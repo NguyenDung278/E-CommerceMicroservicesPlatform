@@ -1,0 +1,10 @@
+server:
+  port: "8080"
+  host: "0.0.0.0"
+
+services:
+  user_service: "http://user-service:8081"
+  product_service: "http://product-service:8082"
+  cart_service: "http://cart-service:8083"
+  order_service: "http://order-service:8084"
+  payment_service: "http://payment-service:8085"

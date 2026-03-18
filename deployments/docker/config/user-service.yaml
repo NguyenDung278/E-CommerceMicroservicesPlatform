@@ -1,0 +1,18 @@
+server:
+  port: "8081"
+  host: "0.0.0.0"
+
+database:
+  host: "postgres"
+  port: "5432"
+  user: "admin"
+  password: "password123"
+  dbname: "ecommerce"
+  sslmode: "disable"
+
+jwt:
+  secret: "super-secret-key-for-jwt"
+  expiration: 24
+
+grpc:
+  port: "50051"

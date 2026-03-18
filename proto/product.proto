@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package product;
+
+option go_package = "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto";
+
+// Service definition
+service ProductService {
+  // Get all products
+  rpc GetProducts (GetProductsRequest) returns (GetProductsResponse);
+  
+  // Get product by ID
+  rpc GetProductByID (GetProductByIDRequest) returns (GetProductByIDResponse);
+  
+  // Create product (admin only)
+  rpc CreateProduct (CreateProductRequest) returns (CreateProductResponse);
+  
+  // Update product (admin only)
+  rpc UpdateProduct (UpdateProductRequest) returns (UpdateProductResponse);
+  
+  // Delete product (admin only)
+  rpc DeleteProduct (DeleteProductRequest) returns (DeleteProductResponse);
+  
+  // Search products
+  rpc SearchProducts (SearchProductsRequest) returns (SearchProductsResponse);
+}
+
+// Get products request
+message GetProductsRequest {
+  int32 page = 1;
+  int32 limit = 2;
+  string category = 3;
+  string sort_by = 4;
+}
+
+// Get products response
+message GetProductsResponse {
+  repeated Product products = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 limit = 4;
+}
+
+// Get product by ID request
+message GetProductByIDRequest {
+  string product_id = 1;
+}
+
+// Get product by ID response
+message GetProductByIDResponse {
+  Product product = 1;
+}
+
+// Create product request
+message CreateProductRequest {
+  string name = 1;
+  string description = 2;
+  float price = 3;
+  string category = 4;
+  int32 stock_quantity = 5;
+  string image_url = 6;
+}
+
+// Create product response
+message CreateProductResponse {
+  Product product = 1;
+}
+
+// Update product request
+message UpdateProductRequest {
+  string product_id = 1;
+  string name = 2;
+  string description = 3;
+  float price = 4;
+  string category = 5;
+  int32 stock_quantity = 6;
+  string image_url = 7;
+}
+
+// Update product response
+message UpdateProductResponse {
+  Product product = 1;
+}
+
+// Delete product request
+message DeleteProductRequest {
+  string product_id = 1;
+}
+
+// Delete product response
+message DeleteProductResponse {
+  bool success = 1;
+}
+
+// Search products request
+message SearchProductsRequest {
+  string query = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+// Search products response
+message SearchProductsResponse {
+  repeated Product products = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 limit = 4;
+}
+
+// Product model
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  float price = 4;
+  string category = 5;
+  int32 stock_quantity = 6;
+  string image_url = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}

@@ -1,0 +1,24 @@
+server:
+  port: "8084"
+  host: "0.0.0.0"
+
+database:
+  host: "postgres"
+  port: "5432"
+  user: "admin"
+  password: "password123"
+  dbname: "ecommerce"
+  sslmode: "disable"
+
+rabbitmq:
+  host: "rabbitmq"
+  port: "5672"
+  user: "admin"
+  password: "password123"
+
+jwt:
+  secret: "super-secret-key-for-jwt"
+  expiration: 24
+
+services:
+  product_service_grpc: "product-service:50052"

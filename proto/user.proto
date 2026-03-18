@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto";
+
+// Service definition
+service UserService {
+  // User registration
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  
+  // User login
+  rpc Login (LoginRequest) returns (LoginResponse);
+  
+  // Get user profile
+  rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
+  
+  // Update user profile
+  rpc UpdateProfile (UpdateProfileRequest) returns (UpdateProfileResponse);
+  
+  // Get user by ID
+  rpc GetUserByID (GetUserByIDRequest) returns (GetUserByIDResponse);
+}
+
+// Registration request
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string first_name = 3;
+  string last_name = 4;
+}
+
+// Registration response
+message RegisterResponse {
+  string token = 1;
+  User user = 2;
+}
+
+// Login request
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// Login response
+message LoginResponse {
+  string token = 1;
+  User user = 2;
+}
+
+// Get profile request
+message GetProfileRequest {
+  string user_id = 1;
+}
+
+// Get profile response
+message GetProfileResponse {
+  User user = 1;
+}
+
+// Update profile request
+message UpdateProfileRequest {
+  string user_id = 1;
+  string first_name = 2;
+  string last_name = 3;
+}
+
+// Update profile response
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+// Get user by ID request
+message GetUserByIDRequest {
+  string user_id = 1;
+}
+
+// Get user by ID response
+message GetUserByIDResponse {
+  User user = 1;
+}
+
+// User model
+message User {
+  string id = 1;
+  string email = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string role = 5;
+  string created_at = 6;
+  string updated_at = 7;
+}
