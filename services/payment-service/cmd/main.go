@@ -19,6 +19,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
@@ -67,6 +68,7 @@ func main() {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
 	e.Use(echomw.Secure())

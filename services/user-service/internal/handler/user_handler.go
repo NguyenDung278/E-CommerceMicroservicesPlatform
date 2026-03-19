@@ -8,6 +8,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
 )
@@ -48,13 +49,8 @@ func (h *UserHandler) Register(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
 	}
-
-	// Basic validation.
-	if req.Email == "" || req.Password == "" || req.FirstName == "" || req.LastName == "" {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "all fields are required")
-	}
-	if len(req.Password) < 8 {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "password must be at least 8 characters")
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	result, err := h.userService.Register(c.Request().Context(), req)
@@ -74,9 +70,8 @@ func (h *UserHandler) Login(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
 	}
-
-	if req.Email == "" || req.Password == "" {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "email and password are required")
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	result, err := h.userService.Login(c.Request().Context(), req)
@@ -118,6 +113,9 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 	var req dto.UpdateProfileRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	user, err := h.userService.UpdateProfile(c.Request().Context(), claims.UserID, req)

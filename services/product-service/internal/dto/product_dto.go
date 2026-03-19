@@ -2,22 +2,22 @@ package dto
 
 // CreateProductRequest is the request body for creating a product.
 type CreateProductRequest struct {
-	Name        string  `json:"name" validate:"required"`
+	Name        string  `json:"name" validate:"required,min=1"`
 	Description string  `json:"description"`
-	Price       float64 `json:"price" validate:"required,gt=0"`
-	Stock       int     `json:"stock" validate:"required,gte=0"`
+	Price       float64 `json:"price" validate:"gt=0"`
+	Stock       int     `json:"stock" validate:"gte=0"`
 	Category    string  `json:"category"`
-	ImageURL    string  `json:"image_url"`
+	ImageURL    string  `json:"image_url" validate:"omitempty,url"`
 }
 
 // UpdateProductRequest is the request body for updating a product.
 type UpdateProductRequest struct {
-	Name        *string  `json:"name"`
+	Name        *string  `json:"name" validate:"omitempty,min=1"`
 	Description *string  `json:"description"`
-	Price       *float64 `json:"price"`
-	Stock       *int     `json:"stock"`
+	Price       *float64 `json:"price" validate:"omitempty,gt=0"`
+	Stock       *int     `json:"stock" validate:"omitempty,gte=0"`
 	Category    *string  `json:"category"`
-	ImageURL    *string  `json:"image_url"`
+	ImageURL    *string  `json:"image_url" validate:"omitempty,url"`
 }
 
 // ListProductsQuery holds query parameters for listing products.

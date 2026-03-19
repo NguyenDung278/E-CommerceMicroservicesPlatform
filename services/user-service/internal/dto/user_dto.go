@@ -16,8 +16,8 @@ type LoginRequest struct {
 
 // UpdateProfileRequest is the request body for updating user profile.
 type UpdateProfileRequest struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	FirstName string `json:"first_name" validate:"omitempty,min=1"`
+	LastName  string `json:"last_name" validate:"omitempty,min=1"`
 }
 
 // AuthResponse is the response body for successful authentication.

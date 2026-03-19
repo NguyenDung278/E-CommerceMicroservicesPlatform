@@ -19,6 +19,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
@@ -79,6 +80,7 @@ func main() {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
 	e.Use(echomw.Secure())

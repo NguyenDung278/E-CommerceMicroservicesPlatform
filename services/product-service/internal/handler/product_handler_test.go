@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
@@ -48,6 +49,7 @@ var _ repository.ProductRepository = (*fakeProductRepo)(nil)
 
 func TestCreateRequiresAdminRole(t *testing.T) {
 	e := echo.New()
+	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo)
 	handler := NewProductHandler(productService)
@@ -74,6 +76,7 @@ func TestCreateRequiresAdminRole(t *testing.T) {
 
 func TestCreateAllowsAdminRole(t *testing.T) {
 	e := echo.New()
+	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo)
 	handler := NewProductHandler(productService)

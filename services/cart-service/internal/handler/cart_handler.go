@@ -8,6 +8,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/service"
 )
@@ -46,8 +47,8 @@ func (h *CartHandler) AddItem(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
 	}
-	if req.ProductID == "" || req.Quantity <= 0 {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "product_id and quantity > 0 required")
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	cart, err := h.cartService.AddItem(c.Request().Context(), claims.UserID, req)
@@ -63,6 +64,9 @@ func (h *CartHandler) UpdateItem(c echo.Context) error {
 	var req dto.UpdateCartItemRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	cart, err := h.cartService.UpdateItem(c.Request().Context(), claims.UserID, productID, req)

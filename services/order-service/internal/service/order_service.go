@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
@@ -18,8 +20,11 @@ import (
 )
 
 var (
-	ErrOrderNotFound = errors.New("order not found")
-	ErrEmptyOrder    = errors.New("order must contain at least one item")
+	ErrOrderNotFound      = errors.New("order not found")
+	ErrEmptyOrder         = errors.New("order must contain at least one item")
+	ErrProductNotFound    = errors.New("product not found")
+	ErrProductUnavailable = errors.New("product is unavailable")
+	ErrInsufficientStock  = errors.New("insufficient stock")
 )
 
 // OrderEvent is published to RabbitMQ when an order is created.
@@ -79,11 +84,19 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID string, req dto.C
 		// For this demo, we check the product exists and use the real price.
 		product, err := s.productClient.GetProduct(ctx, item.ProductID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
+			switch grpcstatus.Code(err) {
+			case codes.NotFound:
+				return nil, fmt.Errorf("%w: %s", ErrProductNotFound, item.ProductID)
+			case codes.InvalidArgument:
+				return nil, fmt.Errorf("%w: %s", ErrProductUnavailable, item.ProductID)
+			default:
+				return nil, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
+			}
 		}
 
 		if product.StockQuantity < int32(item.Quantity) {
-			return nil, fmt.Errorf("product %s is out of stock", product.Name)
+			return nil, fmt.Errorf("%w: product %s only has %d item(s)",
+				ErrInsufficientStock, product.Name, product.StockQuantity)
 		}
 
 		orderItem := model.OrderItem{

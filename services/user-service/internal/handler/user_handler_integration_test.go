@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
@@ -53,6 +54,7 @@ func TestRegisterEndpointCreatesUserAndReturnsToken(t *testing.T) {
 	handler := NewUserHandler(userService)
 
 	e := echo.New()
+	e.Validator = validation.New()
 	handler.RegisterRoutes(e, "super-secret-test-key-1234567890")
 
 	body, _ := json.Marshal(dto.RegisterRequest{

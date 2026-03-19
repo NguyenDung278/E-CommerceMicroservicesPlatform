@@ -8,6 +8,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
 )
@@ -34,8 +35,8 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
 	}
-	if req.OrderID == "" || req.Amount <= 0 || req.PaymentMethod == "" {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "order_id, amount, and payment_method required")
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	payment, err := h.paymentService.ProcessPayment(c.Request().Context(), claims.UserID, req)

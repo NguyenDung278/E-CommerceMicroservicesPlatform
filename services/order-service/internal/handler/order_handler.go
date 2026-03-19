@@ -8,6 +8,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service"
 )
@@ -35,11 +36,23 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
 	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
 
 	order, err := h.orderService.CreateOrder(c.Request().Context(), claims.UserID, req)
 	if err != nil {
 		if errors.Is(err, service.ErrEmptyOrder) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
+		}
+		if errors.Is(err, service.ErrProductNotFound) {
+			return response.Error(c, http.StatusNotFound, "product not found", err.Error())
+		}
+		if errors.Is(err, service.ErrProductUnavailable) {
+			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
+		}
+		if errors.Is(err, service.ErrInsufficientStock) {
+			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to create order")
 	}

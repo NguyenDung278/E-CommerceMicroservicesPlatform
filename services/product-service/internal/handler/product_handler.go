@@ -9,6 +9,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
 )
@@ -50,8 +51,8 @@ func (h *ProductHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
 	}
-	if req.Name == "" || req.Price <= 0 {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "name and price > 0 are required")
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	product, err := h.productService.Create(c.Request().Context(), req)
@@ -78,6 +79,9 @@ func (h *ProductHandler) Update(c echo.Context) error {
 	var req dto.UpdateProductRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
 	product, err := h.productService.Update(c.Request().Context(), id, req)

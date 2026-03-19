@@ -22,6 +22,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/grpc"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
@@ -70,6 +71,7 @@ func main() {
 	// 6. Set up Echo and register routes.
 	e := echo.New()
 	e.HideBanner = true
+	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
 	e.Use(echomw.Secure())
