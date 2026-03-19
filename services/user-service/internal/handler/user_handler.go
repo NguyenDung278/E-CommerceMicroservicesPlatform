@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -58,6 +59,9 @@ func (h *UserHandler) Register(c echo.Context) error {
 		if errors.Is(err, service.ErrEmailAlreadyExists) {
 			return response.Error(c, http.StatusConflict, "registration failed", "email already exists")
 		}
+		if errors.Is(err, service.ErrPhoneAlreadyExists) {
+			return response.Error(c, http.StatusConflict, "registration failed", "phone already exists")
+		}
 		return response.Error(c, http.StatusInternalServerError, "registration failed", "internal server error")
 	}
 
@@ -73,11 +77,14 @@ func (h *UserHandler) Login(c echo.Context) error {
 	if err := c.Validate(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
+	if strings.TrimSpace(req.Identifier) == "" && strings.TrimSpace(req.Email) == "" {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "identifier is required")
+	}
 
 	result, err := h.userService.Login(c.Request().Context(), req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			return response.Error(c, http.StatusUnauthorized, "login failed", "invalid email or password")
+			return response.Error(c, http.StatusUnauthorized, "login failed", "invalid email/phone or password")
 		}
 		return response.Error(c, http.StatusInternalServerError, "login failed", "internal server error")
 	}

@@ -10,6 +10,7 @@ import "time"
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
+	Phone     string    `json:"phone,omitempty"`
 	Password  string    `json:"-"` // Never serialize the password hash
 	FirstName string    `json:"first_name"`
 	LastName  string    `json:"last_name"`

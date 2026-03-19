@@ -1,6 +1,7 @@
 import {
   sanitizeEmail,
   sanitizeMultiline,
+  sanitizePhone,
   sanitizeText,
   sanitizeUrl,
   toPositiveFloat,
@@ -8,6 +9,100 @@ import {
 } from "./sanitize";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^(?:\+?\d{9,15}|0\d{9,10})$/;
+
+export type LoginFormValues = {
+  identifier: string;
+  password: string;
+  rememberMe: boolean;
+};
+
+export type RegisterFormValues = {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+  acceptTerms: boolean;
+};
+
+export type FormErrors<T extends Record<string, unknown>> = Partial<Record<keyof T, string>>;
+
+export function isValidEmail(value: string) {
+  return emailPattern.test(sanitizeEmail(value));
+}
+
+export function isValidPhone(value: string) {
+  return phonePattern.test(sanitizePhone(value));
+}
+
+export function isValidEmailOrPhone(value: string) {
+  const trimmed = sanitizeText(value);
+
+  if (!trimmed) {
+    return false;
+  }
+
+  if (trimmed.includes("@")) {
+    return isValidEmail(trimmed);
+  }
+
+  return isValidPhone(trimmed);
+}
+
+export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFormValues> {
+  const errors: FormErrors<LoginFormValues> = {};
+
+  if (!sanitizeText(values.identifier)) {
+    errors.identifier = "Vui lòng nhập email hoặc số điện thoại.";
+  } else if (!isValidEmailOrPhone(values.identifier)) {
+    errors.identifier = "Email hoặc số điện thoại chưa đúng định dạng.";
+  }
+
+  if (!sanitizeText(values.password)) {
+    errors.password = "Vui lòng nhập mật khẩu.";
+  }
+
+  return errors;
+}
+
+export function validateRegisterFields(
+  values: RegisterFormValues
+): FormErrors<RegisterFormValues> {
+  const errors: FormErrors<RegisterFormValues> = {};
+
+  if (!sanitizeText(values.fullName)) {
+    errors.fullName = "Vui lòng nhập họ và tên.";
+  } else if (sanitizeText(values.fullName).split(" ").length < 2) {
+    errors.fullName = "Hãy nhập đầy đủ họ và tên để giao hàng chính xác.";
+  }
+
+  if (!isValidEmail(values.email)) {
+    errors.email = "Email chưa đúng định dạng.";
+  }
+
+  if (!sanitizePhone(values.phone)) {
+    errors.phone = "Vui lòng nhập số điện thoại.";
+  } else if (!isValidPhone(values.phone)) {
+    errors.phone = "Số điện thoại chưa đúng định dạng.";
+  }
+
+  if (values.password.trim().length < 8) {
+    errors.password = "Mật khẩu cần ít nhất 8 ký tự.";
+  }
+
+  if (!values.confirmPassword.trim()) {
+    errors.confirmPassword = "Vui lòng xác nhận lại mật khẩu.";
+  } else if (values.confirmPassword !== values.password) {
+    errors.confirmPassword = "Mật khẩu xác nhận chưa khớp.";
+  }
+
+  if (!values.acceptTerms) {
+    errors.acceptTerms = "Bạn cần đồng ý điều khoản để tiếp tục.";
+  }
+
+  return errors;
+}
 
 export function validateRegister(values: {
   email: string;
@@ -17,7 +112,7 @@ export function validateRegister(values: {
 }) {
   const errors: string[] = [];
 
-  if (!emailPattern.test(sanitizeEmail(values.email))) {
+  if (!isValidEmail(values.email)) {
     errors.push("Email không hợp lệ.");
   }
   if (values.password.trim().length < 8) {
@@ -36,7 +131,7 @@ export function validateRegister(values: {
 export function validateLogin(values: { email: string; password: string }) {
   const errors: string[] = [];
 
-  if (!emailPattern.test(sanitizeEmail(values.email))) {
+  if (!isValidEmail(values.email)) {
     errors.push("Email không hợp lệ.");
   }
   if (!sanitizeText(values.password)) {

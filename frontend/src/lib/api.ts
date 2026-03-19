@@ -75,6 +75,9 @@ export function getErrorMessage(error: unknown) {
     if (error.status === 409 && error.detail.includes("email already exists")) {
       return "Email đã tồn tại. Hãy dùng form đăng nhập ở bên dưới.";
     }
+    if (error.status === 409 && error.detail.includes("phone already exists")) {
+      return "Số điện thoại đã được sử dụng. Hãy dùng số khác hoặc đăng nhập.";
+    }
     return error.detail ? `${error.message}: ${error.detail}` : error.message;
   }
   if (error instanceof Error) {
@@ -89,13 +92,14 @@ export function getErrorMessage(error: unknown) {
 export const api = {
   register(body: {
     email: string;
+    phone: string;
     password: string;
     first_name: string;
     last_name: string;
   }) {
     return request<AuthPayload>("/api/v1/auth/register", { method: "POST", body });
   },
-  login(body: { email: string; password: string }) {
+  login(body: { identifier: string; email?: string; password: string }) {
     return request<AuthPayload>("/api/v1/auth/login", { method: "POST", body });
   },
   getProfile(token: string) {

@@ -13,6 +13,20 @@ export function sanitizeEmail(value: string) {
   return sanitizeText(value).toLowerCase();
 }
 
+export function sanitizePhone(value: string) {
+  const normalized = value.replace(/[^\d+]/g, "").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.startsWith("+")) {
+    return `+${normalized.slice(1).replace(/\+/g, "")}`;
+  }
+
+  return normalized.replace(/\+/g, "");
+}
+
 export function sanitizeUrl(value: string) {
   const next = sanitizeText(value);
   if (!next) {

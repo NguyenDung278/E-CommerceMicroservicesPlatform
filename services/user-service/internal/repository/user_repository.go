@@ -15,6 +15,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id string) (*model.User, error)
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
+	GetByPhone(ctx context.Context, phone string) (*model.User, error)
 	Update(ctx context.Context, user *model.User) error
 }
 
@@ -32,12 +33,19 @@ func NewUserRepository(db *sql.DB) UserRepository {
 // PITFALL: Always use parameterized queries ($1, $2...) to prevent SQL injection.
 func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) error {
 	query := `
-		INSERT INTO users (id, email, password, first_name, last_name, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (id, email, phone, password, first_name, last_name, role, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		user.ID, user.Email, user.Password, user.FirstName,
-		user.LastName, user.Role, user.CreatedAt, user.UpdatedAt,
+		user.ID,
+		user.Email,
+		toNullableString(user.Phone),
+		user.Password,
+		user.FirstName,
+		user.LastName,
+		user.Role,
+		user.CreatedAt,
+		user.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
@@ -48,11 +56,15 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 // GetByID retrieves a user by their UUID.
 // Returns nil, nil if the user is not found (not an error condition).
 func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
-	query := `SELECT id, email, password, first_name, last_name, role, created_at, updated_at FROM users WHERE id = $1`
+	query := `
+		SELECT id, email, COALESCE(phone, ''), password, first_name, last_name, role, created_at, updated_at
+		FROM users
+		WHERE id = $1
+	`
 
 	user := &model.User{}
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&user.ID, &user.Email, &user.Password, &user.FirstName,
+		&user.ID, &user.Email, &user.Phone, &user.Password, &user.FirstName,
 		&user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -67,11 +79,15 @@ func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model
 // GetByEmail retrieves a user by their email address.
 // Used during login to look up the user and verify their password.
 func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	query := `SELECT id, email, password, first_name, last_name, role, created_at, updated_at FROM users WHERE email = $1`
+	query := `
+		SELECT id, email, COALESCE(phone, ''), password, first_name, last_name, role, created_at, updated_at
+		FROM users
+		WHERE email = $1
+	`
 
 	user := &model.User{}
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&user.ID, &user.Email, &user.Password, &user.FirstName,
+		&user.ID, &user.Email, &user.Phone, &user.Password, &user.FirstName,
 		&user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -79,6 +95,28 @@ func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
+	}
+	return user, nil
+}
+
+// GetByPhone retrieves a user by their normalized phone number.
+func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
+	query := `
+		SELECT id, email, COALESCE(phone, ''), password, first_name, last_name, role, created_at, updated_at
+		FROM users
+		WHERE phone = $1
+	`
+
+	user := &model.User{}
+	err := r.db.QueryRowContext(ctx, query, phone).Scan(
+		&user.ID, &user.Email, &user.Phone, &user.Password, &user.FirstName,
+		&user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by phone: %w", err)
 	}
 	return user, nil
 }
@@ -96,4 +134,12 @@ func (r *postgresUserRepository) Update(ctx context.Context, user *model.User) e
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil
+}
+
+func toNullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+
+	return value
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
@@ -19,6 +20,7 @@ import (
 var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrEmailAlreadyExists = errors.New("email already exists")
+	ErrPhoneAlreadyExists = errors.New("phone already exists")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 )
 
@@ -52,6 +54,9 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 // SECURITY: bcrypt cost of 12 means ~250ms per hash on modern hardware,
 // which is slow enough to resist brute force but fast enough for users.
 func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.AuthResponse, error) {
+	req.Email = normalizeEmail(req.Email)
+	req.Phone = normalizePhone(req.Phone)
+
 	// Check for duplicate email.
 	existing, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {
@@ -59,6 +64,15 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	}
 	if existing != nil {
 		return nil, ErrEmailAlreadyExists
+	}
+	if req.Phone != "" {
+		existingByPhone, err := s.repo.GetByPhone(ctx, req.Phone)
+		if err != nil {
+			return nil, err
+		}
+		if existingByPhone != nil {
+			return nil, ErrPhoneAlreadyExists
+		}
 	}
 
 	// Hash the password.
@@ -72,6 +86,7 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	user := &model.User{
 		ID:        uuid.New().String(),
 		Email:     req.Email,
+		Phone:     req.Phone,
 		Password:  string(hashedPassword),
 		FirstName: req.FirstName,
 		LastName:  req.LastName,
@@ -103,7 +118,18 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 //     to prevent email enumeration attacks.
 //   - bcrypt.CompareHashAndPassword is constant-time, preventing timing attacks.
 func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error) {
-	user, err := s.repo.GetByEmail(ctx, req.Email)
+	identifier := normalizeIdentifier(req)
+	if identifier == "" {
+		return nil, ErrInvalidCredentials
+	}
+
+	var user *model.User
+	var err error
+	if strings.Contains(identifier, "@") {
+		user, err = s.repo.GetByEmail(ctx, identifier)
+	} else {
+		user, err = s.repo.GetByPhone(ctx, identifier)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -178,4 +204,45 @@ func (s *UserService) generateToken(user *model.User) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func normalizeIdentifier(req dto.LoginRequest) string {
+	if strings.TrimSpace(req.Identifier) != "" {
+		identifier := strings.TrimSpace(req.Identifier)
+		if strings.Contains(identifier, "@") {
+			return normalizeEmail(identifier)
+		}
+		return normalizePhone(identifier)
+	}
+
+	return normalizeEmail(req.Email)
+}
+
+func normalizeEmail(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func normalizePhone(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	for index, r := range trimmed {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+			continue
+		}
+		if r == '+' && index == 0 {
+			builder.WriteRune(r)
+		}
+	}
+
+	normalized := builder.String()
+	if strings.HasPrefix(normalized, "+") {
+		return "+" + strings.ReplaceAll(normalized[1:], "+", "")
+	}
+
+	return strings.ReplaceAll(normalized, "+", "")
 }

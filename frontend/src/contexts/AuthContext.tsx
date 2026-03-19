@@ -6,14 +6,20 @@ import type { UserProfile } from "../types/api";
 
 type RegisterInput = {
   email: string;
+  phone: string;
   password: string;
   first_name: string;
   last_name: string;
 };
 
 type LoginInput = {
-  email: string;
+  identifier: string;
+  email?: string;
   password: string;
+};
+
+type AuthOptions = {
+  remember?: boolean;
 };
 
 type UpdateProfileInput = {
@@ -28,8 +34,8 @@ type AuthContextValue = {
   isAdmin: boolean;
   isBootstrapping: boolean;
   error: string;
-  register: (input: RegisterInput) => Promise<UserProfile>;
-  login: (input: LoginInput) => Promise<UserProfile>;
+  register: (input: RegisterInput, options?: AuthOptions) => Promise<UserProfile>;
+  login: (input: LoginInput, options?: AuthOptions) => Promise<UserProfile>;
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
@@ -102,21 +108,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token, user]);
 
-  async function register(input: RegisterInput) {
+  async function register(input: RegisterInput, options?: AuthOptions) {
     setError("");
     const response = await api.register(input);
     startTransition(() => {
-      setToken(response.data.token);
+      setToken(response.data.token, options?.remember ?? false);
       setUser(response.data.user);
     });
     return response.data.user;
   }
 
-  async function login(input: LoginInput) {
+  async function login(input: LoginInput, options?: AuthOptions) {
     setError("");
     const response = await api.login(input);
     startTransition(() => {
-      setToken(response.data.token);
+      setToken(response.data.token, options?.remember ?? false);
       setUser(response.data.user);
     });
     return response.data.user;

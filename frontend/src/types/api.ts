@@ -15,6 +15,7 @@ export type ApiEnvelope<T> = {
 export type UserProfile = {
   id: string;
   email: string;
+  phone?: string;
   first_name: string;
   last_name: string;
   role: string;

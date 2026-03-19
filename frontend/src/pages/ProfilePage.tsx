@@ -75,6 +75,7 @@ export function ProfilePage() {
             <h2>Cập nhật hồ sơ</h2>
             <div className="profile-summary">
               <span>Email: {user?.email}</span>
+              <span>SĐT: {user?.phone || "Chưa cập nhật"}</span>
               <span>Role: {user?.role}</span>
             </div>
             <div className="inline-grid">

@@ -10,18 +10,23 @@ import (
 
 type fakeUserRepo struct {
 	usersByEmail map[string]*model.User
+	usersByPhone map[string]*model.User
 	usersByID    map[string]*model.User
 }
 
 func newFakeUserRepo() *fakeUserRepo {
 	return &fakeUserRepo{
 		usersByEmail: map[string]*model.User{},
+		usersByPhone: map[string]*model.User{},
 		usersByID:    map[string]*model.User{},
 	}
 }
 
 func (r *fakeUserRepo) Create(_ context.Context, user *model.User) error {
 	r.usersByEmail[user.Email] = user
+	if user.Phone != "" {
+		r.usersByPhone[user.Phone] = user
+	}
 	r.usersByID[user.ID] = user
 	return nil
 }
@@ -34,8 +39,15 @@ func (r *fakeUserRepo) GetByEmail(_ context.Context, email string) (*model.User,
 	return r.usersByEmail[email], nil
 }
 
+func (r *fakeUserRepo) GetByPhone(_ context.Context, phone string) (*model.User, error) {
+	return r.usersByPhone[phone], nil
+}
+
 func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
 	r.usersByEmail[user.Email] = user
+	if user.Phone != "" {
+		r.usersByPhone[user.Phone] = user
+	}
 	r.usersByID[user.ID] = user
 	return nil
 }
@@ -46,6 +58,7 @@ func TestRegisterHashesPasswordAndReturnsToken(t *testing.T) {
 
 	resp, err := svc.Register(context.Background(), dto.RegisterRequest{
 		Email:     "alice@example.com",
+		Phone:     "0901234567",
 		Password:  "password123",
 		FirstName: "Alice",
 		LastName:  "Nguyen",
@@ -75,6 +88,7 @@ func TestLoginRejectsInvalidPassword(t *testing.T) {
 
 	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
 		Email:     "bob@example.com",
+		Phone:     "0912345678",
 		Password:  "password123",
 		FirstName: "Bob",
 		LastName:  "Tran",
@@ -83,8 +97,8 @@ func TestLoginRejectsInvalidPassword(t *testing.T) {
 	}
 
 	if _, err := svc.Login(context.Background(), dto.LoginRequest{
-		Email:    "bob@example.com",
-		Password: "wrong-password",
+		Identifier: "bob@example.com",
+		Password:   "wrong-password",
 	}); err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}

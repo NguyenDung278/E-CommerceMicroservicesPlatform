@@ -62,6 +62,7 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 		CREATE TABLE users (
 			id VARCHAR(36) PRIMARY KEY,
 			email VARCHAR(255) UNIQUE NOT NULL,
+			phone VARCHAR(20) UNIQUE,
 			password VARCHAR(255) NOT NULL,
 			first_name VARCHAR(100) NOT NULL,
 			last_name VARCHAR(100) NOT NULL,
@@ -78,6 +79,7 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 	user := &model.User{
 		ID:        "user-1",
 		Email:     "alice@example.com",
+		Phone:     "0901234567",
 		Password:  "hashed-password",
 		FirstName: "Alice",
 		LastName:  "Nguyen",
@@ -96,6 +98,9 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 	}
 	if got == nil || got.Email != user.Email {
 		t.Fatalf("expected user %q, got %+v", user.Email, got)
+	}
+	if got.Phone != user.Phone {
+		t.Fatalf("expected phone %q, got %+v", user.Phone, got)
 	}
 }
 

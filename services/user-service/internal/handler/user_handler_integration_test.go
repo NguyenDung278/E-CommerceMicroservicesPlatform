@@ -18,18 +18,23 @@ import (
 
 type integrationUserRepo struct {
 	usersByEmail map[string]*model.User
+	usersByPhone map[string]*model.User
 	usersByID    map[string]*model.User
 }
 
 func newIntegrationUserRepo() *integrationUserRepo {
 	return &integrationUserRepo{
 		usersByEmail: map[string]*model.User{},
+		usersByPhone: map[string]*model.User{},
 		usersByID:    map[string]*model.User{},
 	}
 }
 
 func (r *integrationUserRepo) Create(_ context.Context, user *model.User) error {
 	r.usersByEmail[user.Email] = user
+	if user.Phone != "" {
+		r.usersByPhone[user.Phone] = user
+	}
 	r.usersByID[user.ID] = user
 	return nil
 }
@@ -42,8 +47,15 @@ func (r *integrationUserRepo) GetByEmail(_ context.Context, email string) (*mode
 	return r.usersByEmail[email], nil
 }
 
+func (r *integrationUserRepo) GetByPhone(_ context.Context, phone string) (*model.User, error) {
+	return r.usersByPhone[phone], nil
+}
+
 func (r *integrationUserRepo) Update(_ context.Context, user *model.User) error {
 	r.usersByEmail[user.Email] = user
+	if user.Phone != "" {
+		r.usersByPhone[user.Phone] = user
+	}
 	r.usersByID[user.ID] = user
 	return nil
 }
@@ -59,6 +71,7 @@ func TestRegisterEndpointCreatesUserAndReturnsToken(t *testing.T) {
 
 	body, _ := json.Marshal(dto.RegisterRequest{
 		Email:     "alice@example.com",
+		Phone:     "0901234567",
 		Password:  "password123",
 		FirstName: "Alice",
 		LastName:  "Nguyen",

@@ -1,33 +1,67 @@
 import { useEffect, useState } from "react";
 
 const sessionTokenKey = "ecommerce_frontend_session_token";
+const persistentTokenKey = "ecommerce_frontend_persistent_token";
+
+type StoredTokenState = {
+  token: string;
+  remember: boolean;
+};
 
 function readInitialToken() {
   if (typeof window === "undefined") {
-    return "";
+    return {
+      token: "",
+      remember: false
+    } satisfies StoredTokenState;
   }
-  return window.sessionStorage.getItem(sessionTokenKey) ?? "";
+
+  const persistentToken = window.localStorage.getItem(persistentTokenKey) ?? "";
+  if (persistentToken) {
+    return {
+      token: persistentToken,
+      remember: true
+    } satisfies StoredTokenState;
+  }
+
+  return {
+    token: window.sessionStorage.getItem(sessionTokenKey) ?? "",
+    remember: false
+  } satisfies StoredTokenState;
 }
 
 export function useSessionToken() {
-  const [token, setToken] = useState(readInitialToken);
+  const [state, setState] = useState(readInitialToken);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    if (token) {
-      window.sessionStorage.setItem(sessionTokenKey, token);
+    if (state.token) {
+      if (state.remember) {
+        window.localStorage.setItem(persistentTokenKey, state.token);
+        window.sessionStorage.removeItem(sessionTokenKey);
+        return;
+      }
+
+      window.sessionStorage.setItem(sessionTokenKey, state.token);
+      window.localStorage.removeItem(persistentTokenKey);
       return;
     }
 
     window.sessionStorage.removeItem(sessionTokenKey);
-  }, [token]);
+    window.localStorage.removeItem(persistentTokenKey);
+  }, [state]);
 
   return {
-    token,
-    setToken,
-    clearToken: () => setToken("")
+    token: state.token,
+    remember: state.remember,
+    setToken: (token: string, remember = false) => setState({ token, remember }),
+    clearToken: () =>
+      setState({
+        token: "",
+        remember: false
+      })
   };
 }
