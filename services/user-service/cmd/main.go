@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -28,6 +27,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/migrations"
 	"github.com/labstack/echo-contrib/echoprometheus"
 	"google.golang.org/grpc"
 )
@@ -57,7 +57,7 @@ func main() {
 	defer db.Close()
 
 	// 4. Run migrations.
-	if err := runMigrations(db); err != nil {
+	if err := database.RunPostgresMigrations(db, migrations.Files); err != nil {
 		log.Fatal("failed to run migrations", zap.Error(err))
 	}
 	log.Info("database migrations completed")
@@ -139,24 +139,4 @@ func main() {
 	}
 
 	log.Info("server shutdown complete")
-}
-
-// runMigrations creates the users table if it doesn't exist.
-// In production, use a proper migration tool like golang-migrate.
-func runMigrations(db *sql.DB) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS users (
-			id         VARCHAR(36) PRIMARY KEY,
-			email      VARCHAR(255) UNIQUE NOT NULL,
-			password   VARCHAR(255) NOT NULL,
-			first_name VARCHAR(100) NOT NULL,
-			last_name  VARCHAR(100) NOT NULL,
-			role       VARCHAR(20)  NOT NULL DEFAULT 'user',
-			created_at TIMESTAMP    NOT NULL DEFAULT NOW(),
-			updated_at TIMESTAMP    NOT NULL DEFAULT NOW()
-		);
-		CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-	`
-	_, err := db.Exec(query)
-	return err
 }

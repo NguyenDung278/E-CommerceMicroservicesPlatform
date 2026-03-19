@@ -81,6 +81,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -145,6 +146,20 @@ services:
     depends_on:
       api-gateway:
         condition: service_healthy
+      frontend:
+        condition: service_started
+    networks:
+      - ecommerce-network
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost}
+    container_name: ecommerce-frontend
+    ports:
+      - "4173:80"
     networks:
       - ecommerce-network
 

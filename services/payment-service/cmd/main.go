@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -23,6 +22,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/migrations"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func main() {
 	}
 	defer db.Close()
 
-	if err := runMigrations(db); err != nil {
+	if err := database.RunPostgresMigrations(db, migrations.Files); err != nil {
 		log.Fatal("failed to run migrations", zap.Error(err))
 	}
 
@@ -108,23 +108,4 @@ func main() {
 	if err := e.Shutdown(ctx); err != nil {
 		log.Fatal("server forced shutdown", zap.Error(err))
 	}
-}
-
-func runMigrations(db *sql.DB) error {
-	query := `
-		CREATE TABLE IF NOT EXISTS payments (
-			id             VARCHAR(36)    PRIMARY KEY,
-			order_id       VARCHAR(36)    UNIQUE NOT NULL,
-			user_id        VARCHAR(36)    NOT NULL,
-			amount         DECIMAL(10,2)  NOT NULL,
-			status         VARCHAR(20)    NOT NULL DEFAULT 'pending',
-			payment_method VARCHAR(50)    NOT NULL,
-			created_at     TIMESTAMP      NOT NULL DEFAULT NOW(),
-			updated_at     TIMESTAMP      NOT NULL DEFAULT NOW()
-		);
-		CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
-		CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
-	`
-	_, err := db.Exec(query)
-	return err
 }

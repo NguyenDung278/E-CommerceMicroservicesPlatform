@@ -13,8 +13,12 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	postgresmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/lib/pq" // PostgreSQL driver — blank import registers the driver
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
@@ -44,4 +48,28 @@ func NewPostgresDB(cfg config.DatabaseConfig) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// RunPostgresMigrations applies embedded SQL migrations against PostgreSQL.
+func RunPostgresMigrations(db *sql.DB, migrationFS fs.FS) error {
+	driver, err := postgresmigrate.WithInstance(db, &postgresmigrate.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create postgres migration driver: %w", err)
+	}
+
+	sourceDriver, err := iofs.New(migrationFS, ".")
+	if err != nil {
+		return fmt.Errorf("failed to create migration source: %w", err)
+	}
+
+	migrator, err := migrate.NewWithInstance("iofs", sourceDriver, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("failed to create migrator: %w", err)
+	}
+
+	if err := migrator.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return nil
 }

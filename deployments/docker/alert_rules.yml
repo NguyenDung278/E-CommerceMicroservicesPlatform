@@ -1,0 +1,38 @@
+groups:
+  - name: ecommerce-platform
+    rules:
+      - alert: EcommerceServiceDown
+        expr: up{job="ecommerce-services"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: EcommerceHigh5xxRate
+        expr: |
+          sum by (job, instance) (
+            rate(echo_requests_total{job="ecommerce-services", code=~"5.."}[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.instance }}"
+          description: "The service is returning more than 0.1 5xx responses per second for 5 minutes."
+
+      - alert: EcommerceHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, job, instance) (
+              rate(echo_request_duration_seconds_bucket{job="ecommerce-services"}[5m])
+            )
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency is high on {{ $labels.instance }}"
+          description: "95th percentile latency is above 1 second for 10 minutes."

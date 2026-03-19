@@ -16,6 +16,19 @@ spec:
       containers:
         - name: user-service
           image: ghcr.io/your-org/ecommerce-user-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -87,6 +100,19 @@ spec:
       containers:
         - name: product-service
           image: ghcr.io/your-org/ecommerce-product-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -158,6 +184,19 @@ spec:
       containers:
         - name: cart-service
           image: ghcr.io/your-org/ecommerce-cart-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -211,6 +250,19 @@ spec:
       containers:
         - name: order-service
           image: ghcr.io/your-org/ecommerce-order-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -288,6 +340,19 @@ spec:
       containers:
         - name: payment-service
           image: ghcr.io/your-org/ecommerce-payment-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -363,6 +428,19 @@ spec:
       containers:
         - name: notification-service
           image: ghcr.io/your-org/ecommerce-notification-service:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
@@ -418,6 +496,19 @@ spec:
       containers:
         - name: api-gateway
           image: ghcr.io/your-org/ecommerce-api-gateway:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           env:
             - name: SERVER_HOST
               value: 0.0.0.0
