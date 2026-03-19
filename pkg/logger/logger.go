@@ -52,8 +52,8 @@ func New(serviceName string) *zap.Logger {
 	)
 
 	return zap.New(core,
-		zap.AddCaller(),                        // Adds file:line to every log entry
-		zap.AddStacktrace(zapcore.ErrorLevel),   // Stack traces only for errors
+		zap.AddCaller(),                       // Adds file:line to every log entry
+		zap.AddStacktrace(zapcore.ErrorLevel), // Stack traces only for errors
 		zap.Fields(zap.String("service", serviceName)),
 	)
 }

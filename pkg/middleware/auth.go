@@ -13,6 +13,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+const (
+	RoleAdmin = "admin"
+	RoleUser  = "user"
+)
+
 // JWTClaims represents the custom claims embedded in JWT tokens.
 // We include UserID and Role so downstream handlers don't need
 // to hit the User Service on every request.
@@ -87,4 +92,31 @@ func GetUserClaims(c echo.Context) *JWTClaims {
 		return claims
 	}
 	return nil
+}
+
+// RequireRole authorizes requests based on the role embedded in JWT claims.
+func RequireRole(roles ...string) echo.MiddlewareFunc {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[strings.ToLower(role)] = struct{}{}
+	}
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			claims := GetUserClaims(c)
+			if claims == nil {
+				return c.JSON(http.StatusUnauthorized, map[string]string{
+					"error": "missing user claims",
+				})
+			}
+
+			if _, ok := allowed[strings.ToLower(claims.Role)]; !ok {
+				return c.JSON(http.StatusForbidden, map[string]string{
+					"error": "insufficient permissions",
+				})
+			}
+
+			return next(c)
+		}
+	}
 }

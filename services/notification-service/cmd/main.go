@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo-contrib/echoprometheus"
+	"github.com/labstack/echo/v4"
+	echomw "github.com/labstack/echo/v4/middleware"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
@@ -89,13 +91,13 @@ func main() {
 
 	// Start consuming messages.
 	msgs, err := ch.Consume(
-		q.Name,                 // queue
+		q.Name,                  // queue
 		"notification-consumer", // consumer tag
-		false,                  // auto-ack (false = manual ack for reliability)
-		false,                  // exclusive
-		false,                  // no-local
-		false,                  // no-wait
-		nil,                    // args
+		false,                   // auto-ack (false = manual ack for reliability)
+		false,                   // exclusive
+		false,                   // no-local
+		false,                   // no-wait
+		nil,                     // args
 	)
 	if err != nil {
 		log.Fatal("failed to start consuming", zap.Error(err))
@@ -115,6 +117,7 @@ func main() {
 	go func() {
 		e := echo.New()
 		e.HideBanner = true
+		e.Use(echomw.Secure())
 		e.Use(echoprometheus.NewMiddleware("notification_service"))
 		e.GET("/metrics", echoprometheus.NewHandler())
 		e.GET("/health", func(c echo.Context) error {
@@ -124,7 +127,14 @@ func main() {
 			})
 		})
 		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+		server := &http.Server{
+			Addr:         addr,
+			Handler:      e,
+			ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+			WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+			IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
+		}
+		if err := e.StartServer(server); err != nil && err != http.ErrServerClosed {
 			log.Error("health check server error", zap.Error(err))
 		}
 	}()

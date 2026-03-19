@@ -1,44 +1,28 @@
-# Multi-stage Dockerfile for user-service
-# Stage 1: Build
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /src
 
-# Copy go mod files
-COPY go.mod go.sum ./
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY proto/go.mod proto/go.sum ./proto/
+COPY services/user-service/go.mod services/user-service/go.sum ./services/user-service/
 
-# Download dependencies
+WORKDIR /src/services/user-service
 RUN go mod download
 
-# Copy source files
-COPY . .
+WORKDIR /src
+COPY pkg ./pkg
+COPY proto ./proto
+COPY services/user-service ./services/user-service
 
-# Build the application (static binary for scratch)
-RUN CGO_ENABLED=0 GOOS=linux go build -o user-service ./cmd/main.go
+WORKDIR /src/services/user-service
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/user-service ./cmd/main.go
 
-# Stage 2: Run
-FROM scratch
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Copy CA certificates for TLS (required for external API calls)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy binary from builder stage
-COPY --from=builder /app/user-service /user-service
-
-# Set environment variables (defaults)
 ENV CONFIG_PATH=/config/config.yaml
 
-# Create config directory
-RUN mkdir -p /config
+COPY --from=builder /out/user-service /app/user-service
 
-# Expose service ports (HTTP and gRPC)
-EXPOSE 8081
-EXPOSE 50051
+EXPOSE 8081 50051
 
-# Health check configuration (for Kubernetes)
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD ["/user-service", "health-check"]
-
-# Run the service
-ENTRYPOINT ["/user-service"]
+ENTRYPOINT ["/app/user-service"]

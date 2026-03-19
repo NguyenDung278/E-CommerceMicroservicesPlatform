@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	ErrPaymentNotFound = errors.New("payment not found")
+	ErrPaymentNotFound  = errors.New("payment not found")
 	ErrDuplicatePayment = errors.New("payment already exists for this order")
 )
 
@@ -43,10 +43,10 @@ func NewPaymentService(repo repository.PaymentRepository, amqpCh *amqp.Channel, 
 //
 // IN PRODUCTION: This would integrate with a payment gateway (Stripe, PayPal).
 // The flow would be:
-//   1. Create a payment intent with the gateway
-//   2. Store payment record as "pending"
-//   3. Receive webhook callback from gateway with result
-//   4. Update status to "completed" or "failed"
+//  1. Create a payment intent with the gateway
+//  2. Store payment record as "pending"
+//  3. Receive webhook callback from gateway with result
+//  4. Update status to "completed" or "failed"
 //
 // FOR THIS DEMO: We simulate instant success and publish an event.
 func (s *PaymentService) ProcessPayment(ctx context.Context, userID string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
@@ -131,8 +131,8 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment) {
 	}
 
 	err = s.amqpCh.PublishWithContext(ctx,
-		"events",    // exchange
-		routingKey,  // routing key
+		"events",   // exchange
+		routingKey, // routing key
 		false, false,
 		amqp.Publishing{
 			ContentType: "application/json",

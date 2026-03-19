@@ -1,44 +1,26 @@
-# Multi-stage Dockerfile for payment-service
-# Stage 1: Build
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /src
 
-# Copy go mod files
-COPY go.mod go.sum ./
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY services/payment-service/go.mod services/payment-service/go.sum ./services/payment-service/
 
-# Download dependencies
+WORKDIR /src/services/payment-service
 RUN go mod download
 
-# Copy source files
-COPY . .
+WORKDIR /src
+COPY pkg ./pkg
+COPY services/payment-service ./services/payment-service
 
-# Build the application (static binary for scratch)
-RUN CGO_ENABLED=0 GOOS=linux go build -o payment-service ./cmd/main.go
+WORKDIR /src/services/payment-service
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/payment-service ./cmd/main.go
 
-# Stage 2: Run
-FROM scratch
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Copy CA certificates for TLS (required for external API calls)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy binary from builder stage
-COPY --from=builder /app/payment-service /payment-service
-
-# Set environment variables (defaults)
 ENV CONFIG_PATH=/config/config.yaml
 
-# Create config directory
-RUN mkdir -p /config
+COPY --from=builder /out/payment-service /app/payment-service
 
-# Expose service ports (HTTP and gRPC)
 EXPOSE 8085
-EXPOSE 50055
 
-# Health check configuration (for Kubernetes)
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD ["/payment-service", "health-check"]
-
-# Run the service
-ENTRYPOINT ["/payment-service"]
+ENTRYPOINT ["/app/payment-service"]

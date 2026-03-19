@@ -25,10 +25,10 @@ import (
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/grpc"
-	"github.com/labstack/echo-contrib/echoprometheus"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/labstack/echo-contrib/echoprometheus"
 	"google.golang.org/grpc"
 )
 
@@ -72,6 +72,8 @@ func main() {
 	e.HideBanner = true
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
+	e.Use(echomw.Secure())
+	e.Use(appmw.NewRateLimiter(40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("user_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())
@@ -94,7 +96,14 @@ func main() {
 	go func() {
 		// Start HTTP server
 		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+		server := &http.Server{
+			Addr:         addr,
+			Handler:      e,
+			ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+			WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+			IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
+		}
+		if err := e.StartServer(server); err != nil && err != http.ErrServerClosed {
 			log.Fatal("HTTP server error", zap.Error(err))
 		}
 	}()

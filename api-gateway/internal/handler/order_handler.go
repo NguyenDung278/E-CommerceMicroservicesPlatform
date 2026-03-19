@@ -20,17 +20,13 @@ func NewOrderHandler(p *proxy.ServiceProxy) *OrderHandler {
 	}
 }
 
-// RegisterRoutes registers order service routes
-func (h *OrderHandler) RegisterRoutes(g *echo.Group, jwtSecret string) {
-	// All order endpoints require authentication
-	g.Use(appmw.JWTAuth(jwtSecret))
-
-	// Order endpoints
-	g.POST("/", h.forwardRequest)
-	g.GET("/:id", h.forwardRequest)
-	g.GET("/user", h.forwardRequest)
-	g.PUT("/:id/status", h.forwardRequest)
-	g.DELETE("/:id", h.forwardRequest)
+// RegisterRoutes registers order service routes.
+func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	orders := e.Group("/api/v1/orders")
+	orders.Use(appmw.JWTAuth(jwtSecret))
+	orders.POST("", h.forwardRequest)
+	orders.GET("", h.forwardRequest)
+	orders.GET("/:id", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the order service

@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   # Database services
   postgres:
     image: postgres:15-alpine
     container_name: ecommerce-postgres
     environment:
-      POSTGRES_DB: ecommerce
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
     ports:
       - "5432:5432"
     volumes:
@@ -42,8 +40,8 @@ services:
     image: rabbitmq:3.12-management-alpine
     container_name: ecommerce-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: password123
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       RABBITMQ_DEFAULT_VHOST: /
     ports:
       - "5672:5672"   # AMQP
@@ -119,8 +117,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: password123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-grafana-password}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
@@ -153,12 +151,14 @@ services:
   # API Gateway (Go)
   api-gateway:
     build:
-      context: ../../api-gateway
+      context: ../..
+      dockerfile: api-gateway/Dockerfile
     container_name: ecommerce-api-gateway
     ports:
       - "8080:8080" # Can keep this exposed for direct access if needed, or remove to force going through Nginx
     environment:
       CONFIG_PATH: /config/config.yaml
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/api-gateway.yaml:/config/config.yaml
     healthcheck:
@@ -183,13 +183,16 @@ services:
   # User Service
   user-service:
     build:
-      context: ../../services/user-service
+      context: ../..
+      dockerfile: services/user-service/Dockerfile
     container_name: ecommerce-user-service
     ports:
       - "8081:8081"   # HTTP
       - "50051:50051" # gRPC
     environment:
       CONFIG_PATH: /config/config.yaml
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/user-service.yaml:/config/config.yaml
     healthcheck:
@@ -208,13 +211,16 @@ services:
   # Product Service
   product-service:
     build:
-      context: ../../services/product-service
+      context: ../..
+      dockerfile: services/product-service/Dockerfile
     container_name: ecommerce-product-service
     ports:
       - "8082:8082"   # HTTP
       - "50052:50052" # gRPC
     environment:
       CONFIG_PATH: /config/config.yaml
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/product-service.yaml:/config/config.yaml
     healthcheck:
@@ -233,12 +239,15 @@ services:
   # Cart Service
   cart-service:
     build:
-      context: ../../services/cart-service
+      context: ../..
+      dockerfile: services/cart-service/Dockerfile
     container_name: ecommerce-cart-service
     ports:
       - "8083:8083"
     environment:
       CONFIG_PATH: /config/config.yaml
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/cart-service.yaml:/config/config.yaml
     healthcheck:
@@ -257,12 +266,16 @@ services:
   # Order Service
   order-service:
     build:
-      context: ../../services/order-service
+      context: ../..
+      dockerfile: services/order-service/Dockerfile
     container_name: ecommerce-order-service
     ports:
       - "8084:8084"
     environment:
       CONFIG_PATH: /config/config.yaml
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/order-service.yaml:/config/config.yaml
     healthcheck:
@@ -281,12 +294,16 @@ services:
   # Payment Service
   payment-service:
     build:
-      context: ../../services/payment-service
+      context: ../..
+      dockerfile: services/payment-service/Dockerfile
     container_name: ecommerce-payment-service
     ports:
       - "8085:8085"
     environment:
       CONFIG_PATH: /config/config.yaml
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/payment-service.yaml:/config/config.yaml
     healthcheck:
@@ -305,12 +322,14 @@ services:
   # Notification Service
   notification-service:
     build:
-      context: ../../services/notification-service
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
     container_name: ecommerce-notification-service
     ports:
       - "8086:8086"
     environment:
       CONFIG_PATH: /config/config.yaml
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
     volumes:
       - ./config/notification-service.yaml:/config/config.yaml
     healthcheck:

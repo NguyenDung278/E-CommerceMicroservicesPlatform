@@ -65,6 +65,8 @@ func main() {
 	e.HideBanner = true
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
+	e.Use(echomw.Secure())
+	e.Use(appmw.NewRateLimiter(60, 120, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("api_gateway"))
 	e.GET("/metrics", echoprometheus.NewHandler())
@@ -78,16 +80,25 @@ func main() {
 	})
 
 	// Register service proxy routes.
-	userHandler.RegisterRoutes(e.Group("/api/users"), cfg.JWT.Secret)
-	productHandler.RegisterRoutes(e.Group("/api/products"), cfg.JWT.Secret)
-	cartHandler.RegisterRoutes(e.Group("/api/cart"), cfg.JWT.Secret)
-	orderHandler.RegisterRoutes(e.Group("/api/orders"), cfg.JWT.Secret)
-	paymentHandler.RegisterRoutes(e.Group("/api/payments"), cfg.JWT.Secret)
+	// We expose the same /api/v1/... contract as the backend services so the
+	// gateway stays a thin, predictable layer.
+	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	productHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	cartHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	orderHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	paymentHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 6. Start server with graceful shutdown.
 	go func() {
 		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+		server := &http.Server{
+			Addr:         addr,
+			Handler:      e,
+			ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+			WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+			IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
+		}
+		if err := e.StartServer(server); err != nil && err != http.ErrServerClosed {
 			log.Fatal("server error", zap.Error(err))
 		}
 	}()

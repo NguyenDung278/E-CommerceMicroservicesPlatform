@@ -20,19 +20,18 @@ func NewUserHandler(p *proxy.ServiceProxy) *UserHandler {
 	}
 }
 
-// RegisterRoutes registers user service routes
-func (h *UserHandler) RegisterRoutes(g *echo.Group, jwtSecret string) {
-	// Public endpoints
-	g.POST("/register", h.forwardRequest)
-	g.POST("/login", h.forwardRequest)
+// RegisterRoutes registers user service routes.
+// The gateway mirrors the backend route contract so requests can be forwarded
+// without rewriting path segments.
+func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	auth := e.Group("/api/v1/auth")
+	auth.POST("/register", h.forwardRequest)
+	auth.POST("/login", h.forwardRequest)
 
-	// Protected endpoints (require valid JWT)
-	protected := g.Group("")
-	protected.Use(appmw.JWTAuth(jwtSecret))
-	
-	protected.GET("/profile", h.forwardRequest)
-	protected.PUT("/profile", h.forwardRequest)
-	protected.GET("/:id", h.forwardRequest)
+	users := e.Group("/api/v1/users")
+	users.Use(appmw.JWTAuth(jwtSecret))
+	users.GET("/profile", h.forwardRequest)
+	users.PUT("/profile", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the user service

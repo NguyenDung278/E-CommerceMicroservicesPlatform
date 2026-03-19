@@ -8,6 +8,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -32,11 +34,12 @@ type GRPCConfig struct {
 
 // ServicesConfig holds URLs to other microservices.
 type ServicesConfig struct {
-	ProductService string `mapstructure:"product_service"`
-	UserService    string `mapstructure:"user_service"`
-	CartService    string `mapstructure:"cart_service"`
-	OrderService   string `mapstructure:"order_service"`
-	PaymentService string `mapstructure:"payment_service"`
+	ProductService     string `mapstructure:"product_service"`
+	ProductServiceGRPC string `mapstructure:"product_service_grpc"`
+	UserService        string `mapstructure:"user_service"`
+	CartService        string `mapstructure:"cart_service"`
+	OrderService       string `mapstructure:"order_service"`
+	PaymentService     string `mapstructure:"payment_service"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -134,6 +137,7 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("jwt.expiration", 24)
 	v.SetDefault("grpc.port", "50051")
 	v.SetDefault("services.product_service", "product-service:8082")
+	v.SetDefault("services.product_service_grpc", "product-service:50052")
 	v.SetDefault("services.user_service", "user-service:8081")
 	v.SetDefault("services.cart_service", "cart-service:8083")
 	v.SetDefault("services.order_service", "order-service:8084")
@@ -149,6 +153,14 @@ func Load(serviceName string) (*Config, error) {
 	v.SetConfigType("yaml")
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
+
+	// CONFIG_PATH lets containers mount a single explicit config file.
+	if configPath := os.Getenv("CONFIG_PATH"); configPath != "" {
+		v.SetConfigFile(configPath)
+		if info, err := os.Stat(configPath); err == nil && !info.IsDir() {
+			v.AddConfigPath(filepath.Dir(configPath))
+		}
+	}
 
 	// It's OK if the config file doesn't exist — we fall back to env vars and defaults.
 	if err := v.ReadInConfig(); err != nil {

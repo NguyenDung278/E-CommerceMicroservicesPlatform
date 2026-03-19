@@ -20,17 +20,16 @@ func NewCartHandler(p *proxy.ServiceProxy) *CartHandler {
 	}
 }
 
-// RegisterRoutes registers cart service routes
-func (h *CartHandler) RegisterRoutes(g *echo.Group, jwtSecret string) {
-	// All cart endpoints require authentication
-	g.Use(appmw.JWTAuth(jwtSecret))
+// RegisterRoutes registers cart service routes.
+func (h *CartHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	cart := e.Group("/api/v1/cart")
+	cart.Use(appmw.JWTAuth(jwtSecret))
 
-	g.GET("/", h.forwardRequest)
-	g.POST("/", h.forwardRequest)
-	g.DELETE("/", h.forwardRequest)
-	g.POST("/items", h.forwardRequest)
-	g.PUT("/items/:itemID", h.forwardRequest)
-	g.DELETE("/items/:itemID", h.forwardRequest)
+	cart.GET("", h.forwardRequest)
+	cart.DELETE("", h.forwardRequest)
+	cart.POST("/items", h.forwardRequest)
+	cart.PUT("/items/:productId", h.forwardRequest)
+	cart.DELETE("/items/:productId", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the cart service

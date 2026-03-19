@@ -39,6 +39,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Admin-only routes.
 	admin := e.Group("/api/v1/products")
 	admin.Use(middleware.JWTAuth(jwtSecret))
+	admin.Use(middleware.RequireRole(middleware.RoleAdmin))
 	admin.POST("", h.Create)
 	admin.PUT("/:id", h.Update)
 	admin.DELETE("/:id", h.Delete)

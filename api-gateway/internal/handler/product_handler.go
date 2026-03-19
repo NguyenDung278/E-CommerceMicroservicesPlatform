@@ -20,17 +20,16 @@ func NewProductHandler(p *proxy.ServiceProxy) *ProductHandler {
 	}
 }
 
-// RegisterRoutes registers product service routes
-func (h *ProductHandler) RegisterRoutes(g *echo.Group, jwtSecret string) {
-	// Public endpoints
-	g.GET("/", h.forwardRequest)
-	g.GET("/:id", h.forwardRequest)
+// RegisterRoutes registers product service routes.
+func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	public := e.Group("/api/v1/products")
+	public.GET("", h.forwardRequest)
+	public.GET("/:id", h.forwardRequest)
 
-	// Protected endpoints (admin)
-	protected := g.Group("")
+	protected := e.Group("/api/v1/products")
 	protected.Use(appmw.JWTAuth(jwtSecret))
-	
-	protected.POST("/", h.forwardRequest)
+	protected.Use(appmw.RequireRole(appmw.RoleAdmin))
+	protected.POST("", h.forwardRequest)
 	protected.PUT("/:id", h.forwardRequest)
 	protected.DELETE("/:id", h.forwardRequest)
 }

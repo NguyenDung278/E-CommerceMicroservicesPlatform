@@ -5,9 +5,10 @@ import "time"
 // OrderStatus represents the lifecycle of an order.
 //
 // STATE MACHINE:
-//   pending → paid → shipped → delivered
-//   pending → cancelled
-//   pending → paid → refunded
+//
+//	pending → paid → shipped → delivered
+//	pending → cancelled
+//	pending → paid → refunded
 type OrderStatus string
 
 const (

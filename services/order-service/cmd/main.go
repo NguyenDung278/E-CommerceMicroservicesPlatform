@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo-contrib/echoprometheus"
+	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Setup gRPC client for Product Service
-	productClient, err := grpc_client.NewProductClient(cfg.Services.ProductService)
+	productClient, err := grpc_client.NewProductClient(cfg.Services.ProductServiceGRPC)
 	if err != nil {
 		log.Fatal("failed to connect to product service via gRPC", zap.Error(err))
 	}
@@ -81,6 +81,8 @@ func main() {
 	e.HideBanner = true
 	e.Use(echomw.Recover())
 	e.Use(echomw.CORS())
+	e.Use(echomw.Secure())
+	e.Use(appmw.NewRateLimiter(40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("order_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())
@@ -96,7 +98,14 @@ func main() {
 
 	go func() {
 		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+		server := &http.Server{
+			Addr:         addr,
+			Handler:      e,
+			ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+			WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+			IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
+		}
+		if err := e.StartServer(server); err != nil && err != http.ErrServerClosed {
 			log.Fatal("server error", zap.Error(err))
 		}
 	}()

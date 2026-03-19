@@ -6,4 +6,3 @@ rabbitmq:
   host: "rabbitmq"
   port: "5672"
   user: "admin"
-  password: "password123"

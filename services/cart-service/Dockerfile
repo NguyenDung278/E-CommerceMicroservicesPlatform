@@ -1,44 +1,26 @@
-# Multi-stage Dockerfile for cart-service
-# Stage 1: Build
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /src
 
-# Copy go mod files
-COPY go.mod go.sum ./
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY services/cart-service/go.mod services/cart-service/go.sum ./services/cart-service/
 
-# Download dependencies
+WORKDIR /src/services/cart-service
 RUN go mod download
 
-# Copy source files
-COPY . .
+WORKDIR /src
+COPY pkg ./pkg
+COPY services/cart-service ./services/cart-service
 
-# Build the application (static binary for scratch)
-RUN CGO_ENABLED=0 GOOS=linux go build -o cart-service ./cmd/main.go
+WORKDIR /src/services/cart-service
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/cart-service ./cmd/main.go
 
-# Stage 2: Run
-FROM scratch
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Copy CA certificates for TLS (required for external API calls)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy binary from builder stage
-COPY --from=builder /app/cart-service /cart-service
-
-# Set environment variables (defaults)
 ENV CONFIG_PATH=/config/config.yaml
 
-# Create config directory
-RUN mkdir -p /config
+COPY --from=builder /out/cart-service /app/cart-service
 
-# Expose service ports (HTTP and gRPC)
 EXPOSE 8083
-EXPOSE 50053
 
-# Health check configuration (for Kubernetes)
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD ["/cart-service", "health-check"]
-
-# Run the service
-ENTRYPOINT ["/cart-service"]
+ENTRYPOINT ["/app/cart-service"]

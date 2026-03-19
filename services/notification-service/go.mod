@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg v0.0.0
+	github.com/labstack/echo-contrib v0.50.1
 	github.com/labstack/echo/v4 v4.15.0
 	github.com/rabbitmq/amqp091-go v1.9.0
 	go.uber.org/zap v1.26.0
@@ -14,7 +15,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/labstack/echo-contrib v0.50.1 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

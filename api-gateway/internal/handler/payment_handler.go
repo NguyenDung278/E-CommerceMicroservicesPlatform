@@ -20,15 +20,13 @@ func NewPaymentHandler(p *proxy.ServiceProxy) *PaymentHandler {
 	}
 }
 
-// RegisterRoutes registers payment service routes
-func (h *PaymentHandler) RegisterRoutes(g *echo.Group, jwtSecret string) {
-	// All payment endpoints require authentication
-	g.Use(appmw.JWTAuth(jwtSecret))
-
-	// Payment endpoints
-	g.POST("/", h.forwardRequest)
-	g.GET("/:id", h.forwardRequest)
-	g.GET("/", h.forwardRequest)
+// RegisterRoutes registers payment service routes.
+func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	payments := e.Group("/api/v1/payments")
+	payments.Use(appmw.JWTAuth(jwtSecret))
+	payments.POST("", h.forwardRequest)
+	payments.GET("/:id", h.forwardRequest)
+	payments.GET("/order/:orderId", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the payment service

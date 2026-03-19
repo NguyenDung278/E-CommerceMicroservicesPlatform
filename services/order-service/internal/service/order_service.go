@@ -166,10 +166,10 @@ func (s *OrderService) publishOrderEvent(order *model.Order) {
 	defer cancel()
 
 	err = s.amqpCh.PublishWithContext(ctx,
-		"events",          // exchange
-		"order.created",   // routing key
-		false,             // mandatory
-		false,             // immediate
+		"events",        // exchange
+		"order.created", // routing key
+		false,           // mandatory
+		false,           // immediate
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        body,

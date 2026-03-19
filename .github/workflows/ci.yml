@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+  pull_request:
+
+jobs:
+  go-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - pkg
+          - api-gateway
+          - proto
+          - services/user-service
+          - services/product-service
+          - services/cart-service
+          - services/order-service
+          - services/payment-service
+          - services/notification-service
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache: true
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          files=$(find . -name '*.go' -print)
+          if [ -n "$files" ]; then
+            test -z "$(gofmt -l $files)"
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

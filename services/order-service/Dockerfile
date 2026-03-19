@@ -1,44 +1,28 @@
-# Multi-stage Dockerfile for order-service
-# Stage 1: Build
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /src
 
-# Copy go mod files
-COPY go.mod go.sum ./
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY proto/go.mod proto/go.sum ./proto/
+COPY services/order-service/go.mod services/order-service/go.sum ./services/order-service/
 
-# Download dependencies
+WORKDIR /src/services/order-service
 RUN go mod download
 
-# Copy source files
-COPY . .
+WORKDIR /src
+COPY pkg ./pkg
+COPY proto ./proto
+COPY services/order-service ./services/order-service
 
-# Build the application (static binary for scratch)
-RUN CGO_ENABLED=0 GOOS=linux go build -o order-service ./cmd/main.go
+WORKDIR /src/services/order-service
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/order-service ./cmd/main.go
 
-# Stage 2: Run
-FROM scratch
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# Copy CA certificates for TLS (required for external API calls)
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy binary from builder stage
-COPY --from=builder /app/order-service /order-service
-
-# Set environment variables (defaults)
 ENV CONFIG_PATH=/config/config.yaml
 
-# Create config directory
-RUN mkdir -p /config
+COPY --from=builder /out/order-service /app/order-service
 
-# Expose service ports (HTTP and gRPC)
 EXPOSE 8084
-EXPOSE 50054
 
-# Health check configuration (for Kubernetes)
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD ["/order-service", "health-check"]
-
-# Run the service
-ENTRYPOINT ["/order-service"]
+ENTRYPOINT ["/app/order-service"]
