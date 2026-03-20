@@ -53,7 +53,7 @@ export function CheckoutPage() {
     event.preventDefault();
 
     if (!isAuthenticated || !token) {
-      navigate("/auth");
+      navigate("/login", { state: { from: location } });
       return;
     }
 

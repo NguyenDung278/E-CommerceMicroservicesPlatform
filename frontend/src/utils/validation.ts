@@ -1,7 +1,6 @@
 import {
   sanitizeEmail,
   sanitizeMultiline,
-  sanitizePhone,
   sanitizeText,
   sanitizeUrl,
   toPositiveFloat,
@@ -9,7 +8,9 @@ import {
 } from "./sanitize";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^(?:\+?\d{9,15}|0\d{9,10})$/;
+const usernamePattern = /^[a-zA-Z0-9._-]{3,32}$/;
+const passwordLetterPattern = /[A-Za-z]/;
+const passwordDigitPattern = /\d/;
 
 export type LoginFormValues = {
   identifier: string;
@@ -20,10 +21,8 @@ export type LoginFormValues = {
 export type RegisterFormValues = {
   fullName: string;
   email: string;
-  phone: string;
   password: string;
   confirmPassword: string;
-  acceptTerms: boolean;
 };
 
 export type FormErrors<T extends Record<string, unknown>> = Partial<Record<keyof T, string>>;
@@ -32,31 +31,33 @@ export function isValidEmail(value: string) {
   return emailPattern.test(sanitizeEmail(value));
 }
 
-export function isValidPhone(value: string) {
-  return phonePattern.test(sanitizePhone(value));
+export function isValidUsername(value: string) {
+  return usernamePattern.test(sanitizeText(value));
 }
 
-export function isValidEmailOrPhone(value: string) {
-  const trimmed = sanitizeText(value);
+export function isStrongPassword(value: string) {
+  const trimmed = value.trim();
 
-  if (!trimmed) {
-    return false;
-  }
-
-  if (trimmed.includes("@")) {
-    return isValidEmail(trimmed);
-  }
-
-  return isValidPhone(trimmed);
+  return (
+    trimmed.length >= 8 &&
+    passwordLetterPattern.test(trimmed) &&
+    passwordDigitPattern.test(trimmed)
+  );
 }
 
 export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFormValues> {
   const errors: FormErrors<LoginFormValues> = {};
+  const identifier = sanitizeText(values.identifier);
 
-  if (!sanitizeText(values.identifier)) {
-    errors.identifier = "Vui lòng nhập email hoặc số điện thoại.";
-  } else if (!isValidEmailOrPhone(values.identifier)) {
-    errors.identifier = "Email hoặc số điện thoại chưa đúng định dạng.";
+  if (!identifier) {
+    errors.identifier = "Vui lòng nhập email hoặc tên đăng nhập.";
+  } else if (identifier.includes("@")) {
+    if (!isValidEmail(identifier)) {
+      errors.identifier = "Email chưa đúng định dạng.";
+    }
+  } else if (!isValidUsername(identifier)) {
+    errors.identifier =
+      "Tên đăng nhập cần từ 3-32 ký tự và chỉ gồm chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.";
   }
 
   if (!sanitizeText(values.password)) {
@@ -81,24 +82,14 @@ export function validateRegisterFields(
     errors.email = "Email chưa đúng định dạng.";
   }
 
-  if (!sanitizePhone(values.phone)) {
-    errors.phone = "Vui lòng nhập số điện thoại.";
-  } else if (!isValidPhone(values.phone)) {
-    errors.phone = "Số điện thoại chưa đúng định dạng.";
-  }
-
-  if (values.password.trim().length < 8) {
-    errors.password = "Mật khẩu cần ít nhất 8 ký tự.";
+  if (!isStrongPassword(values.password)) {
+    errors.password = "Mật khẩu cần ít nhất 8 ký tự và gồm cả chữ lẫn số.";
   }
 
   if (!values.confirmPassword.trim()) {
     errors.confirmPassword = "Vui lòng xác nhận lại mật khẩu.";
   } else if (values.confirmPassword !== values.password) {
     errors.confirmPassword = "Mật khẩu xác nhận chưa khớp.";
-  }
-
-  if (!values.acceptTerms) {
-    errors.acceptTerms = "Bạn cần đồng ý điều khoản để tiếp tục.";
   }
 
   return errors;
@@ -115,8 +106,8 @@ export function validateRegister(values: {
   if (!isValidEmail(values.email)) {
     errors.push("Email không hợp lệ.");
   }
-  if (values.password.trim().length < 8) {
-    errors.push("Mật khẩu cần ít nhất 8 ký tự.");
+  if (!isStrongPassword(values.password)) {
+    errors.push("Mật khẩu cần ít nhất 8 ký tự và gồm cả chữ lẫn số.");
   }
   if (!sanitizeText(values.firstName)) {
     errors.push("Tên không được để trống.");

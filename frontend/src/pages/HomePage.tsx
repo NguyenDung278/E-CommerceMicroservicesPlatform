@@ -77,7 +77,7 @@ export function HomePage() {
             <Link className="primary-link" to="/products">
               Mua sắm ngay
             </Link>
-            <Link className="secondary-link" to="/auth">
+            <Link className="secondary-link" to="/register">
               Tạo tài khoản
             </Link>
           </div>

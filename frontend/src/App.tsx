@@ -5,16 +5,17 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContext";
 import { AdminPage } from "./pages/AdminPage";
-import { AuthPage } from "./pages/AuthPage";
 import { CartPage } from "./pages/CartPage";
 import { CategoryPage } from "./pages/CategoryPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { HomePage } from "./pages/HomePage";
+import { LoginPage } from "./pages/LoginPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
 import { PaymentHistoryPage } from "./pages/PaymentHistoryPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { RegisterPage } from "./pages/RegisterPage";
 
 export default function App() {
   return (
@@ -29,7 +30,8 @@ export default function App() {
               <Route element={<CategoryPage />} path="categories/:categoryName" />
               <Route element={<CartPage />} path="cart" />
               <Route element={<CheckoutPage />} path="checkout" />
-              <Route element={<AuthPage />} path="auth" />
+              <Route element={<LoginPage />} path="login" />
+              <Route element={<RegisterPage />} path="register" />
               <Route
                 element={
                   <ProtectedRoute>

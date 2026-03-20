@@ -73,10 +73,13 @@ async function request<T>(path: string, options: RequestOptions = {}) {
 export function getErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 409 && error.detail.includes("email already exists")) {
-      return "Email đã tồn tại. Hãy dùng form đăng nhập ở bên dưới.";
+      return "Email đã tồn tại. Hãy đăng nhập hoặc dùng email khác.";
     }
     if (error.status === 409 && error.detail.includes("phone already exists")) {
       return "Số điện thoại đã được sử dụng. Hãy dùng số khác hoặc đăng nhập.";
+    }
+    if (error.status === 401 && error.detail.includes("invalid email/phone or password")) {
+      return "Thông tin đăng nhập hoặc mật khẩu chưa chính xác.";
     }
     return error.detail ? `${error.message}: ${error.detail}` : error.message;
   }

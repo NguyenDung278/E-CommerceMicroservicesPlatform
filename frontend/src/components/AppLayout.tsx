@@ -39,7 +39,7 @@ export function AppLayout() {
               Tài khoản
             </NavLink>
           ) : (
-            <NavLink className={navClassName} to="/auth">
+            <NavLink className={navClassName} to="/login">
               Đăng nhập
             </NavLink>
           )}
@@ -67,7 +67,7 @@ export function AppLayout() {
               </button>
             </>
           ) : (
-            <NavLink className="primary-link" to="/auth">
+            <NavLink className="primary-link" to="/register">
               Bắt đầu
             </NavLink>
           )}
