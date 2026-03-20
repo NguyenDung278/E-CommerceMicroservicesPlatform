@@ -57,7 +57,7 @@ func main() {
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
-	e.Use(echomw.CORS())
+	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
 	e.Use(appmw.NewRateLimiter(80, 160, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

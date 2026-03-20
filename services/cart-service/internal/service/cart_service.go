@@ -3,21 +3,31 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/repository"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
-var ErrItemNotFound = errors.New("item not found in cart")
+var (
+	ErrItemNotFound       = errors.New("item not found in cart")
+	ErrProductNotFound    = errors.New("product not found")
+	ErrProductUnavailable = errors.New("product is unavailable")
+	ErrInsufficientStock  = errors.New("insufficient stock")
+)
 
 // CartService contains business logic for cart operations.
 type CartService struct {
-	repo repository.CartRepository
+	repo          repository.CartRepository
+	productClient *grpc_client.ProductClient
 }
 
-func NewCartService(repo repository.CartRepository) *CartService {
-	return &CartService{repo: repo}
+func NewCartService(repo repository.CartRepository, productClient *grpc_client.ProductClient) *CartService {
+	return &CartService{repo: repo, productClient: productClient}
 }
 
 // GetCart retrieves the cart for a user.
@@ -35,22 +45,44 @@ func (s *CartService) AddItem(ctx context.Context, userID string, req dto.AddToC
 		return nil, err
 	}
 
+	product, err := s.productClient.GetProduct(ctx, req.ProductID)
+	if err != nil {
+		switch grpcstatus.Code(err) {
+		case codes.NotFound:
+			return nil, fmt.Errorf("%w: %s", ErrProductNotFound, req.ProductID)
+		case codes.InvalidArgument:
+			return nil, fmt.Errorf("%w: %s", ErrProductUnavailable, req.ProductID)
+		default:
+			return nil, fmt.Errorf("failed to fetch product %s: %w", req.ProductID, err)
+		}
+	}
+
 	// Check if item already exists in cart — increment quantity if so.
 	found := false
 	for i, item := range cart.Items {
 		if item.ProductID == req.ProductID {
+			nextQuantity := cart.Items[i].Quantity + req.Quantity
+			if product.StockQuantity < int32(nextQuantity) {
+				return nil, fmt.Errorf("%w: product %s only has %d item(s)", ErrInsufficientStock, product.Name, product.StockQuantity)
+			}
+
 			cart.Items[i].Quantity += req.Quantity
-			cart.Items[i].Price = req.Price // Update price in case it changed
+			cart.Items[i].Name = product.Name
+			cart.Items[i].Price = float64(product.Price)
 			found = true
 			break
 		}
 	}
 
 	if !found {
+		if product.StockQuantity < int32(req.Quantity) {
+			return nil, fmt.Errorf("%w: product %s only has %d item(s)", ErrInsufficientStock, product.Name, product.StockQuantity)
+		}
+
 		cart.Items = append(cart.Items, model.CartItem{
 			ProductID: req.ProductID,
-			Name:      req.Name,
-			Price:     req.Price,
+			Name:      product.Name,
+			Price:     float64(product.Price),
 			Quantity:  req.Quantity,
 		})
 	}

@@ -8,7 +8,7 @@ import {
 } from "./sanitize";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const usernamePattern = /^[a-zA-Z0-9._-]{3,32}$/;
+const phonePattern = /^[+]?[\d\s().-]{10,20}$/;
 const passwordLetterPattern = /[A-Za-z]/;
 const passwordDigitPattern = /\d/;
 
@@ -31,8 +31,8 @@ export function isValidEmail(value: string) {
   return emailPattern.test(sanitizeEmail(value));
 }
 
-export function isValidUsername(value: string) {
-  return usernamePattern.test(sanitizeText(value));
+export function isValidPhone(value: string) {
+  return phonePattern.test(sanitizeText(value));
 }
 
 export function isStrongPassword(value: string) {
@@ -50,14 +50,13 @@ export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFo
   const identifier = sanitizeText(values.identifier);
 
   if (!identifier) {
-    errors.identifier = "Vui lòng nhập email hoặc tên đăng nhập.";
+    errors.identifier = "Vui lòng nhập email hoặc số điện thoại.";
   } else if (identifier.includes("@")) {
     if (!isValidEmail(identifier)) {
       errors.identifier = "Email chưa đúng định dạng.";
     }
-  } else if (!isValidUsername(identifier)) {
-    errors.identifier =
-      "Tên đăng nhập cần từ 3-32 ký tự và chỉ gồm chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.";
+  } else if (!isValidPhone(identifier)) {
+    errors.identifier = "Số điện thoại chưa đúng định dạng.";
   }
 
   if (!sanitizeText(values.password)) {
@@ -188,16 +187,12 @@ export function validateOrder(values: { productId: string; quantity: string }) {
 
 export function validatePayment(values: {
   orderId: string;
-  amount: string;
   paymentMethod: string;
 }) {
   const errors: string[] = [];
 
   if (!sanitizeText(values.orderId)) {
     errors.push("Mã đơn hàng không được để trống.");
-  }
-  if (toPositiveFloat(values.amount) <= 0) {
-    errors.push("Số tiền thanh toán phải lớn hơn 0.");
   }
   if (!sanitizeText(values.paymentMethod)) {
     errors.push("Bạn chưa chọn phương thức thanh toán.");

@@ -7,17 +7,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
-)
-
-var (
-	ErrPaymentNotFound  = errors.New("payment not found")
-	ErrDuplicatePayment = errors.New("payment already exists for this order")
 )
 
 // PaymentEvent is published to RabbitMQ after payment processing.
@@ -30,13 +27,14 @@ type PaymentEvent struct {
 }
 
 type PaymentService struct {
-	repo   repository.PaymentRepository
-	amqpCh *amqp.Channel
-	log    *zap.Logger
+	repo        repository.PaymentRepository
+	orderClient *client.OrderClient
+	amqpCh      *amqp.Channel
+	log         *zap.Logger
 }
 
-func NewPaymentService(repo repository.PaymentRepository, amqpCh *amqp.Channel, log *zap.Logger) *PaymentService {
-	return &PaymentService{repo: repo, amqpCh: amqpCh, log: log}
+func NewPaymentService(repo repository.PaymentRepository, orderClient *client.OrderClient, amqpCh *amqp.Channel, log *zap.Logger) *PaymentService {
+	return &PaymentService{repo: repo, orderClient: orderClient, amqpCh: amqpCh, log: log}
 }
 
 // ProcessPayment simulates payment processing.
@@ -49,7 +47,7 @@ func NewPaymentService(repo repository.PaymentRepository, amqpCh *amqp.Channel, 
 //  4. Update status to "completed" or "failed"
 //
 // FOR THIS DEMO: We simulate instant success and publish an event.
-func (s *PaymentService) ProcessPayment(ctx context.Context, userID string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
+func (s *PaymentService) ProcessPayment(ctx context.Context, userID, authHeader string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
 	// Check for duplicate payment.
 	existing, err := s.repo.GetByOrderID(ctx, req.OrderID)
 	if err != nil {
@@ -59,12 +57,23 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID string, req 
 		return nil, ErrDuplicatePayment
 	}
 
+	order, err := s.orderClient.GetOrder(ctx, authHeader, req.OrderID)
+	if err != nil {
+		if errors.Is(err, client.ErrOrderNotFound) {
+			return nil, ErrOrderNotFound
+		}
+		return nil, err
+	}
+	if order.UserID != userID {
+		return nil, ErrOrderNotFound
+	}
+
 	now := time.Now()
 	payment := &model.Payment{
 		ID:            uuid.New().String(),
 		OrderID:       req.OrderID,
 		UserID:        userID,
-		Amount:        req.Amount,
+		Amount:        order.TotalPrice,
 		Status:        model.PaymentStatusCompleted, // Simulated success
 		PaymentMethod: req.PaymentMethod,
 		CreatedAt:     now,
@@ -72,17 +81,20 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID string, req 
 	}
 
 	if err := s.repo.Create(ctx, payment); err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrDuplicatePayment
+		}
 		return nil, err
 	}
 
 	// Publish payment event.
-	go s.publishPaymentEvent(payment)
+	s.publishPaymentEvent(payment)
 
 	return payment, nil
 }
 
-func (s *PaymentService) GetPayment(ctx context.Context, paymentID string) (*model.Payment, error) {
-	payment, err := s.repo.GetByID(ctx, paymentID)
+func (s *PaymentService) GetPayment(ctx context.Context, paymentID, userID string) (*model.Payment, error) {
+	payment, err := s.repo.GetByIDForUser(ctx, paymentID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +104,8 @@ func (s *PaymentService) GetPayment(ctx context.Context, paymentID string) (*mod
 	return payment, nil
 }
 
-func (s *PaymentService) GetPaymentByOrder(ctx context.Context, orderID string) (*model.Payment, error) {
-	payment, err := s.repo.GetByOrderID(ctx, orderID)
+func (s *PaymentService) GetPaymentByOrder(ctx context.Context, orderID, userID string) (*model.Payment, error) {
+	payment, err := s.repo.GetByOrderIDForUser(ctx, orderID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,23 +142,32 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment) {
 		routingKey = "payment.failed"
 	}
 
-	err = s.amqpCh.PublishWithContext(ctx,
-		"events",   // exchange
-		routingKey, // routing key
-		false, false,
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-			Timestamp:   time.Now(),
-		},
-	)
-	if err != nil {
-		s.log.Error("failed to publish payment event", zap.Error(err))
-		return
+	for attempt := 0; attempt < 3; attempt++ {
+		err = s.amqpCh.PublishWithContext(ctx,
+			"events",   // exchange
+			routingKey, // routing key
+			false, false,
+			amqp.Publishing{
+				ContentType: "application/json",
+				Body:        body,
+				Timestamp:   time.Now(),
+			},
+		)
+		if err == nil {
+			s.log.Info("published payment event",
+				zap.String("payment_id", payment.ID),
+				zap.String("routing_key", routingKey),
+			)
+			return
+		}
+
+		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
 	}
 
-	s.log.Info("published payment event",
-		zap.String("payment_id", payment.ID),
-		zap.String("routing_key", routingKey),
-	)
+	s.log.Error("failed to publish payment event", zap.Error(err))
+}
+
+func isUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }

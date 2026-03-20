@@ -28,7 +28,7 @@ const loginStats = [
   },
   {
     value: "Cục bộ",
-    label: "Lưu thông tin bằng localStorage trên thiết bị"
+    label: "Lưu tài khoản trên thiết bị bằng localStorage"
   },
   {
     value: "Responsive",
@@ -46,8 +46,8 @@ const loginHighlights = [
     description: "Sau khi đăng nhập xong, người dùng được trả về đúng nơi họ đang thao tác trước đó."
   },
   {
-    title: "Nhớ mật khẩu theo yêu cầu",
-    description: "Checkbox ghi nhớ sẽ lưu tài khoản và mật khẩu cục bộ để lần sau điền lại tự động."
+    title: "Nhớ tài khoản theo yêu cầu",
+    description: "Checkbox ghi nhớ chỉ lưu tài khoản cục bộ để lần sau điền lại nhanh hơn mà không giữ plaintext password."
   }
 ];
 
@@ -64,7 +64,7 @@ export function LoginPage() {
 
     return {
       identifier: remembered.identifier,
-      password: remembered.password,
+      password: "",
       rememberMe: true
     };
   });
@@ -152,8 +152,7 @@ export function LoginPage() {
 
       if (loginForm.rememberMe) {
         saveRememberedLogin({
-          identifier: loginForm.identifier,
-          password: loginForm.password
+          identifier: loginForm.identifier
         });
       } else {
         clearRememberedLogin();
@@ -187,9 +186,9 @@ export function LoginPage() {
         <form className="auth-form-stack" noValidate onSubmit={handleLogin}>
           <FormField
             error={visibleErrors.identifier}
-            hint="Nhập email đã đăng ký hoặc tài khoản bạn thường dùng để đăng nhập."
+            hint="Nhập email đã đăng ký hoặc số điện thoại dùng để đăng nhập."
             htmlFor="login-identifier"
-            label="Email / Tên đăng nhập"
+            label="Email / Số điện thoại"
             required
           >
             <input
@@ -232,7 +231,7 @@ export function LoginPage() {
                 type="checkbox"
                 onChange={(event) => updateField("rememberMe", event.target.checked)}
               />
-              <span>Ghi nhớ mật khẩu</span>
+              <span>Ghi nhớ tài khoản</span>
             </label>
 
             <button
@@ -245,8 +244,7 @@ export function LoginPage() {
           </div>
 
           <p className="auth-storage-note">
-            Khi bật, hệ thống sẽ lưu tài khoản và mật khẩu cục bộ trên thiết bị này bằng
-            localStorage.
+            Khi bật, hệ thống sẽ lưu lại tài khoản trên thiết bị này để điền nhanh hơn ở lần sau.
           </p>
 
           {showRecoveryHelp ? (

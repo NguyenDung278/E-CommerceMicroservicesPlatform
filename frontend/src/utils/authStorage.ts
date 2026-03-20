@@ -4,12 +4,7 @@ const rememberedLoginKey = "ecommerce_frontend_saved_login";
 
 type RememberedLogin = {
   identifier: string;
-  password: string;
 };
-
-function sanitizePassword(value: string) {
-  return value.replace(/[\u0000-\u001f\u007f]/g, "");
-}
 
 export function readRememberedLogin() {
   if (typeof window === "undefined") {
@@ -24,15 +19,13 @@ export function readRememberedLogin() {
 
     const parsed = JSON.parse(raw) as Partial<RememberedLogin>;
     const identifier = sanitizeText(String(parsed.identifier ?? ""));
-    const password = sanitizePassword(String(parsed.password ?? ""));
 
-    if (!identifier || !password) {
+    if (!identifier) {
       return null;
     }
 
     return {
-      identifier,
-      password
+      identifier
     } satisfies RememberedLogin;
   } catch {
     return null;
@@ -45,9 +38,8 @@ export function saveRememberedLogin(value: RememberedLogin) {
   }
 
   const identifier = sanitizeText(value.identifier);
-  const password = sanitizePassword(value.password);
 
-  if (!identifier || !password) {
+  if (!identifier) {
     clearRememberedLogin();
     return;
   }
@@ -56,8 +48,7 @@ export function saveRememberedLogin(value: RememberedLogin) {
     window.localStorage.setItem(
       rememberedLoginKey,
       JSON.stringify({
-        identifier,
-        password
+        identifier
       } satisfies RememberedLogin)
     );
   } catch {

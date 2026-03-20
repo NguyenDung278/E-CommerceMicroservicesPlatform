@@ -117,10 +117,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID string, req dto.C
 		return nil, err
 	}
 
-	// Publish event asynchronously.
-	// DESIGN: We don't fail the order if event publishing fails.
-	// In production, use an outbox pattern for guaranteed delivery.
-	go s.publishOrderEvent(order)
+	// Publish after commit with bounded retries.
+	// We still don't fail the order if event publishing fails, but this avoids
+	// losing the event immediately because a goroutine never got to run.
+	s.publishOrderEvent(order)
 
 	return order, nil
 }
@@ -178,26 +178,30 @@ func (s *OrderService) publishOrderEvent(order *model.Order) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = s.amqpCh.PublishWithContext(ctx,
-		"events",        // exchange
-		"order.created", // routing key
-		false,           // mandatory
-		false,           // immediate
-		amqp.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-			Timestamp:   time.Now(),
-		},
-	)
-	if err != nil {
-		s.log.Error("failed to publish order event", zap.Error(err))
-		return
+	for attempt := 0; attempt < 3; attempt++ {
+		err = s.amqpCh.PublishWithContext(ctx,
+			"events",        // exchange
+			"order.created", // routing key
+			false,           // mandatory
+			false,           // immediate
+			amqp.Publishing{
+				ContentType: "application/json",
+				Body:        body,
+				Timestamp:   time.Now(),
+			},
+		)
+		if err == nil {
+			s.log.Info("published order event",
+				zap.String("order_id", order.ID),
+				zap.String("routing_key", "order.created"),
+			)
+			return
+		}
+
+		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
 	}
 
-	s.log.Info("published order event",
-		zap.String("order_id", order.ID),
-		zap.String("routing_key", "order.created"),
-	)
+	s.log.Error("failed to publish order event", zap.Error(err))
 }
 
 // SetupExchange declares the RabbitMQ exchange and queue for order events.

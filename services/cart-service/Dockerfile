@@ -3,6 +3,7 @@ FROM golang:1.25-alpine AS builder
 WORKDIR /src
 
 COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY proto/go.mod proto/go.sum ./proto/
 COPY services/cart-service/go.mod services/cart-service/go.sum ./services/cart-service/
 
 WORKDIR /src/services/cart-service
@@ -10,6 +11,7 @@ RUN go mod download
 
 WORKDIR /src
 COPY pkg ./pkg
+COPY proto ./proto
 COPY services/cart-service ./services/cart-service
 
 WORKDIR /src/services/cart-service

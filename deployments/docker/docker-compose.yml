@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
-    ports:
-      - "5434:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
@@ -24,8 +22,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ecommerce-redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -44,9 +40,6 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       RABBITMQ_DEFAULT_VHOST: /
-    ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
@@ -61,14 +54,6 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.49
     container_name: ecommerce-jaeger
-    ports:
-      - "5775:5775/udp"
-      - "6831:6831/udp"
-      - "6832:6832/udp"
-      - "5778:5778"
-      - "16686:16686" # Jaeger UI
-      - "14268:14268"
-      - "14250:14250"
     environment:
       COLLECTOR_OTLP_ENABLED: true
     networks:
@@ -78,8 +63,6 @@ services:
   prometheus:
     image: prom/prometheus:v2.46.0
     container_name: ecommerce-prometheus
-    ports:
-      - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./alert_rules.yml:/etc/prometheus/alert_rules.yml
@@ -116,8 +99,6 @@ services:
   grafana:
     image: grafana/grafana:10.1.0
     container_name: ecommerce-grafana
-    ports:
-      - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-me-grafana-password}
@@ -202,9 +183,6 @@ services:
       context: ../..
       dockerfile: services/user-service/Dockerfile
     container_name: ecommerce-user-service
-    ports:
-      - "8081:8081"   # HTTP
-      - "50051:50051" # gRPC
     environment:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
@@ -230,9 +208,6 @@ services:
       context: ../..
       dockerfile: services/product-service/Dockerfile
     container_name: ecommerce-product-service
-    ports:
-      - "8082:8082"   # HTTP
-      - "50052:50052" # gRPC
     environment:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
@@ -258,8 +233,6 @@ services:
       context: ../..
       dockerfile: services/cart-service/Dockerfile
     container_name: ecommerce-cart-service
-    ports:
-      - "8083:8083"
     environment:
       CONFIG_PATH: /config/config.yaml
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -285,8 +258,6 @@ services:
       context: ../..
       dockerfile: services/order-service/Dockerfile
     container_name: ecommerce-order-service
-    ports:
-      - "8084:8084"
     environment:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
@@ -313,8 +284,6 @@ services:
       context: ../..
       dockerfile: services/payment-service/Dockerfile
     container_name: ecommerce-payment-service
-    ports:
-      - "8085:8085"
     environment:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
@@ -341,8 +310,6 @@ services:
       context: ../..
       dockerfile: services/notification-service/Dockerfile
     container_name: ecommerce-notification-service
-    ports:
-      - "8086:8086"
     environment:
       CONFIG_PATH: /config/config.yaml
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}

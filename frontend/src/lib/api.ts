@@ -178,8 +178,6 @@ export const api = {
     token: string,
     body: {
       product_id: string;
-      name: string;
-      price: number;
       quantity: number;
     }
   ) {
@@ -222,7 +220,6 @@ export const api = {
     token: string,
     body: {
       order_id: string;
-      amount: number;
       payment_method: string;
     }
   ) {

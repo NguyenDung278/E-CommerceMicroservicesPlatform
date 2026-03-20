@@ -51,8 +51,6 @@ export function CatalogPage() {
       setBusyProductId(product.id);
       await addItem({
         product_id: product.id,
-        name: product.name,
-        price: product.price,
         quantity: 1
       });
       setFeedback(`${product.name} đã được thêm vào giỏ hàng.`);

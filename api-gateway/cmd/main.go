@@ -64,7 +64,7 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(echomw.Recover())
-	e.Use(echomw.CORS())
+	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
 	e.Use(appmw.NewRateLimiter(60, 120, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

@@ -53,6 +53,15 @@ func (h *CartHandler) AddItem(c echo.Context) error {
 
 	cart, err := h.cartService.AddItem(c.Request().Context(), claims.UserID, req)
 	if err != nil {
+		if errors.Is(err, service.ErrProductNotFound) {
+			return response.Error(c, http.StatusNotFound, "product not found", err.Error())
+		}
+		if errors.Is(err, service.ErrProductUnavailable) {
+			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
+		}
+		if errors.Is(err, service.ErrInsufficientStock) {
+			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", err.Error())
 	}
 	return response.Success(c, http.StatusOK, "item added to cart", cart)

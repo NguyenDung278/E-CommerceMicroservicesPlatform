@@ -39,10 +39,18 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	payment, err := h.paymentService.ProcessPayment(c.Request().Context(), claims.UserID, req)
+	payment, err := h.paymentService.ProcessPayment(
+		c.Request().Context(),
+		claims.UserID,
+		c.Request().Header.Get(echo.HeaderAuthorization),
+		req,
+	)
 	if err != nil {
 		if errors.Is(err, service.ErrDuplicatePayment) {
 			return response.Error(c, http.StatusConflict, "duplicate", "payment already exists for this order")
+		}
+		if errors.Is(err, service.ErrOrderNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "order not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "payment processing failed")
 	}
@@ -50,8 +58,9 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 }
 
 func (h *PaymentHandler) GetPayment(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
 	id := c.Param("id")
-	payment, err := h.paymentService.GetPayment(c.Request().Context(), id)
+	payment, err := h.paymentService.GetPayment(c.Request().Context(), id, claims.UserID)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")
@@ -62,8 +71,9 @@ func (h *PaymentHandler) GetPayment(c echo.Context) error {
 }
 
 func (h *PaymentHandler) GetPaymentByOrder(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
 	orderID := c.Param("orderId")
-	payment, err := h.paymentService.GetPaymentByOrder(c.Request().Context(), orderID)
+	payment, err := h.paymentService.GetPaymentByOrder(c.Request().Context(), orderID, claims.UserID)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")

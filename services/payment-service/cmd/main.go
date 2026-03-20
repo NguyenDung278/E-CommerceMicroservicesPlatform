@@ -20,6 +20,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
@@ -62,15 +63,16 @@ func main() {
 		}
 	}
 
+	orderClient := client.NewOrderClient(cfg.Services.OrderService)
 	paymentRepo := repository.NewPaymentRepository(db)
-	paymentService := service.NewPaymentService(paymentRepo, amqpCh, log)
+	paymentService := service.NewPaymentService(paymentRepo, orderClient, amqpCh, log)
 	paymentHandler := handler.NewPaymentHandler(paymentService)
 
 	e := echo.New()
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
-	e.Use(echomw.CORS())
+	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
 	e.Use(appmw.NewRateLimiter(40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

@@ -5,7 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
 import type { Order, Payment } from "../types/api";
-import { sanitizeText, toPositiveFloat } from "../utils/sanitize";
+import { sanitizeText } from "../utils/sanitize";
 import { validatePayment } from "../utils/validation";
 
 type DirectProductState = {
@@ -94,7 +94,6 @@ export function CheckoutPage() {
 
     const form = {
       orderId: latestOrder.id,
-      amount: latestOrder.total_price.toFixed(2),
       paymentMethod
     };
 
@@ -108,7 +107,6 @@ export function CheckoutPage() {
       setIsBusy("payment");
       const response = await api.processPayment(token, {
         order_id: sanitizeText(latestOrder.id),
-        amount: toPositiveFloat(latestOrder.total_price.toFixed(2)),
         payment_method: sanitizeText(paymentMethod)
       });
       setLatestPayment(response.data);

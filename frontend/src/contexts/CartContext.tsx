@@ -18,8 +18,6 @@ type CartContextValue = {
   refreshCart: () => Promise<Cart>;
   addItem: (item: {
     product_id: string;
-    name: string;
-    price: number;
     quantity: number;
   }) => Promise<Cart>;
   updateItem: (productId: string, quantity: number) => Promise<Cart>;
@@ -102,8 +100,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   async function addItem(item: {
     product_id: string;
-    name: string;
-    price: number;
     quantity: number;
   }) {
     if (!token) {

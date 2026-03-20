@@ -20,6 +20,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/service"
@@ -51,15 +52,21 @@ func main() {
 
 	log.Info("connected to Redis", zap.String("addr", cfg.Redis.Addr()))
 
+	productClient, err := grpc_client.NewProductClient(cfg.Services.ProductServiceGRPC)
+	if err != nil {
+		log.Fatal("failed to connect to product service gRPC", zap.Error(err))
+	}
+	defer productClient.Close()
+
 	cartRepo := repository.NewCartRepository(rdb)
-	cartService := service.NewCartService(cartRepo)
+	cartService := service.NewCartService(cartRepo, productClient)
 	cartHandler := handler.NewCartHandler(cartService)
 
 	e := echo.New()
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
-	e.Use(echomw.CORS())
+	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
 	e.Use(appmw.NewRateLimiter(60, 120, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
