@@ -24,6 +24,7 @@ type Config struct {
 	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	GRPC     GRPCConfig     `mapstructure:"grpc"`
+	SMTP     SMTPConfig     `mapstructure:"smtp"`
 	Services ServicesConfig `mapstructure:"services"`
 }
 
@@ -40,6 +41,15 @@ type ServicesConfig struct {
 	CartService        string `mapstructure:"cart_service"`
 	OrderService       string `mapstructure:"order_service"`
 	PaymentService     string `mapstructure:"payment_service"`
+}
+
+type SMTPConfig struct {
+	Host        string `mapstructure:"host"`
+	Port        string `mapstructure:"port"`
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	FromName    string `mapstructure:"from_name"`
+	FromAddress string `mapstructure:"from_address"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -95,6 +105,10 @@ func (r RabbitMQConfig) URL() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%s/", r.User, r.Password, r.Host, r.Port)
 }
 
+func (s SMTPConfig) Addr() string {
+	return fmt.Sprintf("%s:%s", s.Host, s.Port)
+}
+
 // JWTConfig holds JWT authentication settings.
 type JWTConfig struct {
 	Secret     string `mapstructure:"secret"`
@@ -136,6 +150,12 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("jwt.secret", "change-me-in-production")
 	v.SetDefault("jwt.expiration", 24)
 	v.SetDefault("grpc.port", "50051")
+	v.SetDefault("smtp.host", "")
+	v.SetDefault("smtp.port", "587")
+	v.SetDefault("smtp.username", "")
+	v.SetDefault("smtp.password", "")
+	v.SetDefault("smtp.from_name", "ND Shop")
+	v.SetDefault("smtp.from_address", "")
 	v.SetDefault("services.product_service", "product-service:8082")
 	v.SetDefault("services.product_service_grpc", "product-service:50052")
 	v.SetDefault("services.user_service", "user-service:8081")

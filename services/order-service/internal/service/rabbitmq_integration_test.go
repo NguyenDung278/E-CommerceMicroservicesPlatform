@@ -84,7 +84,7 @@ func TestPublishOrderEventWithRabbitMQContainer(t *testing.T) {
 		UserID:     "user-1",
 		Status:     model.OrderStatusPending,
 		TotalPrice: 99.99,
-	})
+	}, "user@example.com")
 
 	select {
 	case msg := <-msgs:

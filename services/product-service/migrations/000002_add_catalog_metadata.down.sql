@@ -1,0 +1,11 @@
+DROP INDEX IF EXISTS idx_products_tags;
+DROP INDEX IF EXISTS idx_products_sku;
+DROP INDEX IF EXISTS idx_products_status;
+DROP INDEX IF EXISTS idx_products_brand;
+
+ALTER TABLE products
+DROP COLUMN IF EXISTS variants,
+DROP COLUMN IF EXISTS sku,
+DROP COLUMN IF EXISTS status,
+DROP COLUMN IF EXISTS tags,
+DROP COLUMN IF EXISTS brand;

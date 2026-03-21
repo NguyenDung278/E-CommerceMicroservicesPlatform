@@ -18,7 +18,7 @@ export function HomePage() {
     let active = true;
 
     void api
-      .listProducts()
+      .listProducts({ status: "active" })
       .then((response) => {
         if (active) {
           setProducts(response.data.slice(0, 3));

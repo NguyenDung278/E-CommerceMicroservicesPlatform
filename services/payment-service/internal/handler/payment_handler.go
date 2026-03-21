@@ -42,6 +42,7 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 	payment, err := h.paymentService.ProcessPayment(
 		c.Request().Context(),
 		claims.UserID,
+		claims.Email,
 		c.Request().Header.Get(echo.HeaderAuthorization),
 		req,
 	)

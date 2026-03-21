@@ -6,3 +6,10 @@ rabbitmq:
   host: "rabbitmq"
   port: "5672"
   user: "admin"
+
+smtp:
+  host: ""
+  port: "587"
+  username: ""
+  from_name: "ND Shop"
+  from_address: ""

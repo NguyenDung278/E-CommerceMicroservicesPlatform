@@ -38,8 +38,28 @@ export function ProductCard({
         </span>
       </div>
 
+      <div className="product-meta-row">
+        <span>{product.brand || "No brand"}</span>
+        <span>{product.status || "active"}</span>
+        <span>{product.sku || "SKU pending"}</span>
+      </div>
+
       <h3>{product.name}</h3>
       <p className="product-description">{product.description || "Không có mô tả sản phẩm."}</p>
+
+      {product.tags.length > 0 ? (
+        <div className="product-tag-row">
+          {product.tags.map((tag) => (
+            <span className="product-tag-chip" key={tag}>
+              #{tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {product.variants.length > 0 ? (
+        <p className="product-variant-summary">{product.variants.length} biến thể SKU khả dụng</p>
+      ) : null}
 
       <div className="product-price-row">
         <strong>${product.price.toFixed(2)}</strong>

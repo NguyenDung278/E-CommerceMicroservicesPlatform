@@ -1,8 +1,11 @@
 import type {
+  AdminOrderReport,
   ApiEnvelope,
   AuthPayload,
   Cart,
+  Coupon,
   Order,
+  OrderEvent,
   Payment,
   Product,
   UserProfile
@@ -117,7 +120,14 @@ export const api = {
   ) {
     return request<UserProfile>("/api/v1/users/profile", { method: "PUT", token, body });
   },
-  listProducts(options?: { search?: string; category?: string; limit?: number }) {
+  listProducts(options?: {
+    search?: string;
+    category?: string;
+    brand?: string;
+    tag?: string;
+    status?: string;
+    limit?: number;
+  }) {
     const params = new URLSearchParams();
     params.set("limit", String(options?.limit ?? 24));
 
@@ -126,6 +136,15 @@ export const api = {
     }
     if (options?.category) {
       params.set("category", options.category);
+    }
+    if (options?.brand) {
+      params.set("brand", options.brand);
+    }
+    if (options?.tag) {
+      params.set("tag", options.tag);
+    }
+    if (options?.status) {
+      params.set("status", options.status);
     }
 
     const query = `?${params.toString()}`;
@@ -142,6 +161,16 @@ export const api = {
       price: number;
       stock: number;
       category: string;
+      brand: string;
+      tags: string[];
+      status: string;
+      sku: string;
+      variants: Array<{
+        sku: string;
+        label: string;
+        price: number;
+        stock: number;
+      }>;
       image_url: string;
     }
   ) {
@@ -156,6 +185,16 @@ export const api = {
       price: number;
       stock: number;
       category: string;
+      brand: string;
+      tags: string[];
+      status: string;
+      sku: string;
+      variants: Array<{
+        sku: string;
+        label: string;
+        price: number;
+        stock: number;
+      }>;
       image_url: string;
     }>
   ) {
@@ -202,6 +241,11 @@ export const api = {
   listOrders(token: string) {
     return request<Order[]>("/api/v1/orders", { token });
   },
+  getAdminOrderReport(token: string, days = 30) {
+    return request<AdminOrderReport>(`/api/v1/admin/orders/report?days=${encodeURIComponent(String(days))}`, {
+      token
+    });
+  },
   getOrderById(token: string, orderId: string) {
     return request<Order>(`/api/v1/orders/${encodeURIComponent(orderId)}`, { token });
   },
@@ -212,9 +256,74 @@ export const api = {
         product_id: string;
         quantity: number;
       }>;
+      coupon_code?: string;
     }
   ) {
     return request<Order>("/api/v1/orders", { method: "POST", token, body });
+  },
+  getOrderTimeline(token: string, orderId: string) {
+    return request<OrderEvent[]>(`/api/v1/orders/${encodeURIComponent(orderId)}/events`, { token });
+  },
+  listAdminOrders(
+    token: string,
+    options?: { page?: number; limit?: number; userId?: string; status?: string; from?: string; to?: string }
+  ) {
+    const params = new URLSearchParams();
+    params.set("page", String(options?.page ?? 1));
+    params.set("limit", String(options?.limit ?? 20));
+
+    if (options?.userId) {
+      params.set("user_id", options.userId);
+    }
+    if (options?.status) {
+      params.set("status", options.status);
+    }
+    if (options?.from) {
+      params.set("from", options.from);
+    }
+    if (options?.to) {
+      params.set("to", options.to);
+    }
+
+    return request<Order[]>(`/api/v1/admin/orders?${params.toString()}`, { token });
+  },
+  getAdminOrder(token: string, orderId: string) {
+    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}`, { token });
+  },
+  getAdminOrderTimeline(token: string, orderId: string) {
+    return request<OrderEvent[]>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/events`, { token });
+  },
+  updateAdminOrderStatus(
+    token: string,
+    orderId: string,
+    body: {
+      status: string;
+      message?: string;
+    }
+  ) {
+    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/status`, {
+      method: "PUT",
+      token,
+      body
+    });
+  },
+  listCoupons(token: string) {
+    return request<Coupon[]>("/api/v1/admin/coupons", { token });
+  },
+  createCoupon(
+    token: string,
+    body: {
+      code: string;
+      description?: string;
+      discount_type: "fixed" | "percentage";
+      discount_value: number;
+      min_order_amount?: number;
+      usage_limit?: number;
+      expires_at?: string;
+      active?: boolean;
+    }
+  ) {
+    return request<Coupon>("/api/v1/admin/coupons", { method: "POST", token, body });
   },
   processPayment(
     token: string,

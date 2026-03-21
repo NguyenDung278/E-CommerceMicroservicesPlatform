@@ -75,9 +75,35 @@ export function ProductDetailPage() {
               <h1>{product.name}</h1>
               <p>{product.description || "Không có mô tả chi tiết."}</p>
               <div className="detail-meta">
+                <span>Brand: {product.brand || "No brand"}</span>
+                <span>Status: {product.status || "active"}</span>
+                <span>SKU: {product.sku || "pending"}</span>
+              </div>
+              {product.tags.length > 0 ? (
+                <div className="product-tag-row">
+                  {product.tags.map((tag) => (
+                    <span className="product-tag-chip" key={tag}>
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="detail-meta">
                 <strong>${product.price.toFixed(2)}</strong>
                 <span>Tồn kho: {product.stock}</span>
               </div>
+              {product.variants.length > 0 ? (
+                <div className="detail-variant-list">
+                  {product.variants.map((variant) => (
+                    <div className="detail-variant-card" key={variant.sku}>
+                      <strong>{variant.label}</strong>
+                      <span>{variant.sku}</span>
+                      <span>${variant.price.toFixed(2)}</span>
+                      <span>Tồn kho: {variant.stock}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <label className="field" htmlFor="detail-quantity">
                 <span className="field-label">Số lượng</span>

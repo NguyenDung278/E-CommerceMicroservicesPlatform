@@ -481,6 +481,29 @@ a:focus-visible {
   color: rgba(22, 33, 29, 0.68);
 }
 
+.product-meta-row,
+.product-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: rgba(22, 33, 29, 0.6);
+  font-size: 0.84rem;
+}
+
+.product-tag-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(21, 58, 143, 0.08);
+  color: #153a8f;
+}
+
+.product-variant-summary {
+  margin: 0 0 14px;
+  color: rgba(22, 33, 29, 0.62);
+  font-size: 0.92rem;
+}
+
 .product-price-row strong {
   font-size: 1.1rem;
 }
@@ -663,6 +686,20 @@ a:focus-visible {
   color: #1a6c3c;
 }
 
+.detail-variant-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.detail-variant-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(19, 61, 51, 0.05);
+}
+
 .page-state {
   max-width: 1240px;
   margin: 0 auto;
@@ -679,6 +716,43 @@ a:focus-visible {
 
 .admin-cancel-button {
   margin-top: 12px;
+}
+
+.admin-report-card {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.admin-report-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-report-subcard {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-variant-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 22px;
+  background: rgba(19, 61, 51, 0.04);
+}
+
+.admin-variant-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-variant-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr 0.8fr auto;
+  gap: 12px;
+  align-items: center;
 }
 
 .auth-shell {
@@ -1048,6 +1122,7 @@ a:focus-visible {
   .product-grid,
   .history-meta-grid,
   .payment-overview-grid,
+  .admin-report-grid,
   .auth-shell-grid,
   .auth-story-grid,
   .auth-password-grid {
@@ -1082,6 +1157,10 @@ a:focus-visible {
   }
 
   .inline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-variant-row {
     grid-template-columns: 1fr;
   }
 

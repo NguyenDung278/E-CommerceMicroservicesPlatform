@@ -22,6 +22,7 @@ var (
 	ErrEmailAlreadyExists = errors.New("email already exists")
 	ErrPhoneAlreadyExists = errors.New("phone already exists")
 	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrInvalidToken       = errors.New("invalid or expired token")
 )
 
 // UserService contains business logic for user operations.
@@ -30,7 +31,7 @@ var (
 type UserService struct {
 	repo      repository.UserRepository
 	jwtSecret string
-	jwtExpiry int // hours
+	jwtExpiry int // hours — for access tokens
 }
 
 // NewUserService creates a new user service.
@@ -49,7 +50,7 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 //  2. Hash the password with bcrypt (cost=12 for security/performance balance)
 //  3. Generate a UUID for the new user
 //  4. Insert into database
-//  5. Generate a JWT token for immediate login after registration
+//  5. Generate a JWT token pair for immediate login after registration
 //
 // SECURITY: bcrypt cost of 12 means ~250ms per hash on modern hardware,
 // which is slow enough to resist brute force but fast enough for users.
@@ -99,19 +100,20 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		return nil, err
 	}
 
-	// Generate JWT token so the user is immediately logged in.
-	token, err := s.generateToken(user)
+	// Generate JWT token pair so the user is immediately logged in.
+	accessToken, refreshToken, err := s.generateTokenPair(user)
 	if err != nil {
 		return nil, err
 	}
 
 	return &dto.AuthResponse{
-		Token: token,
-		User:  user,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
 	}, nil
 }
 
-// Login authenticates a user and returns a JWT token.
+// Login authenticates a user and returns a JWT token pair.
 //
 // SECURITY NOTES:
 //   - We use the same error message for "user not found" and "wrong password"
@@ -142,14 +144,15 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 		return nil, ErrInvalidCredentials
 	}
 
-	token, err := s.generateToken(user)
+	accessToken, refreshToken, err := s.generateTokenPair(user)
 	if err != nil {
 		return nil, err
 	}
 
 	return &dto.AuthResponse{
-		Token: token,
-		User:  user,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
 	}, nil
 }
 
@@ -190,9 +193,85 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.
 	return user, nil
 }
 
-// generateToken creates a signed JWT token with user claims.
-func (s *UserService) generateToken(user *model.User) (string, error) {
-	claims := middleware.JWTClaims{
+// ChangePassword validates the current password and updates to a new one.
+//
+// SECURITY:
+//   - The old password must match before we allow any change.
+//   - The new password is hashed with the same bcrypt cost as registration.
+func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) error {
+	user, err := s.repo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
+	}
+
+	// Verify the current password.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return ErrInvalidCredentials
+	}
+
+	// Hash the new password.
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
+	if err != nil {
+		return err
+	}
+
+	user.Password = string(hashedPassword)
+	user.UpdatedAt = time.Now()
+
+	return s.repo.Update(ctx, user)
+}
+
+// RefreshToken validates a refresh token and issues a new access + refresh pair.
+//
+// FLOW:
+//  1. Parse the refresh token and validate its signature + expiry
+//  2. Look up the user by the embedded UserID
+//  3. Issue a fresh token pair
+//
+// WHY ROTATE: Issuing a new refresh token on each refresh limits the window
+// of exposure if a refresh token is leaked (refresh token rotation).
+func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString string) (*dto.AuthResponse, error) {
+	claims := &middleware.JWTClaims{}
+	token, err := jwt.ParseWithClaims(refreshTokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return []byte(s.jwtSecret), nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	// Ensure the user still exists.
+	user, err := s.repo.GetByID(ctx, claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	// Issue a fresh token pair.
+	accessToken, newRefreshToken, err := s.generateTokenPair(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.AuthResponse{
+		Token:        accessToken,
+		RefreshToken: newRefreshToken,
+		User:         user,
+	}, nil
+}
+
+// generateTokenPair creates both an access token (short-lived) and a refresh token (long-lived).
+func (s *UserService) generateTokenPair(user *model.User) (accessToken string, refreshToken string, err error) {
+	// Access token — short-lived (uses configured expiry, typically 1-24h).
+	accessClaims := middleware.JWTClaims{
 		UserID: user.ID,
 		Email:  user.Email,
 		Role:   user.Role,
@@ -201,9 +280,29 @@ func (s *UserService) generateToken(user *model.User) (string, error) {
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
+	at := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessToken, err = at.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return "", "", err
+	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(s.jwtSecret))
+	// Refresh token — long-lived (7 days).
+	refreshClaims := middleware.JWTClaims{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshToken, err = rt.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
 }
 
 func normalizeIdentifier(req dto.LoginRequest) string {

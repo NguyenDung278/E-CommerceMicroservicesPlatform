@@ -22,8 +22,20 @@ type UpdateProfileRequest struct {
 	LastName  string `json:"last_name" validate:"omitempty,min=1"`
 }
 
+// ChangePasswordRequest is the request body for changing password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+}
+
+// RefreshTokenRequest is the request body for refreshing JWT tokens.
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 // AuthResponse is the response body for successful authentication.
 type AuthResponse struct {
-	Token string      `json:"token"`
-	User  interface{} `json:"user"`
+	Token        string      `json:"token"`
+	RefreshToken string      `json:"refresh_token"`
+	User         interface{} `json:"user"`
 }

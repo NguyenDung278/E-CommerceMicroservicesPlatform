@@ -40,10 +40,14 @@ func (r *fakeProductRepo) GetByID(_ context.Context, id string) (*model.Product,
 
 func (r *fakeProductRepo) Update(_ context.Context, product *model.Product) error { return nil }
 func (r *fakeProductRepo) Delete(_ context.Context, id string) error              { return nil }
-func (r *fakeProductRepo) List(_ context.Context, offset, limit int, category, search string) ([]*model.Product, int64, error) {
+func (r *fakeProductRepo) List(_ context.Context, offset, limit int, category, brand, tag, status, search string) ([]*model.Product, int64, error) {
 	return []*model.Product{}, 0, nil
 }
 func (r *fakeProductRepo) UpdateStock(_ context.Context, id string, quantity int) error { return nil }
+func (r *fakeProductRepo) RestoreStock(_ context.Context, id string, quantity int) error { return nil }
+func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
+	return []*model.Product{}, nil
+}
 
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
 

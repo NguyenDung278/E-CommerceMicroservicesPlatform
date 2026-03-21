@@ -57,6 +57,9 @@ func (h *ProductHandler) Create(c echo.Context) error {
 
 	product, err := h.productService.Create(c.Request().Context(), req)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidStatus) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "status must be draft, active or inactive")
+		}
 		return response.Error(c, http.StatusInternalServerError, "creation failed", "internal server error")
 	}
 	return response.Success(c, http.StatusCreated, "product created", product)
@@ -89,6 +92,9 @@ func (h *ProductHandler) Update(c echo.Context) error {
 		if errors.Is(err, service.ErrProductNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "product not found")
 		}
+		if errors.Is(err, service.ErrInvalidStatus) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "status must be draft, active or inactive")
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	return response.Success(c, http.StatusOK, "product updated", product)
@@ -114,6 +120,9 @@ func (h *ProductHandler) List(c echo.Context) error {
 		Page:     page,
 		Limit:    limit,
 		Category: c.QueryParam("category"),
+		Brand:    c.QueryParam("brand"),
+		Tag:      c.QueryParam("tag"),
+		Status:   c.QueryParam("status"),
 		Search:   c.QueryParam("search"),
 	}
 

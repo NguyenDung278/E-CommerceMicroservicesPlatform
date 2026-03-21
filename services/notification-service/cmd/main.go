@@ -23,6 +23,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/handler"
 )
 
@@ -103,7 +104,8 @@ func main() {
 		log.Fatal("failed to start consuming", zap.Error(err))
 	}
 
-	eventHandler := handler.NewEventHandler(log)
+	sender := email.NewSender(cfg.SMTP, log)
+	eventHandler := handler.NewEventHandler(log, sender)
 
 	// Start the worker in a goroutine.
 	go func() {

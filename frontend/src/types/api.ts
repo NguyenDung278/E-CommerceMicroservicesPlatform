@@ -35,9 +35,21 @@ export type Product = {
   price: number;
   stock: number;
   category: string;
+  brand: string;
+  tags: string[];
+  status: string;
+  sku: string;
+  variants: ProductVariant[];
   image_url: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductVariant = {
+  sku: string;
+  label: string;
+  price: number;
+  stock: number;
 };
 
 export type CartItem = {
@@ -66,8 +78,37 @@ export type Order = {
   id: string;
   user_id: string;
   status: string;
+  subtotal_price: number;
+  discount_amount: number;
+  coupon_code?: string;
   total_price: number;
   items: OrderItem[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type OrderEvent = {
+  id: string;
+  order_id: string;
+  type: string;
+  status: string;
+  actor_id?: string;
+  actor_role?: string;
+  message: string;
+  created_at: string;
+};
+
+export type Coupon = {
+  id: string;
+  code: string;
+  description: string;
+  discount_type: string;
+  discount_value: number;
+  min_order_amount: number;
+  usage_limit: number;
+  used_count: number;
+  active: boolean;
+  expires_at?: string;
   created_at: string;
   updated_at: string;
 };
@@ -81,4 +122,27 @@ export type Payment = {
   payment_method: string;
   created_at: string;
   updated_at: string;
+};
+
+export type AdminOrderTopProduct = {
+  product_id: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+};
+
+export type AdminOrderStatusBreakdown = {
+  status: string;
+  orders: number;
+  revenue: number;
+};
+
+export type AdminOrderReport = {
+  window_days: number;
+  total_revenue: number;
+  order_count: number;
+  cancelled_count: number;
+  average_order_value: number;
+  top_products: AdminOrderTopProduct[];
+  status_breakdown: AdminOrderStatusBreakdown[];
 };

@@ -20,7 +20,7 @@ export function CategoryPage() {
     let active = true;
 
     void api
-      .listProducts({ category, limit: 48 })
+      .listProducts({ category, limit: 48, status: "active" })
       .then((response) => {
         if (active) {
           setProducts(response.data);

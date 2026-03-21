@@ -8,28 +8,45 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// OrderHandler handles order service requests
+// OrderHandler handles order service requests.
 type OrderHandler struct {
 	proxy *proxy.ServiceProxy
 }
 
-// NewOrderHandler creates a new order handler
 func NewOrderHandler(p *proxy.ServiceProxy) *OrderHandler {
 	return &OrderHandler{
 		proxy: p,
 	}
 }
 
-// RegisterRoutes registers order service routes.
 func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders := e.Group("/api/v1/orders")
 	orders.Use(appmw.JWTAuth(jwtSecret))
 	orders.POST("", h.forwardRequest)
 	orders.GET("", h.forwardRequest)
+	orders.GET("/:id/events", h.forwardRequest)
 	orders.GET("/:id", h.forwardRequest)
+
+	legacyAdmin := orders.Group("/admin")
+	legacyAdmin.Use(appmw.RequireRole(appmw.RoleAdmin))
+	legacyAdmin.GET("/report", h.forwardRequest)
+
+	adminOrders := e.Group("/api/v1/admin/orders")
+	adminOrders.Use(appmw.JWTAuth(jwtSecret))
+	adminOrders.Use(appmw.RequireRole(appmw.RoleAdmin))
+	adminOrders.GET("/report", h.forwardRequest)
+	adminOrders.GET("", h.forwardRequest)
+	adminOrders.GET("/:id/events", h.forwardRequest)
+	adminOrders.GET("/:id", h.forwardRequest)
+	adminOrders.PUT("/:id/status", h.forwardRequest)
+
+	adminCoupons := e.Group("/api/v1/admin/coupons")
+	adminCoupons.Use(appmw.JWTAuth(jwtSecret))
+	adminCoupons.Use(appmw.RequireRole(appmw.RoleAdmin))
+	adminCoupons.POST("", h.forwardRequest)
+	adminCoupons.GET("", h.forwardRequest)
 }
 
-// forwardRequest proxies the request to the order service
 func (h *OrderHandler) forwardRequest(c echo.Context) error {
 	req := c.Request()
 	resp, err := h.proxy.Do(c.Request().Context(), req)

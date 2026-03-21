@@ -13,6 +13,8 @@ export function CatalogPage() {
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("");
+  const [selectedTag, setSelectedTag] = useState("");
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
 
@@ -22,13 +24,24 @@ export function CatalogPage() {
     ).sort();
   }, [products]);
 
+  const brands = useMemo(() => {
+    return Array.from(new Set(products.map((product) => product.brand).filter(Boolean))).sort();
+  }, [products]);
+
+  const tags = useMemo(() => {
+    return Array.from(new Set(products.flatMap((product) => product.tags).filter(Boolean))).sort();
+  }, [products]);
+
   useEffect(() => {
     let active = true;
 
     void api
       .listProducts({
         search: submittedSearch,
-        category: selectedCategory || undefined
+        category: selectedCategory || undefined,
+        brand: selectedBrand || undefined,
+        tag: selectedTag || undefined,
+        status: "active"
       })
       .then((response) => {
         if (active) {
@@ -44,7 +57,7 @@ export function CatalogPage() {
     return () => {
       active = false;
     };
-  }, [submittedSearch, selectedCategory]);
+  }, [submittedSearch, selectedCategory, selectedBrand, selectedTag]);
 
   async function handleAddToCart(product: Product) {
     try {
@@ -106,6 +119,48 @@ export function CatalogPage() {
             </button>
           ))}
         </div>
+
+        <div className="category-filter-row">
+          <button
+            className={!selectedBrand ? "filter-chip filter-chip-active" : "filter-chip"}
+            onClick={() => setSelectedBrand("")}
+            type="button"
+          >
+            Tất cả thương hiệu
+          </button>
+          {brands.map((brand) => (
+            <button
+              className={selectedBrand === brand ? "filter-chip filter-chip-active" : "filter-chip"}
+              key={brand}
+              onClick={() => setSelectedBrand(brand)}
+              type="button"
+            >
+              {brand}
+            </button>
+          ))}
+        </div>
+
+        {tags.length > 0 ? (
+          <div className="category-filter-row">
+            <button
+              className={!selectedTag ? "filter-chip filter-chip-active" : "filter-chip"}
+              onClick={() => setSelectedTag("")}
+              type="button"
+            >
+              Tất cả tag
+            </button>
+            {tags.map((tag) => (
+              <button
+                className={selectedTag === tag ? "filter-chip filter-chip-active" : "filter-chip"}
+                key={tag}
+                onClick={() => setSelectedTag(tag)}
+                type="button"
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 

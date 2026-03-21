@@ -22,6 +22,7 @@ type PaymentEvent struct {
 	PaymentID string  `json:"payment_id"`
 	OrderID   string  `json:"order_id"`
 	UserID    string  `json:"user_id"`
+	UserEmail string  `json:"user_email"`
 	Amount    float64 `json:"amount"`
 	Status    string  `json:"status"`
 }
@@ -47,7 +48,7 @@ func NewPaymentService(repo repository.PaymentRepository, orderClient *client.Or
 //  4. Update status to "completed" or "failed"
 //
 // FOR THIS DEMO: We simulate instant success and publish an event.
-func (s *PaymentService) ProcessPayment(ctx context.Context, userID, authHeader string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
+func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, authHeader string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
 	// Check for duplicate payment.
 	existing, err := s.repo.GetByOrderID(ctx, req.OrderID)
 	if err != nil {
@@ -88,7 +89,7 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, authHeader 
 	}
 
 	// Publish payment event.
-	s.publishPaymentEvent(payment)
+	s.publishPaymentEvent(payment, userEmail)
 
 	return payment, nil
 }
@@ -115,7 +116,7 @@ func (s *PaymentService) GetPaymentByOrder(ctx context.Context, orderID, userID 
 	return payment, nil
 }
 
-func (s *PaymentService) publishPaymentEvent(payment *model.Payment) {
+func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail string) {
 	if s.amqpCh == nil {
 		return
 	}
@@ -124,6 +125,7 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment) {
 		PaymentID: payment.ID,
 		OrderID:   payment.OrderID,
 		UserID:    payment.UserID,
+		UserEmail: userEmail,
 		Amount:    payment.Amount,
 		Status:    string(payment.Status),
 	}

@@ -68,6 +68,10 @@ func main() {
 	userService := service.NewUserService(userRepo, cfg.JWT.Secret, cfg.JWT.Expiration)
 	userHandler := handler.NewUserHandler(userService)
 
+	addressRepo := repository.NewAddressRepository(db)
+	addressService := service.NewAddressService(addressRepo)
+	addressHandler := handler.NewAddressHandler(addressService)
+
 	// 6. Set up Echo and register routes.
 	e := echo.New()
 	e.HideBanner = true
@@ -89,6 +93,7 @@ func main() {
 	})
 
 	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	addressHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 7. Set up gRPC server.
 	grpcServer := grpc.NewServer()
