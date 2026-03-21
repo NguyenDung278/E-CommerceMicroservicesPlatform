@@ -51,6 +51,32 @@ func (r *integrationUserRepo) GetByPhone(_ context.Context, phone string) (*mode
 	return r.usersByPhone[phone], nil
 }
 
+func (r *integrationUserRepo) GetByEmailVerificationTokenHash(_ context.Context, tokenHash string) (*model.User, error) {
+	for _, user := range r.usersByID {
+		if user.EmailVerificationTokenHash == tokenHash {
+			return user, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *integrationUserRepo) GetByPasswordResetTokenHash(_ context.Context, tokenHash string) (*model.User, error) {
+	for _, user := range r.usersByID {
+		if user.PasswordResetTokenHash == tokenHash {
+			return user, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *integrationUserRepo) List(_ context.Context) ([]*model.User, error) {
+	users := make([]*model.User, 0, len(r.usersByID))
+	for _, user := range r.usersByID {
+		users = append(users, user)
+	}
+	return users, nil
+}
+
 func (r *integrationUserRepo) Update(_ context.Context, user *model.User) error {
 	r.usersByEmail[user.Email] = user
 	if user.Phone != "" {

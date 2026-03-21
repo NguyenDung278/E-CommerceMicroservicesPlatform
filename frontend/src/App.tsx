@@ -16,6 +16,8 @@ import { PaymentHistoryPage } from "./pages/PaymentHistoryPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
               <Route element={<CheckoutPage />} path="checkout" />
               <Route element={<LoginPage />} path="login" />
               <Route element={<RegisterPage />} path="register" />
+              <Route element={<VerifyEmailPage />} path="verify-email" />
+              <Route element={<ResetPasswordPage />} path="reset-password" />
               <Route
                 element={
                   <ProtectedRoute>
@@ -58,7 +62,7 @@ export default function App() {
               />
               <Route
                 element={
-                  <ProtectedRoute requireAdmin>
+                  <ProtectedRoute allowStaff>
                     <AdminPage />
                   </ProtectedRoute>
                 }

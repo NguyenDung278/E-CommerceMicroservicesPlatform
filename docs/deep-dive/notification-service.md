@@ -9,6 +9,7 @@
 ## 2. Event mà service này consume
 
 - `order.created`
+- `order.cancelled`
 - `payment.completed`
 - `payment.failed`
 
@@ -29,12 +30,12 @@ RabbitMQ
 
 ```mermaid
 flowchart LR
-    A["Order Service"] -->|"order.created"| B["RabbitMQ Exchange"]
+    A["Order Service"] -->|"order.created / order.cancelled"| B["RabbitMQ Exchange"]
     C["Payment Service"] -->|"payment.completed / payment.failed"| B
     B --> D["notification-queue"]
     D --> E["Notification Worker"]
     E --> F["EventHandler.HandleMessage"]
-    F --> G["handleOrderCreated"]
+    F --> G["handleOrderCreated / handleOrderCancelled"]
     F --> H["handlePaymentCompleted"]
     F --> I["handlePaymentFailed"]
 ```

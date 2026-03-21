@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
@@ -41,6 +42,32 @@ func (r *fakeUserRepo) GetByEmail(_ context.Context, email string) (*model.User,
 
 func (r *fakeUserRepo) GetByPhone(_ context.Context, phone string) (*model.User, error) {
 	return r.usersByPhone[phone], nil
+}
+
+func (r *fakeUserRepo) GetByEmailVerificationTokenHash(_ context.Context, tokenHash string) (*model.User, error) {
+	for _, user := range r.usersByID {
+		if user.EmailVerificationTokenHash == tokenHash {
+			return user, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *fakeUserRepo) GetByPasswordResetTokenHash(_ context.Context, tokenHash string) (*model.User, error) {
+	for _, user := range r.usersByID {
+		if user.PasswordResetTokenHash == tokenHash {
+			return user, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *fakeUserRepo) List(_ context.Context) ([]*model.User, error) {
+	users := make([]*model.User, 0, len(r.usersByID))
+	for _, user := range r.usersByID {
+		users = append(users, user)
+	}
+	return users, nil
 }
 
 func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
@@ -84,6 +111,12 @@ func TestRegisterHashesPasswordAndReturnsToken(t *testing.T) {
 	}
 	if user.Role != "user" {
 		t.Fatalf("expected default role user, got %q", user.Role)
+	}
+	if user.EmailVerified {
+		t.Fatal("expected email to be unverified right after registration")
+	}
+	if user.EmailVerificationTokenHash == "" || user.EmailVerificationExpiresAt == nil {
+		t.Fatal("expected email verification token fields to be populated")
 	}
 }
 
@@ -258,5 +291,94 @@ func TestRefreshTokenRejectsInvalidToken(t *testing.T) {
 	_, err := svc.RefreshToken(context.Background(), "invalid.token.string")
 	if err != ErrInvalidToken {
 		t.Fatalf("expected ErrInvalidToken for garbage token, got: %v", err)
+	}
+}
+
+func TestVerifyEmailMarksUserVerified(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(repo, testSecret, 24)
+
+	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "verified@example.com",
+		Phone:     "0967890123",
+		Password:  "password123",
+		FirstName: "Verified",
+		LastName:  "User",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	user := repo.usersByEmail["verified@example.com"]
+	rawToken := "verify-token"
+	expiresAt := time.Now().Add(time.Hour)
+	user.EmailVerificationTokenHash = hashToken(rawToken)
+	user.EmailVerificationExpiresAt = &expiresAt
+
+	if err := svc.VerifyEmail(context.Background(), rawToken); err != nil {
+		t.Fatalf("VerifyEmail returned error: %v", err)
+	}
+	if !user.EmailVerified {
+		t.Fatal("expected email to be marked verified")
+	}
+	if user.EmailVerificationTokenHash != "" || user.EmailVerificationExpiresAt != nil {
+		t.Fatal("expected verification token state to be cleared")
+	}
+}
+
+func TestResetPasswordClearsResetToken(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(repo, testSecret, 24)
+
+	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "reset@example.com",
+		Phone:     "0978901234",
+		Password:  "password123",
+		FirstName: "Reset",
+		LastName:  "User",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	user := repo.usersByEmail["reset@example.com"]
+	rawToken := "reset-token"
+	expiresAt := time.Now().Add(time.Hour)
+	user.PasswordResetTokenHash = hashToken(rawToken)
+	user.PasswordResetExpiresAt = &expiresAt
+
+	if err := svc.ResetPassword(context.Background(), rawToken, "newpassword2"); err != nil {
+		t.Fatalf("ResetPassword returned error: %v", err)
+	}
+	if user.PasswordResetTokenHash != "" || user.PasswordResetExpiresAt != nil {
+		t.Fatal("expected reset token state to be cleared")
+	}
+	if _, err := svc.Login(context.Background(), dto.LoginRequest{
+		Identifier: "reset@example.com",
+		Password:   "newpassword2",
+	}); err != nil {
+		t.Fatalf("expected login with reset password to succeed, got: %v", err)
+	}
+}
+
+func TestUpdateUserRoleSupportsStaff(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(repo, testSecret, 24)
+
+	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "staff@example.com",
+		Phone:     "0989012345",
+		Password:  "password123",
+		FirstName: "Staff",
+		LastName:  "Member",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	user := repo.usersByEmail["staff@example.com"]
+	updated, err := svc.UpdateUserRole(context.Background(), user.ID, "staff")
+	if err != nil {
+		t.Fatalf("UpdateUserRole returned error: %v", err)
+	}
+	if updated.Role != "staff" {
+		t.Fatalf("expected role staff, got %q", updated.Role)
 	}
 }

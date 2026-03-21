@@ -20,6 +20,7 @@ type CreateProductRequest struct {
 	SKU         string                  `json:"sku"`
 	Variants    []ProductVariantRequest `json:"variants"`
 	ImageURL    string                  `json:"image_url" validate:"omitempty,url"`
+	ImageURLs   []string                `json:"image_urls"`
 }
 
 // UpdateProductRequest is the request body for updating a product.
@@ -35,6 +36,11 @@ type UpdateProductRequest struct {
 	SKU         *string                  `json:"sku"`
 	Variants    *[]ProductVariantRequest `json:"variants"`
 	ImageURL    *string                  `json:"image_url" validate:"omitempty,url"`
+	ImageURLs   *[]string                `json:"image_urls"`
+}
+
+type UploadProductImagesResponse struct {
+	URLs []string `json:"urls"`
 }
 
 // ListProductsQuery holds query parameters for listing products.

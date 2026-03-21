@@ -29,6 +29,10 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	payments.GET("/order/:orderId", h.GetPaymentByOrder)
 }
 
+// ProcessPayment handles POST /api/v1/payments
+//
+// Mục đích: Tiếp nhận HTTP request thanh toán cho 1 Order cụ thể.
+// Hiện tại đây chỉ là API giả lập (Mock). Trong thực tế, nó sẽ nhận Webhook từ Stripe/PayPal.
 func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	var req dto.ProcessPaymentRequest

@@ -254,6 +254,31 @@ Các ý chính:
 - token được sinh trong service vì nó là một phần của auth business flow,
 - claims dùng lại struct chung giúp middleware verify dễ dàng.
 
+### Dòng 193-207: `generateTokenPair` (Mới nâng cấp)
+
+Trong phiên bản mới, hệ thống chuyển sang dùng `generateTokenPair` thay vì sinh độc lập một token.
+
+Các ý chính:
+
+- Access Token: Ngắn hạn (ví dụ 15-30 phút), chứa toàn bộ Claims để frontend xài gọi API.
+- Refresh Token: Dài hạn (ví dụ 7 ngày), được build bằng `uuid.NewString()` hặc một JWT khác chứa id, lưu kèm hoặc để verify riêng biệt.
+- Flow này dạy bạn một nguyên tắc security quan trọng: "Token Rotation". Access token sinh ra rất dễ bị lộ (qua XSS), vì vậy phải cấp quyền ngắn hạn. Nếu token hết hạn, client dùng thẻ "Refresh Token" gọi `POST /auth/refresh` để đổi lấy thẻ mới.
+
+### Dòng x-y (Chức năng mới): Thực thi Đổi mật khẩu (`ChangePassword`)
+
+Flow `ChangePassword` sẽ yêu cầu client gửi `OldPassword` và `NewPassword`.
+
+Tại sao phải bắt nhập password cũ?
+- Nếu user quên logout máy công cộng, kẻ gian mở lại trình duyệt không thể đổi sang password của họ nếu không biết password cũ.
+- Dòng code quan trọng: `bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword))`. Nếu pass, mới cho hash và lưu `req.NewPassword`.
+
+### Dòng x-y (Chức năng mới): Quản lý địa chỉ giao hàng (`AddressService`)
+
+Dù không ở file `user_service.go`, logic địa chỉ nằm ngay cạnh.
+Nó minh họa 2 pattern Back-end cực hay:
+1. **Hard Limit**: Kiểm tra `repo.CountByUserID` <= 10 trước khi cho tạo mới. Giúp phòng thủ (Defense in Depth) chống lại việc CSDL bị spam.
+2. **Auto Fallback Default**: Khi `repo.Count == 0`, tự động force `is_default = true`. Khi đổi default, hệ thống gọi `repo.ClearDefault(userID)` (xoá hết cờ true về false của user đó) rồi `repo.SetDefault(addressID)`. Cách làm này đảm bảo tính Consistency mà không cần lock nguyên cái bảng.
+
 ### Dòng 209-248: normalize helpers
 
 Đây là block nhỏ nhưng là nơi thể hiện code chăm chút.

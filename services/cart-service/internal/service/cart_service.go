@@ -37,8 +37,10 @@ func (s *CartService) GetCart(ctx context.Context, userID string) (*model.Cart, 
 
 // AddItem adds a product to the cart or increments quantity if it already exists.
 //
-// DESIGN DECISION: If the same product is added twice, we increment the quantity
-// rather than creating a duplicate entry. This matches user expectations.
+// YÊU CẦU NGHIỆP VỤ (DESIGN DECISION):
+// 1. Phải gọi gRPC (productClient) sang Product Service để lấy giá gốc và Stock hiện tại, KHÔNG TỰ TIN tưởng giá do Client gửi lên.
+// 2. Nếu Product ID đã có trong mảng Items, ta chỉ cộng dồn (+= quantity) chứ không Push object mới.
+// 3. Trước khi add phải check: Stock >= Quantity cần mua. Nếu không đủ thì trả lỗi `ErrInsufficientStock`.
 func (s *CartService) AddItem(ctx context.Context, userID string, req dto.AddToCartRequest) (*model.Cart, error) {
 	cart, err := s.repo.Get(ctx, userID)
 	if err != nil {

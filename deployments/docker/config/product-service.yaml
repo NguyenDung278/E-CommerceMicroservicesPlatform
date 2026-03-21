@@ -14,3 +14,11 @@ jwt:
 
 grpc:
   port: "50052"
+
+object_storage:
+  endpoint: "minio:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "product-media"
+  use_ssl: false
+  public_base_url: "http://localhost:9000/product-media"

@@ -6,8 +6,10 @@ import type {
   Coupon,
   Order,
   OrderEvent,
+  OrderPreview,
   Payment,
   Product,
+  UploadedProductImages,
   UserProfile
 } from "../types/api";
 
@@ -37,8 +39,15 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   const headers = new Headers({
     Accept: "application/json"
   });
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const requestBody =
+    options.body === undefined
+      ? undefined
+      : isFormData
+        ? (options.body as FormData)
+        : JSON.stringify(options.body);
 
-  if (options.body !== undefined) {
+  if (options.body !== undefined && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -48,7 +57,7 @@ async function request<T>(path: string, options: RequestOptions = {}) {
 
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: options.method ?? "GET",
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body: requestBody,
     headers,
     signal: options.signal
   });
@@ -84,6 +93,12 @@ export function getErrorMessage(error: unknown) {
     if (error.status === 401 && error.detail.includes("invalid email/phone or password")) {
       return "Thông tin đăng nhập hoặc mật khẩu chưa chính xác.";
     }
+    if (error.status === 401 && error.detail.includes("invalid or expired verification token")) {
+      return "Liên kết xác minh email không hợp lệ hoặc đã hết hạn.";
+    }
+    if (error.status === 401 && error.detail.includes("invalid or expired reset token")) {
+      return "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.";
+    }
     return error.detail ? `${error.message}: ${error.detail}` : error.message;
   }
   if (error instanceof Error) {
@@ -108,6 +123,15 @@ export const api = {
   login(body: { identifier: string; email?: string; password: string }) {
     return request<AuthPayload>("/api/v1/auth/login", { method: "POST", body });
   },
+  verifyEmail(body: { token: string }) {
+    return request<null>("/api/v1/auth/verify-email", { method: "POST", body });
+  },
+  forgotPassword(body: { email: string }) {
+    return request<null>("/api/v1/auth/forgot-password", { method: "POST", body });
+  },
+  resetPassword(body: { token: string; new_password: string }) {
+    return request<null>("/api/v1/auth/reset-password", { method: "POST", body });
+  },
   getProfile(token: string) {
     return request<UserProfile>("/api/v1/users/profile", { token });
   },
@@ -119,6 +143,19 @@ export const api = {
     }
   ) {
     return request<UserProfile>("/api/v1/users/profile", { method: "PUT", token, body });
+  },
+  resendVerificationEmail(token: string) {
+    return request<null>("/api/v1/users/verify-email/resend", { method: "POST", token });
+  },
+  listUsers(token: string) {
+    return request<UserProfile[]>("/api/v1/admin/users", { token });
+  },
+  updateUserRole(token: string, userId: string, body: { role: string }) {
+    return request<UserProfile>(`/api/v1/admin/users/${encodeURIComponent(userId)}/role`, {
+      method: "PUT",
+      token,
+      body
+    });
   },
   listProducts(options?: {
     search?: string;
@@ -172,9 +209,22 @@ export const api = {
         stock: number;
       }>;
       image_url: string;
+      image_urls: string[];
     }
   ) {
     return request<Product>("/api/v1/products", { method: "POST", token, body });
+  },
+  uploadProductImages(token: string, files: File[]) {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("images", file);
+    });
+
+    return request<UploadedProductImages>("/api/v1/products/uploads", {
+      method: "POST",
+      token,
+      body: formData
+    });
   },
   updateProduct(
     token: string,
@@ -196,6 +246,7 @@ export const api = {
         stock: number;
       }>;
       image_url: string;
+      image_urls: string[];
     }>
   ) {
     return request<Product>(`/api/v1/products/${encodeURIComponent(productId)}`, {
@@ -260,6 +311,18 @@ export const api = {
     }
   ) {
     return request<Order>("/api/v1/orders", { method: "POST", token, body });
+  },
+  previewOrder(
+    token: string,
+    body: {
+      items: Array<{
+        product_id: string;
+        quantity: number;
+      }>;
+      coupon_code?: string;
+    }
+  ) {
+    return request<OrderPreview>("/api/v1/orders/preview", { method: "POST", token, body });
   },
   getOrderTimeline(token: string, orderId: string) {
     return request<OrderEvent[]>(`/api/v1/orders/${encodeURIComponent(orderId)}/events`, { token });

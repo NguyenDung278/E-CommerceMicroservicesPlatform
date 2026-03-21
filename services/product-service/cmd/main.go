@@ -26,6 +26,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/jobs"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/storage"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/migrations"
 	"google.golang.org/grpc"
 )
@@ -51,7 +52,19 @@ func main() {
 	}
 
 	productRepo := repository.NewProductRepository(db)
-	productService := service.NewProductService(productRepo)
+	productOptions := []service.ProductServiceOption{}
+	if mediaStore, err := storage.NewObjectStorage(cfg.ObjectStorage); err != nil {
+		log.Warn("object storage disabled", zap.Error(err))
+	} else {
+		ensureCtx, cancelEnsure := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := mediaStore.EnsureBucket(ensureCtx); err != nil {
+			log.Warn("failed to prepare object storage bucket", zap.Error(err))
+		}
+		cancelEnsure()
+		productOptions = append(productOptions, service.WithMediaStore(mediaStore))
+	}
+
+	productService := service.NewProductService(productRepo, productOptions...)
 	productHandler := handler.NewProductHandler(productService)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()

@@ -13,6 +13,13 @@ Tất cả route đều cần JWT:
 - `POST /api/v1/orders`
 - `GET /api/v1/orders`
 - `GET /api/v1/orders/:id`
+- `GET /api/v1/orders/:id/events`
+- `PUT /api/v1/orders/:id/cancel`
+
+Admin routes (`RequireRole(admin)`):
+- `GET /api/v1/admin/orders`
+- `GET /api/v1/admin/orders/report`
+- `PUT /api/v1/admin/orders/:id/status`
 
 ## 3. Luồng tạo đơn hàng
 
@@ -58,6 +65,34 @@ sequenceDiagram
     Service->>MQ: publish order.created
     Service-->>Handler: order
     Handler-->>Client: 201 Created
+```
+
+## 3.2 Luồng hủy đơn và hoàn kho (Cancel Order)
+
+Khi người dùng muốn hủy đơn đã đặt:
+1. `GET /api/v1/orders/:id`
+2. Người dùng chọn "Hủy đơn" (`PUT /orders/:id/cancel`).
+3. Business Rule Constraint: backend kiểm tra `state == "pending"`. Không thể hủy các đơn đã `paid` hoặc `shipped` tự do.
+4. Update `order.status = cancelled`.
+5. For each item: gọi gRPC sang `product-service` thực thi hàm `RestoreStock`. Điều này rất quan trọng do hệ thống phân tán, `UpdateStock` khi mua sẽ chốt tồn kho, thì `RestoreStock` khi hủy cũng phải trả tồn kho bằng query `stock = stock + $1`. Truy xuất thông qua một helper `toProtoProduct` tại layer gRPC để giảm việc cập nhật protocol.
+6. Publish event `order.cancelled` ra RabbitMQ để gửi email báo với khách.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant OS as OrderService
+    participant PS as ProductService (gRPC)
+    participant MQ as RabbitMQ
+    
+    C->>OS: PUT /orders/123/cancel
+    OS->>OS: Check status == pending
+    OS->>OS: Update DB status = cancelled
+    loop Each Item
+        OS->>PS: GetProduct() -> UpdateProduct() (RestoreStock logic)
+        PS-->>OS: stock updated
+    end
+    OS->>MQ: Publish "order.cancelled"
+    OS-->>C: 200 OK
 ```
 
 ## 4. Vì sao service này rất đáng học?
@@ -112,6 +147,11 @@ Nó còn check:
 
 - Auth != Authorization
 - Có token hợp lệ chưa đủ; còn phải có quyền xem đúng record.
+
+## 6.1 Bảng Tracking Timeline (`order_events`)
+
+Mỗi khi service gọi `UpdateStatus` (tạo đơn, thanh toán, hủy đơn), `order-service` sẽ tự ghi một row `OrderEvent` với các thông tin: `status`, `actor_id` (ai là người update), `role`, `message`. 
+Điều này cung cấp Audit Trail rất chuẩn enterprise để khách hàng thấy được timeline mua hàng trên App.
 
 ## 7. Event publishing
 

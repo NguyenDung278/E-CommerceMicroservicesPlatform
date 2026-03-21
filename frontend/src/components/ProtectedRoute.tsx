@@ -6,11 +6,12 @@ import { useAuth } from "../hooks/useAuth";
 type ProtectedRouteProps = {
   children: ReactNode;
   requireAdmin?: boolean;
+  allowStaff?: boolean;
 };
 
-export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requireAdmin = false, allowStaff = false }: ProtectedRouteProps) {
   const location = useLocation();
-  const { isAuthenticated, isAdmin, isBootstrapping } = useAuth();
+  const { isAuthenticated, isAdmin, canAccessAdmin, isBootstrapping } = useAuth();
 
   if (isBootstrapping) {
     return <div className="page-state">Đang xác thực phiên làm việc...</div>;
@@ -18,6 +19,10 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   if (!isAuthenticated) {
     return <Navigate replace state={{ from: location }} to="/login" />;
+  }
+
+  if (allowStaff && !canAccessAdmin) {
+    return <Navigate replace to="/" />;
   }
 
   if (requireAdmin && !isAdmin) {

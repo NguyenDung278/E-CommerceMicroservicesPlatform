@@ -18,14 +18,16 @@ import (
 // Config holds all configuration for a microservice.
 // Each service can embed this struct and add service-specific fields.
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	GRPC     GRPCConfig     `mapstructure:"grpc"`
-	SMTP     SMTPConfig     `mapstructure:"smtp"`
-	Services ServicesConfig `mapstructure:"services"`
+	Server        ServerConfig        `mapstructure:"server"`
+	Database      DatabaseConfig      `mapstructure:"database"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	RabbitMQ      RabbitMQConfig      `mapstructure:"rabbitmq"`
+	JWT           JWTConfig           `mapstructure:"jwt"`
+	GRPC          GRPCConfig          `mapstructure:"grpc"`
+	SMTP          SMTPConfig          `mapstructure:"smtp"`
+	Services      ServicesConfig      `mapstructure:"services"`
+	Frontend      FrontendConfig      `mapstructure:"frontend"`
+	ObjectStorage ObjectStorageConfig `mapstructure:"object_storage"`
 }
 
 // GRPCConfig holds gRPC server settings.
@@ -50,6 +52,19 @@ type SMTPConfig struct {
 	Password    string `mapstructure:"password"`
 	FromName    string `mapstructure:"from_name"`
 	FromAddress string `mapstructure:"from_address"`
+}
+
+type FrontendConfig struct {
+	BaseURL string `mapstructure:"base_url"`
+}
+
+type ObjectStorageConfig struct {
+	Endpoint      string `mapstructure:"endpoint"`
+	AccessKey     string `mapstructure:"access_key"`
+	SecretKey     string `mapstructure:"secret_key"`
+	Bucket        string `mapstructure:"bucket"`
+	UseSSL        bool   `mapstructure:"use_ssl"`
+	PublicBaseURL string `mapstructure:"public_base_url"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -162,6 +177,13 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("services.cart_service", "cart-service:8083")
 	v.SetDefault("services.order_service", "order-service:8084")
 	v.SetDefault("services.payment_service", "payment-service:8085")
+	v.SetDefault("frontend.base_url", "http://localhost:4173")
+	v.SetDefault("object_storage.endpoint", "minio:9000")
+	v.SetDefault("object_storage.access_key", "minioadmin")
+	v.SetDefault("object_storage.secret_key", "minioadmin")
+	v.SetDefault("object_storage.bucket", "product-media")
+	v.SetDefault("object_storage.use_ssl", false)
+	v.SetDefault("object_storage.public_base_url", "http://localhost:9000/product-media")
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port

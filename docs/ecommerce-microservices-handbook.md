@@ -164,9 +164,11 @@ func main() {
 Nghiep vu:
 
 - register
-- login
+- login (with refresh token)
+- password change
 - profile
 - role
+- shipping addresses (CRUD, max 10, auto-fallback default)
 
 DTO:
 
@@ -231,6 +233,7 @@ Nghiep vu:
 - list products
 - get by id
 - create/update/delete cho admin
+- **restore stock** (tái sử dụng `UpdateProduct` RPC để hoàn kho khi hủy đơn)
 
 Repository query co phan trang:
 
@@ -301,6 +304,10 @@ Nghiep vu:
 - xac minh san pham qua Product Service
 - tao order + order_items
 - publish event `order.created`
+- **cancel order** (chỉ cho phép khi ở trạng thái pending)
+- restore stock (gọi gRPC sang Product Service)
+- publish event `order.cancelled`
+- tracking event timeline (order_events)
 
 Pseudo flow:
 

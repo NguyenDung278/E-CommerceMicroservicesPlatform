@@ -31,6 +31,7 @@ type Product struct {
 	SKU         string           `json:"sku"`
 	Variants    []ProductVariant `json:"variants"`
 	ImageURL    string           `json:"image_url"`
+	ImageURLs   []string         `json:"image_urls"`
 	CreatedAt   time.Time        `json:"created_at"`
 	UpdatedAt   time.Time        `json:"updated_at"`
 }

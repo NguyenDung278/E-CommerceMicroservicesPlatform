@@ -5,7 +5,7 @@ import { FormField } from "../components/FormField";
 import { NotificationStack, type NotificationItem } from "../components/NotificationStack";
 import { AuthShell } from "../components/auth/AuthShell";
 import { useAuth } from "../hooks/useAuth";
-import { getErrorMessage } from "../lib/api";
+import { api, getErrorMessage } from "../lib/api";
 import { getVisibleErrors, inputClassName, normalizeIdentifier, type TouchedFields } from "../utils/authForm";
 import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "../utils/authStorage";
 import { sanitizeEmail } from "../utils/sanitize";
@@ -72,8 +72,10 @@ export function LoginPage() {
   const [submitted, setSubmitted] = useState(false);
   const [showRecoveryHelp, setShowRecoveryHelp] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [isRecoveryBusy, setIsRecoveryBusy] = useState(false);
   const [delayRedirect, setDelayRedirect] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [recoveryFormEmail, setRecoveryFormEmail] = useState("");
 
   const navigationState = location.state as AuthLocationState | null;
   const redirectTo = navigationState?.from
@@ -116,6 +118,31 @@ export function LoginPage() {
 
   function markTouched<Key extends keyof LoginFormValues>(field: Key) {
     setTouched((current) => ({ ...current, [field]: true }));
+  }
+
+  async function handleForgotPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const emailToRecover = sanitizeEmail(recoveryFormEmail || recoveryEmail);
+    if (!emailToRecover || !isValidEmail(emailToRecover)) {
+      pushNotification("error", "Chưa gửi được yêu cầu", "Hãy nhập email hợp lệ để nhận liên kết đặt lại mật khẩu.");
+      return;
+    }
+
+    try {
+      setIsRecoveryBusy(true);
+      await api.forgotPassword({ email: emailToRecover });
+      pushNotification(
+        "success",
+        "Đã ghi nhận yêu cầu",
+        "Nếu email tồn tại trong hệ thống, chúng tôi sẽ gửi liên kết đặt lại mật khẩu trong ít phút."
+      );
+      setRecoveryFormEmail(emailToRecover);
+    } catch (reason) {
+      pushNotification("error", "Không thể gửi yêu cầu", getErrorMessage(reason));
+    } finally {
+      setIsRecoveryBusy(false);
+    }
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -237,7 +264,12 @@ export function LoginPage() {
             <button
               className="auth-text-link"
               type="button"
-              onClick={() => setShowRecoveryHelp((current) => !current)}
+              onClick={() => {
+                setShowRecoveryHelp((current) => !current);
+                if (!recoveryFormEmail && recoveryEmail) {
+                  setRecoveryFormEmail(recoveryEmail);
+                }
+              }}
             >
               Quên mật khẩu?
             </button>
@@ -248,18 +280,23 @@ export function LoginPage() {
           </p>
 
           {showRecoveryHelp ? (
-            <div className="auth-help-card">
+            <form className="auth-help-card" onSubmit={handleForgotPassword}>
               <strong>Khôi phục mật khẩu</strong>
-              <p>
-                Backend hiện chưa cung cấp API đặt lại mật khẩu, nên mình đã chừa sẵn luồng UI để
-                bạn nối tiếp sau này mà không phải sửa lại layout.
-              </p>
-              <p>
-                {recoveryEmail
-                  ? `Email gợi ý để gửi hướng dẫn sau này: ${recoveryEmail}.`
-                  : "Hãy dùng email đăng ký của bạn để hệ thống có thể gửi hướng dẫn khi tính năng này được bật."}
-              </p>
-            </div>
+              <p>Nhập email đăng ký để nhận liên kết đặt lại mật khẩu. Liên kết sẽ được gửi qua email.</p>
+              <FormField htmlFor="recovery-email" label="Email khôi phục" required>
+                <input
+                  id="recovery-email"
+                  inputMode="email"
+                  placeholder="name@example.com"
+                  type="email"
+                  value={recoveryFormEmail}
+                  onChange={(event) => setRecoveryFormEmail(event.target.value)}
+                />
+              </FormField>
+              <button className="ghost-button" disabled={isRecoveryBusy} type="submit">
+                {isRecoveryBusy ? "Đang gửi liên kết..." : "Gửi liên kết đặt lại mật khẩu"}
+              </button>
+            </form>
           ) : null}
 
           <button className="secondary-button auth-submit-full" disabled={isBusy} type="submit">

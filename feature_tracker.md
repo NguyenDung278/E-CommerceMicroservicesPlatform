@@ -29,14 +29,12 @@
 - [x] Refresh token rotation qua `POST /api/v1/auth/refresh`
 - [x] Xem và cập nhật profile
 - [x] Đổi mật khẩu (`PUT /api/v1/users/password`)
-- [x] RBAC: phân quyền `user` / `admin` qua JWT claims
+- [x] RBAC: phân quyền `user` / `staff` / `admin` qua JWT claims
 - [x] Shared [JWTAuth](file:///Users/nguyendung/FPT/projects/ecommerce-platform/pkg/middleware/auth.go#31-87) middleware & [RequireRole](file:///Users/nguyendung/FPT/projects/ecommerce-platform/pkg/middleware/auth.go#97-123) cho toàn bộ services
 - [x] Bảo vệ chống email enumeration attack
-
-**Còn thiếu:**
-- [ ] Vai trò `staff` (hiện tại chỉ có `user` và `admin`)
-- [ ] Xác minh email sau đăng ký
-- [ ] Quên mật khẩu / reset (UI đã chừa sẵn slot)
+- [x] Vai trò `staff` (hiện tại chỉ có `user` và `admin`)
+- [x] Xác minh email sau đăng ký
+- [x] Quên mật khẩu / reset (UI đã chừa sẵn slot)
 
 ---
 
@@ -54,11 +52,9 @@
 - [x] SKU / variants cơ bản lưu trong `products.variants`
 - [x] Trạng thái bán: `draft` / `active` / `inactive`
 - [x] Lọc theo `brand` / `tag` / `status`
-
-**Còn thiếu:**
-- [ ] Upload ảnh (hiện tại chỉ có URL field)
-- [ ] Multiple images cho một sản phẩm
-- [ ] Object storage (S3/MinIO)
+- [x] Upload ảnh (hiện tại chỉ có URL field)
+- [x] Multiple images cho một sản phẩm
+- [x] Object storage (S3/MinIO)
 
 ---
 
@@ -178,14 +174,14 @@
 - [x] API admin tạo coupon
 - [x] API admin xem danh sách coupon
 - [x] Áp coupon khi tạo order (`coupon_code`)
+- [x] Preview coupon ở cart/checkout trước khi đặt hàng
 - [x] Giảm theo % hoặc số tiền cố định
 - [x] Điều kiện: đơn tối thiểu, số lần dùng, thời hạn
 - [x] Lock và consume voucher khi checkout bằng transaction + `SELECT ... FOR UPDATE`
+- [x] UI quản trị coupon
 
 **Còn thiếu:**
-- [ ] Preview coupon ở cart/checkout trước khi đặt hàng
 - [ ] Rule nâng cao: giới hạn theo user, category, product
-- [ ] UI quản trị coupon
 
 ---
 

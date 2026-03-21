@@ -40,12 +40,18 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Admin-only routes.
 	admin := e.Group("/api/v1/products")
 	admin.Use(middleware.JWTAuth(jwtSecret))
-	admin.Use(middleware.RequireRole(middleware.RoleAdmin))
+	admin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
 	admin.POST("", h.Create)
+	admin.POST("/uploads", h.UploadImages)
 	admin.PUT("/:id", h.Update)
 	admin.DELETE("/:id", h.Delete)
 }
 
+// Create handles POST /api/v1/products
+//
+// Mục đích: Endpoint dành riêng cho Role Admin để đăng tải sản phẩm mới lên Catalog.
+// Input: JSON body `dto.CreateProductRequest` chứa Name, Price, Stock, ImageURL...
+// Output: 201 Created (Kèm theo data sản phẩm vừa tạo) hoặc 400 Bad Request.
 func (h *ProductHandler) Create(c echo.Context) error {
 	var req dto.CreateProductRequest
 	if err := c.Bind(&req); err != nil {
@@ -112,6 +118,10 @@ func (h *ProductHandler) Delete(c echo.Context) error {
 }
 
 // List handles GET /api/v1/products?page=1&limit=20&category=electronics&search=laptop
+//
+// Mục đích: API chính để hiển thị danh sách sản phẩm trên trang chủ hoặc trang tìm kiếm.
+// Input: Các query parameter như `page`, `limit`, `category`, `search` để phân trang và bọ lọc.
+// Output: Trả về HTTP 200 kèm danh sách Products và Meta data phân trang (`total` items).
 func (h *ProductHandler) List(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))

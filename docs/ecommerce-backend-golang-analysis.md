@@ -170,8 +170,8 @@ Phần này mô tả các luồng nghiệp vụ quan trọng nhất theo dạng 
    - Nếu không, normalize như số điện thoại.
 5. Service lấy user từ repository.
 6. So sánh password bằng `bcrypt.CompareHashAndPassword`.
-7. Nếu đúng, tạo JWT chứa `user_id`, `email`, `role`.
-8. Trả token về cho frontend.
+7. Nếu đúng, tạo JWT chứa `user_id`, `email`, `role`, đồng thời tạo `refresh_token`.
+8. Trả token pair về cho frontend, cho phép user giữ đăng nhập lâu dài an toàn hơn.
 
 ### 4.2 Luồng xem sản phẩm
 
@@ -229,6 +229,17 @@ Sau patch mới, client không còn được gửi `amount`. Đây là một ví
 4. Parse JSON event.
 5. Xử lý business action tương ứng.
 6. `Ack` message nếu xử lý ổn, `Nack` nếu parse lỗi.
+
+### 4.7 Luồng Hủy đơn hàng và Hoàn kho
+
+1. Frontend gọi `PUT /api/v1/orders/:id/cancel`.
+2. `order-service` kiểm tra quyền sở hữu order và rule nghiệp vụ (chỉ hủy đơn `pending`).
+3. Đổi status thành `cancelled`.
+4. Với mỗi item, gọi RPC `UpdateProduct` sang `product-service` để khôi phục kho (`stock = stock + quantity`). Giải pháp này tải sử dụng Proto struct để không cần sinh thêm file PB.
+5. Publish event `order.cancelled` tới RabbitMQ.
+6. `notification-service` nhận event và gửi email xác nhận hủy đơn cho khách hàng.
+
+Đây là ví dụ điển hình về Distributed Transaction theo dạng best-effort và Event-driven Architecture trong hệ sinh thái E-commerce.
 
 Đây là ví dụ tốt để học event-driven backend trong Go.
 

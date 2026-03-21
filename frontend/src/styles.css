@@ -438,6 +438,30 @@ a:focus-visible {
   padding: 22px;
 }
 
+.product-card-media {
+  overflow: hidden;
+  min-height: 220px;
+  margin-bottom: 18px;
+  border-radius: 24px;
+  background: rgba(19, 61, 51, 0.06);
+}
+
+.product-card-media img {
+  display: block;
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+}
+
+.product-card-media-fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #133d33, #2d7462);
+  color: #f2fff8;
+  font-size: 3.6rem;
+  font-weight: 800;
+}
+
 .product-card-head,
 .product-price-row,
 .summary-row,
@@ -528,6 +552,27 @@ a:focus-visible {
   margin-top: 18px;
   padding-top: 18px;
   border-top: 1px solid rgba(22, 33, 29, 0.08);
+}
+
+.coupon-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.coupon-summary-discount {
+  color: #1f715d;
+}
+
+.coupon-preview-card {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(19, 61, 51, 0.06);
+  border: 1px solid rgba(19, 61, 51, 0.08);
 }
 
 .cart-items,
@@ -653,6 +698,17 @@ a:focus-visible {
 
 .detail-media {
   display: grid;
+  gap: 14px;
+}
+
+.detail-main-image {
+  display: block;
+  width: 100%;
+  min-height: 340px;
+  max-height: 480px;
+  border-radius: 28px;
+  object-fit: cover;
+  background: rgba(19, 61, 51, 0.06);
 }
 
 .mock-image {
@@ -664,6 +720,32 @@ a:focus-visible {
   color: #f2fff8;
   font-size: 7rem;
   font-weight: 800;
+}
+
+.detail-thumbnail-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 12px;
+}
+
+.detail-thumbnail-button {
+  overflow: hidden;
+  padding: 0;
+  border-radius: 18px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.detail-thumbnail-button img {
+  display: block;
+  width: 100%;
+  height: 84px;
+  object-fit: cover;
+}
+
+.detail-thumbnail-button-active {
+  border-color: rgba(31, 113, 93, 0.4);
+  box-shadow: 0 12px 28px rgba(19, 61, 51, 0.12);
 }
 
 .detail-copy p {
@@ -753,6 +835,128 @@ a:focus-visible {
   grid-template-columns: 1.4fr 1fr 0.8fr 0.8fr auto;
   gap: 12px;
   align-items: center;
+}
+
+.admin-image-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 22px;
+  background: rgba(21, 58, 143, 0.04);
+}
+
+.admin-image-input-row,
+.admin-image-upload-row,
+.feedback-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-image-input-row input,
+.admin-image-upload-row input[type="file"] {
+  flex: 1 1 240px;
+}
+
+.admin-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.admin-image-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(22, 33, 29, 0.08);
+}
+
+.admin-image-card img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 18px;
+  background: rgba(19, 61, 51, 0.06);
+}
+
+.admin-image-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-upload-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-upload-chip {
+  display: inline-flex;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(21, 58, 143, 0.08);
+  color: #153a8f;
+  font-size: 0.84rem;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.coupon-admin-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(22, 33, 29, 0.08);
+}
+
+.coupon-admin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.coupon-admin-head p {
+  margin: 6px 0 0;
+}
+
+.coupon-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.coupon-admin-grid div {
+  display: grid;
+  gap: 6px;
+}
+
+.coupon-admin-grid span {
+  color: rgba(22, 33, 29, 0.58);
+}
+
+.feedback-warning {
+  border-color: rgba(255, 163, 91, 0.3);
+  background: rgba(255, 246, 238, 0.95);
+  color: #7e3d14;
 }
 
 .auth-shell {
@@ -1162,6 +1366,15 @@ a:focus-visible {
 
   .admin-variant-row {
     grid-template-columns: 1fr;
+  }
+
+  .coupon-admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coupon-admin-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .auth-shell,

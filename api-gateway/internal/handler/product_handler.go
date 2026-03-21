@@ -28,8 +28,9 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	protected := e.Group("/api/v1/products")
 	protected.Use(appmw.JWTAuth(jwtSecret))
-	protected.Use(appmw.RequireRole(appmw.RoleAdmin))
+	protected.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
 	protected.POST("", h.forwardRequest)
+	protected.POST("/uploads", h.forwardRequest)
 	protected.PUT("/:id", h.forwardRequest)
 	protected.DELETE("/:id", h.forwardRequest)
 }

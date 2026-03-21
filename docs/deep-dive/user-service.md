@@ -23,11 +23,14 @@ Public:
 
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
 
 Protected:
 
 - `GET /api/v1/users/profile`
 - `PUT /api/v1/users/profile`
+- `PUT /api/v1/users/password`
+- `GET/POST/PUT/DELETE /api/v1/users/addresses`
 
 ## 3. Cấu trúc thư mục
 
@@ -108,6 +111,19 @@ Logic chính:
 
 - Dùng cùng một error cho sai user/sai password để tránh enumeration.
 - Service giữ logic auth; handler chỉ bind/validate/trả response.
+
+## 5.1 Luồng Refresh Token và Đổi mật khẩu
+
+Hai tính năng quan trọng vừa được thêm vào:
+
+- **Refresh Token**: Client gửi `refresh_token` lên endpoint `POST /auth/refresh`. Service sẽ verify token này, và sinh ra một cặp Access/Refresh token mới. Giúp bảo mật tốt hơn với Access Token ngắn hạn mà không làm phiền người dùng đăng nhập lại liên tục.
+- **Đổi mật khẩu**: Yêu cầu xác định mật khẩu cũ trước khi hash và lưu mật khẩu mới.
+
+## 5.2 Quản lý địa chỉ giao hàng (Shipping Address)
+
+User có thể quản lý nhiều địa chỉ giao hàng (`Address` model). Điểm thú vị:
+- Giới hạn tối đa 10 địa chỉ/user để tránh lạm dụng DB.
+- Tự động fallback: địa chỉ đầu tiên tạo ra sẽ tự động làm mặc định. Khi set một địa chỉ khác làm mặc định, backend sẽ dùng SQL Transaction tĩnh `ClearDefault` (set `is_default = false` cho mọi địa chỉ của user) rồi mới `SetDefault` cho địa chỉ được chọn. Đảm bảo rule "chỉ 1 địa chỉ mặc định tại mọi thời điểm".
 
 ## 6. File quan trọng
 

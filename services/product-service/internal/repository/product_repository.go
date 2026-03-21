@@ -33,9 +33,9 @@ func NewProductRepository(db *sql.DB) ProductRepository {
 func (r *postgresProductRepository) Create(ctx context.Context, product *model.Product) error {
 	query := `
 		INSERT INTO products (
-			id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, created_at, updated_at
+			id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, $12, $13::jsonb, $14, $15)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		product.ID,
@@ -50,6 +50,7 @@ func (r *postgresProductRepository) Create(ctx context.Context, product *model.P
 		product.SKU,
 		mustJSON(product.Variants),
 		product.ImageURL,
+		mustJSON(product.ImageURLs),
 		product.CreatedAt,
 		product.UpdatedAt,
 	)
@@ -61,7 +62,7 @@ func (r *postgresProductRepository) Create(ctx context.Context, product *model.P
 
 func (r *postgresProductRepository) GetByID(ctx context.Context, id string) (*model.Product, error) {
 	query := `
-		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, created_at, updated_at
+		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		FROM products
 		WHERE id = $1
 	`
@@ -80,8 +81,8 @@ func (r *postgresProductRepository) Update(ctx context.Context, product *model.P
 	query := `
 		UPDATE products
 		SET name = $1, description = $2, price = $3, stock = $4, category = $5, brand = $6,
-		    tags = $7::jsonb, status = $8, sku = $9, variants = $10::jsonb, image_url = $11, updated_at = $12
-		WHERE id = $13
+		    tags = $7::jsonb, status = $8, sku = $9, variants = $10::jsonb, image_url = $11, image_urls = $12::jsonb, updated_at = $13
+		WHERE id = $14
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		product.Name,
@@ -95,6 +96,7 @@ func (r *postgresProductRepository) Update(ctx context.Context, product *model.P
 		product.SKU,
 		mustJSON(product.Variants),
 		product.ImageURL,
+		mustJSON(product.ImageURLs),
 		product.UpdatedAt,
 		product.ID,
 	)
@@ -113,6 +115,12 @@ func (r *postgresProductRepository) Delete(ctx context.Context, id string) error
 }
 
 // List retrieves products with pagination plus catalog metadata filters.
+//
+// DESIGN PATTERN: Dynamic SQL Query Building.
+// Hàm này là một ví dụ kinh điển về việc nối chuỗi an toàn trong Go:
+// Do điều kiện lọc (Filters) từ người dùng có thể rỗng hoặc có, SQL Builder
+// sẽ linh động build vế `WHERE` theo từng chuỗi, và gán tham số `$1`, `$2`
+// vào array `args` để DB bind vào, ngăn chặn hoàn toàn lỗi SQL Injection.
 func (r *postgresProductRepository) List(
 	ctx context.Context,
 	offset, limit int,
@@ -157,7 +165,7 @@ func (r *postgresProductRepository) List(
 	}
 
 	selectQuery := fmt.Sprintf(`
-		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, created_at, updated_at
+		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		%s
 		ORDER BY created_at DESC
 		LIMIT $%d OFFSET $%d
@@ -218,7 +226,7 @@ func (r *postgresProductRepository) RestoreStock(ctx context.Context, id string,
 
 func (r *postgresProductRepository) ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error) {
 	query := `
-		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, created_at, updated_at
+		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		FROM products
 		WHERE status = $1 AND stock <= $2
 		ORDER BY stock ASC, updated_at DESC
@@ -250,6 +258,7 @@ func (r *postgresProductRepository) scanProductRow(scanner productScanner) (*mod
 	product := &model.Product{}
 	var rawTags []byte
 	var rawVariants []byte
+	var rawImageURLs []byte
 
 	err := scanner.Scan(
 		&product.ID,
@@ -264,6 +273,7 @@ func (r *postgresProductRepository) scanProductRow(scanner productScanner) (*mod
 		&product.SKU,
 		&rawVariants,
 		&product.ImageURL,
+		&rawImageURLs,
 		&product.CreatedAt,
 		&product.UpdatedAt,
 	)
@@ -276,6 +286,9 @@ func (r *postgresProductRepository) scanProductRow(scanner productScanner) (*mod
 	}
 	if err := json.Unmarshal(rawVariants, &product.Variants); err != nil {
 		return nil, fmt.Errorf("failed to decode product variants: %w", err)
+	}
+	if err := json.Unmarshal(rawImageURLs, &product.ImageURLs); err != nil {
+		return nil, fmt.Errorf("failed to decode product image urls: %w", err)
 	}
 
 	return product, nil

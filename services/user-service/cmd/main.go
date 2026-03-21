@@ -24,6 +24,7 @@ import (
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/grpc"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
@@ -65,7 +66,14 @@ func main() {
 
 	// 5. Dependency injection: repo → service → handler.
 	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo, cfg.JWT.Secret, cfg.JWT.Expiration)
+	emailSender := email.NewSender(cfg.SMTP, log)
+	userService := service.NewUserService(
+		userRepo,
+		cfg.JWT.Secret,
+		cfg.JWT.Expiration,
+		service.WithEmailSender(emailSender),
+		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
+	)
 	userHandler := handler.NewUserHandler(userService)
 
 	addressRepo := repository.NewAddressRepository(db)

@@ -14,19 +14,40 @@ import (
 )
 
 var (
-	ErrProductNotFound = errors.New("product not found")
-	ErrInvalidStatus   = errors.New("invalid product status")
+	ErrProductNotFound        = errors.New("product not found")
+	ErrInvalidStatus          = errors.New("invalid product status")
+	ErrImageStorageUnavailable = errors.New("image storage unavailable")
 )
 
 // ProductService contains business logic for product operations.
 type ProductService struct {
-	repo repository.ProductRepository
+	repo       repository.ProductRepository
+	mediaStore MediaStore
 }
 
-func NewProductService(repo repository.ProductRepository) *ProductService {
-	return &ProductService{repo: repo}
+type ProductServiceOption func(*ProductService)
+
+func WithMediaStore(mediaStore MediaStore) ProductServiceOption {
+	return func(service *ProductService) {
+		service.mediaStore = mediaStore
+	}
 }
 
+func NewProductService(repo repository.ProductRepository, options ...ProductServiceOption) *ProductService {
+	service := &ProductService{repo: repo}
+	for _, option := range options {
+		option(service)
+	}
+
+	return service
+}
+
+// Create is responsible for validating and assembling a new Product domain object.
+//
+// FLOW HOẠT ĐỘNG:
+//  1. Validate trạng thái (normalizeStatus) đảm bảo rơi vào 'active', 'inactive', 'draft'.
+//  2. Resolve số lượng Stock tổng (dựa trên tồng số Variants cộng lại hoặc dùng số Stock truyền vào).
+//  3. Gọi Database (repo) để insert dòng mới kèm UUID.
 func (s *ProductService) Create(ctx context.Context, req dto.CreateProductRequest) (*model.Product, error) {
 	status, err := normalizeStatus(req.Status)
 	if err != nil {
@@ -34,6 +55,7 @@ func (s *ProductService) Create(ctx context.Context, req dto.CreateProductReques
 	}
 
 	variants := normalizeVariants(req.Variants)
+	imageURLs := normalizeImageURLs(req.ImageURLs, req.ImageURL)
 	now := time.Now()
 	product := &model.Product{
 		ID:          uuid.New().String(),
@@ -47,7 +69,8 @@ func (s *ProductService) Create(ctx context.Context, req dto.CreateProductReques
 		Status:      status,
 		SKU:         strings.TrimSpace(req.SKU),
 		Variants:    variants,
-		ImageURL:    strings.TrimSpace(req.ImageURL),
+		ImageURL:    resolvePrimaryImage(imageURLs),
+		ImageURLs:   imageURLs,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -115,6 +138,13 @@ func (s *ProductService) Update(ctx context.Context, id string, req dto.UpdatePr
 	}
 	if req.ImageURL != nil {
 		product.ImageURL = strings.TrimSpace(*req.ImageURL)
+	}
+	if req.ImageURLs != nil {
+		product.ImageURLs = normalizeImageURLs(*req.ImageURLs, product.ImageURL)
+		product.ImageURL = resolvePrimaryImage(product.ImageURLs)
+	} else if req.ImageURL != nil {
+		product.ImageURLs = normalizeImageURLs(product.ImageURLs, product.ImageURL)
+		product.ImageURL = resolvePrimaryImage(product.ImageURLs)
 	}
 	product.UpdatedAt = time.Now()
 
@@ -248,4 +278,31 @@ func normalizeStatus(value string) (string, error) {
 	default:
 		return "", ErrInvalidStatus
 	}
+}
+
+func normalizeImageURLs(urls []string, fallback string) []string {
+	normalized := make([]string, 0, len(urls)+1)
+	seen := map[string]struct{}{}
+
+	for _, imageURL := range append([]string{fallback}, urls...) {
+		clean := strings.TrimSpace(imageURL)
+		if clean == "" {
+			continue
+		}
+		if _, exists := seen[clean]; exists {
+			continue
+		}
+		seen[clean] = struct{}{}
+		normalized = append(normalized, clean)
+	}
+
+	return normalized
+}
+
+func resolvePrimaryImage(urls []string) string {
+	if len(urls) == 0 {
+		return ""
+	}
+
+	return urls[0]
 }

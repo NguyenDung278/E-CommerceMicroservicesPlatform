@@ -10,13 +10,14 @@ import { sanitizeText } from "../utils/sanitize";
 import { validateProfile } from "../utils/validation";
 
 export function ProfilePage() {
-  const { token, user, updateProfile } = useAuth();
+  const { token, user, updateProfile, resendVerificationEmail } = useAuth();
   const [profileForm, setProfileForm] = useState({
     firstName: user?.first_name || "",
     lastName: user?.last_name || ""
   });
   const [feedback, setFeedback] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
   const { orders, paymentsByOrder, isLoading, error: recordsError } = useOrderPayments(token);
 
   useEffect(() => {
@@ -54,6 +55,18 @@ export function ProfilePage() {
     }
   }
 
+  async function handleResendVerification() {
+    try {
+      setIsResendingVerification(true);
+      await resendVerificationEmail();
+      setFeedback("Đã gửi lại email xác minh. Hãy kiểm tra hộp thư đến hoặc log SMTP giả lập.");
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsResendingVerification(false);
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="content-section">
@@ -69,12 +82,28 @@ export function ProfilePage() {
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
         {recordsError ? <div className="feedback feedback-error">{recordsError}</div> : null}
+        {user && !user.email_verified ? (
+          <div className="feedback feedback-warning">
+            Email của bạn chưa được xác minh. Một số luồng phục hồi tài khoản sẽ phụ thuộc vào địa chỉ này.
+            <div className="feedback-action-row">
+              <button
+                className="ghost-button"
+                disabled={isResendingVerification}
+                type="button"
+                onClick={() => void handleResendVerification()}
+              >
+                {isResendingVerification ? "Đang gửi lại..." : "Gửi lại email xác minh"}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="two-column-grid">
           <form className="card" onSubmit={handleSubmit}>
             <h2>Cập nhật hồ sơ</h2>
             <div className="profile-summary">
               <span>Email: {user?.email}</span>
+              <span>Email verified: {user?.email_verified ? "Đã xác minh" : "Chưa xác minh"}</span>
               <span>SĐT: {user?.phone || "Chưa cập nhật"}</span>
               <span>Role: {user?.role}</span>
             </div>

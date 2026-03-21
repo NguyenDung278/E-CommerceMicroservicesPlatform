@@ -1,10 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
-import type { Order, Payment } from "../types/api";
+import type { Order, OrderPreview, Payment } from "../types/api";
+import { formatCurrency } from "../utils/format";
 import { sanitizeText } from "../utils/sanitize";
 import { validatePayment } from "../utils/validation";
 
@@ -26,12 +27,14 @@ export function CheckoutPage() {
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
   const [latestPayment, setLatestPayment] = useState<Payment | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("credit_card");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
   const [feedback, setFeedback] = useState("");
   const [isBusy, setIsBusy] = useState("");
 
   const directProduct = (location.state as DirectProductState | null)?.directProduct;
 
-  const checkoutItems = directProduct
+  const draftItems = directProduct
     ? [
         {
           product_id: directProduct.id,
@@ -47,7 +50,35 @@ export function CheckoutPage() {
         price: item.price
       }));
 
-  const totalAmount = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const checkoutItems = latestOrder
+    ? latestOrder.items.map((item) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        name: item.name,
+        price: item.price
+      }))
+    : draftItems;
+
+  const draftSignature = useMemo(
+    () => draftItems.map((item) => `${item.product_id}:${item.quantity}`).join("|"),
+    [draftItems]
+  );
+
+  useEffect(() => {
+    if (!latestOrder) {
+      setCouponPreview(null);
+    }
+  }, [draftSignature, latestOrder]);
+
+  const localSubtotal = draftItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const pricingSummary = latestOrder
+    ? {
+        subtotal_price: latestOrder.subtotal_price,
+        discount_amount: latestOrder.discount_amount,
+        coupon_code: latestOrder.coupon_code,
+        total_price: latestOrder.total_price
+      }
+    : couponPreview;
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,20 +88,30 @@ export function CheckoutPage() {
       return;
     }
 
-    if (checkoutItems.length === 0) {
+    if (latestOrder) {
+      setFeedback("Đơn hàng đã được tạo. Bạn có thể tiếp tục thanh toán ngay bên phải.");
+      return;
+    }
+
+    if (draftItems.length === 0) {
       setFeedback("Không có sản phẩm nào để checkout.");
       return;
     }
 
     try {
       setIsBusy("order");
+      const normalizedCouponCode = couponCode.trim();
       const response = await api.createOrder(token, {
-        items: checkoutItems.map((item) => ({
+        items: draftItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity
-        }))
+        })),
+        coupon_code: normalizedCouponCode || undefined
       });
       setLatestOrder(response.data);
+      if (response.data.coupon_code) {
+        setCouponCode(response.data.coupon_code);
+      }
       setLatestPayment(null);
       setFeedback(`Đã tạo đơn hàng ${response.data.id}. Bạn có thể thanh toán ngay bên dưới.`);
 
@@ -82,6 +123,60 @@ export function CheckoutPage() {
     } finally {
       setIsBusy("");
     }
+  }
+
+  async function handlePreviewCoupon() {
+    const normalizedCouponCode = couponCode.trim();
+
+    if (!isAuthenticated || !token) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    if (latestOrder) {
+      setFeedback("Voucher đã được khóa theo đơn hàng vừa tạo.");
+      return;
+    }
+
+    if (!normalizedCouponCode) {
+      setFeedback("Nhập mã voucher trước khi áp dụng.");
+      return;
+    }
+
+    if (draftItems.length === 0) {
+      setFeedback("Không có sản phẩm nào để kiểm tra voucher.");
+      return;
+    }
+
+    try {
+      setIsBusy("preview");
+      const response = await api.previewOrder(token, {
+        items: draftItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity
+        })),
+        coupon_code: normalizedCouponCode
+      });
+      setCouponPreview(response.data);
+      setCouponCode(response.data.coupon_code ?? normalizedCouponCode.toUpperCase());
+      setFeedback(`Voucher ${response.data.coupon_code ?? normalizedCouponCode.toUpperCase()} hợp lệ cho đơn hiện tại.`);
+    } catch (reason) {
+      setCouponPreview(null);
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsBusy("");
+    }
+  }
+
+  function handleClearCoupon() {
+    if (latestOrder) {
+      setFeedback("Voucher đã được gắn với đơn hàng vừa tạo và không thể gỡ tại bước này.");
+      return;
+    }
+
+    setCouponCode("");
+    setCouponPreview(null);
+    setFeedback("");
   }
 
   async function handleProcessPayment(event: FormEvent<HTMLFormElement>) {
@@ -130,7 +225,7 @@ export function CheckoutPage() {
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
-        {checkoutItems.length === 0 ? (
+        {!latestOrder && checkoutItems.length === 0 ? (
           <div className="empty-card">
             <h2>Không có sản phẩm để thanh toán</h2>
             <p>Bạn có thể mua ngay từ trang sản phẩm hoặc thêm item vào giỏ hàng.</p>
@@ -145,21 +240,84 @@ export function CheckoutPage() {
                     <span>
                       {item.name} x {item.quantity}
                     </span>
-                    <strong>${(item.price * item.quantity).toFixed(2)}</strong>
+                    <strong>{formatCurrency(item.price * item.quantity)}</strong>
                   </div>
                 ))}
               </div>
 
-              <div className="summary-row summary-total">
+              <div className="summary-row">
                 <span>Tổng tạm tính</span>
-                <strong>${totalAmount.toFixed(2)}</strong>
+                <strong>{formatCurrency(pricingSummary?.subtotal_price ?? localSubtotal)}</strong>
               </div>
 
-              <form onSubmit={handleCreateOrder}>
-                <button className="primary-button" disabled={isBusy === "order"} type="submit">
-                  {isBusy === "order" ? "Đang tạo đơn..." : "Tạo đơn hàng"}
-                </button>
-              </form>
+              {pricingSummary?.discount_amount ? (
+                <div className="summary-row coupon-summary-discount">
+                  <span>Giảm giá {pricingSummary.coupon_code ? `(${pricingSummary.coupon_code})` : ""}</span>
+                  <strong>-{formatCurrency(pricingSummary.discount_amount)}</strong>
+                </div>
+              ) : null}
+
+              {couponPreview?.coupon_description && !latestOrder ? (
+                <div className="coupon-preview-card">
+                  <strong>{couponPreview.coupon_code}</strong>
+                  <span>{couponPreview.coupon_description}</span>
+                </div>
+              ) : null}
+
+              <div className="summary-row summary-total">
+                <span>Thành tiền</span>
+                <strong>{formatCurrency(pricingSummary?.total_price ?? localSubtotal)}</strong>
+              </div>
+
+              {latestOrder ? (
+                <div className="payment-success">
+                  <strong>Đơn hàng đã sẵn sàng để thanh toán</strong>
+                  <span>Bạn có thể tiếp tục xử lý thanh toán ở thẻ bên phải.</span>
+                </div>
+              ) : (
+                <>
+                  <label className="field" htmlFor="checkout-coupon-code">
+                    <span className="field-label">Voucher</span>
+                    <input
+                      id="checkout-coupon-code"
+                      placeholder="Nhập mã giảm giá"
+                      value={couponCode}
+                      onChange={(event) => {
+                        setCouponCode(event.target.value);
+                        setCouponPreview(null);
+                      }}
+                    />
+                    <span className="field-hint">
+                      Xem trước tổng tiền sau giảm giá trước khi tạo đơn hàng.
+                    </span>
+                  </label>
+
+                  <div className="coupon-action-row">
+                    <button
+                      className="secondary-button"
+                      disabled={isBusy === "preview"}
+                      onClick={() => void handlePreviewCoupon()}
+                      type="button"
+                    >
+                      {isBusy === "preview" ? "Đang kiểm tra..." : "Áp dụng voucher"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      disabled={!couponCode && !couponPreview}
+                      onClick={handleClearCoupon}
+                      type="button"
+                    >
+                      Gỡ voucher
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCreateOrder}>
+                    <button className="primary-button" disabled={isBusy === "order"} type="submit">
+                      {isBusy === "order" ? "Đang tạo đơn..." : "Tạo đơn hàng"}
+                    </button>
+                  </form>
+                </>
+              )}
             </div>
 
             <div className="card">
@@ -172,8 +330,20 @@ export function CheckoutPage() {
                   </div>
                   <div className="summary-row">
                     <span>Tổng tiền</span>
-                    <strong>${latestOrder.total_price.toFixed(2)}</strong>
+                    <strong>{formatCurrency(latestOrder.total_price)}</strong>
                   </div>
+                  {latestOrder.coupon_code ? (
+                    <div className="summary-row">
+                      <span>Voucher</span>
+                      <strong>{latestOrder.coupon_code}</strong>
+                    </div>
+                  ) : null}
+                  {latestOrder.discount_amount > 0 ? (
+                    <div className="summary-row">
+                      <span>Giảm giá</span>
+                      <strong>-{formatCurrency(latestOrder.discount_amount)}</strong>
+                    </div>
+                  ) : null}
 
                   <form onSubmit={handleProcessPayment}>
                     <label className="field" htmlFor="payment-method">

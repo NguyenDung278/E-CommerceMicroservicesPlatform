@@ -247,6 +247,38 @@ Phiên bản hiện tại cũng đã tốt hơn kiểu fire-and-forget goroutine
 - robust hơn trước,
 - nhưng vẫn chưa phải outbox pattern hoàn chỉnh.
 
+### Dòng 248-270 (Chức năng mới): Hủy đơn hàng (`CancelOrder`)
+
+Flow Hủy đơn không đơn giản chỉ là cập nhật DB. 
+
+```go
+func (s *OrderService) CancelOrder(ctx context.Context, orderID, userID string) error {
+    ...
+    // 1. Chỉ đơn pending mới được hủy
+    if order.Status != model.OrderStatusPending {
+        return ErrOrderNotCancellable
+    }
+    ...
+```
+
+Ý nghĩa ở đây:
+- Business Rule được thi hành chặn đứng ở tầng Service. Frontend dù có submit API đi nữa cũng sẽ bị từ chối nếu đơn đã `shipped` hặc `paid`.
+
+#### Khôi phục tồn kho qua RPC
+```go
+    for _, item := range order.Items {
+        if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
+            s.log.Error("failed to restore stock for product", ...)
+        }
+    }
+```
+Tại sao dùng Loop thay vì gọi 1 lần? Vì `UpdateProduct` RPC cũ nhận ID từng thằng.
+Tại sao lấy log error mà không return lỗi? Vì `RestoreStock` là một tác vụ Best-effort. Hủy đơn thành công thì nên báo cho user. Lỗi hoàn kho (do rớt mạng) thì log lại để một con bot (reconciliation job) chạy quét và xử lý sau.
+
+#### Tính năng Bảng Audit (`order_events`)
+Mỗi lần gọi `UpdateStatus`, Code ghi một Audit log vô bảng `order_events` chứa `Status`, `ActorID`, `Role`, `Message`.
+Đây là cách thiết kế "Timeline mua hàng" giống Shopee/Tiki.
+
 ### Dòng 128-140: `GetOrder`
 
 Đây là đoạn nhỏ nhưng rất quan trọng về security.

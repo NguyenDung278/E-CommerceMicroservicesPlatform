@@ -12,6 +12,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
@@ -23,24 +24,47 @@ var (
 	ErrPhoneAlreadyExists = errors.New("phone already exists")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrInvalidToken       = errors.New("invalid or expired token")
+	ErrInvalidRole        = errors.New("invalid user role")
 )
 
 // UserService contains business logic for user operations.
 // WHY THIS LAYER: Separating business logic from handlers and repositories
 // makes the code testable and prevents mixing HTTP concerns with domain logic.
 type UserService struct {
-	repo      repository.UserRepository
-	jwtSecret string
-	jwtExpiry int // hours — for access tokens
+	repo            repository.UserRepository
+	jwtSecret       string
+	jwtExpiry       int // hours — for access tokens
+	emailSender     email.Sender
+	frontendBaseURL string
+}
+
+type UserServiceOption func(*UserService)
+
+func WithEmailSender(sender email.Sender) UserServiceOption {
+	return func(s *UserService) {
+		s.emailSender = sender
+	}
+}
+
+func WithFrontendBaseURL(baseURL string) UserServiceOption {
+	return func(s *UserService) {
+		s.frontendBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	}
 }
 
 // NewUserService creates a new user service.
-func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry int) *UserService {
-	return &UserService{
-		repo:      repo,
-		jwtSecret: jwtSecret,
-		jwtExpiry: jwtExpiry,
+func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry int, options ...UserServiceOption) *UserService {
+	service := &UserService{
+		repo:            repo,
+		jwtSecret:       jwtSecret,
+		jwtExpiry:       jwtExpiry,
+		frontendBaseURL: "http://localhost:4173",
 	}
+	for _, option := range options {
+		option(service)
+	}
+
+	return service
 }
 
 // Register creates a new user account.
@@ -85,18 +109,30 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 
 	now := time.Now()
 	user := &model.User{
-		ID:        uuid.New().String(),
-		Email:     req.Email,
-		Phone:     req.Phone,
-		Password:  string(hashedPassword),
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Role:      "user",
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:            uuid.New().String(),
+		Email:         req.Email,
+		Phone:         req.Phone,
+		Password:      string(hashedPassword),
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
+		Role:          middleware.RoleUser,
+		EmailVerified: false,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
+	verificationToken, verificationTokenHash, verificationTokenExpiry, err := issueTimeBoundToken(48 * time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	user.EmailVerificationTokenHash = verificationTokenHash
+	user.EmailVerificationExpiresAt = &verificationTokenExpiry
+
 	if err := s.repo.Create(ctx, user); err != nil {
+		return nil, err
+	}
+
+	if err := s.sendVerificationEmail(user, verificationToken); err != nil {
 		return nil, err
 	}
 
@@ -157,6 +193,10 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 }
 
 // GetProfile retrieves a user's profile by ID.
+//
+// Mục đích: Trích xuất thông tin người dùng từ Database dựa trên `userID`.
+// Input: `userID` (chuỗi UUID được bóc tách từ JWT token).
+// Output: Trả về pointer `*model.User` chứa toàn bộ thông tin tài khoản, hoặc lỗi `ErrUserNotFound` nếu record đã bị xóa.
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {

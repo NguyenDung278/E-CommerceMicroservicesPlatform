@@ -26,6 +26,9 @@ func NewUserGRPCServer(userService *service.UserService) *UserGRPCServer {
 }
 
 // Register handles user registration via gRPC
+// 
+// Mục đích: Cho phép các Microservices khác tạo tài khoản User thông qua gRPC (thay vì HTTP).
+// Hiện tại API Gateway gọi HTTP trực tiếp tới Handler, nhưng hàm gRPC này dự phòng cho các Service backend gọi nội bộ.
 func (s *UserGRPCServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterResponse, error) {
 	// Convert protobuf request to DTO
 	registerReq := dto.RegisterRequest{
@@ -172,6 +175,9 @@ func (s *UserGRPCServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfil
 }
 
 // GetUserByID handles getting user by ID via gRPC
+//
+// Mục đích: Cung cấp thông tin User cho các Service khác (như Order Service).
+// Ví dụ: Order Service cần biết Email của User để lưu vào hóa đơn thì sẽ gọi gRPC hàm này.
 func (s *UserGRPCServer) GetUserByID(ctx context.Context, req *pb.GetUserByIDRequest) (*pb.GetUserByIDResponse, error) {
 	userID := req.GetUserId()
 	if userID == "" {

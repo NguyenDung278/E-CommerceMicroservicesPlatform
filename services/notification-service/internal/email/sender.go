@@ -19,6 +19,12 @@ type Sender interface {
 	Send(message Message) error
 }
 
+// NewSender creates a new email sender based on configuration.
+// 
+// LOGIC CHUYỂN ĐỔI (FALLBACK):
+// Nếu bạn chưa cấu hình thông số SMTP thực tế (Host, FromAddress rỗng), hệ thống sẽ
+// tự động dùng `logSender` để in nội dung email ra Terminal thay vì gửi thật. Việc này giúp Developer
+// debug dễ dàng ở localhost mà không lo spam thật.
 func NewSender(cfg config.SMTPConfig, log *zap.Logger) Sender {
 	if strings.TrimSpace(cfg.Host) == "" || strings.TrimSpace(cfg.FromAddress) == "" {
 		log.Warn("SMTP not configured, falling back to log-based notifications")

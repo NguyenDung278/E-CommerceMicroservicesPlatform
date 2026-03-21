@@ -46,12 +46,11 @@ type PaymentEvent struct {
 
 // HandleMessage processes a single RabbitMQ message based on its routing key.
 //
-// IN PRODUCTION: This would call real notification providers:
-//   - Email: SendGrid, SES, Mailgun
-//   - SMS: Twilio, Vonage
-//   - Push: Firebase Cloud Messaging
+// MỤC ĐÍCH: Là hàm cốt lõi (Core Engine) của Worker. Nó lấy từng message trong Queue ra, kiểm tra `RoutingKey`.
+// Dựa vào chuỗi khoá (Ví dụ: "order.created" hay "payment.completed"), hàm sẽ Route payload JSON
+// sang các sub-handler tương ứng (`handleOrderCreated`, `handlePaymentCompleted`).
 //
-// FOR THIS DEMO: We log the notification that would be sent.
+// IN PRODUCTION: This would call real notification providers (SendGrid, Twilio, Firebase).
 func (h *EventHandler) HandleMessage(msg amqp.Delivery) {
 	h.log.Info("received event",
 		zap.String("routing_key", msg.RoutingKey),

@@ -67,6 +67,11 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 			first_name VARCHAR(100) NOT NULL,
 			last_name VARCHAR(100) NOT NULL,
 			role VARCHAR(20) NOT NULL,
+			email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+			email_verification_token_hash VARCHAR(64),
+			email_verification_expires_at TIMESTAMP,
+			password_reset_token_hash VARCHAR(64),
+			password_reset_expires_at TIMESTAMP,
 			created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL
 		)
@@ -84,6 +89,7 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 		FirstName: "Alice",
 		LastName:  "Nguyen",
 		Role:      "user",
+		EmailVerified: false,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

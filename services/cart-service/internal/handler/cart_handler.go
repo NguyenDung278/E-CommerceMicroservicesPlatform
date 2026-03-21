@@ -41,6 +41,10 @@ func (h *CartHandler) GetCart(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "cart retrieved", cart)
 }
 
+// AddItem handles POST /api/v1/cart/items
+//
+// Mục đích: Thêm 1 sản phẩm vào giỏ hàng. Nếu sản phẩm đã có, tự động tăng số lượng.
+// API này gọi gRPC sang Product Service để lấy thông tin giá mới nhất và check tồn kho (Stock).
 func (h *CartHandler) AddItem(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	var req dto.AddToCartRequest
@@ -102,6 +106,9 @@ func (h *CartHandler) RemoveItem(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "item removed", cart)
 }
 
+// ClearCart handles DELETE /api/v1/cart
+//
+// Mục đích: Xóa trắng toàn bộ giỏ hàng (thường được tự động gọi sau quá trình Checkout/Thanh toán thành công).
 func (h *CartHandler) ClearCart(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	if err := h.cartService.ClearCart(c.Request().Context(), claims.UserID); err != nil {

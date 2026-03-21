@@ -27,11 +27,23 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	auth := e.Group("/api/v1/auth")
 	auth.POST("/register", h.forwardRequest)
 	auth.POST("/login", h.forwardRequest)
+	auth.POST("/refresh", h.forwardRequest)
+	auth.POST("/verify-email", h.forwardRequest)
+	auth.POST("/forgot-password", h.forwardRequest)
+	auth.POST("/reset-password", h.forwardRequest)
 
 	users := e.Group("/api/v1/users")
 	users.Use(appmw.JWTAuth(jwtSecret))
 	users.GET("/profile", h.forwardRequest)
 	users.PUT("/profile", h.forwardRequest)
+	users.PUT("/password", h.forwardRequest)
+	users.POST("/verify-email/resend", h.forwardRequest)
+
+	adminUsers := e.Group("/api/v1/admin/users")
+	adminUsers.Use(appmw.JWTAuth(jwtSecret))
+	adminUsers.Use(appmw.RequireRole(appmw.RoleAdmin))
+	adminUsers.GET("", h.forwardRequest)
+	adminUsers.PUT("/:id/role", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the user service

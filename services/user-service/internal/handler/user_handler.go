@@ -39,6 +39,9 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	auth.POST("/register", h.Register)
 	auth.POST("/login", h.Login)
 	auth.POST("/refresh", h.RefreshToken)
+	auth.POST("/verify-email", h.VerifyEmail)
+	auth.POST("/forgot-password", h.ForgotPassword)
+	auth.POST("/reset-password", h.ResetPassword)
 
 	// Protected routes — require valid JWT token.
 	users := e.Group("/api/v1/users")
@@ -46,9 +49,23 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.GET("/profile", h.GetProfile)
 	users.PUT("/profile", h.UpdateProfile)
 	users.PUT("/password", h.ChangePassword)
+	users.POST("/verify-email/resend", h.ResendVerificationEmail)
+
+	adminUsers := e.Group("/api/v1/admin/users")
+	adminUsers.Use(middleware.JWTAuth(jwtSecret))
+	adminUsers.Use(middleware.RequireRole(middleware.RoleAdmin))
+	adminUsers.GET("", h.ListUsers)
+	adminUsers.PUT("/:id/role", h.UpdateUserRole)
 }
 
 // Register handles POST /api/v1/auth/register
+//
+// Mục đích: Tiếp nhận HTTP request đăng ký tài khoản mới từ User.
+// Input: JSON body map vào struct `dto.RegisterRequest` (yêu cầu email, độ dài password >= 8).
+// Output:
+//   - 201 Created nếu thành công (kèm JSON chứa Access Token và Refresh Token).
+//   - 400 Bad Request nếu JSON lỗi hặc Validation thất bại.
+//   - 409 Conflict nếu Email/Phone đã tồn tại trong DB.
 func (h *UserHandler) Register(c echo.Context) error {
 	var req dto.RegisterRequest
 	if err := c.Bind(&req); err != nil {
@@ -73,6 +90,13 @@ func (h *UserHandler) Register(c echo.Context) error {
 }
 
 // Login handles POST /api/v1/auth/login
+//
+// Mục đích: Xác thực người dùng qua Email hoặc Phone và trả về thẻ Token (JWT).
+// Input: JSON body `dto.LoginRequest` (gồm Identifier và Password).
+// Output:
+//   - 200 OK (kèm Token Pair) nếu đúng mật khẩu.
+//   - 400 Bad Request nếu thiếu tham số.
+//   - 401 Unauthorized nếu sại thông tin đăng nhập.
 func (h *UserHandler) Login(c echo.Context) error {
 	var req dto.LoginRequest
 	if err := c.Bind(&req); err != nil {
@@ -97,6 +121,12 @@ func (h *UserHandler) Login(c echo.Context) error {
 }
 
 // RefreshToken handles POST /api/v1/auth/refresh
+//
+// Mục đích: Cấp lại một cặp Access/Refresh Token mới khi Access Token cũ đã hết hạn.
+// Input: JSON body `dto.RefreshTokenRequest` chứa string `refresh_token`.
+// Output:
+//   - 200 OK (Kèm Token Pair mới).
+//   - 401 Unauthorized nếu Refresh token gửi lên bị sai, giả mạo, hoặc User đã bị đổi thông tin.
 func (h *UserHandler) RefreshToken(c echo.Context) error {
 	var req dto.RefreshTokenRequest
 	if err := c.Bind(&req); err != nil {
@@ -118,6 +148,60 @@ func (h *UserHandler) RefreshToken(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "token refreshed", result)
+}
+
+func (h *UserHandler) VerifyEmail(c echo.Context) error {
+	var req dto.VerifyEmailRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	if err := h.userService.VerifyEmail(c.Request().Context(), req.Token); err != nil {
+		if errors.Is(err, service.ErrInvalidToken) {
+			return response.Error(c, http.StatusUnauthorized, "verification failed", "invalid or expired verification token")
+		}
+		return response.Error(c, http.StatusInternalServerError, "verification failed", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "email verified successfully", nil)
+}
+
+func (h *UserHandler) ForgotPassword(c echo.Context) error {
+	var req dto.ForgotPasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	if err := h.userService.ForgotPassword(c.Request().Context(), req.Email); err != nil {
+		return response.Error(c, http.StatusInternalServerError, "forgot password failed", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "password reset instructions queued", nil)
+}
+
+func (h *UserHandler) ResetPassword(c echo.Context) error {
+	var req dto.ResetPasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	if err := h.userService.ResetPassword(c.Request().Context(), req.Token, req.NewPassword); err != nil {
+		if errors.Is(err, service.ErrInvalidToken) {
+			return response.Error(c, http.StatusUnauthorized, "reset failed", "invalid or expired reset token")
+		}
+		return response.Error(c, http.StatusInternalServerError, "reset failed", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "password reset successfully", nil)
 }
 
 // GetProfile handles GET /api/v1/users/profile
@@ -191,4 +275,52 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "password changed successfully", nil)
+}
+
+func (h *UserHandler) ResendVerificationEmail(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	if err := h.userService.ResendVerificationEmail(c.Request().Context(), claims.UserID); err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "user not found")
+		}
+		return response.Error(c, http.StatusInternalServerError, "resend verification failed", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "verification email sent", nil)
+}
+
+func (h *UserHandler) ListUsers(c echo.Context) error {
+	users, err := h.userService.ListUsers(c.Request().Context())
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "users retrieved", users)
+}
+
+func (h *UserHandler) UpdateUserRole(c echo.Context) error {
+	var req dto.UpdateUserRoleRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	user, err := h.userService.UpdateUserRole(c.Request().Context(), c.Param("id"), req.Role)
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "user not found")
+		}
+		if errors.Is(err, service.ErrInvalidRole) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "role must be user, staff or admin")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "user role updated", user)
 }

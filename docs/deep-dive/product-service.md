@@ -97,7 +97,8 @@ Giúp `order-service` và `cart-service` gọi sản phẩm qua gRPC.
 ## 6. Điểm đáng chú ý cho người học
 
 - `List(...)` là ví dụ rất tốt để học pagination backend.
-- `UpdateStock(...)` là ví dụ về update có điều kiện để tránh stock âm.
+- `UpdateStock(...)` là ví dụ về update có điều kiện để tránh stock âm (atomic update `stock = stock - $1 WHERE stock >= $1`).
+- `UpdateProduct(...)` qua gRPC được tái sử dụng sáng tạo để làm `RestoreStock` khi hủy đơn hàng, thay vì phải sửa file `.proto` sinh ra nhiều code thừa.
 - Product service là "source of truth" cho giá và tồn kho; service khác không nên tự tin dữ liệu frontend gửi lên.
 
 ## 7. Thứ tự đọc gợi ý

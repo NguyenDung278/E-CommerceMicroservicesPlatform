@@ -154,7 +154,11 @@ export function RegisterPage() {
       );
 
       setDelayRedirect(true);
-      pushNotification("success", "Tạo tài khoản thành công", "Đang đưa bạn đến khu vực tài khoản.");
+      pushNotification(
+        "success",
+        "Tạo tài khoản thành công",
+        "Tài khoản đã được tạo. Hãy kiểm tra email để xác minh địa chỉ của bạn."
+      );
       window.setTimeout(() => navigate(redirectTo, { replace: true }), 550);
     } catch (reason) {
       pushNotification("error", "Không thể tạo tài khoản", getErrorMessage(reason));

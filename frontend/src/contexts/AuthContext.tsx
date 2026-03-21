@@ -32,6 +32,8 @@ type AuthContextValue = {
   user: UserProfile | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isStaff: boolean;
+  canAccessAdmin: boolean;
   isBootstrapping: boolean;
   error: string;
   register: (input: RegisterInput, options?: AuthOptions) => Promise<UserProfile>;
@@ -39,6 +41,7 @@ type AuthContextValue = {
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
+  resendVerificationEmail: () => Promise<void>;
   clearError: () => void;
 };
 
@@ -162,6 +165,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   }
 
+  async function resendVerificationEmail() {
+    if (!token) {
+      throw new Error("Missing JWT token");
+    }
+
+    await api.resendVerificationEmail(token);
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -169,6 +180,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isAuthenticated: Boolean(token),
         isAdmin: user?.role === "admin",
+        isStaff: user?.role === "staff",
+        canAccessAdmin: user?.role === "admin" || user?.role === "staff",
         isBootstrapping,
         error,
         register,
@@ -176,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshProfile,
         updateProfile,
+        resendVerificationEmail,
         clearError: () => setError("")
       }}
     >

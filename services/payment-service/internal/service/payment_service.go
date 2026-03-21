@@ -116,6 +116,9 @@ func (s *PaymentService) GetPaymentByOrder(ctx context.Context, orderID, userID 
 	return payment, nil
 }
 
+// publishPaymentEvent gửi message sang RabbitMQ (Exchange: events)
+// với Routing Key là `payment.completed` hoặc `payment.failed`.
+// Notification Service và Order Service sẽ tự động "lắng nghe" Message này để gởi Email cho khách hặc đổi Status Order.
 func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail string) {
 	if s.amqpCh == nil {
 		return

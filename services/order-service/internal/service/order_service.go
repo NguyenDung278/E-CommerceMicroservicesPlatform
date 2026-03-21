@@ -16,8 +16,8 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
+	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
 )
@@ -52,10 +52,41 @@ type OrderService struct {
 	repo          repository.OrderRepository
 	amqpCh        *amqp.Channel
 	log           *zap.Logger
-	productClient *grpc_client.ProductClient
+	productClient productCatalog
 }
 
-func NewOrderService(repo repository.OrderRepository, amqpCh *amqp.Channel, log *zap.Logger, productClient *grpc_client.ProductClient) *OrderService {
+type productCatalog interface {
+	GetProduct(ctx context.Context, productID string) (*pb.Product, error)
+	RestoreStock(ctx context.Context, productID string, quantity int) error
+}
+
+type pricedOrderItem struct {
+	ProductID string
+	Name      string
+	Price     float64
+	Quantity  int
+}
+
+type pricedOrderQuote struct {
+	Items             []pricedOrderItem
+	SubtotalPrice     float64
+	DiscountAmount    float64
+	CouponCode        string
+	CouponDescription string
+	TotalPrice        float64
+}
+
+func (q *pricedOrderQuote) ToPreview() *model.OrderPreview {
+	return &model.OrderPreview{
+		SubtotalPrice:     q.SubtotalPrice,
+		DiscountAmount:    q.DiscountAmount,
+		CouponCode:        q.CouponCode,
+		CouponDescription: q.CouponDescription,
+		TotalPrice:        q.TotalPrice,
+	}
+}
+
+func NewOrderService(repo repository.OrderRepository, amqpCh *amqp.Channel, log *zap.Logger, productClient productCatalog) *OrderService {
 	return &OrderService{
 		repo:          repo,
 		amqpCh:        amqpCh,
@@ -64,78 +95,44 @@ func NewOrderService(repo repository.OrderRepository, amqpCh *amqp.Channel, log 
 	}
 }
 
+// CreateOrder orchestrates the process of turning a cart request into a real order.
+//
+// FLOW HOẠT ĐỘNG:
+//  1. Tính giá quoteOrder: Lấy thông tin thật và giá từ product-service thông qua gRPC.
+//  2. Kiểm tra tồn kho (StockQuantity).
+//  3. Tạo struct Order (Domain Object) kết nối với UserID.
+//  4. Persist xuống Database qua repo.Create (sử dụng DB Transaction).
+//  5. Publish sự kiện "order.created" sang RabbitMQ cho Notification/Payment service.
 func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string, req dto.CreateOrderRequest) (*model.Order, error) {
-	if len(req.Items) == 0 {
-		return nil, ErrEmptyOrder
+	quote, err := s.quoteOrder(ctx, req)
+	if err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
 	order := &model.Order{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		Status:    model.OrderStatusPending,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		Status:         model.OrderStatusPending,
+		Items:          make([]model.OrderItem, 0, len(quote.Items)),
+		CouponCode:     quote.CouponCode,
+		SubtotalPrice:  quote.SubtotalPrice,
+		DiscountAmount: quote.DiscountAmount,
+		TotalPrice:     quote.TotalPrice,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
-	var subtotal float64
-	for _, item := range req.Items {
-		product, err := s.productClient.GetProduct(ctx, item.ProductID)
-		if err != nil {
-			switch grpcstatus.Code(err) {
-			case codes.NotFound:
-				return nil, fmt.Errorf("%w: %s", ErrProductNotFound, item.ProductID)
-			case codes.InvalidArgument:
-				return nil, fmt.Errorf("%w: %s", ErrProductUnavailable, item.ProductID)
-			default:
-				return nil, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
-			}
-		}
-
-		if product.StockQuantity < int32(item.Quantity) {
-			return nil, fmt.Errorf("%w: product %s only has %d item(s)",
-				ErrInsufficientStock, product.Name, product.StockQuantity)
-		}
-
+	for _, item := range quote.Items {
 		orderItem := model.OrderItem{
 			ID:        uuid.New().String(),
 			OrderID:   order.ID,
 			ProductID: item.ProductID,
-			Name:      product.Name,
-			Price:     float64(product.Price),
+			Name:      item.Name,
+			Price:     item.Price,
 			Quantity:  item.Quantity,
 		}
 		order.Items = append(order.Items, orderItem)
-		subtotal += float64(product.Price) * float64(item.Quantity)
-	}
-
-	order.SubtotalPrice = roundCurrency(subtotal)
-	order.TotalPrice = order.SubtotalPrice
-
-	if req.CouponCode != "" {
-		coupon, err := s.repo.GetCouponByCode(ctx, normalizeCouponCode(req.CouponCode))
-		if err != nil {
-			return nil, err
-		}
-		if coupon == nil {
-			return nil, ErrCouponNotFound
-		}
-		if !coupon.Active {
-			return nil, ErrCouponInactive
-		}
-		if coupon.ExpiresAt != nil && time.Now().After(*coupon.ExpiresAt) {
-			return nil, ErrCouponExpired
-		}
-		if coupon.MinOrderAmount > order.SubtotalPrice {
-			return nil, ErrCouponMinimumNotMet
-		}
-		if coupon.UsageLimit > 0 && coupon.UsedCount >= coupon.UsageLimit {
-			return nil, ErrCouponUsageLimit
-		}
-
-		order.CouponCode = coupon.Code
-		order.DiscountAmount = roundCurrency(calculateDiscount(coupon, order.SubtotalPrice))
-		order.TotalPrice = roundCurrency(order.SubtotalPrice - order.DiscountAmount)
 	}
 
 	if err := s.repo.Create(ctx, order); err != nil {
@@ -152,6 +149,15 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 	s.publishOrderEvent(order, userEmail)
 
 	return order, nil
+}
+
+func (s *OrderService) PreviewOrder(ctx context.Context, req dto.CreateOrderRequest) (*model.OrderPreview, error) {
+	quote, err := s.quoteOrder(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return quote.ToPreview(), nil
 }
 
 func (s *OrderService) GetOrder(ctx context.Context, orderID, userID string) (*model.Order, error) {
@@ -361,6 +367,92 @@ func (s *OrderService) GetAdminReport(ctx context.Context, windowDays int) (*mod
 	from := now.AddDate(0, 0, -windowDays)
 
 	return s.repo.GetAdminReport(ctx, from, now, windowDays)
+}
+
+func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderRequest) (*pricedOrderQuote, error) {
+	if len(req.Items) == 0 {
+		return nil, ErrEmptyOrder
+	}
+
+	quote := &pricedOrderQuote{
+		Items: make([]pricedOrderItem, 0, len(req.Items)),
+	}
+
+	var subtotal float64
+	for _, item := range req.Items {
+		product, err := s.productClient.GetProduct(ctx, item.ProductID)
+		if err != nil {
+			switch grpcstatus.Code(err) {
+			case codes.NotFound:
+				return nil, fmt.Errorf("%w: %s", ErrProductNotFound, item.ProductID)
+			case codes.InvalidArgument:
+				return nil, fmt.Errorf("%w: %s", ErrProductUnavailable, item.ProductID)
+			default:
+				return nil, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
+			}
+		}
+
+		if product.StockQuantity < int32(item.Quantity) {
+			return nil, fmt.Errorf(
+				"%w: product %s only has %d item(s)",
+				ErrInsufficientStock,
+				product.Name,
+				product.StockQuantity,
+			)
+		}
+
+		price := float64(product.Price)
+		quote.Items = append(quote.Items, pricedOrderItem{
+			ProductID: item.ProductID,
+			Name:      product.Name,
+			Price:     price,
+			Quantity:  item.Quantity,
+		})
+		subtotal += price * float64(item.Quantity)
+	}
+
+	quote.SubtotalPrice = roundCurrency(subtotal)
+	quote.TotalPrice = quote.SubtotalPrice
+
+	if strings.TrimSpace(req.CouponCode) == "" {
+		return quote, nil
+	}
+
+	coupon, err := s.validateCoupon(ctx, req.CouponCode, quote.SubtotalPrice)
+	if err != nil {
+		return nil, err
+	}
+
+	quote.CouponCode = coupon.Code
+	quote.CouponDescription = strings.TrimSpace(coupon.Description)
+	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, quote.SubtotalPrice))
+	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount)
+
+	return quote, nil
+}
+
+func (s *OrderService) validateCoupon(ctx context.Context, code string, subtotal float64) (*model.Coupon, error) {
+	coupon, err := s.repo.GetCouponByCode(ctx, normalizeCouponCode(code))
+	if err != nil {
+		return nil, err
+	}
+	if coupon == nil {
+		return nil, ErrCouponNotFound
+	}
+	if !coupon.Active {
+		return nil, ErrCouponInactive
+	}
+	if coupon.ExpiresAt != nil && time.Now().After(*coupon.ExpiresAt) {
+		return nil, ErrCouponExpired
+	}
+	if coupon.MinOrderAmount > subtotal {
+		return nil, ErrCouponMinimumNotMet
+	}
+	if coupon.UsageLimit > 0 && coupon.UsedCount >= coupon.UsageLimit {
+		return nil, ErrCouponUsageLimit
+	}
+
+	return coupon, nil
 }
 
 // publishOrderEvent publishes an order event to RabbitMQ.

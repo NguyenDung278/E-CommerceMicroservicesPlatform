@@ -29,8 +29,22 @@ export function ProductCard({
   adminAction,
   secondaryAdminAction
 }: ProductCardProps) {
+  const productImages =
+    product.image_urls.length > 0 ? product.image_urls : product.image_url ? [product.image_url] : [];
+  const primaryImage = productImages[0] ?? "";
+
   return (
     <article className="product-card">
+      {primaryImage ? (
+        <div className="product-card-media">
+          <img alt={product.name} src={primaryImage} />
+        </div>
+      ) : (
+        <div className="product-card-media product-card-media-fallback">
+          <span>{product.name.slice(0, 1).toUpperCase()}</span>
+        </div>
+      )}
+
       <div className="product-card-head">
         <span className="product-category">{product.category || "general"}</span>
         <span className={`stock-chip${product.stock === 0 ? " stock-chip-empty" : ""}`}>

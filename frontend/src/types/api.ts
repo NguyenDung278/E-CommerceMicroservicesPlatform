@@ -19,6 +19,7 @@ export type UserProfile = {
   first_name: string;
   last_name: string;
   role: string;
+  email_verified: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -41,6 +42,7 @@ export type Product = {
   sku: string;
   variants: ProductVariant[];
   image_url: string;
+  image_urls: string[];
   created_at: string;
   updated_at: string;
 };
@@ -87,6 +89,14 @@ export type Order = {
   updated_at: string;
 };
 
+export type OrderPreview = {
+  subtotal_price: number;
+  discount_amount: number;
+  coupon_code?: string;
+  coupon_description?: string;
+  total_price: number;
+};
+
 export type OrderEvent = {
   id: string;
   order_id: string;
@@ -122,6 +132,10 @@ export type Payment = {
   payment_method: string;
   created_at: string;
   updated_at: string;
+};
+
+export type UploadedProductImages = {
+  urls: string[];
 };
 
 export type AdminOrderTopProduct = {

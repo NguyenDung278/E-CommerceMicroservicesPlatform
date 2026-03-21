@@ -22,18 +22,19 @@ func NewOrderHandler(p *proxy.ServiceProxy) *OrderHandler {
 func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders := e.Group("/api/v1/orders")
 	orders.Use(appmw.JWTAuth(jwtSecret))
+	orders.POST("/preview", h.forwardRequest)
 	orders.POST("", h.forwardRequest)
 	orders.GET("", h.forwardRequest)
 	orders.GET("/:id/events", h.forwardRequest)
 	orders.GET("/:id", h.forwardRequest)
 
 	legacyAdmin := orders.Group("/admin")
-	legacyAdmin.Use(appmw.RequireRole(appmw.RoleAdmin))
+	legacyAdmin.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
 	legacyAdmin.GET("/report", h.forwardRequest)
 
 	adminOrders := e.Group("/api/v1/admin/orders")
 	adminOrders.Use(appmw.JWTAuth(jwtSecret))
-	adminOrders.Use(appmw.RequireRole(appmw.RoleAdmin))
+	adminOrders.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
 	adminOrders.GET("/report", h.forwardRequest)
 	adminOrders.GET("", h.forwardRequest)
 	adminOrders.GET("/:id/events", h.forwardRequest)
@@ -42,7 +43,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
 	adminCoupons.Use(appmw.JWTAuth(jwtSecret))
-	adminCoupons.Use(appmw.RequireRole(appmw.RoleAdmin))
+	adminCoupons.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
 	adminCoupons.POST("", h.forwardRequest)
 	adminCoupons.GET("", h.forwardRequest)
 }

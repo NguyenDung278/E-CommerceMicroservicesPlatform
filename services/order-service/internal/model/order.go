@@ -34,6 +34,14 @@ type Order struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 }
 
+type OrderPreview struct {
+	SubtotalPrice     float64 `json:"subtotal_price"`
+	DiscountAmount    float64 `json:"discount_amount"`
+	CouponCode        string  `json:"coupon_code,omitempty"`
+	CouponDescription string  `json:"coupon_description,omitempty"`
+	TotalPrice        float64 `json:"total_price"`
+}
+
 // OrderItem represents a single item within an order.
 type OrderItem struct {
 	ID        string  `json:"id"`

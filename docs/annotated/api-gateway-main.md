@@ -99,8 +99,11 @@ Gateway không tự xử lý user, product, cart, order, payment. Nó tạo các
 
 Ý nghĩa kiến trúc:
 
-- Gateway là thin layer.
+- Gateway là thin layer. Nó hoạt động như một "Reverse Proxy".
 - Business logic vẫn nằm trong service chuyên trách.
+
+**Thực tiễn (Practical insight):**
+Nếu không chia Proxy như vầy, Gateway sẽ phải import và parse từng struct Request/Response của các dịch vụ con. Điều này dẫn tới Gateway biến thành một "Cục tạ" (Monolith Gateway) dễ xảy ra rủi ro mỗi lần service con đổi Model. Nhưng bằng cách Forward raw Request (copy header + body), Gateway gần như "mù" về data (Agnostic), giúp nó độc lập và ít bugs.
 
 Điều nên học:
 
@@ -229,15 +232,14 @@ e.Shutdown(ctx)
 
 Nó cho phép process:
 
-- nhận tín hiệu dừng,
-- ngừng nhận request mới,
-- cho request đang chạy một khoảng thời gian để hoàn tất,
-- rồi mới tắt hẳn.
+- Nhận tín hiệu dừng từ Hệ Điều Hành (SIGINT, SIGTERM) bằng `channel` (size 1 để tránh block signal nếu app chưa kịp đọc).
+- Dừng `e.Start` ngay lập tức.
+- Nhưng `e.Shutdown(ctx)` (hàm built-in của Echo) sẽ chờ các in-flight requests đang phục vụ chạy xong hoặc bị timeout (qua `context.WithTimeout(10s)`).
 
 Điều nên học:
 
-- graceful shutdown là một đặc trưng rất thực tế của backend Go tốt.
-- nếu bạn kill cứng process ngay, request dang dở có thể hỏng dữ liệu hoặc tạo UX tệ.
+- Graceful shutdown là một đặc trưng rất thực tế của backend Go tốt.
+- Nó cũng phối hợp hoàn hảo với Kubernetes `SIGTERM`. Kubernetes hay cho app vài giây dọn dẹp (termination grace period) trước khi gửi ngắt điện `SIGKILL`. Graceful shutdown giúp user trên web đang thanh toán không bị `502 Bad Gateway` đột ngột gây hoang mang.
 
 ## 4. Tư duy backend rút ra từ file này
 

@@ -42,6 +42,12 @@ func NewOrderRepository(db *sql.DB) OrderRepository {
 	return &postgresOrderRepository{db: db}
 }
 
+// Create inserts a new order along with its items and event tracking into PostgreSQL.
+//
+// TRANSACTIONAL GUARANTEE:
+//   - Quá trình insert vào `orders`, `order_items`, bảng `coupons` (khóa row), và `order_events`
+//     phải diễn ra trong một Transaction (BeginTx).
+//   - Nếu có bất cứ bảng nào thất bại, toàn bộ quá trình sẽ Rollback để tránh việc tạo ra Data "Mồ côi".
 func (r *postgresOrderRepository) Create(ctx context.Context, order *model.Order) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

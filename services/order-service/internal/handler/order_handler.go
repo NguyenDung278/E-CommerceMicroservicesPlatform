@@ -28,6 +28,7 @@ func NewOrderHandler(orderService *service.OrderService) *OrderHandler {
 func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders := e.Group("/api/v1/orders")
 	orders.Use(middleware.JWTAuth(jwtSecret))
+	orders.POST("/preview", h.PreviewOrder)
 	orders.POST("", h.CreateOrder)
 	orders.GET("", h.GetUserOrders)
 	orders.GET("/:id/events", h.GetOrderTimeline)
@@ -35,12 +36,12 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.PUT("/:id/cancel", h.CancelOrder)
 
 	legacyAdmin := orders.Group("/admin")
-	legacyAdmin.Use(middleware.RequireRole(middleware.RoleAdmin))
+	legacyAdmin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
 	legacyAdmin.GET("/report", h.GetAdminReport)
 
 	adminOrders := e.Group("/api/v1/admin/orders")
 	adminOrders.Use(middleware.JWTAuth(jwtSecret))
-	adminOrders.Use(middleware.RequireRole(middleware.RoleAdmin))
+	adminOrders.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
 	adminOrders.GET("/report", h.GetAdminReport)
 	adminOrders.GET("", h.ListAdminOrders)
 	adminOrders.GET("/:id/events", h.GetAdminOrderTimeline)
@@ -49,11 +50,19 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
 	adminCoupons.Use(middleware.JWTAuth(jwtSecret))
-	adminCoupons.Use(middleware.RequireRole(middleware.RoleAdmin))
+	adminCoupons.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
 	adminCoupons.POST("", h.CreateCoupon)
 	adminCoupons.GET("", h.ListCoupons)
 }
 
+// CreateOrder handles POST /api/v1/orders
+//
+// Mục đích: Tiếp nhận HTTP request để tạo đơn hàng mới.
+// Input: JSON body `dto.CreateOrderRequest` chứa danh sách các Items cần mua.
+// Output:
+//   - 201 Created nếu tạo đơn thành công.
+//   - 400 Bad Request nếu JSON lỗi hoặc số lượng âm.
+//   - 404 Not Found nếu Product ID trong giỏ không tồn tại.
 func (h *OrderHandler) CreateOrder(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	var req dto.CreateOrderRequest
@@ -66,30 +75,26 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 
 	order, err := h.orderService.CreateOrder(c.Request().Context(), claims.UserID, claims.Email, req)
 	if err != nil {
-		if errors.Is(err, service.ErrEmptyOrder) {
-			return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
-		}
-		if errors.Is(err, service.ErrProductNotFound) {
-			return response.Error(c, http.StatusNotFound, "product not found", err.Error())
-		}
-		if errors.Is(err, service.ErrProductUnavailable) {
-			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
-		}
-		if errors.Is(err, service.ErrInsufficientStock) {
-			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
-		}
-		if errors.Is(err, service.ErrCouponNotFound) {
-			return response.Error(c, http.StatusNotFound, "coupon not found", err.Error())
-		}
-		if errors.Is(err, service.ErrCouponInactive) || errors.Is(err, service.ErrCouponExpired) || errors.Is(err, service.ErrCouponMinimumNotMet) {
-			return response.Error(c, http.StatusBadRequest, "coupon invalid", err.Error())
-		}
-		if errors.Is(err, service.ErrCouponUsageLimit) {
-			return response.Error(c, http.StatusConflict, "coupon unavailable", err.Error())
-		}
-		return response.Error(c, http.StatusInternalServerError, "error", "failed to create order")
+		return writePricingError(c, err, "failed to create order")
 	}
 	return response.Success(c, http.StatusCreated, "order created", order)
+}
+
+func (h *OrderHandler) PreviewOrder(c echo.Context) error {
+	var req dto.CreateOrderRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	preview, err := h.orderService.PreviewOrder(c.Request().Context(), req)
+	if err != nil {
+		return writePricingError(c, err, "failed to preview order")
+	}
+
+	return response.Success(c, http.StatusOK, "order preview retrieved", preview)
 }
 
 func (h *OrderHandler) GetOrder(c echo.Context) error {
@@ -116,6 +121,9 @@ func (h *OrderHandler) GetUserOrders(c echo.Context) error {
 }
 
 // CancelOrder handles PUT /api/v1/orders/:id/cancel
+//
+// Mục đích: Hủy bỏ một đơn hàng đang ở trạng thái Pending.
+// Luồng xử lý: Yêu cầu quyền sở hữu của Order. Gọi sang Service để đổi trạng thái, khôi phục tồn kho và phát sự kiện.
 func (h *OrderHandler) CancelOrder(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	id := c.Param("id")
@@ -290,6 +298,34 @@ func parsePageAndLimit(c echo.Context) (int, int) {
 	}
 
 	return page, limit
+}
+
+func writePricingError(c echo.Context, err error, fallbackMessage string) error {
+	if errors.Is(err, service.ErrEmptyOrder) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
+	}
+	if errors.Is(err, service.ErrProductNotFound) {
+		return response.Error(c, http.StatusNotFound, "product not found", err.Error())
+	}
+	if errors.Is(err, service.ErrProductUnavailable) {
+		return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
+	}
+	if errors.Is(err, service.ErrInsufficientStock) {
+		return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
+	}
+	if errors.Is(err, service.ErrCouponNotFound) {
+		return response.Error(c, http.StatusNotFound, "coupon not found", err.Error())
+	}
+	if errors.Is(err, service.ErrCouponInactive) ||
+		errors.Is(err, service.ErrCouponExpired) ||
+		errors.Is(err, service.ErrCouponMinimumNotMet) {
+		return response.Error(c, http.StatusBadRequest, "coupon invalid", err.Error())
+	}
+	if errors.Is(err, service.ErrCouponUsageLimit) {
+		return response.Error(c, http.StatusConflict, "coupon unavailable", err.Error())
+	}
+
+	return response.Error(c, http.StatusInternalServerError, "error", fallbackMessage)
 }
 
 func parseTimeQuery(value string, inclusiveEnd bool) (*time.Time, error) {

@@ -14,6 +14,7 @@ export function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [feedback, setFeedback] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [activeImage, setActiveImage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -23,6 +24,13 @@ export function ProductDetailPage() {
       .then((response) => {
         if (active) {
           setProduct(response.data);
+          const images =
+            response.data.image_urls.length > 0
+              ? response.data.image_urls
+              : response.data.image_url
+                ? [response.data.image_url]
+                : [];
+          setActiveImage(images[0] ?? "");
         }
       })
       .catch((reason) => {
@@ -59,6 +67,9 @@ export function ProductDetailPage() {
     return <div className="page-state">Đang tải thông tin sản phẩm...</div>;
   }
 
+  const productImages =
+    product?.image_urls.length ? product.image_urls : product?.image_url ? [product.image_url] : [];
+
   return (
     <div className="page-stack">
       <section className="content-section">
@@ -67,7 +78,30 @@ export function ProductDetailPage() {
         {product ? (
           <div className="detail-layout">
             <div className="detail-media">
-              <div className="mock-image">{product.name.slice(0, 1).toUpperCase()}</div>
+              {activeImage ? (
+                <img className="detail-main-image" alt={product.name} src={activeImage} />
+              ) : (
+                <div className="mock-image">{product.name.slice(0, 1).toUpperCase()}</div>
+              )}
+
+              {productImages.length > 1 ? (
+                <div className="detail-thumbnail-row">
+                  {productImages.map((imageUrl, index) => (
+                    <button
+                      className={
+                        imageUrl === activeImage
+                          ? "detail-thumbnail-button detail-thumbnail-button-active"
+                          : "detail-thumbnail-button"
+                      }
+                      key={imageUrl}
+                      type="button"
+                      onClick={() => setActiveImage(imageUrl)}
+                    >
+                      <img alt={`${product.name} ${index + 1}`} src={imageUrl} />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div className="detail-copy">

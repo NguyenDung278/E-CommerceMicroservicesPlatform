@@ -21,6 +21,9 @@ func NewProductGRPCServer(productService *service.ProductService) *ProductGRPCSe
 	return &ProductGRPCServer{productService: productService}
 }
 
+// GetProductByID cung cấp thông tin sản phẩm qua gRPC.
+// 
+// Trọng tâm nghiệp vụ: Order Service sẽ gọi hàm này để kiểm tra xem sản phẩm có tồn tại và còn đủ Stock không trước khi tạo Đơn.
 func (s *ProductGRPCServer) GetProductByID(ctx context.Context, req *pb.GetProductByIDRequest) (*pb.GetProductByIDResponse, error) {
 	productID := req.GetProductId()
 	if productID == "" {
@@ -40,6 +43,10 @@ func (s *ProductGRPCServer) GetProductByID(ctx context.Context, req *pb.GetProdu
 	}, nil
 }
 
+// UpdateProduct cập nhật thông tin sản phẩm thông qua gRPC.
+// 
+// Trọng tâm nghiệp vụ: Order Service có thể dùng hàm này như một mẹo (Hack/Reuse) để Restore lại Stock
+// kho hàng khi 1 Đơn bị hủy (CancelOrder), tránh việc phải viết thêm RPC `RestoreStock` trong Protobuf.
 func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdateProductRequest) (*pb.UpdateProductResponse, error) {
 	productID := req.GetProductId()
 	if productID == "" {

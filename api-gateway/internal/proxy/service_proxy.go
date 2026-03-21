@@ -13,7 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// ServiceProxy represents a reverse proxy for a backend service
+// ServiceProxy represents a reverse proxy for a backend service.
+//
+// DESIGN PATTERN: Proxy & GoBreaker.
+// Thay vì Gateway tự import Model và gọi HTTP trực tiếp, ServiceProxy đơn thuần
+// copy (forward) toàn bộ Header, Body, Path của Client và đẩy thẳng xuống Service con.
+// Cách tiếp cận này giúp API Gateway không bao giờ phải sửa code khi Service con thay đổi API mới.
 type ServiceProxy struct {
 	baseURL        string
 	log            *zap.Logger
@@ -59,6 +64,8 @@ func (p *ServiceProxy) Do(ctx context.Context, req *http.Request) (*http.Respons
 	if err != nil {
 		return nil, err
 	}
+	backendReq.ContentLength = req.ContentLength
+	backendReq.GetBody = req.GetBody
 
 	// Copy headers from original request
 	backendReq.Header = make(http.Header)
@@ -91,6 +98,11 @@ func (p *ServiceProxy) Do(ctx context.Context, req *http.Request) (*http.Respons
 	return resp, nil
 }
 
+// executeWithResilience wraps the HTTP client call with Retry and Circuit Breaker patterns.
+//
+//  1. Retry: Nếu call thất bại (do Network hặc Service con 500), nó sẽ tự động chạy lại (Sleep backoff nhỏ).
+//  2. Circuit Breaker (gobreaker): Xử lý đứt gãy dây chuyền. Nếu Service con ngỏm cứng (Rate fail > 5), Breaker sẽ
+//     chuyển sang trạng thái "Open" và ngay lập tức trả lỗi cho các request tiếp theo thay vì bắt User chờ timeout.
 func (p *ServiceProxy) executeWithResilience(req *http.Request) (*http.Response, error) {
 	var lastErr error
 	attempts := p.maxRetries + 1

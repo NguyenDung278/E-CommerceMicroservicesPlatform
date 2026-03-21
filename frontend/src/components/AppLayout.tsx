@@ -8,7 +8,7 @@ function navClassName({ isActive }: { isActive: boolean }) {
 }
 
 export function AppLayout() {
-  const { isAuthenticated, isAdmin, logout, user } = useAuth();
+  const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
 
   return (
@@ -48,7 +48,7 @@ export function AppLayout() {
               Thanh toán
             </NavLink>
           ) : null}
-          {isAdmin ? (
+          {canAccessAdmin ? (
             <NavLink className={navClassName} to="/admin">
               Quản trị
             </NavLink>
