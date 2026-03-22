@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
@@ -19,6 +20,7 @@ type PaymentRepository interface {
 	ListByOrderIDForUser(ctx context.Context, orderID, userID string) ([]*model.Payment, error)
 	ListByUserID(ctx context.Context, userID string) ([]*model.Payment, error)
 	Update(ctx context.Context, payment *model.Payment) error
+	CreateAuditEntry(ctx context.Context, entry *model.AuditEntry) error
 }
 
 type postgresPaymentRepository struct {
@@ -235,6 +237,34 @@ func (r *postgresPaymentRepository) Update(ctx context.Context, payment *model.P
 	if err != nil {
 		return fmt.Errorf("failed to update payment: %w", err)
 	}
+	return nil
+}
+
+func (r *postgresPaymentRepository) CreateAuditEntry(ctx context.Context, entry *model.AuditEntry) error {
+	query := `
+		INSERT INTO audit_entries (id, entity_type, entity_id, action, actor_id, actor_role, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+	`
+
+	metadata, err := json.Marshal(entry.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit metadata: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx, query,
+		entry.ID,
+		entry.EntityType,
+		entry.EntityID,
+		entry.Action,
+		nullableString(entry.ActorID),
+		nullableString(entry.ActorRole),
+		string(metadata),
+		entry.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create audit entry: %w", err)
+	}
+
 	return nil
 }
 

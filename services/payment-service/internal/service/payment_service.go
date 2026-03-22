@@ -41,12 +41,12 @@ type PaymentEvent struct {
 }
 
 type PaymentService struct {
-	repo           repository.PaymentRepository
-	orderClient    *client.OrderClient
-	amqpCh         *amqp.Channel
-	log            *zap.Logger
-	webhookSecret  string
-	momoReturnURL  string
+	repo          repository.PaymentRepository
+	orderClient   *client.OrderClient
+	amqpCh        *amqp.Channel
+	log           *zap.Logger
+	webhookSecret string
+	momoReturnURL string
 }
 
 func NewPaymentService(
@@ -204,7 +204,7 @@ func (s *PaymentService) ListPaymentHistory(ctx context.Context, userID string) 
 	return enrichPayments(payments), nil
 }
 
-func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, userEmail string, req dto.RefundPaymentRequest) (*model.Payment, error) {
+func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, actorRole, userEmail string, req dto.RefundPaymentRequest) (*model.Payment, error) {
 	target, err := s.repo.GetByID(ctx, paymentID)
 	if err != nil {
 		return nil, err
@@ -261,6 +261,23 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, userEmail
 
 	updatedPayments := append([]*model.Payment{refund}, payments...)
 	enriched := enrichPayment(refund, updatedPayments)
+	s.recordAuditEntry(ctx, &model.AuditEntry{
+		ID:         uuid.New().String(),
+		EntityType: "payment",
+		EntityID:   refund.ID,
+		Action:     "payment.refunded",
+		ActorID:    actorID,
+		ActorRole:  actorRole,
+		Metadata: map[string]any{
+			"order_id":             refund.OrderID,
+			"user_id":              refund.UserID,
+			"amount":               refund.Amount,
+			"reference_payment_id": refund.ReferencePaymentID,
+			"gateway_provider":     refund.GatewayProvider,
+			"failure_reason":       refund.FailureReason,
+		},
+		CreatedAt: time.Now(),
+	})
 	s.publishPaymentEvent(enriched, userEmail)
 
 	return enriched, nil
@@ -442,6 +459,21 @@ func summarizeNetPaid(payments []*model.Payment) float64 {
 	}
 
 	return roundMoney(total)
+}
+
+func (s *PaymentService) recordAuditEntry(ctx context.Context, entry *model.AuditEntry) {
+	if entry == nil {
+		return
+	}
+
+	if err := s.repo.CreateAuditEntry(ctx, entry); err != nil {
+		s.log.Warn("failed to persist audit entry",
+			zap.String("entity_type", entry.EntityType),
+			zap.String("entity_id", entry.EntityID),
+			zap.String("action", entry.Action),
+			zap.Error(err),
+		)
+	}
 }
 
 func refundableAmountForCharge(paymentID string, amount float64, payments []*model.Payment) float64 {

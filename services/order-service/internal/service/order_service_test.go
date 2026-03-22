@@ -76,6 +76,10 @@ func (r *fakeOrderRepo) ListPopularProducts(_ context.Context, _ int) ([]model.P
 	return []model.ProductPopularity{}, nil
 }
 
+func (r *fakeOrderRepo) CreateAuditEntry(_ context.Context, _ *model.AuditEntry) error {
+	return nil
+}
+
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {

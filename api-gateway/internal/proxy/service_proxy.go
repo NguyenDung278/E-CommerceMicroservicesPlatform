@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/sony/gobreaker/v2"
 	"go.uber.org/zap"
 )
@@ -34,11 +35,11 @@ func NewServiceProxy(baseURL string, log *zap.Logger) *ServiceProxy {
 		log:     log,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
+			Transport: appobs.WrapHTTPTransport(&http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 20,
 				IdleConnTimeout:     90 * time.Second,
-			},
+			}),
 		},
 		circuitBreaker: gobreaker.NewCircuitBreaker[*http.Response](gobreaker.Settings{
 			Name:        baseURL,

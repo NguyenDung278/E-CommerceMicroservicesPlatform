@@ -22,6 +22,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/labstack/echo-contrib/echoprometheus"
 )
 
@@ -36,6 +37,19 @@ func main() {
 	// 2. Initialize structured logger.
 	log := logger.New("api-gateway")
 	defer log.Sync()
+
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "api-gateway", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	log.Info("starting API gateway",
 		zap.String("port", cfg.Server.Port),
@@ -66,7 +80,8 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
-	e.Use(appmw.NewRateLimiter(60, 120, 2*time.Minute))
+	e.Use(appobs.EchoMiddleware("api-gateway"))
+	e.Use(appmw.NewRedisBackedRateLimiter("api-gateway", cfg.Redis, log, 60, 120, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("api_gateway"))
 	e.GET("/metrics", echoprometheus.NewHandler())

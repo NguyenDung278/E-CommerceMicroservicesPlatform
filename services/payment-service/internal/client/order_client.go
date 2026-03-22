@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 )
 
 var ErrOrderNotFound = errors.New("order not found")
@@ -35,7 +37,8 @@ func NewOrderClient(baseURL string) *OrderClient {
 	return &OrderClient{
 		baseURL: normalizeBaseURL(baseURL),
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: appobs.WrapHTTPTransport(http.DefaultTransport),
 		},
 	}
 }

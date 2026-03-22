@@ -48,6 +48,12 @@ func (r *fakeProductRepo) Delete(_ context.Context, id string) error            
 func (r *fakeProductRepo) List(_ context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sort string) ([]*model.Product, int64, error) {
 	return []*model.Product{}, 0, nil
 }
+func (r *fakeProductRepo) ListByIDs(_ context.Context, ids []string) ([]*model.Product, error) {
+	return []*model.Product{}, nil
+}
+func (r *fakeProductRepo) ListForSearchIndex(_ context.Context) ([]*model.Product, error) {
+	return []*model.Product{}, nil
+}
 func (r *fakeProductRepo) UpdateStock(_ context.Context, id string, quantity int) error  { return nil }
 func (r *fakeProductRepo) RestoreStock(_ context.Context, id string, quantity int) error { return nil }
 func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {

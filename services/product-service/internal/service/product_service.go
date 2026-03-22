@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
@@ -23,6 +24,15 @@ var (
 type ProductService struct {
 	repo       repository.ProductRepository
 	mediaStore MediaStore
+	search     ProductSearchIndex
+	log        *zap.Logger
+}
+
+type ProductSearchIndex interface {
+	Search(ctx context.Context, query dto.ListProductsQuery) ([]string, int64, error)
+	Index(ctx context.Context, product *model.Product) error
+	Delete(ctx context.Context, productID string) error
+	Reindex(ctx context.Context, products []*model.Product) error
 }
 
 type ProductServiceOption func(*ProductService)
@@ -33,8 +43,23 @@ func WithMediaStore(mediaStore MediaStore) ProductServiceOption {
 	}
 }
 
+func WithSearchIndex(search ProductSearchIndex) ProductServiceOption {
+	return func(service *ProductService) {
+		service.search = search
+	}
+}
+
+func WithLogger(log *zap.Logger) ProductServiceOption {
+	return func(service *ProductService) {
+		service.log = log
+	}
+}
+
 func NewProductService(repo repository.ProductRepository, options ...ProductServiceOption) *ProductService {
-	service := &ProductService{repo: repo}
+	service := &ProductService{
+		repo: repo,
+		log:  zap.NewNop(),
+	}
 	for _, option := range options {
 		option(service)
 	}
@@ -77,6 +102,11 @@ func (s *ProductService) Create(ctx context.Context, req dto.CreateProductReques
 
 	if err := s.repo.Create(ctx, product); err != nil {
 		return nil, err
+	}
+	if s.search != nil {
+		if err := s.search.Index(ctx, product); err != nil {
+			s.log.Warn("failed to index product in search backend", zap.String("product_id", product.ID), zap.Error(err))
+		}
 	}
 	return product, nil
 }
@@ -151,6 +181,11 @@ func (s *ProductService) Update(ctx context.Context, id string, req dto.UpdatePr
 	if err := s.repo.Update(ctx, product); err != nil {
 		return nil, err
 	}
+	if s.search != nil {
+		if err := s.search.Index(ctx, product); err != nil {
+			s.log.Warn("failed to update product in search backend", zap.String("product_id", product.ID), zap.Error(err))
+		}
+	}
 	return product, nil
 }
 
@@ -162,7 +197,15 @@ func (s *ProductService) Delete(ctx context.Context, id string) error {
 	if product == nil {
 		return ErrProductNotFound
 	}
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if s.search != nil {
+		if err := s.search.Delete(ctx, id); err != nil {
+			s.log.Warn("failed to delete product from search backend", zap.String("product_id", id), zap.Error(err))
+		}
+	}
+	return nil
 }
 
 // List returns paginated products with optional catalog metadata filters.
@@ -174,6 +217,22 @@ func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) 
 		query.Limit = 20
 	}
 	offset := (query.Page - 1) * query.Limit
+
+	if s.search != nil && shouldUseSearchBackend(query) {
+		ids, total, err := s.search.Search(ctx, query)
+		if err != nil {
+			s.log.Warn("search backend failed, falling back to PostgreSQL", zap.String("search", strings.TrimSpace(query.Search)), zap.Error(err))
+		} else {
+			if len(ids) == 0 {
+				return []*model.Product{}, total, nil
+			}
+			products, listErr := s.repo.ListByIDs(ctx, ids)
+			if listErr != nil {
+				return nil, 0, listErr
+			}
+			return products, total, nil
+		}
+	}
 
 	return s.repo.List(
 		ctx,
@@ -190,6 +249,19 @@ func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) 
 		strings.TrimSpace(query.Color),
 		normalizeSort(query.Sort),
 	)
+}
+
+func (s *ProductService) SyncSearchIndex(ctx context.Context) error {
+	if s.search == nil {
+		return nil
+	}
+
+	products, err := s.repo.ListForSearchIndex(ctx)
+	if err != nil {
+		return err
+	}
+
+	return s.search.Reindex(ctx, products)
 }
 
 // CheckStock verifies if a product has sufficient stock.
@@ -259,6 +331,14 @@ func normalizeVariants(variants []dto.ProductVariantRequest) []model.ProductVari
 		})
 	}
 	return normalized
+}
+
+func shouldUseSearchBackend(query dto.ListProductsQuery) bool {
+	if strings.TrimSpace(query.Search) == "" {
+		return false
+	}
+
+	return normalizeSort(query.Sort) != "popular"
 }
 
 func resolveStock(baseStock int, variants []model.ProductVariant) int {

@@ -77,6 +77,29 @@ services:
     container_name: ecommerce-jaeger
     environment:
       COLLECTOR_OTLP_ENABLED: true
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    networks:
+      - ecommerce-network
+
+  # Elasticsearch for advanced catalog search
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+    container_name: ecommerce-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
     networks:
       - ecommerce-network
 
@@ -247,6 +270,7 @@ services:
       - postgres
       - redis
       - rabbitmq
+      - elasticsearch
       - jaeger
 
   # Cart Service
@@ -356,6 +380,7 @@ volumes:
   redis-data:
   rabbitmq-data:
   minio-data:
+  elasticsearch-data:
   prometheus-data:
   grafana-data:
 

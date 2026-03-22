@@ -22,6 +22,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
@@ -45,6 +46,19 @@ func main() {
 	// 2. Initialize structured logger.
 	log := logger.New("user-service")
 	defer log.Sync()
+
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "user-service", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	log.Info("starting user service",
 		zap.String("port", cfg.Server.Port),
@@ -87,7 +101,8 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
-	e.Use(appmw.NewRateLimiter(40, 80, 2*time.Minute))
+	e.Use(appobs.EchoMiddleware("user-service"))
+	e.Use(appmw.NewRedisBackedRateLimiter("user-service", cfg.Redis, log, 40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("user_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())
@@ -104,7 +119,7 @@ func main() {
 	addressHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 7. Set up gRPC server.
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("user-service")))
 	pb.RegisterUserServiceServer(grpcServer, grpc_handler.NewUserGRPCServer(userService))
 
 	// 8. Start servers with graceful shutdown.

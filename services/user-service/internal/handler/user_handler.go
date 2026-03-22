@@ -2,7 +2,9 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -16,12 +18,24 @@ import (
 
 // UserHandler handles HTTP requests for user operations.
 type UserHandler struct {
-	userService *service.UserService
+	userService    *service.UserService
+	loginProtector *LoginAttemptProtector
 }
 
 // NewUserHandler creates a new user handler.
 func NewUserHandler(userService *service.UserService) *UserHandler {
-	return &UserHandler{userService: userService}
+	return NewUserHandlerWithLoginProtector(userService, NewLoginAttemptProtector(defaultMaxLoginFailures, defaultLoginLockDuration, defaultLoginAttemptTTL))
+}
+
+func NewUserHandlerWithLoginProtector(userService *service.UserService, loginProtector *LoginAttemptProtector) *UserHandler {
+	if loginProtector == nil {
+		loginProtector = NewLoginAttemptProtector(defaultMaxLoginFailures, defaultLoginLockDuration, defaultLoginAttemptTTL)
+	}
+
+	return &UserHandler{
+		userService:    userService,
+		loginProtector: loginProtector,
+	}
 }
 
 // RegisterRoutes registers all user-related routes on the Echo instance.
@@ -109,14 +123,27 @@ func (h *UserHandler) Login(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", "identifier is required")
 	}
 
+	attemptKeys := loginAttemptKeys(req, c.RealIP())
+	if retryAfter, blocked := h.loginProtector.Check(attemptKeys...); blocked {
+		retryAfterSeconds := int(retryAfter.Seconds())
+		c.Response().Header().Set(echo.HeaderRetryAfter, strconv.Itoa(retryAfterSeconds))
+		return response.Error(c, http.StatusTooManyRequests, "login temporarily locked", fmt.Sprintf("too many failed login attempts, try again in %d seconds", retryAfterSeconds))
+	}
+
 	result, err := h.userService.Login(c.Request().Context(), req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
+			if retryAfter, blocked := h.loginProtector.RecordFailure(attemptKeys...); blocked {
+				retryAfterSeconds := int(retryAfter.Seconds())
+				c.Response().Header().Set(echo.HeaderRetryAfter, strconv.Itoa(retryAfterSeconds))
+				return response.Error(c, http.StatusTooManyRequests, "login temporarily locked", fmt.Sprintf("too many failed login attempts, try again in %d seconds", retryAfterSeconds))
+			}
 			return response.Error(c, http.StatusUnauthorized, "login failed", "invalid email/phone or password")
 		}
 		return response.Error(c, http.StatusInternalServerError, "login failed", "internal server error")
 	}
 
+	h.loginProtector.RecordSuccess(attemptKeys...)
 	return response.Success(c, http.StatusOK, "login successful", result)
 }
 

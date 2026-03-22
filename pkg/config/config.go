@@ -18,17 +18,19 @@ import (
 // Config holds all configuration for a microservice.
 // Each service can embed this struct and add service-specific fields.
 type Config struct {
-	Server        ServerConfig        `mapstructure:"server"`
-	Database      DatabaseConfig      `mapstructure:"database"`
-	Redis         RedisConfig         `mapstructure:"redis"`
-	RabbitMQ      RabbitMQConfig      `mapstructure:"rabbitmq"`
-	JWT           JWTConfig           `mapstructure:"jwt"`
-	GRPC          GRPCConfig          `mapstructure:"grpc"`
-	SMTP          SMTPConfig          `mapstructure:"smtp"`
-	Services      ServicesConfig      `mapstructure:"services"`
-	Frontend      FrontendConfig      `mapstructure:"frontend"`
+	Server         ServerConfig         `mapstructure:"server"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	Redis          RedisConfig          `mapstructure:"redis"`
+	RabbitMQ       RabbitMQConfig       `mapstructure:"rabbitmq"`
+	JWT            JWTConfig            `mapstructure:"jwt"`
+	GRPC           GRPCConfig           `mapstructure:"grpc"`
+	SMTP           SMTPConfig           `mapstructure:"smtp"`
+	Services       ServicesConfig       `mapstructure:"services"`
+	Frontend       FrontendConfig       `mapstructure:"frontend"`
 	PaymentGateway PaymentGatewayConfig `mapstructure:"payment_gateway"`
-	ObjectStorage ObjectStorageConfig `mapstructure:"object_storage"`
+	ObjectStorage  ObjectStorageConfig  `mapstructure:"object_storage"`
+	Tracing        TracingConfig        `mapstructure:"tracing"`
+	Search         SearchConfig         `mapstructure:"search"`
 }
 
 // GRPCConfig holds gRPC server settings.
@@ -62,6 +64,24 @@ type FrontendConfig struct {
 type PaymentGatewayConfig struct {
 	WebhookSecret string `mapstructure:"webhook_secret"`
 	MomoReturnURL string `mapstructure:"momo_return_url"`
+}
+
+type TracingConfig struct {
+	Enabled     bool    `mapstructure:"enabled"`
+	Endpoint    string  `mapstructure:"endpoint"`
+	SampleRatio float64 `mapstructure:"sample_ratio"`
+}
+
+type SearchConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	Provider       string `mapstructure:"provider"`
+	Endpoint       string `mapstructure:"endpoint"`
+	Index          string `mapstructure:"index"`
+	Username       string `mapstructure:"username"`
+	Password       string `mapstructure:"password"`
+	APIKey         string `mapstructure:"api_key"`
+	RequestTimeout int    `mapstructure:"request_timeout"`
+	SyncOnStartup  bool   `mapstructure:"sync_on_startup"`
 }
 
 type ObjectStorageConfig struct {
@@ -192,6 +212,18 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("object_storage.bucket", "product-media")
 	v.SetDefault("object_storage.use_ssl", false)
 	v.SetDefault("object_storage.public_base_url", "http://localhost:9000/product-media")
+	v.SetDefault("tracing.enabled", false)
+	v.SetDefault("tracing.endpoint", "http://localhost:4318")
+	v.SetDefault("tracing.sample_ratio", 1.0)
+	v.SetDefault("search.enabled", false)
+	v.SetDefault("search.provider", "elasticsearch")
+	v.SetDefault("search.endpoint", "http://localhost:9200")
+	v.SetDefault("search.index", "products")
+	v.SetDefault("search.username", "")
+	v.SetDefault("search.password", "")
+	v.SetDefault("search.api_key", "")
+	v.SetDefault("search.request_timeout", 5)
+	v.SetDefault("search.sync_on_startup", true)
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port

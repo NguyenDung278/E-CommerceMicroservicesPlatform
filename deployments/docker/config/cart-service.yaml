@@ -7,5 +7,10 @@ redis:
   port: "6379"
   db: 0
 
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:4318"
+  sample_ratio: 1.0
+
 jwt:
   expiration: 24

@@ -188,15 +188,19 @@
 **Còn thiếu:**
 - [ ] Rule nâng cao: giới hạn theo user, category, product
 
-### 9.1 Tìm kiếm nâng cao — ⬜ Backlog
-**Status:** Chưa thêm Elasticsearch / Meilisearch; hiện ưu tiên giữ PostgreSQL + filter/sort để giảm độ phức tạp vận hành
+### 9.1 Tìm kiếm nâng cao — 🟡 Partial
+**Status:** Đã thêm Elasticsearch tùy chọn cho `product-service`, nhưng vẫn giữ PostgreSQL là mặc định và fallback để tránh phụ thuộc cứng vào search engine
 
 **Đã làm:**
 - [x] Search + filter catalog qua PostgreSQL
 - [x] Sort phổ biến từ dữ liệu order-service mà không thêm search engine mới
+- [x] Elasticsearch backend tùy chọn cho fuzzy full-text search (typo-tolerance cơ bản) trong `product-service`
+- [x] Reindex/sync dữ liệu sản phẩm từ PostgreSQL khi bật `search.enabled`
+- [x] PostgreSQL fallback nếu Elasticsearch tạm thời unavailable
 
 **Còn thiếu:**
-- [ ] Elasticsearch/Meilisearch nếu thật sự cần typo-tolerance, ranking nâng cao, faceting lớn
+- [ ] Ranking tuning nâng cao (synonyms/boosting/custom analyzers)
+- [ ] Faceting lớn / search analytics nếu catalog tăng trưởng mạnh
 
 ---
 
@@ -208,13 +212,12 @@
 - [x] HTTP request logging (method, path, status, latency, IP)
 - [x] Log phân cấp theo status code (Info/Warn/Error)
 - [x] Prometheus metrics endpoint (`/metrics`)
+- [x] Grafana dashboard + Prometheus datasource provisioning trong Docker stack
 - [x] Middleware Recover cho panic
 - [x] Error wrapping với `%w` để trace rõ ràng
-
-**Còn thiếu:**
-- [ ] Distributed tracing với OpenTelemetry / Jaeger
-- [ ] Audit table cho các thao tác quan trọng (xóa đơn, refund)
-- [ ] Grafana dashboard
+- [x] Distributed tracing với OpenTelemetry / Jaeger cho HTTP ingress/egress
+- [x] Trace propagation qua gRPC giữa `cart-service` / `order-service` và `product-service`
+- [x] Audit table riêng cho thao tác quan trọng như `order.cancelled` và `payment.refunded`
 
 ---
 
@@ -229,16 +232,14 @@
 - [x] Input validation bằng `go-playground/validator`
 - [x] Parameterized SQL queries (chống SQL injection)
 - [x] Circuit breaker + retry ở API Gateway
-
-**Còn thiếu:**
-- [ ] Redis-backed rate limiter (cho multi-instance deployment)
-- [ ] Brute force protection cho login endpoint (vd: lock sau 5 lần sai)
+- [x] Brute force protection cho login endpoint (khóa tạm sau 5 lần sai)
+- [x] Redis-backed rate limiter (token bucket bằng Lua script) cho multi-instance deployment, có fallback về in-memory nếu Redis lỗi
 
 ---
 
 ## 🟡 Ưu tiên Trung bình
 
-### 12. Tìm kiếm & Lọc sản phẩm — 🟡 Partial
+### 12. Tìm kiếm & Lọc sản phẩm — ✅ Done
 **Tích hợp trong:** `product-service`
 
 **Đã làm:**
@@ -246,16 +247,17 @@
 - [x] Lọc theo category
 - [x] Lọc theo brand / tag / status
 - [x] Phân trang
+- [x] Lọc theo khoảng giá
+- [x] Lọc theo thuộc tính (size, màu)
+- [x] Sort theo giá, mới nhất, phổ biến
+- [x] Optional Elasticsearch path cho full-text nâng cao mà không thay thế luồng PostgreSQL mặc định
 
 **Còn thiếu:**
-- [ ] Lọc theo khoảng giá
-- [ ] Lọc theo thuộc tính (size, màu)
-- [ ] Sort theo giá, mới nhất, phổ biến
-- [ ] Elasticsearch/Meilisearch nếu cần full-text nâng cao
+- [ ] Relevance tuning/faceting lớn nếu thực tế catalog đòi hỏi
 
 ---
 
-### 13. Quản trị đơn hàng (Admin) — 🟡 Partial
+### 13. Quản trị đơn hàng (Admin) — ✅ Done
 **Đã làm:**
 - [x] API: Xem tất cả đơn hàng (admin)
 - [x] API: Tìm kiếm/lọc đơn theo user, status, ngày
@@ -263,10 +265,9 @@
 - [x] API: Xem timeline đơn hàng (admin)
 - [x] API: Cập nhật trạng thái đơn (paid, shipped, delivered, cancelled, refunded)
 - [x] API: Báo cáo admin giữ tương thích route cũ `/api/v1/orders/admin/report`
-
-**Còn thiếu:**
-- [ ] API: Hủy đơn thủ công, hoàn tiền
-- [ ] RBAC phân quyền `staff`
+- [x] API: Hủy đơn thủ công
+- [x] API: Refund payment từ staff/admin
+- [x] RBAC phân quyền `staff`
 
 ---
 
@@ -275,12 +276,12 @@
 **Stack:** Go, RabbitMQ consumer, SMTP sender
 
 **Đã làm:**
-- [x] Consumer RabbitMQ (đọc `order.created`, `payment.completed`, `payment.failed`)
+- [x] Consumer RabbitMQ (đọc `order.created`, `order.cancelled`, `payment.completed`, `payment.failed`, `payment.refunded`)
 - [x] Log thông báo dạng mô phỏng (simulate email/SMS)
-- [x] Retry + nack message khi lỗi parse
+- [x] Retry + nack/requeue message khi lỗi parse hoặc lỗi gửi notification
 - [x] Gửi email thật qua SMTP nếu có config
 - [x] Fallback sang log nếu môi trường chưa cấu hình SMTP
-- [x] Email template text cơ bản cho order created / payment completed / payment failed
+- [x] Email template text cơ bản cho order created / order cancelled / payment completed / payment failed / payment refunded
 
 **Còn thiếu:**
 - [ ] Gửi SMS (Twilio hoặc nhà cung cấp nội địa)
@@ -289,14 +290,12 @@
 
 ---
 
-### 15. Lịch sử & Theo dõi trạng thái đơn — 🟡 Partial
+### 15. Lịch sử & Theo dõi trạng thái đơn — ✅ Done
 **Đã làm:**
 - [x] Bảng `order_events` (audit log mỗi lần tạo đơn / đổi trạng thái)
 - [x] API timeline cho user: `GET /api/v1/orders/:id/events`
 - [x] API timeline cho admin: `GET /api/v1/admin/orders/:id/events`
-
-**Còn thiếu:**
-- [ ] Liên kết payment history với order history
+- [x] Liên kết payment history với order history trên frontend/admin
 
 ---
 
@@ -319,11 +318,11 @@
 **Đã làm:**
 - [x] API hủy đơn phía user cho đơn `pending`
 - [x] Hoàn kho best-effort khi hủy đơn pending
-- [x] Payment status có trạng thái `refunded` để sẵn cho bước tích hợp sau
+- [x] API hủy đơn sau thanh toán / hủy thủ công từ admin
+- [x] API refund (partial và full)
+- [x] Payment status / lifecycle có trạng thái `refunded`
 
 **Còn thiếu:**
-- [ ] API hủy đơn sau thanh toán / hủy thủ công từ admin
-- [ ] API refund (partial và full)
 - [ ] Tích hợp refund với payment gateway
 
 ---
@@ -331,11 +330,11 @@
 ### 18. Job nền & Tác vụ định kỳ — 🟡 Partial
 **Đã làm:**
 - [x] Background job monitor tồn kho thấp trong `product-service`
+- [x] TTL cho cart cũ qua Redis TTL, không cần cron job riêng
+- [x] Sync trạng thái thanh toán với gateway qua webhook + payment lifecycle consumer
+- [x] Retry gửi thông báo thất bại bằng nack/requeue trong `notification-service`
 
 **Còn thiếu:**
-- [ ] Cron job dọn cart cũ (TTL)
-- [ ] Sync trạng thái thanh toán với gateway
-- [ ] Retry gửi thông báo thất bại
 - [ ] Tổng hợp báo cáo hàng ngày
 
 ---
@@ -361,30 +360,29 @@
 
 | Trạng thái | Số lượng |
 |------------|----------|
-| ✅ Done | 5 |
-| 🟡 Partial | 13 |
+| ✅ Done | 8 |
+| 🟡 Partial | 11 |
 | 🔴 Planned | 2 |
 | ⬜ Backlog | 0 |
-| **Tổng** | **20** |
+| **Tổng** | **21** |
 
 ---
 
 ## 🎯 Roadmap đề xuất
 
 ### Giai đoạn tiếp theo (Sprint 1-2)
-1. **Quên mật khẩu + xác minh email** → user-service
-2. **Nối địa chỉ vào checkout/order + phí ship** → user-service + order-service
-3. **Tích hợp thanh toán thật** (Stripe/VNPay) → payment-service
-4. **Refund + admin cancel sau thanh toán** → payment-service + order-service
+1. **Tích hợp payment gateway thật** (MoMo/VNPay/Stripe production flow) → payment-service
+2. **Rule voucher nâng cao** (theo user/category/product) → order-service
+3. **Category hierarchy + model riêng cho Brand/Tag** → product-service
+4. **Reservation/hold stock + lịch sử nhập/xuất kho** → product-service
 
 ### Giai đoạn 2 (Sprint 3-4)
-5. **Voucher/Coupon** → implemented trong `order-service` để giữ stack đơn giản
-6. **Admin quản trị đơn hàng** → order-service
-7. **Notification email thật** → notification-service
-8. **Order timeline** → order-service
+5. **Thông báo nâng cao** (HTML template, i18n, SMS/in-app) → notification-service
+6. **Báo cáo doanh thu chuỗi thời gian + export** → order-service
+7. **Search relevance tuning** (synonyms/boosting/faceting) chỉ khi PostgreSQL + Elasticsearch hiện tại chưa đủ
+8. **Mở rộng audit coverage** sang các thao tác admin khác nếu cần compliance cao hơn
 
-### Giai đoạn 3 (Sprint 5-6)
-9. **Category/Brand/Tag** → đã triển khai theo hướng mở rộng `product-service`
-10. **Product variants/SKU** → đã triển khai mức cơ bản trong `product-service`
-11. **Báo cáo & thống kê** → đã triển khai snapshot admin report trong `order-service`
-12. **Job nền** → đã triển khai low-stock monitor, các cron khác còn backlog
+### Giai đoạn 3 (Backlog chọn lọc)
+9. **Review sản phẩm** → service/module mới hoặc mở rộng platform
+10. **Wishlist** → service/module mới hoặc mở rộng platform
+11. **Tổng hợp báo cáo hằng ngày** nếu snapshot theo request không còn đủ

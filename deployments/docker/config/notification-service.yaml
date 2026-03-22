@@ -2,10 +2,20 @@ server:
   port: "8086"
   host: "0.0.0.0"
 
+redis:
+  host: "redis"
+  port: "6379"
+  db: 0
+
 rabbitmq:
   host: "rabbitmq"
   port: "5672"
   user: "admin"
+
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:4318"
+  sample_ratio: 1.0
 
 smtp:
   host: ""

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/lib/pq"
+
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 )
 
@@ -16,6 +18,8 @@ type ProductRepository interface {
 	Update(ctx context.Context, product *model.Product) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sort string) ([]*model.Product, int64, error)
+	ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error)
+	ListForSearchIndex(ctx context.Context) ([]*model.Product, error)
 	UpdateStock(ctx context.Context, id string, quantity int) error
 	RestoreStock(ctx context.Context, id string, quantity int) error
 	ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error)
@@ -230,6 +234,69 @@ func (r *postgresProductRepository) List(
 	}
 
 	return products, total, nil
+}
+
+func (r *postgresProductRepository) ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error) {
+	if len(ids) == 0 {
+		return []*model.Product{}, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		FROM products
+		WHERE id = ANY($1)
+	`, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list products by ids: %w", err)
+	}
+	defer rows.Close()
+
+	byID := make(map[string]*model.Product, len(ids))
+	for rows.Next() {
+		product, err := r.scanProductRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan product by id: %w", err)
+		}
+		byID[product.ID] = product
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate products by ids: %w", err)
+	}
+
+	ordered := make([]*model.Product, 0, len(ids))
+	for _, id := range ids {
+		if product, ok := byID[id]; ok {
+			ordered = append(ordered, product)
+		}
+	}
+
+	return ordered, nil
+}
+
+func (r *postgresProductRepository) ListForSearchIndex(ctx context.Context) ([]*model.Product, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		FROM products
+		ORDER BY updated_at DESC, created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list products for search index: %w", err)
+	}
+	defer rows.Close()
+
+	products := make([]*model.Product, 0)
+	for rows.Next() {
+		product, err := r.scanProductRows(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan product for search index: %w", err)
+		}
+		products = append(products, product)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate products for search index: %w", err)
+	}
+
+	return products, nil
 }
 
 // UpdateStock atomically decrements the stock for a product.

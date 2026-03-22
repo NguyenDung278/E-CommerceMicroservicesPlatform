@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,12 @@ func RequestLogger(log *zap.Logger) echo.MiddlewareFunc {
 				zap.Int64("latency_ms", latency.Milliseconds()),
 				zap.String("client_ip", c.RealIP()),
 				zap.String("user_agent", c.Request().UserAgent()),
+			}
+			if spanContext := trace.SpanContextFromContext(c.Request().Context()); spanContext.IsValid() {
+				fields = append(fields,
+					zap.String("trace_id", spanContext.TraceID().String()),
+					zap.String("span_id", spanContext.SpanID().String()),
+				)
 			}
 
 			status := c.Response().Status

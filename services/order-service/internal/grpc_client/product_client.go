@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -16,7 +17,11 @@ type ProductClient struct {
 }
 
 func NewProductClient(target string) (*ProductClient, error) {
-	conn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.Dial(
+		target,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(appobs.GRPCUnaryClientInterceptor("order-service")),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("did not connect: %v", err)
 	}

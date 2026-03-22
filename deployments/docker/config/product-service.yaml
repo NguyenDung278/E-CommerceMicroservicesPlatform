@@ -9,11 +9,29 @@ database:
   dbname: "ecommerce_product"
   sslmode: "disable"
 
+redis:
+  host: "redis"
+  port: "6379"
+  db: 0
+
+tracing:
+  enabled: true
+  endpoint: "http://jaeger:4318"
+  sample_ratio: 1.0
+
 jwt:
   expiration: 24
 
 grpc:
   port: "50052"
+
+search:
+  enabled: true
+  provider: "elasticsearch"
+  endpoint: "http://elasticsearch:9200"
+  index: "products"
+  request_timeout: 5
+  sync_on_startup: true
 
 object_storage:
   endpoint: "minio:9000"

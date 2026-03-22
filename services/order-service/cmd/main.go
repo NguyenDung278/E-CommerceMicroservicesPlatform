@@ -19,6 +19,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler"
@@ -36,6 +37,19 @@ func main() {
 
 	log := logger.New("order-service")
 	defer log.Sync()
+
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "order-service", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	// Connect to PostgreSQL.
 	db, err := database.NewPostgresDB(cfg.Database)
@@ -96,7 +110,8 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
-	e.Use(appmw.NewRateLimiter(40, 80, 2*time.Minute))
+	e.Use(appobs.EchoMiddleware("order-service"))
+	e.Use(appmw.NewRedisBackedRateLimiter("order-service", cfg.Redis, log, 40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("order_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())

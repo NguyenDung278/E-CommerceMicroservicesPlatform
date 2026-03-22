@@ -19,6 +19,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/handler"
@@ -35,6 +36,19 @@ func main() {
 
 	log := logger.New("cart-service")
 	defer log.Sync()
+
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "cart-service", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	// Connect to Redis.
 	rdb := redis.NewClient(&redis.Options{
@@ -68,7 +82,8 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
-	e.Use(appmw.NewRateLimiter(60, 120, 2*time.Minute))
+	e.Use(appobs.EchoMiddleware("cart-service"))
+	e.Use(appmw.NewRedisBackedRateLimiter("cart-service", cfg.Redis, log, 60, 120, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("cart_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())

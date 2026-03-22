@@ -98,6 +98,19 @@ func (h *EventHandler) HandleMessage(msg amqp.Delivery) {
 			return
 		}
 
+	case "payment.refunded":
+		var event PaymentEvent
+		if err := json.Unmarshal(msg.Body, &event); err != nil {
+			h.log.Error("failed to unmarshal payment refund event", zap.Error(err))
+			msg.Nack(false, true)
+			return
+		}
+		if err := h.handlePaymentRefunded(event); err != nil {
+			h.log.Error("failed to send payment refund notification", zap.Error(err))
+			msg.Nack(false, true)
+			return
+		}
+
 	case "order.cancelled":
 		var event OrderEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
@@ -105,7 +118,11 @@ func (h *EventHandler) HandleMessage(msg amqp.Delivery) {
 			msg.Nack(false, true)
 			return
 		}
-		h.handleOrderCancelled(event)
+		if err := h.handleOrderCancelled(event); err != nil {
+			h.log.Error("failed to send order cancellation notification", zap.Error(err))
+			msg.Nack(false, true)
+			return
+		}
 
 	default:
 		h.log.Warn("received unknown event type", zap.String("routing_key", msg.RoutingKey))
@@ -165,6 +182,23 @@ func (h *EventHandler) handlePaymentFailed(event PaymentEvent) error {
 	))
 }
 
+func (h *EventHandler) handlePaymentRefunded(event PaymentEvent) error {
+	h.log.Info("📧 NOTIFICATION: Payment refunded",
+		zap.String("user_id", event.UserID),
+		zap.String("user_email", event.UserEmail),
+		zap.String("order_id", event.OrderID),
+		zap.String("payment_id", event.PaymentID),
+		zap.Float64("amount", event.Amount),
+		zap.String("message", "Your refund has been processed successfully."),
+	)
+	return h.sendEmail(event.UserEmail, "Hoan tien thanh cong", fmt.Sprintf(
+		"Chao ban,\n\nKhoan hoan tien %s cho don hang %s da duoc xu ly thanh cong.\nSo tien hoan: %.2f\n\nNeu ban can ho tro them, vui long lien he chung toi.",
+		event.PaymentID,
+		event.OrderID,
+		event.Amount,
+	))
+}
+
 func (h *EventHandler) sendEmail(to, subject, body string) error {
 	if strings.TrimSpace(to) == "" {
 		h.log.Warn("notification event missing user email, skipping email delivery")
@@ -178,19 +212,22 @@ func (h *EventHandler) sendEmail(to, subject, body string) error {
 	})
 }
 
-func (h *EventHandler) handleOrderCancelled(event OrderEvent) {
+func (h *EventHandler) handleOrderCancelled(event OrderEvent) error {
 	h.log.Info("📧 NOTIFICATION: Order cancelled",
 		zap.String("user_id", event.UserID),
+		zap.String("user_email", event.UserEmail),
 		zap.String("order_id", event.OrderID),
 		zap.Float64("total", event.TotalPrice),
 		zap.String("message", "Your order has been cancelled."),
 	)
 
 	if event.UserEmail != "" {
-		_ = h.sendEmail(event.UserEmail, "Don hang da bi huy", fmt.Sprintf(
+		return h.sendEmail(event.UserEmail, "Don hang da bi huy", fmt.Sprintf(
 			"Chao ban,\n\nDon hang %s da duoc huy thanh cong.\nSo tien: %.2f\n\nNeu ban can ho tro, vui long lien he chung toi.",
 			event.OrderID,
 			event.TotalPrice,
 		))
 	}
+
+	return nil
 }

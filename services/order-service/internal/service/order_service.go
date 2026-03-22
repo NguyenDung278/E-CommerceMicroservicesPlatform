@@ -615,9 +615,27 @@ func roundCurrency(value float64) float64 {
 }
 
 func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
+	previousStatus := order.Status
 	if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message); err != nil {
 		return err
 	}
+
+	s.recordAuditEntry(ctx, &model.AuditEntry{
+		ID:         uuid.New().String(),
+		EntityType: "order",
+		EntityID:   order.ID,
+		Action:     "order.cancelled",
+		ActorID:    actorID,
+		ActorRole:  actorRole,
+		Metadata: map[string]any{
+			"previous_status": previousStatus,
+			"current_status":  model.OrderStatusCancelled,
+			"user_id":         order.UserID,
+			"total_price":     order.TotalPrice,
+			"message":         message,
+		},
+		CreatedAt: time.Now(),
+	})
 
 	for _, item := range order.Items {
 		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
@@ -631,6 +649,21 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 
 	s.publishCancelEvent(order)
 	return nil
+}
+
+func (s *OrderService) recordAuditEntry(ctx context.Context, entry *model.AuditEntry) {
+	if entry == nil {
+		return
+	}
+
+	if err := s.repo.CreateAuditEntry(ctx, entry); err != nil {
+		s.log.Warn("failed to persist audit entry",
+			zap.String("entity_type", entry.EntityType),
+			zap.String("entity_id", entry.EntityID),
+			zap.String("action", entry.Action),
+			zap.Error(err),
+		)
+	}
 }
 
 func isOperatorRole(role string) bool {

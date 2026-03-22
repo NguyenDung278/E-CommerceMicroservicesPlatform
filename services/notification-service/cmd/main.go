@@ -23,6 +23,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/handler"
 )
@@ -36,6 +37,19 @@ func main() {
 
 	log := logger.New("notification-service")
 	defer log.Sync()
+
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "notification-service", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
 
 	// Connect to RabbitMQ.
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL())
@@ -72,8 +86,9 @@ func main() {
 	}
 
 	// Bind the queue to multiple routing keys.
-	// This service receives events for: order.created, payment.completed, payment.failed
-	routingKeys := []string{"order.created", "payment.completed", "payment.failed"}
+	// This service receives events for: order.created, order.cancelled,
+	// payment.completed, payment.failed, payment.refunded.
+	routingKeys := []string{"order.created", "order.cancelled", "payment.completed", "payment.failed", "payment.refunded"}
 	for _, key := range routingKeys {
 		err = ch.QueueBind(q.Name, key, "events", false, nil)
 		if err != nil {
@@ -120,6 +135,7 @@ func main() {
 		e := echo.New()
 		e.HideBanner = true
 		e.Use(echomw.Secure())
+		e.Use(appobs.EchoMiddleware("notification-service"))
 		e.Use(echoprometheus.NewMiddleware("notification_service"))
 		e.GET("/metrics", echoprometheus.NewHandler())
 		e.GET("/health", func(c echo.Context) error {

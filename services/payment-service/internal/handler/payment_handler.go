@@ -124,6 +124,7 @@ func (h *PaymentHandler) ListPaymentHistory(c echo.Context) error {
 }
 
 func (h *PaymentHandler) RefundPayment(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
 	var req dto.RefundPaymentRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
@@ -132,7 +133,7 @@ func (h *PaymentHandler) RefundPayment(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), "", req)
+	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role, claims.Email, req)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")

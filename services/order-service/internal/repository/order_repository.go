@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,6 +34,7 @@ type OrderRepository interface {
 	GetCouponByCode(ctx context.Context, code string) (*model.Coupon, error)
 	GetAdminReport(ctx context.Context, from time.Time, to time.Time, windowDays int) (*model.AdminReport, error)
 	ListPopularProducts(ctx context.Context, limit int) ([]model.ProductPopularity, error)
+	CreateAuditEntry(ctx context.Context, entry *model.AuditEntry) error
 }
 
 type postgresOrderRepository struct {
@@ -533,6 +535,34 @@ func (r *postgresOrderRepository) ListPopularProducts(ctx context.Context, limit
 	}
 
 	return popularity, nil
+}
+
+func (r *postgresOrderRepository) CreateAuditEntry(ctx context.Context, entry *model.AuditEntry) error {
+	query := `
+		INSERT INTO audit_entries (id, entity_type, entity_id, action, actor_id, actor_role, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+	`
+
+	metadata, err := json.Marshal(entry.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal audit metadata: %w", err)
+	}
+
+	_, err = r.db.ExecContext(ctx, query,
+		entry.ID,
+		entry.EntityType,
+		entry.EntityID,
+		entry.Action,
+		nullIfEmpty(entry.ActorID),
+		nullIfEmpty(entry.ActorRole),
+		string(metadata),
+		entry.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create audit entry: %w", err)
+	}
+
+	return nil
 }
 
 type rowScanner interface {

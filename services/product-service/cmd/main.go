@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	echoprometheus "github.com/labstack/echo-contrib/echoprometheus"
@@ -19,12 +20,14 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/database"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/grpc"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/jobs"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/search"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/storage"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/migrations"
@@ -41,6 +44,19 @@ func main() {
 	log := logger.New("product-service")
 	defer log.Sync()
 
+	tracingShutdown, err := appobs.SetupTracing(context.Background(), "product-service", cfg.Tracing, log)
+	if err != nil {
+		log.Warn("failed to initialize tracing", zap.Error(err))
+	} else {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := tracingShutdown(ctx); err != nil {
+				log.Warn("failed to shutdown tracing", zap.Error(err))
+			}
+		}()
+	}
+
 	db, err := database.NewPostgresDB(cfg.Database)
 	if err != nil {
 		log.Fatal("failed to connect to database", zap.Error(err))
@@ -52,7 +68,7 @@ func main() {
 	}
 
 	productRepo := repository.NewProductRepository(db)
-	productOptions := []service.ProductServiceOption{}
+	productOptions := []service.ProductServiceOption{service.WithLogger(log)}
 	if mediaStore, err := storage.NewObjectStorage(cfg.ObjectStorage); err != nil {
 		log.Warn("object storage disabled", zap.Error(err))
 	} else {
@@ -64,7 +80,28 @@ func main() {
 		productOptions = append(productOptions, service.WithMediaStore(mediaStore))
 	}
 
+	var searchIndex *search.ElasticsearchIndex
+	if cfg.Search.Enabled && strings.EqualFold(cfg.Search.Provider, "elasticsearch") {
+		searchIndex, err = search.NewElasticsearchIndex(cfg.Search)
+		if err != nil {
+			log.Warn("Elasticsearch search disabled", zap.Error(err))
+		} else {
+			productOptions = append(productOptions, service.WithSearchIndex(searchIndex))
+		}
+	}
+
 	productService := service.NewProductService(productRepo, productOptions...)
+	if searchIndex != nil {
+		searchCtx, cancelSearch := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := searchIndex.EnsureIndex(searchCtx); err != nil {
+			log.Warn("failed to ensure Elasticsearch index", zap.Error(err))
+		} else if cfg.Search.SyncOnStartup {
+			if err := productService.SyncSearchIndex(searchCtx); err != nil {
+				log.Warn("failed to sync Elasticsearch index from PostgreSQL", zap.Error(err))
+			}
+		}
+		cancelSearch()
+	}
 	productHandler := handler.NewProductHandler(productService)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
@@ -78,7 +115,8 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
-	e.Use(appmw.NewRateLimiter(80, 160, 2*time.Minute))
+	e.Use(appobs.EchoMiddleware("product-service"))
+	e.Use(appmw.NewRedisBackedRateLimiter("product-service", cfg.Redis, log, 80, 160, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
 	e.Use(echoprometheus.NewMiddleware("product_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())
@@ -93,7 +131,7 @@ func main() {
 	productHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// Set up gRPC server.
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("product-service")))
 	pb.RegisterProductServiceServer(grpcServer, grpc_handler.NewProductGRPCServer(productService))
 
 	go func() {
