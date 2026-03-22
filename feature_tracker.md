@@ -32,9 +32,10 @@
 - [x] RBAC: phân quyền `user` / `staff` / `admin` qua JWT claims
 - [x] Shared [JWTAuth](file:///Users/nguyendung/FPT/projects/ecommerce-platform/pkg/middleware/auth.go#31-87) middleware & [RequireRole](file:///Users/nguyendung/FPT/projects/ecommerce-platform/pkg/middleware/auth.go#97-123) cho toàn bộ services
 - [x] Bảo vệ chống email enumeration attack
-- [x] Vai trò `staff` (hiện tại chỉ có `user` và `admin`)
+- [x] Vai trò `staff` với quyền vận hành riêng cho catalog/order/payment
 - [x] Xác minh email sau đăng ký
 - [x] Quên mật khẩu / reset (UI đã chừa sẵn slot)
+- [x] Đăng ký không còn fail toàn bộ khi SMTP / email delivery tạm thời lỗi
 
 ---
 
@@ -52,6 +53,9 @@
 - [x] SKU / variants cơ bản lưu trong `products.variants`
 - [x] Trạng thái bán: `draft` / `active` / `inactive`
 - [x] Lọc theo `brand` / `tag` / `status`
+- [x] Lọc theo khoảng giá
+- [x] Sort theo giá / mới nhất
+- [x] Sort theo phổ biến bằng dữ liệu order thực tế (`/api/v1/catalog/popularity`)
 - [x] Upload ảnh (hiện tại chỉ có URL field)
 - [x] Multiple images cho một sản phẩm
 - [x] Object storage (S3/MinIO)
@@ -65,6 +69,7 @@
 - [x] `Brand`, `Tag` fields trên `products`
 - [x] Filter theo `brand` / `tag`
 - [x] Product Variation cơ bản (size/màu dưới dạng SKU JSONB)
+- [x] Filter theo thuộc tính biến thể `size` / `color`
 
 **Còn thiếu:**
 - [ ] `Category` model với hierarchy (cha/con)
@@ -117,11 +122,13 @@
 - [x] Lưu trạng thái đơn: `pending`, `paid`, `shipped`, `delivered`, `cancelled`, `refunded`
 - [x] Xem đơn hàng của user (bảo mật userID)
 - [x] Hủy đơn pending từ phía user
+- [x] Staff/Admin hủy đơn thủ công (`pending` / `paid`)
 - [x] Hoàn kho best-effort khi hủy đơn pending
 - [x] Timeline/history của đơn qua `order_events`
 - [x] Admin: xem tất cả đơn hàng, chi tiết, timeline, cập nhật trạng thái
 - [x] Publish `order.created` event tới RabbitMQ
 - [x] Publish `order.cancelled` event tới RabbitMQ
+- [x] Consume payment lifecycle events để tự đồng bộ `paid` / `refunded`
 - [x] Event-driven architecture với notification-service
 
 **Còn thiếu:**
@@ -135,17 +142,17 @@
 
 **Đã làm:**
 - [x] Tạo payment record
-- [x] Kiểm tra duplicate payment
+- [x] Kiểm tra duplicate payment / settled order
 - [x] Xác minh total amount từ order-service (backend, không tin client)
-- [x] Publish `payment.completed` / `payment.failed` events
-- [x] Lấy thông tin payment theo ID hoặc orderID
+- [x] Publish `payment.completed` / `payment.failed` / `payment.refunded` events
+- [x] Lấy thông tin payment theo ID, orderID, history theo order, history theo user
+- [x] Webhook nhận callback từ payment gateway (contract nội bộ cho MoMo-style callback)
+- [x] Webhook signature verification (HMAC SHA256)
+- [x] Partial payment / split payment
+- [x] Refund API cho staff/admin
 
 **Còn thiếu:**
-- [ ] Tích hợp cổng thanh toán thật (Stripe, VNPay, MoMo)
-- [ ] Webhook nhận callback từ payment gateway
-- [ ] Webhook signature verification
-- [ ] Partial payment / split payment
-- [ ] Refund API
+- [ ] Tích hợp cổng thanh toán thật (Stripe, VNPay, MoMo production credentials/redirect flow)
 
 ---
 
@@ -180,6 +187,16 @@
 
 **Còn thiếu:**
 - [ ] Rule nâng cao: giới hạn theo user, category, product
+
+### 9.1 Tìm kiếm nâng cao — ⬜ Backlog
+**Status:** Chưa thêm Elasticsearch / Meilisearch; hiện ưu tiên giữ PostgreSQL + filter/sort để giảm độ phức tạp vận hành
+
+**Đã làm:**
+- [x] Search + filter catalog qua PostgreSQL
+- [x] Sort phổ biến từ dữ liệu order-service mà không thêm search engine mới
+
+**Còn thiếu:**
+- [ ] Elasticsearch/Meilisearch nếu thật sự cần typo-tolerance, ranking nâng cao, faceting lớn
 
 ---
 

@@ -11,7 +11,7 @@ export function OrderDetailPage() {
   const { orderId = "" } = useParams();
 
   const [order, setOrder] = useState<Order | null>(null);
-  const [payment, setPayment] = useState<Payment | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -31,13 +31,13 @@ export function OrderDetailPage() {
         }
 
         try {
-          const paymentResponse = await api.getPaymentByOrder(token, orderId);
+          const paymentResponse = await api.listPaymentsByOrder(token, orderId);
           if (active) {
-            setPayment(paymentResponse.data);
+            setPayments(paymentResponse.data);
           }
         } catch {
           if (active) {
-            setPayment(null);
+            setPayments([]);
           }
         }
       })
@@ -115,25 +115,21 @@ export function OrderDetailPage() {
 
             <div className="card">
               <h2>Lịch sử thanh toán</h2>
-              {payment ? (
-                <>
-                  <div className="summary-row">
-                    <span>Mã giao dịch</span>
-                    <strong>{payment.id}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>Trạng thái</span>
-                    <strong>{payment.status}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>Phương thức</span>
-                    <strong>{payment.payment_method}</strong>
-                  </div>
-                  <div className="summary-row">
-                    <span>Số tiền</span>
-                    <strong>{formatCurrency(payment.amount)}</strong>
-                  </div>
-                </>
+              {payments.length > 0 ? (
+                <div className="order-list">
+                  {payments.map((payment) => (
+                    <div className="coupon-preview-card" key={payment.id}>
+                      <strong>{payment.id}</strong>
+                      <span>
+                        {payment.payment_method} • {payment.transaction_type} • {payment.status}
+                      </span>
+                      <span>{formatCurrency(payment.amount)}</span>
+                      {typeof payment.outstanding_amount === "number" ? (
+                        <span>Còn lại: {formatCurrency(payment.outstanding_amount)}</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <p>Chưa có thanh toán cho đơn hàng này.</p>
               )}

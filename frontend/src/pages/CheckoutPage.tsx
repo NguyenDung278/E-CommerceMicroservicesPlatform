@@ -54,6 +54,7 @@ export function CheckoutPage() {
   const [latestOrder, setLatestOrder] = useState<Order | null>(null);
   const [latestPayment, setLatestPayment] = useState<Payment | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("credit_card");
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
   const [feedback, setFeedback] = useState("");
@@ -162,6 +163,10 @@ export function CheckoutPage() {
   const computedTotal =
     pricingSummary?.total_price ??
     Math.max(0, localSubtotal - (pricingSummary?.discount_amount ?? 0) + shippingFee);
+  const outstandingPaymentAmount =
+    latestPayment && typeof latestPayment.outstanding_amount === "number"
+      ? latestPayment.outstanding_amount
+      : latestOrder?.total_price ?? computedTotal;
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -325,7 +330,8 @@ export function CheckoutPage() {
 
     const form = {
       orderId: latestOrder.id,
-      paymentMethod
+      paymentMethod,
+      amount: paymentAmount
     };
 
     const errors = validatePayment(form);
@@ -338,10 +344,20 @@ export function CheckoutPage() {
       setIsBusy("payment");
       const response = await api.processPayment(token, {
         order_id: sanitizeText(latestOrder.id),
-        payment_method: sanitizeText(paymentMethod)
+        payment_method: sanitizeText(paymentMethod),
+        amount: paymentAmount ? Number.parseFloat(paymentAmount) : undefined
       });
       setLatestPayment(response.data);
-      setFeedback(`Thanh toán ${response.data.id} đã được tạo thành công.`);
+      setPaymentAmount("");
+      if (response.data.status === "pending") {
+        setFeedback(
+          `Giao dịch ${response.data.id} đang chờ callback từ ${response.data.gateway_provider}. Hệ thống sẽ cập nhật trạng thái khi webhook xác nhận.`
+        );
+      } else {
+        setFeedback(
+          `Đã ghi nhận giao dịch ${response.data.id}. Còn lại ${formatCurrency(response.data.outstanding_amount ?? 0)} để hoàn tất đơn hàng.`
+        );
+      }
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -640,6 +656,10 @@ export function CheckoutPage() {
                     <strong>{formatCurrency(latestOrder.total_price)}</strong>
                   </div>
                   <div className="summary-row">
+                    <span>Còn lại cần thanh toán</span>
+                    <strong>{formatCurrency(outstandingPaymentAmount)}</strong>
+                  </div>
+                  <div className="summary-row">
                     <span>Vận chuyển</span>
                     <strong>
                       {formatShippingMethodLabel(latestOrder.shipping_method)} • {formatCurrency(latestOrder.shipping_fee)}
@@ -676,10 +696,29 @@ export function CheckoutPage() {
                         <option value="credit_card">Credit Card</option>
                         <option value="paypal">PayPal</option>
                         <option value="bank_transfer">Bank Transfer</option>
+                        <option value="momo">MoMo</option>
                       </select>
                     </label>
 
-                    <button className="secondary-button" disabled={isBusy === "payment"} type="submit">
+                    <label className="field" htmlFor="payment-amount">
+                      <span className="field-label">Số tiền muốn thanh toán</span>
+                      <input
+                        id="payment-amount"
+                        inputMode="decimal"
+                        min="0"
+                        placeholder={`Để trống để thanh toán hết ${formatCurrency(outstandingPaymentAmount)}`}
+                        step="0.01"
+                        type="number"
+                        value={paymentAmount}
+                        onChange={(event) => setPaymentAmount(event.target.value)}
+                      />
+                    </label>
+
+                    <button
+                      className="secondary-button"
+                      disabled={isBusy === "payment" || outstandingPaymentAmount <= 0}
+                      type="submit"
+                    >
                       {isBusy === "payment" ? "Đang thanh toán..." : "Thanh toán"}
                     </button>
                   </form>
@@ -692,6 +731,9 @@ export function CheckoutPage() {
                 <div className="payment-success">
                   <strong>Trạng thái thanh toán: {latestPayment.status}</strong>
                   <span>Mã giao dịch: {latestPayment.id}</span>
+                  {typeof latestPayment.outstanding_amount === "number" ? (
+                    <span>Còn lại: {formatCurrency(latestPayment.outstanding_amount)}</span>
+                  ) : null}
                 </div>
               ) : null}
             </div>

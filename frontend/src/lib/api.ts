@@ -9,6 +9,7 @@ import type {
   OrderEvent,
   OrderPreview,
   Payment,
+  ProductPopularity,
   Product,
   UploadedProductImages,
   UserProfile
@@ -181,6 +182,11 @@ export const api = {
     brand?: string;
     tag?: string;
     status?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    size?: string;
+    color?: string;
+    sort?: "latest" | "price_asc" | "price_desc" | "popular";
     limit?: number;
   }) {
     const params = new URLSearchParams();
@@ -201,12 +207,30 @@ export const api = {
     if (options?.status) {
       params.set("status", options.status);
     }
+    if (typeof options?.minPrice === "number" && options.minPrice > 0) {
+      params.set("min_price", String(options.minPrice));
+    }
+    if (typeof options?.maxPrice === "number" && options.maxPrice > 0) {
+      params.set("max_price", String(options.maxPrice));
+    }
+    if (options?.size) {
+      params.set("size", options.size);
+    }
+    if (options?.color) {
+      params.set("color", options.color);
+    }
+    if (options?.sort) {
+      params.set("sort", options.sort);
+    }
 
     const query = `?${params.toString()}`;
     return request<Product[]>(`/api/v1/products${query}`);
   },
   getProductById(productId: string) {
     return request<Product>(`/api/v1/products/${encodeURIComponent(productId)}`);
+  },
+  getProductPopularity(limit = 100) {
+    return request<ProductPopularity[]>(`/api/v1/catalog/popularity?limit=${encodeURIComponent(String(limit))}`);
   },
   createProduct(
     token: string,
@@ -223,6 +247,8 @@ export const api = {
       variants: Array<{
         sku: string;
         label: string;
+        size?: string;
+        color?: string;
         price: number;
         stock: number;
       }>;
@@ -260,6 +286,8 @@ export const api = {
       variants: Array<{
         sku: string;
         label: string;
+        size?: string;
+        color?: string;
         price: number;
         stock: number;
       }>;
@@ -406,6 +434,19 @@ export const api = {
       body
     });
   },
+  cancelAdminOrder(
+    token: string,
+    orderId: string,
+    body?: {
+      message?: string;
+    }
+  ) {
+    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
+      method: "PUT",
+      token,
+      body
+    });
+  },
   listCoupons(token: string) {
     return request<Coupon[]>("/api/v1/admin/coupons", { token });
   },
@@ -429,11 +470,37 @@ export const api = {
     body: {
       order_id: string;
       payment_method: string;
+      amount?: number;
     }
   ) {
     return request<Payment>("/api/v1/payments", { method: "POST", token, body });
   },
   getPaymentByOrder(token: string, orderId: string) {
     return request<Payment>(`/api/v1/payments/order/${encodeURIComponent(orderId)}`, { token });
+  },
+  listPaymentsByOrder(token: string, orderId: string) {
+    return request<Payment[]>(`/api/v1/payments/order/${encodeURIComponent(orderId)}/history`, { token });
+  },
+  listPaymentHistory(token: string) {
+    return request<Payment[]>("/api/v1/payments/history", { token });
+  },
+  refundPayment(
+    token: string,
+    paymentId: string,
+    body?: {
+      amount?: number;
+      message?: string;
+    }
+    ) {
+    return request<Payment>(`/api/v1/admin/payments/${encodeURIComponent(paymentId)}/refunds`, {
+      method: "POST",
+      token,
+      body
+    });
+  },
+  listAdminPaymentsByOrder(token: string, orderId: string) {
+    return request<Payment[]>(`/api/v1/admin/payments/order/${encodeURIComponent(orderId)}/history`, {
+      token
+    });
   }
 };

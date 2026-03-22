@@ -27,6 +27,7 @@ type Config struct {
 	SMTP          SMTPConfig          `mapstructure:"smtp"`
 	Services      ServicesConfig      `mapstructure:"services"`
 	Frontend      FrontendConfig      `mapstructure:"frontend"`
+	PaymentGateway PaymentGatewayConfig `mapstructure:"payment_gateway"`
 	ObjectStorage ObjectStorageConfig `mapstructure:"object_storage"`
 }
 
@@ -56,6 +57,11 @@ type SMTPConfig struct {
 
 type FrontendConfig struct {
 	BaseURL string `mapstructure:"base_url"`
+}
+
+type PaymentGatewayConfig struct {
+	WebhookSecret string `mapstructure:"webhook_secret"`
+	MomoReturnURL string `mapstructure:"momo_return_url"`
 }
 
 type ObjectStorageConfig struct {
@@ -178,6 +184,8 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("services.order_service", "order-service:8084")
 	v.SetDefault("services.payment_service", "payment-service:8085")
 	v.SetDefault("frontend.base_url", "http://localhost:4173")
+	v.SetDefault("payment_gateway.webhook_secret", "dev-momo-secret")
+	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:4173/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")
 	v.SetDefault("object_storage.access_key", "minioadmin")
 	v.SetDefault("object_storage.secret_key", "minioadmin")

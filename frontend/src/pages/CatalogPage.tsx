@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ProductCard } from "../components/ProductCard";
@@ -15,6 +15,10 @@ export function CatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedTag, setSelectedTag] = useState("");
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
+  const [sortBy, setSortBy] = useState<"latest" | "price_asc" | "price_desc" | "popular">("latest");
+  const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
 
@@ -32,8 +36,22 @@ export function CatalogPage() {
     return Array.from(new Set(products.flatMap((product) => product.tags).filter(Boolean))).sort();
   }, [products]);
 
+  const sizes = useMemo(() => {
+    return Array.from(
+      new Set(products.flatMap((product) => product.variants.map((variant) => variant.size).filter(Boolean)))
+    ).sort();
+  }, [products]);
+
+  const colors = useMemo(() => {
+    return Array.from(
+      new Set(products.flatMap((product) => product.variants.map((variant) => variant.color).filter(Boolean)))
+    ).sort();
+  }, [products]);
+
   useEffect(() => {
     let active = true;
+    const minPrice = Number.parseFloat(priceRange.min);
+    const maxPrice = Number.parseFloat(priceRange.max);
 
     void api
       .listProducts({
@@ -41,11 +59,32 @@ export function CatalogPage() {
         category: selectedCategory || undefined,
         brand: selectedBrand || undefined,
         tag: selectedTag || undefined,
-        status: "active"
+        status: "active",
+        minPrice: Number.isFinite(minPrice) && minPrice > 0 ? minPrice : undefined,
+        maxPrice: Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : undefined,
+        size: selectedSize || undefined,
+        color: selectedColor || undefined,
+        sort: sortBy === "popular" ? "latest" : sortBy
       })
-      .then((response) => {
+      .then(async (response) => {
+        let nextProducts = response.data;
+        if (sortBy === "popular") {
+          try {
+            const popularityResponse = await api.getProductPopularity(response.data.length || 100);
+            const popularityRank = new Map(
+              popularityResponse.data.map((item, index) => [item.product_id, item.quantity * 1000 - index])
+            );
+            nextProducts = response.data
+              .slice()
+              .sort((left, right) => (popularityRank.get(right.id) ?? -1) - (popularityRank.get(left.id) ?? -1));
+          } catch {
+            nextProducts = response.data;
+          }
+        }
+
         if (active) {
-          setProducts(response.data);
+          setProducts(nextProducts);
+          setFeedback("");
         }
       })
       .catch((reason) => {
@@ -57,7 +96,7 @@ export function CatalogPage() {
     return () => {
       active = false;
     };
-  }, [submittedSearch, selectedCategory, selectedBrand, selectedTag]);
+  }, [submittedSearch, selectedCategory, selectedBrand, selectedTag, selectedSize, selectedColor, sortBy, priceRange.min, priceRange.max]);
 
   async function handleAddToCart(product: Product) {
     try {
@@ -77,6 +116,11 @@ export function CatalogPage() {
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmittedSearch(search.trim());
+  }
+
+  function handlePriceChange(field: "min" | "max", event: ChangeEvent<HTMLInputElement>) {
+    const value = event.target.value.replace(/[^\d.]/g, "");
+    setPriceRange((current) => ({ ...current, [field]: value }));
   }
 
   return (
@@ -157,6 +201,80 @@ export function CatalogPage() {
                 type="button"
               >
                 #{tag}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="catalog-filter-grid">
+          <label className="catalog-filter-field">
+            <span>Giá tối thiểu</span>
+            <input
+              inputMode="decimal"
+              placeholder="0"
+              value={priceRange.min}
+              onChange={(event) => handlePriceChange("min", event)}
+            />
+          </label>
+          <label className="catalog-filter-field">
+            <span>Giá tối đa</span>
+            <input
+              inputMode="decimal"
+              placeholder="500"
+              value={priceRange.max}
+              onChange={(event) => handlePriceChange("max", event)}
+            />
+          </label>
+          <label className="catalog-filter-field">
+            <span>Sort</span>
+            <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}>
+              <option value="latest">Mới nhất</option>
+              <option value="price_asc">Giá tăng dần</option>
+              <option value="price_desc">Giá giảm dần</option>
+              <option value="popular">Phổ biến</option>
+            </select>
+          </label>
+        </div>
+
+        {sizes.length > 0 ? (
+          <div className="category-filter-row">
+            <button
+              className={!selectedSize ? "filter-chip filter-chip-active" : "filter-chip"}
+              onClick={() => setSelectedSize("")}
+              type="button"
+            >
+              Tất cả size
+            </button>
+            {sizes.map((size) => (
+              <button
+                className={selectedSize === size ? "filter-chip filter-chip-active" : "filter-chip"}
+                key={size}
+                onClick={() => setSelectedSize(size ?? "")}
+                type="button"
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {colors.length > 0 ? (
+          <div className="category-filter-row">
+            <button
+              className={!selectedColor ? "filter-chip filter-chip-active" : "filter-chip"}
+              onClick={() => setSelectedColor("")}
+              type="button"
+            >
+              Tất cả màu
+            </button>
+            {colors.map((color) => (
+              <button
+                className={selectedColor === color ? "filter-chip filter-chip-active" : "filter-chip"}
+                key={color}
+                onClick={() => setSelectedColor(color ?? "")}
+                type="button"
+              >
+                {color}
               </button>
             ))}
           </div>

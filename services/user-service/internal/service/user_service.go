@@ -132,9 +132,10 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		return nil, err
 	}
 
-	if err := s.sendVerificationEmail(user, verificationToken); err != nil {
-		return nil, err
-	}
+	// Account creation should not fail just because the verification email provider
+	// is temporarily unavailable. The user can request another verification email
+	// later from their profile.
+	_ = s.sendVerificationEmail(user, verificationToken)
 
 	// Generate JWT token pair so the user is immediately logged in.
 	accessToken, refreshToken, err := s.generateTokenPair(user)

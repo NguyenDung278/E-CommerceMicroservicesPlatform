@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,6 +27,9 @@ func NewOrderHandler(orderService *service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	catalog := e.Group("/api/v1/catalog")
+	catalog.GET("/popularity", h.ListPopularProducts)
+
 	orders := e.Group("/api/v1/orders")
 	orders.Use(middleware.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.PreviewOrder)
@@ -46,6 +50,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminOrders.GET("", h.ListAdminOrders)
 	adminOrders.GET("/:id/events", h.GetAdminOrderTimeline)
 	adminOrders.GET("/:id", h.GetAdminOrder)
+	adminOrders.PUT("/:id/cancel", h.CancelOrderAsAdmin)
 	adminOrders.PUT("/:id/status", h.UpdateOrderStatus)
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
@@ -271,6 +276,40 @@ func (h *OrderHandler) ListCoupons(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "coupons retrieved", coupons)
 }
 
+func (h *OrderHandler) CancelOrderAsAdmin(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	var req dto.AdminCancelOrderRequest
+	if err := c.Bind(&req); err != nil && !errors.Is(err, io.EOF) && err != echo.ErrUnsupportedMediaType {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	err := h.orderService.CancelOrderAsAdmin(
+		c.Request().Context(),
+		c.Param("id"),
+		claims.UserID,
+		claims.Role,
+		req.Message,
+	)
+	if err != nil {
+		if errors.Is(err, service.ErrOrderNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "order not found")
+		}
+		if errors.Is(err, service.ErrAdminCancelNotAllowed) {
+			return response.Error(c, http.StatusBadRequest, "not cancellable", "only pending or paid orders can be cancelled manually")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to cancel order")
+	}
+
+	order, err := h.orderService.GetOrderForAdmin(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load updated order")
+	}
+	return response.Success(c, http.StatusOK, "order cancelled", order)
+}
+
 func (h *OrderHandler) GetAdminReport(c echo.Context) error {
 	days, _ := strconv.Atoi(c.QueryParam("days"))
 
@@ -280,6 +319,16 @@ func (h *OrderHandler) GetAdminReport(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "admin report retrieved", report)
+}
+
+func (h *OrderHandler) ListPopularProducts(c echo.Context) error {
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	items, err := h.orderService.ListPopularProducts(c.Request().Context(), limit)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load product popularity")
+	}
+
+	return response.Success(c, http.StatusOK, "product popularity retrieved", items)
 }
 
 func parsePageAndLimit(c echo.Context) (int, int) {

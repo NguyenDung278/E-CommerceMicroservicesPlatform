@@ -13,6 +13,9 @@ type PaymentEntry = {
 function paymentBadgeClassName(status: string) {
   const normalized = status.toLowerCase();
 
+  if (normalized.includes("refund")) {
+    return "status-pill status-pill-neutral";
+  }
   if (normalized.includes("fail")) {
     return "status-pill status-pill-danger";
   }
@@ -25,20 +28,18 @@ export function PaymentHistoryPage() {
   const { orders, paymentsByOrder, isLoading, error } = useOrderPayments(token);
 
   const paymentEntries: PaymentEntry[] = orders
-    .map((order) => {
-      const payment = paymentsByOrder[order.id];
-      if (!payment) {
-        return null;
-      }
-
-      return {
+    .flatMap((order) =>
+      (paymentsByOrder[order.id] ?? []).map((payment) => ({
         payment,
         orderCreatedAt: order.created_at
-      };
-    })
+      }))
+    )
     .filter((entry): entry is PaymentEntry => entry !== null);
 
-  const totalPaid = paymentEntries.reduce((sum, entry) => sum + entry.payment.amount, 0);
+  const totalPaid = paymentEntries.reduce((sum, entry) => {
+    const direction = entry.payment.transaction_type === "refund" ? -1 : 1;
+    return sum + entry.payment.amount * direction;
+  }, 0);
 
   return (
     <div className="page-stack">
@@ -95,7 +96,7 @@ export function PaymentHistoryPage() {
                     </div>
                     <div>
                       <span>Phương thức</span>
-                      <strong>{payment.payment_method}</strong>
+                      <strong>{payment.payment_method} • {payment.transaction_type}</strong>
                     </div>
                     <div>
                       <span>Số tiền</span>

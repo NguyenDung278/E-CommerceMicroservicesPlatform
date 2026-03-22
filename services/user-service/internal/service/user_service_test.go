@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 )
@@ -13,6 +15,14 @@ type fakeUserRepo struct {
 	usersByEmail map[string]*model.User
 	usersByPhone map[string]*model.User
 	usersByID    map[string]*model.User
+}
+
+type fakeEmailSender struct {
+	err error
+}
+
+func (s *fakeEmailSender) Send(_ email.Message) error {
+	return s.err
 }
 
 func newFakeUserRepo() *fakeUserRepo {
@@ -281,6 +291,56 @@ func TestRefreshTokenReturnsNewPair(t *testing.T) {
 	}
 	if secondRefresh.Token == "" || secondRefresh.RefreshToken == "" {
 		t.Fatal("expected valid tokens from second refresh")
+	}
+}
+
+func TestRegisterSucceedsWhenVerificationEmailDeliveryFails(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithEmailSender(&fakeEmailSender{err: errors.New("smtp unavailable")}),
+	)
+
+	resp, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "grace@example.com",
+		Password:  "password123",
+		FirstName: "Grace",
+		LastName:  "Ho",
+	})
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	if resp == nil || resp.Token == "" {
+		t.Fatal("expected register to still return auth response")
+	}
+	if repo.usersByEmail["grace@example.com"] == nil {
+		t.Fatal("expected user to be stored even when email delivery fails")
+	}
+}
+
+func TestForgotPasswordSucceedsWhenEmailDeliveryFails(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithEmailSender(&fakeEmailSender{err: errors.New("smtp unavailable")}),
+	)
+
+	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "harry@example.com",
+		Password:  "password123",
+		FirstName: "Harry",
+		LastName:  "Tran",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	if err := svc.ForgotPassword(context.Background(), "harry@example.com"); err != nil {
+		t.Fatalf("ForgotPassword returned error: %v", err)
 	}
 }
 

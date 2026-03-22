@@ -5,7 +5,7 @@ import type { Order, Payment } from "../types/api";
 
 type OrderPaymentsState = {
   orders: Order[];
-  paymentsByOrder: Record<string, Payment | null>;
+  paymentsByOrder: Record<string, Payment[]>;
   isLoading: boolean;
   error: string;
 };
@@ -42,16 +42,14 @@ export function useOrderPayments(token: string) {
           .slice()
           .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 
-        const paymentResults = await Promise.all(
-          orders.map(async (order) => {
-            try {
-              const paymentResponse = await api.getPaymentByOrder(token, order.id);
-              return [order.id, paymentResponse.data] as const;
-            } catch {
-              return [order.id, null] as const;
-            }
-          })
-        );
+        const paymentHistoryResponse = await api.listPaymentHistory(token);
+        const paymentsByOrder: Record<string, Payment[]> = {};
+        paymentHistoryResponse.data.forEach((payment) => {
+          if (!paymentsByOrder[payment.order_id]) {
+            paymentsByOrder[payment.order_id] = [];
+          }
+          paymentsByOrder[payment.order_id].push(payment);
+        });
 
         if (!active) {
           return;
@@ -59,7 +57,7 @@ export function useOrderPayments(token: string) {
 
         setState({
           orders,
-          paymentsByOrder: Object.fromEntries(paymentResults),
+          paymentsByOrder,
           isLoading: false,
           error: ""
         });

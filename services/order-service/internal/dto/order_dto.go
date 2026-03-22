@@ -32,6 +32,10 @@ type UpdateOrderStatusRequest struct {
 	Message string `json:"message" validate:"omitempty,max=255"`
 }
 
+type AdminCancelOrderRequest struct {
+	Message string `json:"message" validate:"omitempty,max=255"`
+}
+
 type CreateCouponRequest struct {
 	Code           string     `json:"code" validate:"required,min=3,max=64"`
 	Description    string     `json:"description" validate:"omitempty,max=255"`

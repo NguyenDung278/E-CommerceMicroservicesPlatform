@@ -60,7 +60,10 @@ func (s *UserService) ResendVerificationEmail(ctx context.Context, userID string
 		return err
 	}
 
-	return s.sendVerificationEmail(user, rawToken)
+	// Resend is best-effort so a transient SMTP failure does not block the API
+	// response or leak delivery health to the client.
+	_ = s.sendVerificationEmail(user, rawToken)
+	return nil
 }
 
 func (s *UserService) ForgotPassword(ctx context.Context, emailAddress string) error {
@@ -85,7 +88,9 @@ func (s *UserService) ForgotPassword(ctx context.Context, emailAddress string) e
 		return err
 	}
 
-	return s.sendPasswordResetEmail(user, rawToken)
+	// Forgot-password should stay success-shaped even when email delivery is down.
+	_ = s.sendPasswordResetEmail(user, rawToken)
+	return nil
 }
 
 func (s *UserService) ResetPassword(ctx context.Context, token, newPassword string) error {

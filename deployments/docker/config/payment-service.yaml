@@ -16,3 +16,7 @@ rabbitmq:
 
 jwt:
   expiration: 24
+
+payment_gateway:
+  webhook_secret: "dev-momo-secret"
+  momo_return_url: "http://localhost:4173/payments"

@@ -72,6 +72,10 @@ func (r *fakeOrderRepo) GetAdminReport(_ context.Context, _ time.Time, _ time.Ti
 	return &model.AdminReport{WindowDays: windowDays}, nil
 }
 
+func (r *fakeOrderRepo) ListPopularProducts(_ context.Context, _ int) ([]model.ProductPopularity, error) {
+	return []model.ProductPopularity{}, nil
+}
+
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {

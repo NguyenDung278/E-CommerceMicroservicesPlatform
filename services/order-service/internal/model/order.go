@@ -81,6 +81,11 @@ type SalesTopProduct struct {
 	Revenue   float64 `json:"revenue"`
 }
 
+type ProductPopularity struct {
+	ProductID string `json:"product_id"`
+	Quantity  int    `json:"quantity"`
+}
+
 type SalesStatusBreakdown struct {
 	Status  string  `json:"status"`
 	Orders  int     `json:"orders"`

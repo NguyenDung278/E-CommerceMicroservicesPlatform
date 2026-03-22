@@ -20,6 +20,9 @@ func NewOrderHandler(p *proxy.ServiceProxy) *OrderHandler {
 }
 
 func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
+	catalog := e.Group("/api/v1/catalog")
+	catalog.GET("/popularity", h.forwardRequest)
+
 	orders := e.Group("/api/v1/orders")
 	orders.Use(appmw.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.forwardRequest)
@@ -39,6 +42,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminOrders.GET("", h.forwardRequest)
 	adminOrders.GET("/:id/events", h.forwardRequest)
 	adminOrders.GET("/:id", h.forwardRequest)
+	adminOrders.PUT("/:id/cancel", h.forwardRequest)
 	adminOrders.PUT("/:id/status", h.forwardRequest)
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")

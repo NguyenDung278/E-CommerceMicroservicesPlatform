@@ -15,7 +15,7 @@ type ProductRepository interface {
 	GetByID(ctx context.Context, id string) (*model.Product, error)
 	Update(ctx context.Context, product *model.Product) error
 	Delete(ctx context.Context, id string) error
-	List(ctx context.Context, offset, limit int, category, brand, tag, status, search string) ([]*model.Product, int64, error)
+	List(ctx context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sort string) ([]*model.Product, int64, error)
 	UpdateStock(ctx context.Context, id string, quantity int) error
 	RestoreStock(ctx context.Context, id string, quantity int) error
 	ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error)
@@ -125,6 +125,8 @@ func (r *postgresProductRepository) List(
 	ctx context.Context,
 	offset, limit int,
 	category, brand, tag, status, search string,
+	minPrice, maxPrice float64,
+	size, color, sort string,
 ) ([]*model.Product, int64, error) {
 	baseQuery := `FROM products WHERE 1=1`
 	args := []interface{}{}
@@ -157,6 +159,34 @@ func (r *postgresProductRepository) List(
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
+	if minPrice > 0 {
+		baseQuery += fmt.Sprintf(` AND price >= $%d`, argIdx)
+		args = append(args, minPrice)
+		argIdx++
+	}
+	if maxPrice > 0 {
+		baseQuery += fmt.Sprintf(` AND price <= $%d`, argIdx)
+		args = append(args, maxPrice)
+		argIdx++
+	}
+	if size != "" {
+		baseQuery += fmt.Sprintf(` AND EXISTS (
+			SELECT 1
+			FROM jsonb_array_elements(variants) AS variant
+			WHERE lower(COALESCE(variant->>'size', '')) = lower($%d)
+		)`, argIdx)
+		args = append(args, size)
+		argIdx++
+	}
+	if color != "" {
+		baseQuery += fmt.Sprintf(` AND EXISTS (
+			SELECT 1
+			FROM jsonb_array_elements(variants) AS variant
+			WHERE lower(COALESCE(variant->>'color', '')) = lower($%d)
+		)`, argIdx)
+		args = append(args, color)
+		argIdx++
+	}
 
 	var total int64
 	countQuery := `SELECT COUNT(*) ` + baseQuery
@@ -164,12 +194,24 @@ func (r *postgresProductRepository) List(
 		return nil, 0, fmt.Errorf("failed to count products: %w", err)
 	}
 
+	orderByClause := "created_at DESC"
+	switch sort {
+	case "price_asc":
+		orderByClause = "price ASC, created_at DESC"
+	case "price_desc":
+		orderByClause = "price DESC, created_at DESC"
+	case "popular":
+		// Until we add cross-service sales signals, keep "popular" deterministic
+		// by ranking high-stock active products first, then newest arrivals.
+		orderByClause = "stock DESC, created_at DESC"
+	}
+
 	selectQuery := fmt.Sprintf(`
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		%s
-		ORDER BY created_at DESC
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, baseQuery, argIdx, argIdx+1)
+	`, baseQuery, orderByClause, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := r.db.QueryContext(ctx, selectQuery, args...)

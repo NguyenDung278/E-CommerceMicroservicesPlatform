@@ -4,7 +4,7 @@ import { FormField } from "../components/FormField";
 import { ProductCard } from "../components/ProductCard";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../lib/api";
-import type { AdminOrderReport, Coupon, Product, ProductVariant, UserProfile } from "../types/api";
+import type { AdminOrderReport, Coupon, Order, Payment, Product, ProductVariant, UserProfile } from "../types/api";
 import { formatCurrency, formatDateTime } from "../utils/format";
 import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "../utils/sanitize";
 import { validateProduct } from "../utils/validation";
@@ -13,6 +13,8 @@ type VariantFormRow = {
   id: string;
   label: string;
   sku: string;
+  size: string;
+  color: string;
   price: string;
   stock: string;
 };
@@ -56,6 +58,8 @@ function createEmptyVariant(): VariantFormRow {
     id: `variant-${Math.random().toString(36).slice(2, 10)}`,
     label: "",
     sku: "",
+    size: "",
+    color: "",
     price: "",
     stock: "0"
   };
@@ -95,15 +99,20 @@ export function AdminPage() {
   const { token, isAdmin } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [paymentsByOrder, setPaymentsByOrder] = useState<Record<string, Payment[]>>({});
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [report, setReport] = useState<AdminOrderReport | null>(null);
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
+  const [busyOrderId, setBusyOrderId] = useState("");
+  const [busyRefundId, setBusyRefundId] = useState("");
   const [busyUserId, setBusyUserId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [isCreatingCoupon, setIsCreatingCoupon] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [editingProductId, setEditingProductId] = useState("");
   const [reportDays, setReportDays] = useState(30);
@@ -123,6 +132,7 @@ export function AdminPage() {
 
     void loadReport(reportDays);
     void loadCoupons();
+    void loadAdminOrders();
     if (isAdmin) {
       void loadUsers();
     }
@@ -179,6 +189,35 @@ export function AdminPage() {
       setFeedback(getErrorMessage(reason));
     } finally {
       setIsLoadingUsers(false);
+    }
+  }
+
+  async function loadAdminOrders() {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setIsLoadingOrders(true);
+      const response = await api.listAdminOrders(token, { limit: 8 });
+      setOrders(response.data);
+
+      const paymentEntries = await Promise.all(
+        response.data.map(async (order) => {
+          try {
+            const paymentResponse = await api.listAdminPaymentsByOrder(token, order.id);
+            return [order.id, paymentResponse.data] as const;
+          } catch {
+            return [order.id, []] as const;
+          }
+        })
+      );
+
+      setPaymentsByOrder(Object.fromEntries(paymentEntries));
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsLoadingOrders(false);
     }
   }
 
@@ -380,6 +419,44 @@ export function AdminPage() {
     }
   }
 
+  async function handleManualCancel(order: Order) {
+    if (!token) {
+      setFeedback("Bạn cần JWT staff/admin để hủy đơn.");
+      return;
+    }
+
+    try {
+      setBusyOrderId(order.id);
+      const response = await api.cancelAdminOrder(token, order.id, {
+        message: "Order cancelled manually from admin dashboard."
+      });
+      setOrders((current) => current.map((item) => (item.id === order.id ? response.data : item)));
+      setFeedback(`Đã hủy thủ công đơn ${order.id}.`);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyOrderId("");
+    }
+  }
+
+  async function handleRefund(payment: Payment) {
+    if (!token) {
+      setFeedback("Bạn cần JWT staff/admin để hoàn tiền.");
+      return;
+    }
+
+    try {
+      setBusyRefundId(payment.id);
+      await api.refundPayment(token, payment.id);
+      await loadAdminOrders();
+      setFeedback(`Đã tạo refund cho giao dịch ${payment.id}.`);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyRefundId("");
+    }
+  }
+
   function resetForm() {
     setForm(createDefaultForm());
     setEditingProductId("");
@@ -557,6 +634,92 @@ export function AdminPage() {
               </div>
             </>
           ) : null}
+        </div>
+
+        <div className="card admin-report-subcard">
+          <div className="section-heading">
+            <div>
+              <h2>Đơn gần đây</h2>
+              <p className="history-subtle">
+                Staff/Admin có thể hủy thủ công đơn `pending` / `paid` và refund full cho các giao dịch charge đã completed.
+              </p>
+            </div>
+          </div>
+
+          {isLoadingOrders ? <div className="page-state">Đang tải đơn gần đây...</div> : null}
+
+          <div className="order-list">
+            {orders.map((order) => {
+              const payments = paymentsByOrder[order.id] ?? [];
+              return (
+                <article className="coupon-admin-card" key={order.id}>
+                  <div className="coupon-admin-head">
+                    <div>
+                      <strong>{order.id}</strong>
+                      <p className="history-subtle">
+                        User: {order.user_id} • {formatDateTime(order.created_at)}
+                      </p>
+                    </div>
+                    <span className="status-pill status-pill-neutral">{order.status}</span>
+                  </div>
+
+                  <div className="coupon-admin-grid">
+                    <div>
+                      <span>Tổng tiền</span>
+                      <strong>{formatCurrency(order.total_price)}</strong>
+                    </div>
+                    <div>
+                      <span>Vận chuyển</span>
+                      <strong>{order.shipping_method}</strong>
+                    </div>
+                  </div>
+
+                  {(order.status === "pending" || order.status === "paid") ? (
+                    <div className="history-actions">
+                      <button
+                        className="ghost-button"
+                        disabled={busyOrderId === order.id}
+                        type="button"
+                        onClick={() => void handleManualCancel(order)}
+                      >
+                        {busyOrderId === order.id ? "Đang hủy..." : "Hủy thủ công"}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="order-list">
+                    {payments.map((payment) => (
+                      <div className="coupon-preview-card" key={payment.id}>
+                        <strong>{payment.id}</strong>
+                        <span>
+                          {payment.payment_method} • {payment.transaction_type} • {payment.status}
+                        </span>
+                        <span>{formatCurrency(payment.amount)}</span>
+                        {payment.transaction_type === "charge" && payment.status === "completed" ? (
+                          <button
+                            className="ghost-button"
+                            disabled={busyRefundId === payment.id}
+                            type="button"
+                            onClick={() => void handleRefund(payment)}
+                          >
+                            {busyRefundId === payment.id ? "Đang refund..." : "Refund full"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+
+                    {payments.length === 0 ? (
+                      <p className="history-empty">Chưa có payment nào cho đơn này.</p>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+
+            {!isLoadingOrders && orders.length === 0 ? (
+              <p className="history-empty">Chưa có đơn hàng nào để vận hành.</p>
+            ) : null}
+          </div>
         </div>
 
         {isAdmin ? (
@@ -1019,6 +1182,16 @@ export function AdminPage() {
                       onChange={(event) => updateVariantRow(variant.id, "sku", event.target.value)}
                     />
                     <input
+                      placeholder="Size"
+                      value={variant.size}
+                      onChange={(event) => updateVariantRow(variant.id, "size", event.target.value)}
+                    />
+                    <input
+                      placeholder="Màu"
+                      value={variant.color}
+                      onChange={(event) => updateVariantRow(variant.id, "color", event.target.value)}
+                    />
+                    <input
                       min="0"
                       placeholder="Giá"
                       step="0.01"
@@ -1114,6 +1287,8 @@ function parseVariantRows(rows: VariantFormRow[]) {
       return {
         label,
         sku,
+        size: sanitizeText(row.size),
+        color: sanitizeText(row.color),
         price,
         stock: Number.isNaN(stock) ? 0 : stock
       } satisfies ProductVariant;
@@ -1127,6 +1302,8 @@ function toVariantFormRow(variant: ProductVariant): VariantFormRow {
     id: `variant-${variant.sku}`,
     label: variant.label,
     sku: variant.sku,
+    size: variant.size ?? "",
+    color: variant.color ?? "",
     price: String(variant.price),
     stock: String(variant.stock)
   };

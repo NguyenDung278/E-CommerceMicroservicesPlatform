@@ -25,8 +25,19 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	payments := e.Group("/api/v1/payments")
 	payments.Use(appmw.JWTAuth(jwtSecret))
 	payments.POST("", h.forwardRequest)
+	payments.GET("/history", h.forwardRequest)
 	payments.GET("/:id", h.forwardRequest)
 	payments.GET("/order/:orderId", h.forwardRequest)
+	payments.GET("/order/:orderId/history", h.forwardRequest)
+
+	adminPayments := e.Group("/api/v1/admin/payments")
+	adminPayments.Use(appmw.JWTAuth(jwtSecret))
+	adminPayments.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
+	adminPayments.GET("/order/:orderId/history", h.forwardRequest)
+	adminPayments.POST("/:id/refunds", h.forwardRequest)
+
+	webhooks := e.Group("/api/v1/payments/webhooks")
+	webhooks.POST("/momo", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the payment service

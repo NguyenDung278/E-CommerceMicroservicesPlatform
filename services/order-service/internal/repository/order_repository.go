@@ -32,6 +32,7 @@ type OrderRepository interface {
 	ListCoupons(ctx context.Context) ([]*model.Coupon, error)
 	GetCouponByCode(ctx context.Context, code string) (*model.Coupon, error)
 	GetAdminReport(ctx context.Context, from time.Time, to time.Time, windowDays int) (*model.AdminReport, error)
+	ListPopularProducts(ctx context.Context, limit int) ([]model.ProductPopularity, error)
 }
 
 type postgresOrderRepository struct {
@@ -498,6 +499,40 @@ func (r *postgresOrderRepository) GetAdminReport(
 	}
 
 	return report, nil
+}
+
+func (r *postgresOrderRepository) ListPopularProducts(ctx context.Context, limit int) ([]model.ProductPopularity, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT oi.product_id, COALESCE(SUM(oi.quantity), 0) AS quantity
+		FROM order_items oi
+		INNER JOIN orders o ON o.id = oi.order_id
+		WHERE o.status IN ('paid', 'shipped', 'delivered')
+		GROUP BY oi.product_id
+		ORDER BY quantity DESC, oi.product_id ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list popular products: %w", err)
+	}
+	defer rows.Close()
+
+	popularity := make([]model.ProductPopularity, 0, limit)
+	for rows.Next() {
+		item := model.ProductPopularity{}
+		if err := rows.Scan(&item.ProductID, &item.Quantity); err != nil {
+			return nil, fmt.Errorf("failed to scan product popularity: %w", err)
+		}
+		popularity = append(popularity, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate product popularity: %w", err)
+	}
+
+	return popularity, nil
 }
 
 type rowScanner interface {

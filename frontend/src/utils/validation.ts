@@ -188,6 +188,7 @@ export function validateOrder(values: { productId: string; quantity: string }) {
 export function validatePayment(values: {
   orderId: string;
   paymentMethod: string;
+  amount?: string;
 }) {
   const errors: string[] = [];
 
@@ -196,6 +197,9 @@ export function validatePayment(values: {
   }
   if (!sanitizeText(values.paymentMethod)) {
     errors.push("Bạn chưa chọn phương thức thanh toán.");
+  }
+  if (values.amount && toPositiveFloat(values.amount) <= 0) {
+    errors.push("Số tiền thanh toán phải lớn hơn 0.");
   }
 
   return errors;

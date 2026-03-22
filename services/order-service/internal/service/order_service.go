@@ -29,6 +29,7 @@ var (
 	ErrProductUnavailable      = errors.New("product is unavailable")
 	ErrInsufficientStock       = errors.New("insufficient stock")
 	ErrOrderNotCancellable     = errors.New("only pending orders can be cancelled")
+	ErrAdminCancelNotAllowed   = errors.New("only pending or paid orders can be cancelled manually")
 	ErrInvalidOrderStatus      = errors.New("invalid order status")
 	ErrCouponAlreadyExists     = errors.New("coupon code already exists")
 	ErrCouponNotFound          = repository.ErrCouponNotFound
@@ -210,7 +211,7 @@ func (s *OrderService) GetOrderTimeline(ctx context.Context, orderID, actorID, a
 	if order == nil {
 		return nil, ErrOrderNotFound
 	}
-	if !strings.EqualFold(actorRole, "admin") && order.UserID != actorID {
+	if !isOperatorRole(actorRole) && order.UserID != actorID {
 		return nil, ErrOrderNotFound
 	}
 	return s.repo.GetEventsByOrderID(ctx, orderID)
@@ -260,28 +261,29 @@ func (s *OrderService) CancelOrder(ctx context.Context, orderID, userID string) 
 		return ErrOrderNotCancellable
 	}
 
-	// Update status to cancelled.
-	if err := s.repo.UpdateStatus(ctx, orderID, model.OrderStatusCancelled, userID, "user", "Order cancelled by user"); err != nil {
+	return s.cancelOrderWithActor(ctx, order, userID, "user", "Order cancelled by user")
+}
+
+func (s *OrderService) CancelOrderAsAdmin(ctx context.Context, orderID, actorID, actorRole, message string) error {
+	order, err := s.repo.GetByID(ctx, orderID)
+	if err != nil {
 		return err
 	}
-
-	// Restore stock for each item.
-	for _, item := range order.Items {
-		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
-			// Log the error but don't fail the cancellation — stock restore is best-effort.
-			// An out-of-band reconciliation job can fix discrepancies.
-			s.log.Error("failed to restore stock for product",
-				zap.String("product_id", item.ProductID),
-				zap.Int("quantity", item.Quantity),
-				zap.Error(err),
-			)
-		}
+	if order == nil {
+		return ErrOrderNotFound
 	}
 
-	// Publish cancellation event.
-	s.publishCancelEvent(order)
+	switch order.Status {
+	case model.OrderStatusPending, model.OrderStatusPaid:
+	default:
+		return ErrAdminCancelNotAllowed
+	}
 
-	return nil
+	if strings.TrimSpace(message) == "" {
+		message = "Order cancelled manually by staff"
+	}
+
+	return s.cancelOrderWithActor(ctx, order, actorID, actorRole, message)
 }
 
 // publishCancelEvent publishes an order.cancelled event to RabbitMQ.
@@ -376,6 +378,10 @@ func (s *OrderService) GetAdminReport(ctx context.Context, windowDays int) (*mod
 	from := now.AddDate(0, 0, -windowDays)
 
 	return s.repo.GetAdminReport(ctx, from, now, windowDays)
+}
+
+func (s *OrderService) ListPopularProducts(ctx context.Context, limit int) ([]model.ProductPopularity, error) {
+	return s.repo.ListPopularProducts(ctx, limit)
 }
 
 func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderRequest) (*pricedOrderQuote, error) {
@@ -606,6 +612,34 @@ func normalizeCouponCode(code string) string {
 
 func roundCurrency(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
+	if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message); err != nil {
+		return err
+	}
+
+	for _, item := range order.Items {
+		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
+			s.log.Error("failed to restore stock for product",
+				zap.String("product_id", item.ProductID),
+				zap.Int("quantity", item.Quantity),
+				zap.Error(err),
+			)
+		}
+	}
+
+	s.publishCancelEvent(order)
+	return nil
+}
+
+func isOperatorRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "admin", "staff":
+		return true
+	default:
+		return false
+	}
 }
 
 func isValidOrderStatus(status model.OrderStatus) bool {

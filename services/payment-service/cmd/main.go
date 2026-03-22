@@ -65,7 +65,14 @@ func main() {
 
 	orderClient := client.NewOrderClient(cfg.Services.OrderService)
 	paymentRepo := repository.NewPaymentRepository(db)
-	paymentService := service.NewPaymentService(paymentRepo, orderClient, amqpCh, log)
+	paymentService := service.NewPaymentService(
+		paymentRepo,
+		orderClient,
+		amqpCh,
+		log,
+		cfg.PaymentGateway.WebhookSecret,
+		cfg.PaymentGateway.MomoReturnURL,
+	)
 	paymentHandler := handler.NewPaymentHandler(paymentService)
 
 	e := echo.New()

@@ -50,6 +50,8 @@ export type Product = {
 export type ProductVariant = {
   sku: string;
   label: string;
+  size?: string;
+  color?: string;
   price: number;
   stock: number;
 };
@@ -155,11 +157,27 @@ export type Payment = {
   id: string;
   order_id: string;
   user_id: string;
+  order_total: number;
   amount: number;
   status: string;
+  transaction_type: string;
+  reference_payment_id?: string;
   payment_method: string;
+  gateway_provider: string;
+  gateway_transaction_id?: string;
+  gateway_order_id?: string;
+  checkout_url?: string;
+  signature_verified: boolean;
+  failure_reason?: string;
+  net_paid_amount?: number;
+  outstanding_amount?: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductPopularity = {
+  product_id: string;
+  quantity: number;
 };
 
 export type UploadedProductImages = {

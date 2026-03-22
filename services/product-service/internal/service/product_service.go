@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrProductNotFound        = errors.New("product not found")
-	ErrInvalidStatus          = errors.New("invalid product status")
+	ErrProductNotFound         = errors.New("product not found")
+	ErrInvalidStatus           = errors.New("invalid product status")
 	ErrImageStorageUnavailable = errors.New("image storage unavailable")
 )
 
@@ -184,6 +184,11 @@ func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) 
 		strings.TrimSpace(query.Tag),
 		strings.TrimSpace(query.Status),
 		strings.TrimSpace(query.Search),
+		query.MinPrice,
+		query.MaxPrice,
+		strings.TrimSpace(query.Size),
+		strings.TrimSpace(query.Color),
+		normalizeSort(query.Sort),
 	)
 }
 
@@ -247,6 +252,8 @@ func normalizeVariants(variants []dto.ProductVariantRequest) []model.ProductVari
 		normalized = append(normalized, model.ProductVariant{
 			SKU:   strings.TrimSpace(variant.SKU),
 			Label: strings.TrimSpace(variant.Label),
+			Size:  strings.TrimSpace(variant.Size),
+			Color: strings.TrimSpace(variant.Color),
 			Price: variant.Price,
 			Stock: variant.Stock,
 		})
@@ -305,4 +312,13 @@ func resolvePrimaryImage(urls []string) string {
 	}
 
 	return urls[0]
+}
+
+func normalizeSort(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "price_asc", "price_desc", "popular":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "latest"
+	}
 }

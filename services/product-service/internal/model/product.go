@@ -13,6 +13,8 @@ const (
 type ProductVariant struct {
 	SKU   string  `json:"sku"`
 	Label string  `json:"label"`
+	Size  string  `json:"size,omitempty"`
+	Color string  `json:"color,omitempty"`
 	Price float64 `json:"price"`
 	Stock int     `json:"stock"`
 }

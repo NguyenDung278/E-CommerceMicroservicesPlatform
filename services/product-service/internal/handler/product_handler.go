@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"math"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -125,6 +126,15 @@ func (h *ProductHandler) Delete(c echo.Context) error {
 func (h *ProductHandler) List(c echo.Context) error {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	minPrice, _ := strconv.ParseFloat(c.QueryParam("min_price"), 64)
+	maxPrice, _ := strconv.ParseFloat(c.QueryParam("max_price"), 64)
+
+	if minPrice < 0 || math.IsNaN(minPrice) {
+		minPrice = 0
+	}
+	if maxPrice < 0 || math.IsNaN(maxPrice) {
+		maxPrice = 0
+	}
 
 	query := dto.ListProductsQuery{
 		Page:     page,
@@ -134,6 +144,11 @@ func (h *ProductHandler) List(c echo.Context) error {
 		Tag:      c.QueryParam("tag"),
 		Status:   c.QueryParam("status"),
 		Search:   c.QueryParam("search"),
+		MinPrice: minPrice,
+		MaxPrice: maxPrice,
+		Size:     c.QueryParam("size"),
+		Color:    c.QueryParam("color"),
+		Sort:     c.QueryParam("sort"),
 	}
 
 	products, total, err := h.productService.List(c.Request().Context(), query)

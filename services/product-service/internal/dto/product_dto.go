@@ -3,6 +3,8 @@ package dto
 type ProductVariantRequest struct {
 	SKU   string  `json:"sku" validate:"required,min=1"`
 	Label string  `json:"label" validate:"required,min=1"`
+	Size  string  `json:"size"`
+	Color string  `json:"color"`
 	Price float64 `json:"price" validate:"gt=0"`
 	Stock int     `json:"stock" validate:"gte=0"`
 }
@@ -45,11 +47,16 @@ type UploadProductImagesResponse struct {
 
 // ListProductsQuery holds query parameters for listing products.
 type ListProductsQuery struct {
-	Page     int    `query:"page"`
-	Limit    int    `query:"limit"`
-	Category string `query:"category"`
-	Brand    string `query:"brand"`
-	Tag      string `query:"tag"`
-	Status   string `query:"status"`
-	Search   string `query:"search"`
+	Page     int     `query:"page"`
+	Limit    int     `query:"limit"`
+	Category string  `query:"category"`
+	Brand    string  `query:"brand"`
+	Tag      string  `query:"tag"`
+	Status   string  `query:"status"`
+	Search   string  `query:"search"`
+	MinPrice float64 `query:"min_price"`
+	MaxPrice float64 `query:"max_price"`
+	Size     string  `query:"size"`
+	Color    string  `query:"color"`
+	Sort     string  `query:"sort"`
 }

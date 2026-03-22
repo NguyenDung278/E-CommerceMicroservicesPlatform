@@ -5,7 +5,7 @@ import { formatCurrency, formatDateTime, formatStatusLabel } from "../utils/form
 
 type OrderHistoryListProps = {
   orders: Order[];
-  paymentsByOrder: Record<string, Payment | null>;
+  paymentsByOrder: Record<string, Payment[]>;
   emptyTitle?: string;
   emptyDescription?: string;
 };
@@ -41,7 +41,7 @@ export function OrderHistoryList({
   return (
     <div className="history-grid">
       {orders.map((order) => {
-        const payment = paymentsByOrder[order.id];
+        const payment = paymentsByOrder[order.id]?.[0] ?? null;
         const remainingItems = order.items.length - 2;
 
         return (

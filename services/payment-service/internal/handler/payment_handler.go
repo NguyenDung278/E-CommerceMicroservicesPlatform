@@ -25,8 +25,19 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	payments := e.Group("/api/v1/payments")
 	payments.Use(middleware.JWTAuth(jwtSecret))
 	payments.POST("", h.ProcessPayment)
+	payments.GET("/history", h.ListPaymentHistory)
 	payments.GET("/:id", h.GetPayment)
 	payments.GET("/order/:orderId", h.GetPaymentByOrder)
+	payments.GET("/order/:orderId/history", h.ListPaymentsByOrder)
+
+	adminPayments := e.Group("/api/v1/admin/payments")
+	adminPayments.Use(middleware.JWTAuth(jwtSecret))
+	adminPayments.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	adminPayments.GET("/order/:orderId/history", h.ListPaymentsByOrderAdmin)
+	adminPayments.POST("/:id/refunds", h.RefundPayment)
+
+	webhooks := e.Group("/api/v1/payments/webhooks")
+	webhooks.POST("/momo", h.HandleMomoWebhook)
 }
 
 // ProcessPayment handles POST /api/v1/payments
@@ -51,11 +62,17 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 		req,
 	)
 	if err != nil {
-		if errors.Is(err, service.ErrDuplicatePayment) {
-			return response.Error(c, http.StatusConflict, "duplicate", "payment already exists for this order")
-		}
 		if errors.Is(err, service.ErrOrderNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "order not found")
+		}
+		if errors.Is(err, service.ErrOrderNotPayable) {
+			return response.Error(c, http.StatusBadRequest, "not payable", "order is not payable in its current status")
+		}
+		if errors.Is(err, service.ErrPaymentAlreadySettled) {
+			return response.Error(c, http.StatusConflict, "already settled", "order is already fully paid")
+		}
+		if errors.Is(err, service.ErrInvalidPaymentAmount) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "payment amount must be positive and not exceed the outstanding balance")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "payment processing failed")
 	}
@@ -86,4 +103,80 @@ func (h *PaymentHandler) GetPaymentByOrder(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	return response.Success(c, http.StatusOK, "payment retrieved", payment)
+}
+
+func (h *PaymentHandler) ListPaymentsByOrder(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	payments, err := h.paymentService.ListPaymentsByOrder(c.Request().Context(), c.Param("orderId"), claims.UserID)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	return response.Success(c, http.StatusOK, "payments retrieved", payments)
+}
+
+func (h *PaymentHandler) ListPaymentHistory(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	payments, err := h.paymentService.ListPaymentHistory(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	return response.Success(c, http.StatusOK, "payments retrieved", payments)
+}
+
+func (h *PaymentHandler) RefundPayment(c echo.Context) error {
+	var req dto.RefundPaymentRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), "", req)
+	if err != nil {
+		if errors.Is(err, service.ErrPaymentNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "payment not found")
+		}
+		if errors.Is(err, service.ErrRefundNotAllowed) {
+			return response.Error(c, http.StatusBadRequest, "refund not allowed", "this payment cannot be refunded")
+		}
+		if errors.Is(err, service.ErrRefundAmountExceeded) {
+			return response.Error(c, http.StatusBadRequest, "refund exceeded", "refund amount exceeds refundable balance")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "refund failed")
+	}
+
+	return response.Success(c, http.StatusCreated, "refund processed", refund)
+}
+
+func (h *PaymentHandler) ListPaymentsByOrderAdmin(c echo.Context) error {
+	payments, err := h.paymentService.ListPaymentsByOrderAdmin(c.Request().Context(), c.Param("orderId"))
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+
+	return response.Success(c, http.StatusOK, "payments retrieved", payments)
+}
+
+func (h *PaymentHandler) HandleMomoWebhook(c echo.Context) error {
+	var req dto.MomoWebhookRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+
+	payment, err := h.paymentService.HandleMomoWebhook(c.Request().Context(), req)
+	if err != nil {
+		if errors.Is(err, service.ErrPaymentNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "payment not found")
+		}
+		if errors.Is(err, service.ErrInvalidWebhookSignature) {
+			return response.Error(c, http.StatusUnauthorized, "signature invalid", "invalid webhook signature")
+		}
+		if errors.Is(err, service.ErrPaymentAmountMismatch) {
+			return response.Error(c, http.StatusBadRequest, "amount mismatch", "payment amount does not match pending request")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "webhook processing failed")
+	}
+
+	return response.Success(c, http.StatusOK, "webhook processed", payment)
 }

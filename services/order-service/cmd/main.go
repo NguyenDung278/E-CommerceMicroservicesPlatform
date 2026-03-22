@@ -50,6 +50,7 @@ func main() {
 
 	// Connect to RabbitMQ.
 	var amqpCh *amqp.Channel
+	var amqpConsumerCh *amqp.Channel
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL())
 	if err != nil {
 		log.Warn("RabbitMQ not available, events will be skipped", zap.Error(err))
@@ -62,6 +63,12 @@ func main() {
 			defer amqpCh.Close()
 			if err := service.SetupExchange(amqpCh); err != nil {
 				log.Warn("failed to setup exchange", zap.Error(err))
+			}
+			amqpConsumerCh, err = conn.Channel()
+			if err != nil {
+				log.Warn("failed to open RabbitMQ consumer channel", zap.Error(err))
+			} else {
+				defer amqpConsumerCh.Close()
 			}
 			log.Info("connected to RabbitMQ")
 		}
@@ -77,6 +84,11 @@ func main() {
 	orderRepo := repository.NewOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient)
 	orderHandler := handler.NewOrderHandler(orderService)
+	if amqpConsumerCh != nil {
+		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {
+			log.Warn("failed to start payment event consumer", zap.Error(err))
+		}
+	}
 
 	e := echo.New()
 	e.HideBanner = true
