@@ -66,6 +66,9 @@ func (r *redisCartRepository) Get(ctx context.Context, userID string) (*model.Ca
 	if err := json.Unmarshal(data, &cart); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cart: %w", err)
 	}
+	if err := r.client.Expire(ctx, r.cartKey(userID), r.ttl).Err(); err != nil {
+		return nil, fmt.Errorf("failed to refresh cart ttl: %w", err)
+	}
 	return &cart, nil
 }
 

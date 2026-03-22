@@ -8,7 +8,7 @@ import type { OrderPreview } from "../types/api";
 import { formatCurrency } from "../utils/format";
 
 export function CartPage() {
-  const { token } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const { cart, clearCart, error, removeItem, updateItem, isLoading } = useCart();
   const [couponCode, setCouponCode] = useState("");
   const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
@@ -108,6 +108,11 @@ export function CartPage() {
         </div>
 
         {error ? <div className="feedback feedback-error">{error}</div> : null}
+        {!isAuthenticated && cart.items.length > 0 ? (
+          <div className="feedback feedback-info">
+            Đây là giỏ hàng dành cho khách vãng lai trên thiết bị hiện tại. Khi bạn đăng nhập, hệ thống sẽ tự động merge các món này vào tài khoản.
+          </div>
+        ) : null}
 
         {isLoading ? <div className="page-state">Đang tải giỏ hàng...</div> : null}
 

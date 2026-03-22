@@ -67,6 +67,29 @@ export type Cart = {
   total: number;
 };
 
+export type Address = {
+  id: string;
+  user_id: string;
+  recipient_name: string;
+  phone: string;
+  street: string;
+  ward?: string;
+  district: string;
+  city: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ShippingAddress = {
+  recipient_name: string;
+  phone: string;
+  street: string;
+  ward?: string;
+  district: string;
+  city: string;
+};
+
 export type OrderItem = {
   id: string;
   order_id: string;
@@ -83,6 +106,9 @@ export type Order = {
   subtotal_price: number;
   discount_amount: number;
   coupon_code?: string;
+  shipping_method: string;
+  shipping_fee: number;
+  shipping_address?: ShippingAddress;
   total_price: number;
   items: OrderItem[];
   created_at: string;
@@ -94,6 +120,8 @@ export type OrderPreview = {
   discount_amount: number;
   coupon_code?: string;
   coupon_description?: string;
+  shipping_method: string;
+  shipping_fee: number;
   total_price: number;
 };
 

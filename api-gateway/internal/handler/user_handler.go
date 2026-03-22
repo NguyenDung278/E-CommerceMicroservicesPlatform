@@ -38,6 +38,11 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.PUT("/profile", h.forwardRequest)
 	users.PUT("/password", h.forwardRequest)
 	users.POST("/verify-email/resend", h.forwardRequest)
+	users.POST("/addresses", h.forwardRequest)
+	users.GET("/addresses", h.forwardRequest)
+	users.PUT("/addresses/:id", h.forwardRequest)
+	users.DELETE("/addresses/:id", h.forwardRequest)
+	users.PUT("/addresses/:id/default", h.forwardRequest)
 
 	adminUsers := e.Group("/api/v1/admin/users")
 	adminUsers.Use(appmw.JWTAuth(jwtSecret))

@@ -304,6 +304,9 @@ func writePricingError(c echo.Context, err error, fallbackMessage string) error 
 	if errors.Is(err, service.ErrEmptyOrder) {
 		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
 	}
+	if errors.Is(err, service.ErrInvalidShippingMethod) || errors.Is(err, service.ErrShippingAddressRequired) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
+	}
 	if errors.Is(err, service.ErrProductNotFound) {
 		return response.Error(c, http.StatusNotFound, "product not found", err.Error())
 	}

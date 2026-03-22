@@ -23,19 +23,21 @@ import (
 )
 
 var (
-	ErrOrderNotFound       = errors.New("order not found")
-	ErrEmptyOrder          = errors.New("order must contain at least one item")
-	ErrProductNotFound     = errors.New("product not found")
-	ErrProductUnavailable  = errors.New("product is unavailable")
-	ErrInsufficientStock   = errors.New("insufficient stock")
-	ErrOrderNotCancellable = errors.New("only pending orders can be cancelled")
-	ErrInvalidOrderStatus  = errors.New("invalid order status")
-	ErrCouponAlreadyExists = errors.New("coupon code already exists")
-	ErrCouponNotFound      = repository.ErrCouponNotFound
-	ErrCouponInactive      = repository.ErrCouponInactive
-	ErrCouponExpired       = repository.ErrCouponExpired
-	ErrCouponMinimumNotMet = repository.ErrCouponMinimumNotMet
-	ErrCouponUsageLimit    = repository.ErrCouponUsageLimitReached
+	ErrOrderNotFound           = errors.New("order not found")
+	ErrEmptyOrder              = errors.New("order must contain at least one item")
+	ErrProductNotFound         = errors.New("product not found")
+	ErrProductUnavailable      = errors.New("product is unavailable")
+	ErrInsufficientStock       = errors.New("insufficient stock")
+	ErrOrderNotCancellable     = errors.New("only pending orders can be cancelled")
+	ErrInvalidOrderStatus      = errors.New("invalid order status")
+	ErrCouponAlreadyExists     = errors.New("coupon code already exists")
+	ErrCouponNotFound          = repository.ErrCouponNotFound
+	ErrCouponInactive          = repository.ErrCouponInactive
+	ErrCouponExpired           = repository.ErrCouponExpired
+	ErrCouponMinimumNotMet     = repository.ErrCouponMinimumNotMet
+	ErrCouponUsageLimit        = repository.ErrCouponUsageLimitReached
+	ErrInvalidShippingMethod   = errors.New("invalid shipping method")
+	ErrShippingAddressRequired = errors.New("shipping address is required")
 )
 
 // OrderEvent is published to RabbitMQ when an order is created.
@@ -73,6 +75,8 @@ type pricedOrderQuote struct {
 	DiscountAmount    float64
 	CouponCode        string
 	CouponDescription string
+	ShippingMethod    string
+	ShippingFee       float64
 	TotalPrice        float64
 }
 
@@ -82,6 +86,8 @@ func (q *pricedOrderQuote) ToPreview() *model.OrderPreview {
 		DiscountAmount:    q.DiscountAmount,
 		CouponCode:        q.CouponCode,
 		CouponDescription: q.CouponDescription,
+		ShippingMethod:    q.ShippingMethod,
+		ShippingFee:       q.ShippingFee,
 		TotalPrice:        q.TotalPrice,
 	}
 }
@@ -111,16 +117,19 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 
 	now := time.Now()
 	order := &model.Order{
-		ID:             uuid.New().String(),
-		UserID:         userID,
-		Status:         model.OrderStatusPending,
-		Items:          make([]model.OrderItem, 0, len(quote.Items)),
-		CouponCode:     quote.CouponCode,
-		SubtotalPrice:  quote.SubtotalPrice,
-		DiscountAmount: quote.DiscountAmount,
-		TotalPrice:     quote.TotalPrice,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:              uuid.New().String(),
+		UserID:          userID,
+		Status:          model.OrderStatusPending,
+		Items:           make([]model.OrderItem, 0, len(quote.Items)),
+		CouponCode:      quote.CouponCode,
+		SubtotalPrice:   quote.SubtotalPrice,
+		DiscountAmount:  quote.DiscountAmount,
+		ShippingMethod:  quote.ShippingMethod,
+		ShippingFee:     quote.ShippingFee,
+		ShippingAddress: normalizeShippingAddress(req.ShippingAddress),
+		TotalPrice:      quote.TotalPrice,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	for _, item := range quote.Items {
@@ -373,9 +382,17 @@ func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderReques
 	if len(req.Items) == 0 {
 		return nil, ErrEmptyOrder
 	}
+	shippingMethod, err := normalizeShippingMethod(req.ShippingMethod)
+	if err != nil {
+		return nil, err
+	}
+	if shippingMethod != string(model.ShippingMethodPickup) && normalizeShippingAddress(req.ShippingAddress) == nil {
+		return nil, ErrShippingAddressRequired
+	}
 
 	quote := &pricedOrderQuote{
-		Items: make([]pricedOrderItem, 0, len(req.Items)),
+		Items:          make([]pricedOrderItem, 0, len(req.Items)),
+		ShippingMethod: shippingMethod,
 	}
 
 	var subtotal float64
@@ -412,7 +429,8 @@ func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderReques
 	}
 
 	quote.SubtotalPrice = roundCurrency(subtotal)
-	quote.TotalPrice = quote.SubtotalPrice
+	quote.ShippingFee = calculateShippingFee(shippingMethod, quote.SubtotalPrice)
+	quote.TotalPrice = roundCurrency(quote.SubtotalPrice + quote.ShippingFee)
 
 	if strings.TrimSpace(req.CouponCode) == "" {
 		return quote, nil
@@ -426,7 +444,7 @@ func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderReques
 	quote.CouponCode = coupon.Code
 	quote.CouponDescription = strings.TrimSpace(coupon.Description)
 	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, quote.SubtotalPrice))
-	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount)
+	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount + quote.ShippingFee)
 
 	return quote, nil
 }
@@ -530,6 +548,55 @@ func calculateDiscount(coupon *model.Coupon, subtotal float64) float64 {
 		return math.Min(subtotal, coupon.DiscountValue)
 	default:
 		return 0
+	}
+}
+
+func normalizeShippingMethod(value string) (string, error) {
+	method := strings.ToLower(strings.TrimSpace(value))
+	if method == "" {
+		return string(model.ShippingMethodStandard), nil
+	}
+
+	switch model.ShippingMethod(method) {
+	case model.ShippingMethodStandard, model.ShippingMethodExpress, model.ShippingMethodPickup:
+		return method, nil
+	default:
+		return "", ErrInvalidShippingMethod
+	}
+}
+
+func normalizeShippingAddress(address *dto.ShippingAddressRequest) *model.ShippingAddress {
+	if address == nil {
+		return nil
+	}
+
+	normalized := &model.ShippingAddress{
+		RecipientName: strings.TrimSpace(address.RecipientName),
+		Phone:         strings.TrimSpace(address.Phone),
+		Street:        strings.TrimSpace(address.Street),
+		Ward:          strings.TrimSpace(address.Ward),
+		District:      strings.TrimSpace(address.District),
+		City:          strings.TrimSpace(address.City),
+	}
+
+	if normalized.RecipientName == "" || normalized.Phone == "" || normalized.Street == "" || normalized.District == "" || normalized.City == "" {
+		return nil
+	}
+
+	return normalized
+}
+
+func calculateShippingFee(method string, subtotal float64) float64 {
+	switch model.ShippingMethod(method) {
+	case model.ShippingMethodPickup:
+		return 0
+	case model.ShippingMethodExpress:
+		return 14.99
+	default:
+		if subtotal >= 100 {
+			return 0
+		}
+		return 5.99
 	}
 }
 

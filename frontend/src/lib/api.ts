@@ -1,5 +1,6 @@
 import type {
   AdminOrderReport,
+  Address,
   ApiEnvelope,
   AuthPayload,
   Cart,
@@ -146,6 +147,23 @@ export const api = {
   },
   resendVerificationEmail(token: string) {
     return request<null>("/api/v1/users/verify-email/resend", { method: "POST", token });
+  },
+  listAddresses(token: string) {
+    return request<Address[]>("/api/v1/users/addresses", { token });
+  },
+  createAddress(
+    token: string,
+    body: {
+      recipient_name: string;
+      phone: string;
+      street: string;
+      ward?: string;
+      district: string;
+      city: string;
+      is_default?: boolean;
+    }
+  ) {
+    return request<Address>("/api/v1/users/addresses", { method: "POST", token, body });
   },
   listUsers(token: string) {
     return request<UserProfile[]>("/api/v1/admin/users", { token });
@@ -308,6 +326,15 @@ export const api = {
         quantity: number;
       }>;
       coupon_code?: string;
+      shipping_method?: string;
+      shipping_address?: {
+        recipient_name: string;
+        phone: string;
+        street: string;
+        ward?: string;
+        district: string;
+        city: string;
+      };
     }
   ) {
     return request<Order>("/api/v1/orders", { method: "POST", token, body });
@@ -320,6 +347,15 @@ export const api = {
         quantity: number;
       }>;
       coupon_code?: string;
+      shipping_method?: string;
+      shipping_address?: {
+        recipient_name: string;
+        phone: string;
+        street: string;
+        ward?: string;
+        district: string;
+        city: string;
+      };
     }
   ) {
     return request<OrderPreview>("/api/v1/orders/preview", { method: "POST", token, body });

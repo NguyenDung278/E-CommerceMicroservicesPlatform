@@ -62,9 +62,14 @@ func (r *postgresOrderRepository) Create(ctx context.Context, order *model.Order
 	}
 
 	orderQuery := `
-		INSERT INTO orders (id, user_id, status, subtotal_price, discount_amount, coupon_code, total_price, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO orders (
+			id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
+			shipping_recipient_name, shipping_phone, shipping_street, shipping_ward, shipping_district, shipping_city,
+			total_price, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
+	shippingRecipientName, shippingPhone, shippingStreet, shippingWard, shippingDistrict, shippingCity := shippingAddressColumns(order.ShippingAddress)
 	_, err = tx.ExecContext(ctx, orderQuery,
 		order.ID,
 		order.UserID,
@@ -72,6 +77,14 @@ func (r *postgresOrderRepository) Create(ctx context.Context, order *model.Order
 		order.SubtotalPrice,
 		order.DiscountAmount,
 		nullIfEmpty(order.CouponCode),
+		order.ShippingMethod,
+		order.ShippingFee,
+		shippingRecipientName,
+		shippingPhone,
+		shippingStreet,
+		shippingWard,
+		shippingDistrict,
+		shippingCity,
 		order.TotalPrice,
 		order.CreatedAt,
 		order.UpdatedAt,
@@ -110,7 +123,13 @@ func (r *postgresOrderRepository) Create(ctx context.Context, order *model.Order
 }
 
 func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*model.Order, error) {
-	orderQuery := `SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, total_price, created_at, updated_at FROM orders WHERE id = $1`
+	orderQuery := `
+		SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
+		       shipping_recipient_name, shipping_phone, shipping_street, shipping_ward, shipping_district, shipping_city,
+		       total_price, created_at, updated_at
+		FROM orders
+		WHERE id = $1
+	`
 
 	order, err := scanOrder(r.db.QueryRowContext(ctx, orderQuery, id))
 	if err == sql.ErrNoRows {
@@ -142,7 +161,14 @@ func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*mode
 }
 
 func (r *postgresOrderRepository) GetByUserID(ctx context.Context, userID string) ([]*model.Order, error) {
-	query := `SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, total_price, created_at, updated_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC`
+	query := `
+		SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
+		       shipping_recipient_name, shipping_phone, shipping_street, shipping_ward, shipping_district, shipping_city,
+		       total_price, created_at, updated_at
+		FROM orders
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`
 
 	rows, err := r.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -197,7 +223,9 @@ func (r *postgresOrderRepository) ListAll(ctx context.Context, filters model.Ord
 	}
 
 	selectQuery := fmt.Sprintf(
-		`SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, total_price, created_at, updated_at %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		`SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
+		        shipping_recipient_name, shipping_phone, shipping_street, shipping_ward, shipping_district, shipping_city,
+		        total_price, created_at, updated_at %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		baseQuery, argIdx, argIdx+1,
 	)
 	args = append(args, filters.Limit, (filters.Page-1)*filters.Limit)
@@ -479,6 +507,12 @@ type rowScanner interface {
 func scanOrder(scanner rowScanner) (*model.Order, error) {
 	order := &model.Order{}
 	var couponCode sql.NullString
+	var shippingRecipientName sql.NullString
+	var shippingPhone sql.NullString
+	var shippingStreet sql.NullString
+	var shippingWard sql.NullString
+	var shippingDistrict sql.NullString
+	var shippingCity sql.NullString
 	err := scanner.Scan(
 		&order.ID,
 		&order.UserID,
@@ -486,6 +520,14 @@ func scanOrder(scanner rowScanner) (*model.Order, error) {
 		&order.SubtotalPrice,
 		&order.DiscountAmount,
 		&couponCode,
+		&order.ShippingMethod,
+		&order.ShippingFee,
+		&shippingRecipientName,
+		&shippingPhone,
+		&shippingStreet,
+		&shippingWard,
+		&shippingDistrict,
+		&shippingCity,
 		&order.TotalPrice,
 		&order.CreatedAt,
 		&order.UpdatedAt,
@@ -496,7 +538,30 @@ func scanOrder(scanner rowScanner) (*model.Order, error) {
 	if couponCode.Valid {
 		order.CouponCode = couponCode.String
 	}
+	if shippingRecipientName.Valid || shippingPhone.Valid || shippingStreet.Valid || shippingDistrict.Valid || shippingCity.Valid {
+		order.ShippingAddress = &model.ShippingAddress{
+			RecipientName: shippingRecipientName.String,
+			Phone:         shippingPhone.String,
+			Street:        shippingStreet.String,
+			Ward:          shippingWard.String,
+			District:      shippingDistrict.String,
+			City:          shippingCity.String,
+		}
+	}
 	return order, nil
+}
+
+func shippingAddressColumns(address *model.ShippingAddress) (any, any, any, any, any, any) {
+	if address == nil {
+		return nil, nil, nil, nil, nil, nil
+	}
+
+	return nullIfEmpty(address.RecipientName),
+		nullIfEmpty(address.Phone),
+		nullIfEmpty(address.Street),
+		nullIfEmpty(address.Ward),
+		nullIfEmpty(address.District),
+		nullIfEmpty(address.City)
 }
 
 func scanCoupon(scanner rowScanner) (*model.Coupon, error) {

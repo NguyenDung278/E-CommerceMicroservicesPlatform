@@ -85,10 +85,8 @@
 - [x] Xóa toàn bộ giỏ hàng (sau khi đặt hàng)
 - [x] Kiểm tra tồn kho realtime qua gRPC trước khi thêm vào giỏ
 - [x] Tự động tính tổng tiền
-
-**Còn thiếu:**
-- [ ] Merge cart dành cho khách vãng lai (guest cart merge)
-- [ ] TTL cho cart không hoạt động (cron job)
+- [x] Merge cart dành cho khách vãng lai (guest cart merge)
+- [x] TTL cho cart không hoạt động (qua Redis TTL, không cần cron job)
 
 ---
 
@@ -127,7 +125,7 @@
 - [x] Event-driven architecture với notification-service
 
 **Còn thiếu:**
-- [ ] Địa chỉ giao hàng lưu trong đơn
+- [x] Địa chỉ giao hàng lưu trong đơn
 
 ---
 
@@ -160,9 +158,9 @@
 - [x] Set địa chỉ mặc định
 
 **Còn thiếu:**
-- [ ] Lưu địa chỉ vào đơn hàng khi checkout
-- [ ] Chọn phương thức vận chuyển
-- [ ] Tính phí ship
+- [x] Lưu địa chỉ vào đơn hàng khi checkout
+- [x] Chọn phương thức vận chuyển
+- [x] Tính phí ship
 
 ---
 

@@ -119,7 +119,8 @@ func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 2},
 		},
-		CouponCode: " save10 ",
+		CouponCode:     " save10 ",
+		ShippingMethod: "pickup",
 	})
 	if err != nil {
 		t.Fatalf("PreviewOrder returned error: %v", err)
@@ -167,7 +168,8 @@ func TestPreviewOrderRejectsCouponWhenMinimumNotMet(t *testing.T) {
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 1},
 		},
-		CouponCode: "SAVE20",
+		CouponCode:     "SAVE20",
+		ShippingMethod: "pickup",
 	})
 	if err == nil {
 		t.Fatal("expected PreviewOrder to reject coupon below minimum order amount")
@@ -205,7 +207,8 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 2},
 		},
-		CouponCode: "flash15",
+		CouponCode:     "flash15",
+		ShippingMethod: "pickup",
 	})
 	if err != nil {
 		t.Fatalf("CreateOrder returned error: %v", err)
@@ -225,6 +228,73 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 	}
 	if order.CouponCode != "FLASH15" {
 		t.Fatalf("expected coupon code FLASH15, got %q", order.CouponCode)
+	}
+}
+
+func TestPreviewOrderAddsShippingFeeForStandardDelivery(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Desk Lamp",
+				Price:         30,
+				StockQuantity: 10,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+
+	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 2},
+		},
+		ShippingMethod: "standard",
+		ShippingAddress: &dto.ShippingAddressRequest{
+			RecipientName: "Nguyen Van A",
+			Phone:         "0901234567",
+			Street:        "123 Nguyen Trai",
+			District:      "District 1",
+			City:          "Ho Chi Minh",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewOrder returned error: %v", err)
+	}
+
+	if preview.ShippingFee != 5.99 {
+		t.Fatalf("expected shipping fee 5.99, got %.2f", preview.ShippingFee)
+	}
+	if preview.TotalPrice != 65.99 {
+		t.Fatalf("expected total 65.99, got %.2f", preview.TotalPrice)
+	}
+}
+
+func TestCreateOrderRequiresShippingAddressForDelivery(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Desk Lamp",
+				Price:         30,
+				StockQuantity: 10,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "standard",
+	})
+	if err == nil {
+		t.Fatal("expected CreateOrder to require a shipping address for standard delivery")
+	}
+	if err != ErrShippingAddressRequired {
+		t.Fatalf("expected ErrShippingAddressRequired, got %v", err)
 	}
 }
 

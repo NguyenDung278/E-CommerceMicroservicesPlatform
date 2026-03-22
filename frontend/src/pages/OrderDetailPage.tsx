@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../lib/api";
 import type { Order, Payment } from "../types/api";
+import { formatCurrency, formatShippingMethodLabel } from "../utils/format";
 
 export function OrderDetailPage() {
   const { token } = useAuth();
@@ -81,15 +82,32 @@ export function OrderDetailPage() {
               </div>
               <div className="summary-row">
                 <span>Tổng tiền</span>
-                <strong>${order.total_price.toFixed(2)}</strong>
+                <strong>{formatCurrency(order.total_price)}</strong>
               </div>
+              <div className="summary-row">
+                <span>Vận chuyển</span>
+                <strong>
+                  {formatShippingMethodLabel(order.shipping_method)} • {formatCurrency(order.shipping_fee)}
+                </strong>
+              </div>
+              {order.shipping_address ? (
+                <div className="coupon-preview-card">
+                  <strong>{order.shipping_address.recipient_name}</strong>
+                  <span>{order.shipping_address.phone}</span>
+                  <span>
+                    {[order.shipping_address.street, order.shipping_address.ward, order.shipping_address.district, order.shipping_address.city]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                </div>
+              ) : null}
               <div className="order-list">
                 {order.items.map((item) => (
                   <div className="summary-row" key={item.id}>
                     <span>
                       {item.name} x {item.quantity}
                     </span>
-                    <strong>${(item.price * item.quantity).toFixed(2)}</strong>
+                    <strong>{formatCurrency(item.price * item.quantity)}</strong>
                   </div>
                 ))}
               </div>
@@ -113,7 +131,7 @@ export function OrderDetailPage() {
                   </div>
                   <div className="summary-row">
                     <span>Số tiền</span>
-                    <strong>${payment.amount.toFixed(2)}</strong>
+                    <strong>{formatCurrency(payment.amount)}</strong>
                   </div>
                 </>
               ) : (

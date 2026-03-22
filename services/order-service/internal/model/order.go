@@ -22,16 +22,19 @@ const (
 
 // Order represents a customer order.
 type Order struct {
-	ID             string      `json:"id"`
-	UserID         string      `json:"user_id"`
-	Status         OrderStatus `json:"status"`
-	SubtotalPrice  float64     `json:"subtotal_price"`
-	DiscountAmount float64     `json:"discount_amount"`
-	CouponCode     string      `json:"coupon_code,omitempty"`
-	TotalPrice     float64     `json:"total_price"`
-	Items          []OrderItem `json:"items"`
-	CreatedAt      time.Time   `json:"created_at"`
-	UpdatedAt      time.Time   `json:"updated_at"`
+	ID              string           `json:"id"`
+	UserID          string           `json:"user_id"`
+	Status          OrderStatus      `json:"status"`
+	SubtotalPrice   float64          `json:"subtotal_price"`
+	DiscountAmount  float64          `json:"discount_amount"`
+	CouponCode      string           `json:"coupon_code,omitempty"`
+	ShippingMethod  string           `json:"shipping_method"`
+	ShippingFee     float64          `json:"shipping_fee"`
+	ShippingAddress *ShippingAddress `json:"shipping_address,omitempty"`
+	TotalPrice      float64          `json:"total_price"`
+	Items           []OrderItem      `json:"items"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
 }
 
 type OrderPreview struct {
@@ -39,8 +42,27 @@ type OrderPreview struct {
 	DiscountAmount    float64 `json:"discount_amount"`
 	CouponCode        string  `json:"coupon_code,omitempty"`
 	CouponDescription string  `json:"coupon_description,omitempty"`
+	ShippingMethod    string  `json:"shipping_method"`
+	ShippingFee       float64 `json:"shipping_fee"`
 	TotalPrice        float64 `json:"total_price"`
 }
+
+type ShippingAddress struct {
+	RecipientName string `json:"recipient_name"`
+	Phone         string `json:"phone"`
+	Street        string `json:"street"`
+	Ward          string `json:"ward,omitempty"`
+	District      string `json:"district"`
+	City          string `json:"city"`
+}
+
+type ShippingMethod string
+
+const (
+	ShippingMethodStandard ShippingMethod = "standard"
+	ShippingMethodExpress  ShippingMethod = "express"
+	ShippingMethodPickup   ShippingMethod = "pickup"
+)
 
 // OrderItem represents a single item within an order.
 type OrderItem struct {

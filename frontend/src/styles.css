@@ -561,6 +561,39 @@ a:focus-visible {
   margin-bottom: 18px;
 }
 
+.shipping-method-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.checkout-form-block {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.checkout-address-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.address-option-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(22, 33, 29, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+  text-align: left;
+}
+
+.address-option-card-active {
+  border-color: rgba(31, 113, 93, 0.22);
+  box-shadow: 0 14px 30px rgba(19, 61, 51, 0.08);
+  background: rgba(247, 253, 250, 0.96);
+}
+
 .coupon-summary-discount {
   color: #1f715d;
 }

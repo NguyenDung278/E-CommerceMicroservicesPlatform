@@ -20,6 +20,12 @@ const statusLabels: Record<string, string> = {
   success: "Thành công"
 };
 
+const shippingMethodLabels: Record<string, string> = {
+  standard: "Giao tiêu chuẩn",
+  express: "Giao nhanh",
+  pickup: "Nhận tại quầy"
+};
+
 export function formatCurrency(value: number) {
   return currencyFormatter.format(value);
 }
@@ -39,4 +45,13 @@ export function formatStatusLabel(value: string) {
     .filter(Boolean)
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+export function formatShippingMethodLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (shippingMethodLabels[normalized]) {
+    return shippingMethodLabels[normalized];
+  }
+
+  return formatStatusLabel(value);
 }

@@ -103,7 +103,7 @@ Gateway không tự xử lý user, product, cart, order, payment. Nó tạo các
 - Business logic vẫn nằm trong service chuyên trách.
 
 **Thực tiễn (Practical insight):**
-Nếu không chia Proxy như vầy, Gateway sẽ phải import và parse từng struct Request/Response của các dịch vụ con. Điều này dẫn tới Gateway biến thành một "Cục tạ" (Monolith Gateway) dễ xảy ra rủi ro mỗi lần service con đổi Model. Nhưng bằng cách Forward raw Request (copy header + body), Gateway gần như "mù" về data (Agnostic), giúp nó độc lập và ít bugs.
+Nếu không chia Proxy như vầy, Gateway sẽ phải import và parse từng struct Request/Response của các dịch vụ con. Điều này dẫn tới Gateway biến thành một "Cục tạ" (Monolith Gateway) dễ xảy ra rủi ro mỗi lần service con đổi Model. Nhưng bằng cách Forward raw Request (copy header + body), Gateway gần như "mù" về data (Agnostic), giúp nó độc lập và ít bugs. Đặc biệt, để hệ thống hỗ trợ **Upload File (Multipart Streaming)**, Proxy phải copy cả thuộc tính `ContentLength` và func `GetBody` của Request gốc sang `backendReq` để tránh làm gián đoạn luồng stream dữ liệu nhị phân.
 
 Điều nên học:
 

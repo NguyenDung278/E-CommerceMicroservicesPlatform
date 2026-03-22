@@ -32,6 +32,8 @@ Protected:
 - `PUT /api/v1/users/password`
 - `GET/POST/PUT/DELETE /api/v1/users/addresses`
 
+*Lưu ý: Các route quản trị (Admin/Staff) không được liệt kê hết ở đây nhưng được bảo vệ bởi middleware `RequireRole(admin, staff)`.*
+
 ## 3. Cấu trúc thư mục
 
 ```text
@@ -118,6 +120,10 @@ Hai tính năng quan trọng vừa được thêm vào:
 
 - **Refresh Token**: Client gửi `refresh_token` lên endpoint `POST /auth/refresh`. Service sẽ verify token này, và sinh ra một cặp Access/Refresh token mới. Giúp bảo mật tốt hơn với Access Token ngắn hạn mà không làm phiền người dùng đăng nhập lại liên tục.
 - **Đổi mật khẩu**: Yêu cầu xác định mật khẩu cũ trước khi hash và lưu mật khẩu mới.
+- **Xác minh Email (Email Verification)**: Sau khi đăng ký, user được cấp một `EmailVerificationTokenHash` (giới hạn thời gian sống) sinh ra từ mã token ngẫu nhiên để gửi vào Email.
+- **Quên / Đặt lại mật khẩu (Password Reset)**: Tương tự như verify email, cấp một Session Token tạm thời (Hash lưu vào DB) để user có quyền đổi mật khẩu mới.
+
+*Bài học về Token Hash*: Backend không bao giờ lưu raw token vào DB. Hàm `hashToken()` băm token bằng SHA256 để dù DB bị lộ, hacker cũng không thể dùng claim token đó để mạo danh reset password. Mọi Token thao tác đặc biệt (Reset/Verify) đều có cờ `ExpiresAt`.
 
 ## 5.2 Quản lý địa chỉ giao hàng (Shipping Address)
 

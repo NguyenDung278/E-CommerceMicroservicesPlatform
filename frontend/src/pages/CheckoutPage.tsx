@@ -1,11 +1,12 @@
-import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
+import { FormField } from "../components/FormField";
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
-import type { Order, OrderPreview, Payment } from "../types/api";
-import { formatCurrency } from "../utils/format";
+import type { Address, Order, OrderPreview, Payment, ShippingAddress } from "../types/api";
+import { formatCurrency, formatShippingMethodLabel } from "../utils/format";
 import { sanitizeText } from "../utils/sanitize";
 import { validatePayment } from "../utils/validation";
 
@@ -16,6 +17,32 @@ type DirectProductState = {
     price: number;
     quantity: number;
   };
+};
+
+type ShippingMethod = "standard" | "express" | "pickup";
+
+type AddressFormState = {
+  recipient_name: string;
+  phone: string;
+  street: string;
+  ward: string;
+  district: string;
+  city: string;
+};
+
+const shippingMethodOptions: Array<{ value: ShippingMethod; hint: string }> = [
+  { value: "standard", hint: "Miễn phí cho đơn từ $100, còn lại $5.99." },
+  { value: "express", hint: "Ưu tiên đóng gói và giao nhanh với phí $14.99." },
+  { value: "pickup", hint: "Nhận tại quầy, không phát sinh phí vận chuyển." }
+];
+
+const emptyAddressForm: AddressFormState = {
+  recipient_name: "",
+  phone: "",
+  street: "",
+  ward: "",
+  district: "",
+  city: ""
 };
 
 export function CheckoutPage() {
@@ -31,6 +58,13 @@ export function CheckoutPage() {
   const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
   const [feedback, setFeedback] = useState("");
   const [isBusy, setIsBusy] = useState("");
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("standard");
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [isCreatingAddress, setIsCreatingAddress] = useState(false);
+  const [showAddressForm, setShowAddressForm] = useState(false);
+  const [addressForm, setAddressForm] = useState<AddressFormState>(emptyAddressForm);
 
   const directProduct = (location.state as DirectProductState | null)?.directProduct;
 
@@ -70,15 +104,64 @@ export function CheckoutPage() {
     }
   }, [draftSignature, latestOrder]);
 
+  useEffect(() => {
+    let active = true;
+
+    if (!token) {
+      setAddresses([]);
+      setSelectedAddressId("");
+      setIsLoadingAddresses(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setIsLoadingAddresses(true);
+
+    void api
+      .listAddresses(token)
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        setAddresses(response.data);
+        const defaultAddress = response.data.find((item) => item.is_default) ?? response.data[0];
+        setSelectedAddressId(defaultAddress?.id ?? "");
+      })
+      .catch((reason) => {
+        if (active) {
+          setFeedback(getErrorMessage(reason));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingAddresses(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
   const localSubtotal = draftItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const selectedAddress = addresses.find((address) => address.id === selectedAddressId) ?? null;
+  const shippingAddress = toShippingAddress(selectedAddress);
   const pricingSummary = latestOrder
     ? {
         subtotal_price: latestOrder.subtotal_price,
         discount_amount: latestOrder.discount_amount,
         coupon_code: latestOrder.coupon_code,
+        shipping_fee: latestOrder.shipping_fee,
+        shipping_method: latestOrder.shipping_method,
         total_price: latestOrder.total_price
       }
     : couponPreview;
+  const shippingFee = pricingSummary?.shipping_fee ?? estimateShippingFee(localSubtotal, shippingMethod);
+  const computedTotal =
+    pricingSummary?.total_price ??
+    Math.max(0, localSubtotal - (pricingSummary?.discount_amount ?? 0) + shippingFee);
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,6 +180,10 @@ export function CheckoutPage() {
       setFeedback("Không có sản phẩm nào để checkout.");
       return;
     }
+    if (shippingMethod !== "pickup" && !shippingAddress) {
+      setFeedback("Hãy chọn hoặc tạo địa chỉ giao hàng trước khi tạo đơn.");
+      return;
+    }
 
     try {
       setIsBusy("order");
@@ -106,7 +193,9 @@ export function CheckoutPage() {
           product_id: item.product_id,
           quantity: item.quantity
         })),
-        coupon_code: normalizedCouponCode || undefined
+        coupon_code: normalizedCouponCode || undefined,
+        shipping_method: shippingMethod,
+        shipping_address: shippingMethod === "pickup" ? undefined : shippingAddress ?? undefined
       });
       setLatestOrder(response.data);
       if (response.data.coupon_code) {
@@ -147,6 +236,10 @@ export function CheckoutPage() {
       setFeedback("Không có sản phẩm nào để kiểm tra voucher.");
       return;
     }
+    if (shippingMethod !== "pickup" && !shippingAddress) {
+      setFeedback("Hãy chọn địa chỉ giao hàng trước khi xem trước tổng tiền.");
+      return;
+    }
 
     try {
       setIsBusy("preview");
@@ -155,7 +248,9 @@ export function CheckoutPage() {
           product_id: item.product_id,
           quantity: item.quantity
         })),
-        coupon_code: normalizedCouponCode
+        coupon_code: normalizedCouponCode,
+        shipping_method: shippingMethod,
+        shipping_address: shippingMethod === "pickup" ? undefined : shippingAddress ?? undefined
       });
       setCouponPreview(response.data);
       setCouponCode(response.data.coupon_code ?? normalizedCouponCode.toUpperCase());
@@ -177,6 +272,47 @@ export function CheckoutPage() {
     setCouponCode("");
     setCouponPreview(null);
     setFeedback("");
+  }
+
+  async function handleCreateAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!token) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    const payload = {
+      recipient_name: sanitizeText(addressForm.recipient_name),
+      phone: sanitizeText(addressForm.phone),
+      street: sanitizeText(addressForm.street),
+      ward: sanitizeText(addressForm.ward),
+      district: sanitizeText(addressForm.district),
+      city: sanitizeText(addressForm.city),
+      is_default: addresses.length === 0
+    };
+
+    if (!payload.recipient_name || !payload.phone || !payload.street || !payload.district || !payload.city) {
+      setFeedback("Điền đủ tên người nhận, số điện thoại, đường, quận/huyện và tỉnh/thành.");
+      return;
+    }
+
+    try {
+      setIsCreatingAddress(true);
+      const response = await api.createAddress(token, payload);
+      setAddresses((current) => {
+        const next = current.filter((item) => item.id !== response.data.id);
+        return [response.data, ...next];
+      });
+      setSelectedAddressId(response.data.id);
+      setAddressForm(emptyAddressForm);
+      setShowAddressForm(false);
+      setFeedback("Đã thêm địa chỉ giao hàng mới cho lần checkout này.");
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsCreatingAddress(false);
+    }
   }
 
   async function handleProcessPayment(event: FormEvent<HTMLFormElement>) {
@@ -234,6 +370,172 @@ export function CheckoutPage() {
           <div className="checkout-layout">
             <div className="card">
               <h2>Danh sách sản phẩm</h2>
+
+              <div className="checkout-form-block">
+                <h3>Phương thức vận chuyển</h3>
+                <div className="shipping-method-row">
+                  {shippingMethodOptions.map((option) => (
+                    <button
+                      className={
+                        shippingMethod === option.value
+                          ? "filter-chip filter-chip-active"
+                          : "filter-chip"
+                      }
+                      disabled={Boolean(latestOrder)}
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setShippingMethod(option.value);
+                        setCouponPreview(null);
+                      }}
+                    >
+                      {formatShippingMethodLabel(option.value)}
+                    </button>
+                  ))}
+                </div>
+                <p className="history-subtle">
+                  {shippingMethodOptions.find((option) => option.value === shippingMethod)?.hint}
+                </p>
+              </div>
+
+              {shippingMethod !== "pickup" ? (
+                <div className="checkout-form-block">
+                  <div className="section-heading">
+                    <div>
+                      <h3>Địa chỉ giao hàng</h3>
+                      <p className="history-subtle">
+                        Địa chỉ được snapshot vào đơn hàng để tránh lệch dữ liệu khi bạn cập nhật hồ sơ sau này.
+                      </p>
+                    </div>
+                    {!latestOrder ? (
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => setShowAddressForm((current) => !current)}
+                      >
+                        {showAddressForm ? "Ẩn form địa chỉ" : "Thêm địa chỉ mới"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {isLoadingAddresses ? <div className="page-state">Đang tải địa chỉ...</div> : null}
+
+                  <div className="order-list">
+                    {addresses.map((address) => (
+                      <button
+                        className={
+                          selectedAddressId === address.id
+                            ? "address-option-card address-option-card-active"
+                            : "address-option-card"
+                        }
+                        disabled={Boolean(latestOrder)}
+                        key={address.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAddressId(address.id);
+                          setCouponPreview(null);
+                        }}
+                      >
+                        <strong>
+                          {address.recipient_name}
+                          {address.is_default ? " • Mặc định" : ""}
+                        </strong>
+                        <span>{address.phone}</span>
+                        <span>{formatAddressLine(address)}</span>
+                      </button>
+                    ))}
+
+                    {!isLoadingAddresses && addresses.length === 0 ? (
+                      <p className="history-subtle">
+                        Bạn chưa có địa chỉ giao hàng nào. Tạo nhanh ngay bên dưới để checkout.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {showAddressForm || addresses.length === 0 ? (
+                    <form className="checkout-address-grid" onSubmit={handleCreateAddress}>
+                      <div className="inline-grid">
+                        <FormField htmlFor="checkout-address-recipient" label="Người nhận" required>
+                          <input
+                            id="checkout-address-recipient"
+                            value={addressForm.recipient_name}
+                            onChange={(event) =>
+                              setAddressForm((current) => ({
+                                ...current,
+                                recipient_name: event.target.value
+                              }))
+                            }
+                          />
+                        </FormField>
+                        <FormField htmlFor="checkout-address-phone" label="Số điện thoại" required>
+                          <input
+                            id="checkout-address-phone"
+                            value={addressForm.phone}
+                            onChange={(event) =>
+                              setAddressForm((current) => ({ ...current, phone: event.target.value }))
+                            }
+                          />
+                        </FormField>
+                      </div>
+
+                      <FormField htmlFor="checkout-address-street" label="Địa chỉ" required>
+                        <input
+                          id="checkout-address-street"
+                          value={addressForm.street}
+                          onChange={(event) =>
+                            setAddressForm((current) => ({ ...current, street: event.target.value }))
+                          }
+                        />
+                      </FormField>
+
+                      <div className="inline-grid">
+                        <FormField htmlFor="checkout-address-ward" label="Phường / Xã">
+                          <input
+                            id="checkout-address-ward"
+                            value={addressForm.ward}
+                            onChange={(event) =>
+                              setAddressForm((current) => ({ ...current, ward: event.target.value }))
+                            }
+                          />
+                        </FormField>
+                        <FormField htmlFor="checkout-address-district" label="Quận / Huyện" required>
+                          <input
+                            id="checkout-address-district"
+                            value={addressForm.district}
+                            onChange={(event) =>
+                              setAddressForm((current) => ({ ...current, district: event.target.value }))
+                            }
+                          />
+                        </FormField>
+                      </div>
+
+                      <FormField htmlFor="checkout-address-city" label="Tỉnh / Thành phố" required>
+                        <input
+                          id="checkout-address-city"
+                          value={addressForm.city}
+                          onChange={(event) =>
+                            setAddressForm((current) => ({ ...current, city: event.target.value }))
+                          }
+                        />
+                      </FormField>
+
+                      <button
+                        className="secondary-button"
+                        disabled={isCreatingAddress}
+                        type="submit"
+                      >
+                        {isCreatingAddress ? "Đang lưu địa chỉ..." : "Lưu địa chỉ này"}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="payment-success">
+                  <strong>Nhận tại quầy</strong>
+                  <span>Đơn hàng sẽ không yêu cầu địa chỉ giao hàng và phí ship được tính bằng 0.</span>
+                </div>
+              )}
+
               <div className="order-list">
                 {checkoutItems.map((item) => (
                   <div className="summary-row" key={item.product_id}>
@@ -257,6 +559,11 @@ export function CheckoutPage() {
                 </div>
               ) : null}
 
+              <div className="summary-row">
+                <span>Vận chuyển ({formatShippingMethodLabel(pricingSummary?.shipping_method ?? shippingMethod)})</span>
+                <strong>{formatCurrency(pricingSummary?.shipping_fee ?? shippingFee)}</strong>
+              </div>
+
               {couponPreview?.coupon_description && !latestOrder ? (
                 <div className="coupon-preview-card">
                   <strong>{couponPreview.coupon_code}</strong>
@@ -266,7 +573,7 @@ export function CheckoutPage() {
 
               <div className="summary-row summary-total">
                 <span>Thành tiền</span>
-                <strong>{formatCurrency(pricingSummary?.total_price ?? localSubtotal)}</strong>
+                <strong>{formatCurrency(computedTotal)}</strong>
               </div>
 
               {latestOrder ? (
@@ -332,6 +639,19 @@ export function CheckoutPage() {
                     <span>Tổng tiền</span>
                     <strong>{formatCurrency(latestOrder.total_price)}</strong>
                   </div>
+                  <div className="summary-row">
+                    <span>Vận chuyển</span>
+                    <strong>
+                      {formatShippingMethodLabel(latestOrder.shipping_method)} • {formatCurrency(latestOrder.shipping_fee)}
+                    </strong>
+                  </div>
+                  {latestOrder.shipping_address ? (
+                    <div className="coupon-preview-card">
+                      <strong>{latestOrder.shipping_address.recipient_name}</strong>
+                      <span>{latestOrder.shipping_address.phone}</span>
+                      <span>{formatAddressLine(latestOrder.shipping_address)}</span>
+                    </div>
+                  ) : null}
                   {latestOrder.coupon_code ? (
                     <div className="summary-row">
                       <span>Voucher</span>
@@ -380,4 +700,36 @@ export function CheckoutPage() {
       </section>
     </div>
   );
+}
+
+function estimateShippingFee(subtotal: number, method: ShippingMethod) {
+  if (method === "pickup") {
+    return 0;
+  }
+  if (method === "express") {
+    return 14.99;
+  }
+  if (subtotal >= 100) {
+    return 0;
+  }
+  return 5.99;
+}
+
+function toShippingAddress(address: Address | null): ShippingAddress | undefined {
+  if (!address) {
+    return undefined;
+  }
+
+  return {
+    recipient_name: address.recipient_name,
+    phone: address.phone,
+    street: address.street,
+    ward: address.ward,
+    district: address.district,
+    city: address.city
+  };
+}
+
+function formatAddressLine(address: ShippingAddress) {
+  return [address.street, address.ward, address.district, address.city].filter(Boolean).join(", ");
 }

@@ -17,9 +17,10 @@ Public:
 - `GET /api/v1/products`
 - `GET /api/v1/products/:id`
 
-Admin only:
+Admin / Staff only:
 
 - `POST /api/v1/products`
+- `POST /api/v1/products/uploads` (Upload nhiều ảnh qua Multipart Form)
 - `PUT /api/v1/products/:id`
 - `DELETE /api/v1/products/:id`
 
@@ -99,6 +100,8 @@ Giúp `order-service` và `cart-service` gọi sản phẩm qua gRPC.
 - `List(...)` là ví dụ rất tốt để học pagination backend.
 - `UpdateStock(...)` là ví dụ về update có điều kiện để tránh stock âm (atomic update `stock = stock - $1 WHERE stock >= $1`).
 - `UpdateProduct(...)` qua gRPC được tái sử dụng sáng tạo để làm `RestoreStock` khi hủy đơn hàng, thay vì phải sửa file `.proto` sinh ra nhiều code thừa.
+- Tính năng **Multiple Image Uploads**: Product cho phép lưu một mảng `image_urls` (JSONB) thay vì 1 URL. Có hàm `resolvePrimaryImage` tự động lấy ảnh đầu tiên trong mảng làm Ảnh Đại Diện.
+- **Functional Options Pattern**: Kỹ thuật mở rộng constructor `NewProductService(repo, options...)` thông qua hàm `WithMediaStore(mediaStore)`. Cách này giúp tiêm (Inject) thêm các service ngoại lai (AWS S3 Store, Cloudinary) vào Product Service một cách lỏng lẻo (Loosely coupled) cực kì "Go-idiomatic".
 - Product service là "source of truth" cho giá và tồn kho; service khác không nên tự tin dữ liệu frontend gửi lên.
 
 ## 7. Thứ tự đọc gợi ý

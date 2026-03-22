@@ -3,12 +3,9 @@ import { createContext, startTransition, useEffect, useState, type ReactNode } f
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../lib/api";
 import type { Cart } from "../types/api";
+import { clearGuestCart, createEmptyGuestCart, readGuestCart, saveGuestCart } from "../utils/guestCart";
 
-const emptyCart: Cart = {
-  user_id: "",
-  items: [],
-  total: 0
-};
+const emptyCart: Cart = createEmptyGuestCart();
 
 type CartContextValue = {
   cart: Cart;
@@ -38,8 +35,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     if (!token) {
+      const guestCart = readGuestCart();
       startTransition(() => {
-        setCart(emptyCart);
+        setCart(guestCart);
         setError("");
         setIsLoading(false);
       });
@@ -50,33 +48,63 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true);
 
-    void api
-      .getCart(token)
-      .then((response) => {
+    void (async () => {
+      let fallbackCart = emptyCart;
+
+      try {
+        let nextCart = (await api.getCart(token)).data;
+        fallbackCart = nextCart;
+        const guestCart = readGuestCart();
+
+        if (guestCart.items.length > 0) {
+          let remainingGuestItems = [...guestCart.items];
+
+          for (const item of guestCart.items) {
+            const response = await api.addToCart(token, {
+              product_id: item.product_id,
+              quantity: item.quantity
+            });
+            nextCart = response.data;
+            fallbackCart = nextCart;
+            remainingGuestItems = remainingGuestItems.filter(
+              (guestItem) => guestItem.product_id !== item.product_id
+            );
+            saveGuestCart({
+              user_id: "",
+              items: remainingGuestItems,
+              total: remainingGuestItems.reduce(
+                (sum, guestItem) => sum + guestItem.price * guestItem.quantity,
+                0
+              )
+            });
+          }
+
+          clearGuestCart();
+        }
+
         if (!active) {
           return;
         }
 
         startTransition(() => {
-          setCart(response.data);
+          setCart(nextCart);
           setError("");
         });
-      })
-      .catch((reason) => {
+      } catch (reason) {
         if (!active) {
           return;
         }
 
         startTransition(() => {
-          setCart(emptyCart);
+          setCart(fallbackCart.items.length > 0 ? fallbackCart : readGuestCart());
           setError(getErrorMessage(reason));
         });
-      })
-      .finally(() => {
+      } finally {
         if (active) {
           setIsLoading(false);
         }
-      });
+      }
+    })();
 
     return () => {
       active = false;
@@ -85,7 +113,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   async function refreshCart() {
     if (!token) {
-      throw new Error("Missing JWT token");
+      const guestCart = readGuestCart();
+      startTransition(() => {
+        setCart(guestCart);
+        setError("");
+      });
+      return guestCart;
     }
 
     setIsLoading(true);
@@ -103,7 +136,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
     quantity: number;
   }) {
     if (!token) {
-      throw new Error("Missing JWT token");
+      const product = (await api.getProductById(item.product_id)).data;
+      const nextCart = {
+        ...cart,
+        items: [...cart.items]
+      };
+      const existingItem = nextCart.items.find((cartItem) => cartItem.product_id === item.product_id);
+
+      if (existingItem) {
+        const nextQuantity = existingItem.quantity + item.quantity;
+        if (nextQuantity > product.stock) {
+          throw new Error(`Sản phẩm ${product.name} chỉ còn ${product.stock} item(s).`);
+        }
+        existingItem.quantity = nextQuantity;
+        existingItem.price = product.price;
+        existingItem.name = product.name;
+      } else {
+        if (item.quantity > product.stock) {
+          throw new Error(`Sản phẩm ${product.name} chỉ còn ${product.stock} item(s).`);
+        }
+        nextCart.items.push({
+          product_id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: item.quantity
+        });
+      }
+
+      nextCart.total = nextCart.items.reduce((sum, cartItem) => sum + cartItem.price * cartItem.quantity, 0);
+      saveGuestCart(nextCart);
+      startTransition(() => {
+        setCart(nextCart);
+        setError("");
+      });
+      return nextCart;
     }
 
     const response = await api.addToCart(token, item);
@@ -116,7 +182,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   async function updateItem(productId: string, quantity: number) {
     if (!token) {
-      throw new Error("Missing JWT token");
+      const nextCart = {
+        ...cart,
+        items: [...cart.items]
+      };
+      const product = (await api.getProductById(productId)).data;
+      const item = nextCart.items.find((cartItem) => cartItem.product_id === productId);
+
+      if (!item) {
+        throw new Error("Sản phẩm không còn trong giỏ guest.");
+      }
+      if (quantity > product.stock) {
+        throw new Error(`Sản phẩm ${product.name} chỉ còn ${product.stock} item(s).`);
+      }
+
+      item.quantity = quantity;
+      item.price = product.price;
+      item.name = product.name;
+      nextCart.total = nextCart.items.reduce((sum, cartItem) => sum + cartItem.price * cartItem.quantity, 0);
+      saveGuestCart(nextCart);
+      startTransition(() => {
+        setCart(nextCart);
+        setError("");
+      });
+      return nextCart;
     }
 
     const response = await api.updateCartItem(token, productId, quantity);
@@ -129,7 +218,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   async function removeItem(productId: string) {
     if (!token) {
-      throw new Error("Missing JWT token");
+      const nextCart = {
+        ...cart,
+        items: cart.items.filter((item) => item.product_id !== productId)
+      };
+      nextCart.total = nextCart.items.reduce((sum, cartItem) => sum + cartItem.price * cartItem.quantity, 0);
+      saveGuestCart(nextCart);
+      startTransition(() => {
+        setCart(nextCart);
+        setError("");
+      });
+      return nextCart;
     }
 
     const response = await api.removeCartItem(token, productId);
@@ -142,7 +241,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   async function clearCart() {
     if (!token) {
-      throw new Error("Missing JWT token");
+      clearGuestCart();
+      startTransition(() => {
+        setCart(emptyCart);
+        setError("");
+      });
+      return;
     }
 
     await api.clearCart(token);
