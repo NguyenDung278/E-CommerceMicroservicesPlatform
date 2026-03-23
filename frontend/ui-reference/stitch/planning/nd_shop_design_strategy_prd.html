@@ -1,0 +1,78 @@
+# ND Shop: Design Strategy & UI/UX Framework
+
+## 1. Overall Design Concept: "The Curated Tech-Stack"
+The design for ND Shop moves away from "mass-market retail" and toward a "curated technical showcase." It balances the elegance of a high-end boutique with the structured, operational clarity of a modern developer tool. 
+
+**Core Tenets:**
+- **Intentionality:** Every element has a purpose. No "fluff" or generic gradients.
+- **Operational Visibility:** Users (and developers) should always know their state (User Role, Dev vs. Prod account, Order status).
+- **Warm Professionalism:** Replacing cold "enterprise blue" with deep greens and warm neutrals to build trust and a premium feel.
+
+---
+
+## 2. Visual System (Tokens)
+
+### Color Palette
+- **Primary:** `Deep Forest Green (#1B3022)` - Used for headers, primary CTAs, and brand anchoring.
+- **Secondary/Accent:** `Soft Terracotta (#D48166)` - For high-visibility actions (Add to Cart) and accents.
+- **Surface (Background):** `Warm Cream (#F9F7F2)` - The base for the storefront.
+- **Surface (Admin):** `Muted Grey-Green (#F0F4F1)` - A slightly cooler neutral to distinguish the admin area.
+- **Status:**
+  - Success: `Sage (#81A684)`
+  - Warning: `Ochre (#D9A05B)`
+  - Error: `Cinnabar (#B55447)`
+  - Dev/Test Account Badge: `Deep Indigo (#3A405A)` to stand out from the warm palette.
+
+### Typography
+- **Headings:** *Fraunces* or *Playfair Display* (Soft Editorial Serif) - High contrast, confident, used for product titles and hero sections.
+- **Body/UI:** *Inter* or *Public Sans* (Clean Geometric Sans) - Highly legible for data, tables, and functional microcopy.
+
+---
+
+## 3. Layout & Components
+
+### Layout Principles
+- **Spacious Hierarchy:** Generous whitespace (32px+ between sections) to avoid the "cramped" feel of cheap e-commerce.
+- **Structured Grids:** 12-column grid for desktop, switching to a clean single column with optimized margins for mobile.
+- **Persistent Header:** Contains the Storefront/Admin toggle and the critical **Account Chip**.
+
+### The "Account Chip" & Dev Badge
+- **Location:** Top right of the header.
+- **Design:** A rounded container showing `Avatar | Name | Role`. 
+- **Dev Indicator:** If `is_dev_account: true`, append a high-contrast badge: `[DEV ONLY]`.
+- **Admin Warning Banner:** A non-dismissible, subtle top-bar in the admin dashboard: *"You are currently operating in a seeded development environment. Actions may affect test data."*
+
+---
+
+## 4. Screen-by-Screen Guidance
+
+### Storefront Flows
+- **Home:** Hero section showcasing the "Platform Capabilities" through a curated product selection. Minimalist footer.
+- **Catalog:** Side-bar filtering (Categories, Price, Availability). Product cards use "Soft Depth" (subtle shadows) and clear hierarchy (Price > Title).
+- **Product Detail:** High-quality image gallery on the left, "Story-driven" description and technical specs on the right.
+- **Cart/Checkout:** Multi-step, clean progress indicator. "Distraction-free" checkout mode (removes main nav).
+
+### Admin/Operational Flows
+- **Dashboard:** High-level metrics (Total Sales, Active Users, System Health). Grid of "Quick Action" cards.
+- **Tables (Orders/Users):** Alternating row colors (subtle), status pill styling (e.g., `Paid` in Sage, `Pending` in Ochre), and "Bulk Action" header.
+
+---
+
+## 5. Technical Implementation (React + CSS)
+
+**Direction:** Use **Tailwind CSS** for speed and consistency, or **CSS Modules** for a more architectural approach.
+- **Component Structure:** 
+  - `Layout/`: MainStorefrontLayout, AdminLayout.
+  - `UI/`: Button, Badge, Input, Table, Card.
+  - `Features/`: AccountChip, DevWarningBanner.
+- **State Management:** Use React Context or a simple store for `userAccount` status (to toggle the DEV badge globally).
+- **Motion:** Subtle fade-ins for page transitions and slight scale-ups (1.02x) on product card hover.
+
+---
+
+## 6. Accessibility & Microcopy
+- **Contrast:** All text meets WCAG AA standards against the warm cream background.
+- **Focus States:** High-contrast rings for keyboard navigation.
+- **Microcopy:** 
+  - *Empty State:* "No orders found yet. Ready to start the demo flow?"
+  - *Success CTA:* "Order successfully processed by the Payment Microservice."

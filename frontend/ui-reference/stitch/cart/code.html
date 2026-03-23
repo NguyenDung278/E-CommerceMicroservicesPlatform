@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Your Bag — ND Shop</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#5b617d",
+              "inverse-surface": "#30312e",
+              "secondary-container": "#d9deff",
+              "on-tertiary": "#ffffff",
+              "outline-variant": "#c3c8c1",
+              "on-secondary-fixed": "#141a32",
+              "surface-tint": "#4d6453",
+              "surface-container-highest": "#e4e2dd",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#ffb59d",
+              "surface-container-high": "#eae8e3",
+              "surface-container": "#f0eee9",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#73341f",
+              "on-primary-fixed-variant": "#364c3c",
+              "on-error": "#ffffff",
+              "on-tertiary-fixed": "#390b00",
+              "on-error-container": "#93000a",
+              "tertiary-container": "#501a07",
+              "on-surface-variant": "#434843",
+              "inverse-primary": "#b4cdb8",
+              "surface": "#fbf9f4",
+              "on-tertiary-container": "#d07d63",
+              "tertiary": "#320900",
+              "primary": "#061b0e",
+              "on-secondary-fixed-variant": "#404660",
+              "tertiary-fixed": "#ffdbd0",
+              "secondary-fixed-dim": "#bfc5e5",
+              "secondary-fixed": "#dce1ff",
+              "surface-container-lowest": "#ffffff",
+              "primary-container": "#1b3022",
+              "on-secondary": "#ffffff",
+              "inverse-on-surface": "#f2f1ec",
+              "background": "#fbf9f4",
+              "outline": "#737973",
+              "on-primary-fixed": "#0b2013",
+              "on-primary-container": "#819986",
+              "on-background": "#1b1c19",
+              "surface-dim": "#dbdad5",
+              "secondary": "#575d79",
+              "primary-fixed": "#d0e9d4",
+              "on-surface": "#1b1c19",
+              "surface-variant": "#e4e2dd",
+              "on-primary": "#ffffff",
+              "surface-container-low": "#f5f3ee",
+              "surface-bright": "#fbf9f4",
+              "primary-fixed-dim": "#b4cdb8"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #fbf9f4;
+      }
+      h1, h2, h3, .font-serif {
+        font-family: 'Noto Serif', serif;
+      }
+    </style>
+</head>
+<body class="bg-surface text-on-surface selection:bg-tertiary-fixed selection:text-on-tertiary-fixed">
+<!-- Top Navigation Bar -->
+<header class="w-full top-0 sticky z-50 no-border bg-[#f5f3ee] dark:bg-[#252623] flat no shadows tonal-layering">
+<div class="flex justify-between items-center px-12 py-6 w-full max-w-screen-2xl mx-auto">
+<div class="flex items-center gap-8">
+<a class="text-2xl font-bold tracking-tighter text-[#061b0e] dark:text-[#fbf9f4]" href="#">ND Shop</a>
+<nav class="hidden md:flex gap-8">
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Men</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Women</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Footwear</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Accessories</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<a class="font-['Noto_Serif'] tracking-tight text-[#061b0e] dark:text-[#f5f3ee] hover:text-[#1B3022] transition-colors duration-300" href="#">Account</a>
+<div class="relative scale-95 duration-200 ease-in-out cursor-pointer">
+<span class="material-symbols-outlined text-[#061b0e] dark:text-[#fbf9f4]" data-icon="shopping_bag">shopping_bag</span>
+<span class="absolute -top-2 -right-2 bg-tertiary text-on-tertiary text-[10px] w-4 h-4 rounded-full flex items-center justify-center">2</span>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-screen-2xl mx-auto px-12 pt-16 pb-32">
+<!-- Hero Branding / Page Title -->
+<div class="mb-16">
+<h1 class="font-headline text-5xl tracking-tight text-primary mb-2">Shopping Bag</h1>
+<p class="text-secondary font-body tracking-wide flex items-center gap-3">
+                ND_S24 / EDITORIAL COLLECTION
+                <span class="bg-secondary text-on-secondary px-2 py-0.5 rounded-full text-[10px] font-bold tracking-widest uppercase">Dev Note: Cart Microservice Active</span>
+</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-16">
+<!-- Items Section -->
+<div class="lg:col-span-8 space-y-12">
+<!-- Cart Item 01 -->
+<div class="flex flex-col md:flex-row gap-8 pb-12 border-b border-outline-variant/20">
+<div class="w-full md:w-48 aspect-[3/4] bg-surface-container overflow-hidden rounded-xl group">
+<img alt="Structured Wool Blazer" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Minimalist structured black wool blazer on beige background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmzoOQTtcDy9oUPvQjYGMkpnHCgn09etWTuxDKLPlVb0MYizBzTMAquEyqtPdQocc68q7Qa2yzQOgb36t1JCA6hcVYG-PZynvqqx0ieOfISyYWOXuDBesFjkEuGKcDo7FIDz5InyHTil916aii1JQcwH6KG83KF16tU4N7sx9yHNzHanJphn2dRjl7fgQZXMWZQ2cp0SEXODJIcSmpFope_N2tj1nwSEdL48Gq_LOAE4w-dhcb-nqgfEwnx3hznxKLS0CRosJeIE_I"/>
+</div>
+<div class="flex-grow flex flex-col justify-between py-2">
+<div class="flex justify-between items-start">
+<div>
+<span class="text-tertiary text-[10px] font-bold tracking-[0.2em] uppercase mb-2 block">New Arrival</span>
+<h3 class="font-headline text-2xl text-primary mb-1">Structured Wool Blazer</h3>
+<p class="text-secondary text-sm font-body">Deep Forest / Mid-Weight</p>
+</div>
+<p class="font-headline text-xl text-primary">$445.00</p>
+</div>
+<div class="flex items-center justify-between mt-8">
+<div class="flex items-center gap-12">
+<div class="flex flex-col gap-1">
+<span class="text-[10px] uppercase tracking-widest text-outline">Size</span>
+<span class="text-primary font-medium">EU 48</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] uppercase tracking-widest text-outline">Quantity</span>
+<div class="flex items-center gap-4 text-primary">
+<button class="hover:text-tertiary transition-colors"><span class="material-symbols-outlined text-sm" data-icon="remove">remove</span></button>
+<span class="font-medium text-sm">1</span>
+<button class="hover:text-tertiary transition-colors"><span class="material-symbols-outlined text-sm" data-icon="add">add</span></button>
+</div>
+</div>
+</div>
+<button class="text-secondary hover:text-error transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+<span class="text-[10px] font-bold tracking-widest uppercase">Remove</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Cart Item 02 -->
+<div class="flex flex-col md:flex-row gap-8 pb-12 border-b border-outline-variant/20">
+<div class="w-full md:w-48 aspect-[3/4] bg-surface-container overflow-hidden rounded-xl group">
+<img alt="Brutalist Leather Derby" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="Minimalist dark brown leather derby shoes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpXpoKkPoYiz_HDz1vkwOLUovBshFFACGm7vMdfCtiBct9oKvM1euY1yYnn0HEDzAEq8r43obJvrLTG9YlexKp8SlzpREevg4mSA9E4v6ZAmmkDfsqlYo5_S36QZErYyIQqpsCITiMCUfgiHimnHns7fF-Ud2hT93c5zJPRmsgWpTZyR84JdtEYpMg35A48wlPb2a3GwyC7wDqLYWd2MufSLzqJpJuvveDIQdKK_LHoPl23q4n84-MrePyvaPRIUV5pc4kNgYlDJX-"/>
+</div>
+<div class="flex-grow flex flex-col justify-between py-2">
+<div class="flex justify-between items-start">
+<div>
+<span class="text-secondary text-[10px] font-bold tracking-[0.2em] uppercase mb-2 block">Footwear</span>
+<h3 class="font-headline text-2xl text-primary mb-1">Brutalist Leather Derby</h3>
+<p class="text-secondary text-sm font-body">Hand-Burnished / Calfskin</p>
+</div>
+<p class="font-headline text-xl text-primary">$320.00</p>
+</div>
+<div class="flex items-center justify-between mt-8">
+<div class="flex items-center gap-12">
+<div class="flex flex-col gap-1">
+<span class="text-[10px] uppercase tracking-widest text-outline">Size</span>
+<span class="text-primary font-medium">EU 43</span>
+</div>
+<div class="flex flex-col gap-1">
+<span class="text-[10px] uppercase tracking-widest text-outline">Quantity</span>
+<div class="flex items-center gap-4 text-primary">
+<button class="hover:text-tertiary transition-colors"><span class="material-symbols-outlined text-sm" data-icon="remove">remove</span></button>
+<span class="font-medium text-sm">1</span>
+<button class="hover:text-tertiary transition-colors"><span class="material-symbols-outlined text-sm" data-icon="add">add</span></button>
+</div>
+</div>
+</div>
+<button class="text-secondary hover:text-error transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="delete">delete</span>
+<span class="text-[10px] font-bold tracking-widest uppercase">Remove</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Summary Sidebar -->
+<div class="lg:col-span-4">
+<div class="bg-surface-container-low p-10 rounded-xl sticky top-32">
+<h2 class="font-headline text-2xl text-primary mb-8">Order Summary</h2>
+<div class="space-y-4 mb-8">
+<div class="flex justify-between text-sm">
+<span class="text-secondary font-body">Subtotal</span>
+<span class="text-primary font-medium">$765.00</span>
+</div>
+<div class="flex justify-between text-sm">
+<span class="text-secondary font-body">Standard Shipping</span>
+<span class="text-primary font-medium">$12.00</span>
+</div>
+<div class="flex justify-between text-sm">
+<span class="text-secondary font-body">Estimated Tax</span>
+<span class="text-primary font-medium">$64.20</span>
+</div>
+</div>
+<div class="pt-8 border-t border-outline-variant/30 mb-10">
+<div class="flex justify-between items-baseline">
+<span class="font-headline text-xl text-primary">Total</span>
+<span class="font-headline text-3xl text-primary">$841.20</span>
+</div>
+</div>
+<button class="w-full py-5 px-8 rounded-lg bg-gradient-to-br from-primary to-primary-container text-on-primary font-body font-medium tracking-wide flex items-center justify-center gap-3 hover:opacity-90 transition-opacity">
+                        Proceed to Checkout
+                        <span class="material-symbols-outlined text-xl" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<div class="mt-8 flex flex-col gap-4">
+<div class="flex items-center gap-4 text-xs text-secondary/70">
+<span class="material-symbols-outlined text-lg" data-icon="encrypted">encrypted</span>
+<span>Secure encrypted payment processing</span>
+</div>
+<div class="flex items-center gap-4 text-xs text-secondary/70">
+<span class="material-symbols-outlined text-lg" data-icon="local_shipping">local_shipping</span>
+<span>Complimentary shipping on orders over $1,000</span>
+</div>
+</div>
+</div>
+<div class="mt-8 p-6 bg-surface-container-highest/30 rounded-lg text-center">
+<p class="text-[10px] font-bold tracking-[0.2em] text-secondary uppercase mb-2">Exclusive Offer</p>
+<p class="text-xs text-primary leading-relaxed">Join ND Atelier for free shipping and early access to the FW25 Preview.</p>
+<button class="mt-4 text-[10px] font-bold tracking-widest uppercase underline decoration-tertiary underline-offset-4 hover:text-tertiary transition-colors">Join Now</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full pt-24 pb-12 bg-[#f5f3ee] dark:bg-[#1b1c19] tonal-shift-from-surface">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 w-full max-w-screen-2xl mx-auto">
+<div class="mb-8 md:mb-0">
+<span class="text-lg font-semibold text-[#061b0e] dark:text-[#fbf9f4]">ND Shop</span>
+<p class="font-['Inter'] text-[10px] uppercase tracking-widest text-[#575d79] mt-2">© 2024 ND Shop. The Digital Atelier.</p>
+</div>
+<div class="flex gap-12">
+<a class="font-['Inter'] text-[10px] uppercase tracking-widest text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Sustainability</a>
+<a class="font-['Inter'] text-[10px] uppercase tracking-widest text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Atelier Services</a>
+<a class="font-['Inter'] text-[10px] uppercase tracking-widest text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Privacy</a>
+<a class="font-['Inter'] text-[10px] uppercase tracking-widest text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Terms</a>
+</div>
+</div>
+</footer>
+</body></html>

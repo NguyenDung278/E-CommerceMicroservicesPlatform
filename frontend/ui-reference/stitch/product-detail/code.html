@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#5b617d",
+              "inverse-surface": "#30312e",
+              "secondary-container": "#d9deff",
+              "on-tertiary": "#ffffff",
+              "outline-variant": "#c3c8c1",
+              "on-secondary-fixed": "#141a32",
+              "surface-tint": "#4d6453",
+              "surface-container-highest": "#e4e2dd",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#ffb59d",
+              "surface-container-high": "#eae8e3",
+              "surface-container": "#f0eee9",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#73341f",
+              "on-primary-fixed-variant": "#364c3c",
+              "on-error": "#ffffff",
+              "on-tertiary-fixed": "#390b00",
+              "on-error-container": "#93000a",
+              "tertiary-container": "#501a07",
+              "on-surface-variant": "#434843",
+              "inverse-primary": "#b4cdb8",
+              "surface": "#fbf9f4",
+              "on-tertiary-container": "#d07d63",
+              "tertiary": "#320900",
+              "primary": "#061b0e",
+              "on-secondary-fixed-variant": "#404660",
+              "tertiary-fixed": "#ffdbd0",
+              "secondary-fixed-dim": "#bfc5e5",
+              "secondary-fixed": "#dce1ff",
+              "surface-container-lowest": "#ffffff",
+              "primary-container": "#1b3022",
+              "on-secondary": "#ffffff",
+              "inverse-on-surface": "#f2f1ec",
+              "background": "#fbf9f4",
+              "outline": "#737973",
+              "on-primary-fixed": "#0b2013",
+              "on-primary-container": "#819986",
+              "on-background": "#1b1c19",
+              "surface-dim": "#dbdad5",
+              "secondary": "#575d79",
+              "primary-fixed": "#d0e9d4",
+              "on-surface": "#1b1c19",
+              "surface-variant": "#e4e2dd",
+              "on-primary": "#ffffff",
+              "surface-container-low": "#f5f3ee",
+              "surface-bright": "#fbf9f4",
+              "primary-fixed-dim": "#b4cdb8"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "1.5rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body { font-family: 'Inter', sans-serif; }
+      h1, h2, h3 { font-family: 'Noto Serif', serif; }
+      .glass-nav {
+        backdrop-filter: blur(20px);
+        background: rgba(251, 249, 244, 0.8);
+      }
+    </style>
+</head>
+<body class="bg-background text-on-surface selection:bg-tertiary-fixed selection:text-on-tertiary-fixed">
+<!-- TopNavBar -->
+<nav class="w-full top-0 sticky z-50 glass-nav">
+<div class="flex justify-between items-center px-12 py-6 w-full max-w-screen-2xl mx-auto">
+<div class="text-2xl font-bold tracking-tighter text-[#061b0e] dark:text-[#fbf9f4]">ND Shop</div>
+<div class="hidden md:flex items-center space-x-8 font-['Noto_Serif'] tracking-tight">
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Men</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Women</a>
+<a class="text-[#061b0e] dark:text-[#fbf9f4] border-b-2 border-[#1B3022] pb-1" href="#">Footwear</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Accessories</a>
+</div>
+<div class="flex items-center space-x-6">
+<button class="text-on-surface hover:opacity-70 transition-opacity">
+<span class="material-symbols-outlined">shopping_bag</span>
+</button>
+<button class="font-medium text-sm tracking-wide uppercase">Account</button>
+</div>
+</div>
+</nav>
+<main class="max-w-screen-2xl mx-auto px-6 md:px-12 pt-12 pb-24">
+<!-- Product Section -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+<!-- Left: Asymmetric Image Gallery -->
+<div class="lg:col-span-7 grid grid-cols-2 gap-4">
+<div class="col-span-2 aspect-[4/5] overflow-hidden rounded-xl bg-surface-container-low">
+<img class="w-full h-full object-cover hover:scale-105 transition-transform duration-700" data-alt="Close up shot of premium hand-stitched leather boot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwVupOdJIeIiAijcdoYegCoJatqwjDtXW0BUrIgVYFpZ7bEdK5l3GlfwvXLWU36Jt_f-3A0QmI0grQSrNDYxTtgtgODrEbojga9M_wxpo4Hp_E5Uqv2Vv7HW79zuRMHuN62pgsI9QxxFf4868GCXYIy5UsXMGhaFRGFIwxdYgAkCPpkvRcxTGYnXzrk1vdu-_tTCnmata_dz2paM5n8ryooYFniOpl7CVBDIRrjZW3R1tXmerZ74YO8NvGIdSICqKtTeDmpzDTGAaC"/>
+</div>
+<div class="aspect-square overflow-hidden rounded-xl bg-surface-container-low">
+<img class="w-full h-full object-cover hover:scale-105 transition-transform duration-700" data-alt="Side profile view of dark espresso leather boot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVXtG86XF-chItwMJqS7jaBH7hABMfJSxuCPegYHiaPTREp0jTZKqXc-_HcRQ7tqRCxGDfjhRrHRhd1hVxMktgdEdikep_MJOzexMmC63xudNBGx4XHArIfHZnYFKd4MWMCofk0pU_u43WmF6qlCdMtsmXg_xTSnrb6i5VE-eq3LgGu4BVrR0rVQ-AaWbbzhL0bd5eRTKvdnP7rHlC5rWnMsG1El7103v9t7yZqO7-IBV0CmGItSd7s4iMLSWDJ6qS1Ao61edJaGAS"/>
+</div>
+<div class="aspect-square overflow-hidden rounded-xl bg-surface-container-low">
+<img class="w-full h-full object-cover hover:scale-105 transition-transform duration-700" data-alt="Detail shot of the boot sole and texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-f1hJh0vRR4ysUINhEVB3TexfbfMTM43mBLAAW0AO1QMUWity1CVBPs7y0oRmcBteAzpLkzLM-uJ-t7RdK_mo3SRkdMm_Ena41UCjBneaknFFuX0jPpEHN8fwgvUXT7BL58Y8igsDB6sgI1715gg8keP63A91hR4ZMPIVK_B7nC0A_3P-mPv6VeEp2YWGAhgkdft8XOAe1dlWT7AnUwjIDb9MY5g-9GuHsMhFoxUEkrk7Bc0H5lQBaQxSnMTEgt2GlmFwgb3okqER"/>
+</div>
+</div>
+<!-- Right: Product Information -->
+<div class="lg:col-span-5 lg:sticky lg:top-32 space-y-10">
+<header class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="bg-secondary text-on-secondary px-3 py-1 rounded-full text-[10px] tracking-[0.2em] uppercase font-bold">New Arrival</span>
+<span class="text-tertiary text-xs font-semibold tracking-widest uppercase">The Heritage Collection</span>
+</div>
+<h1 class="text-5xl md:text-6xl font-bold tracking-tighter leading-tight text-primary">The Sculptor Boot</h1>
+<p class="text-2xl font-light text-on-surface-variant">$485.00</p>
+</header>
+<div class="prose prose-neutral max-w-none">
+<p class="text-lg leading-relaxed text-on-surface opacity-80 font-body">
+                        Crafted at the intersection of architectural precision and rugged utility. Every pair is lasting-built from vegetable-tanned Italian calfskin that evolves with your journey, gaining a singular patina that records every step of the wearer's narrative. 
+                    </p>
+</div>
+<!-- Selectors -->
+<div class="space-y-8">
+<!-- Color -->
+<div class="space-y-4">
+<label class="text-xs uppercase tracking-widest font-bold opacity-60">Finish</label>
+<div class="flex gap-4">
+<button class="w-10 h-10 rounded-full bg-[#1b1c19] ring-2 ring-offset-4 ring-primary"></button>
+<button class="w-10 h-10 rounded-full bg-[#4a3728] hover:scale-110 transition-transform"></button>
+<button class="w-10 h-10 rounded-full bg-[#7d5c41] hover:scale-110 transition-transform"></button>
+</div>
+</div>
+<!-- Size -->
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<label class="text-xs uppercase tracking-widest font-bold opacity-60">Standard Size</label>
+<a class="text-xs font-medium underline underline-offset-4 hover:text-tertiary transition-colors" href="#">Size Chart</a>
+</div>
+<div class="grid grid-cols-4 gap-2">
+<button class="py-4 text-sm font-medium border border-outline-variant hover:border-primary transition-all">08</button>
+<button class="py-4 text-sm font-medium border border-outline-variant hover:border-primary transition-all">09</button>
+<button class="py-4 text-sm font-medium border-2 border-primary bg-surface-container-low">10</button>
+<button class="py-4 text-sm font-medium border border-outline-variant hover:border-primary transition-all">11</button>
+<button class="py-4 text-sm font-medium border border-outline-variant hover:border-primary transition-all">12</button>
+<button class="py-4 text-sm font-medium border border-outline-variant opacity-30 cursor-not-allowed">13</button>
+</div>
+</div>
+</div>
+<!-- CTA -->
+<div class="pt-6">
+<button class="w-full py-6 rounded-lg bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-lg tracking-tight hover:scale-[0.98] transition-transform duration-200 shadow-xl shadow-primary/10">
+                        Add to Cart
+                    </button>
+<p class="text-center mt-6 text-xs text-on-surface-variant flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-base">local_shipping</span>
+                        Complimentary atelier shipping and returns.
+                    </p>
+</div>
+</div>
+</div>
+<!-- Section Transition -->
+<div class="h-32"></div>
+<!-- Platform Specs: Microservice Flow -->
+<section class="py-24 px-12 rounded-xl bg-surface-container-low">
+<div class="max-w-4xl mx-auto text-center space-y-12">
+<div class="space-y-2">
+<span class="text-secondary text-[10px] tracking-[0.3em] font-bold uppercase">Backend Integrity</span>
+<h2 class="text-4xl font-bold tracking-tight">System Architecture</h2>
+</div>
+<div class="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-0">
+<div class="flex-1 p-8 rounded-xl bg-surface border border-outline-variant/10 text-center space-y-4">
+<span class="material-symbols-outlined text-4xl text-primary">api</span>
+<h4 class="font-bold">Product API</h4>
+<p class="text-xs text-on-surface-variant">Real-time metadata &amp; media streaming</p>
+</div>
+<div class="h-12 w-12 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline">arrow_forward</span>
+</div>
+<div class="flex-1 p-8 rounded-xl bg-primary text-on-primary text-center space-y-4 shadow-2xl">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<h4 class="font-bold">Inventory API</h4>
+<p class="text-xs opacity-70">Global stock synchronisation across nodes</p>
+</div>
+<div class="h-12 w-12 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline">arrow_forward</span>
+</div>
+<div class="flex-1 p-8 rounded-xl bg-surface border border-outline-variant/10 text-center space-y-4">
+<span class="material-symbols-outlined text-4xl text-primary">local_shipping</span>
+<h4 class="font-bold">Logistic Hub</h4>
+<p class="text-xs text-on-surface-variant">Automated fulfillment orchestration</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Customer Reviews -->
+<section class="py-24">
+<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
+<div class="space-y-2">
+<h2 class="text-4xl font-bold">The Wearer's Voice</h2>
+<div class="flex items-center gap-4">
+<div class="flex text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star_half</span>
+</div>
+<span class="text-sm font-medium">4.8 Based on 128 Reviews</span>
+</div>
+</div>
+<button class="pb-1 border-b-2 border-primary font-bold text-sm uppercase tracking-widest">Write a Review</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<!-- Review Card -->
+<div class="p-10 bg-surface-container-lowest rounded-xl border-l-4 border-tertiary space-y-6">
+<div class="flex text-tertiary scale-75 -ml-3">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<p class="text-on-surface italic leading-relaxed">"The patina after three months of wear is incredible. These aren't just boots; they are pieces of equipment for the city."</p>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold">EM</div>
+<span class="text-xs font-bold uppercase tracking-widest">Elias M. — verified architect</span>
+</div>
+</div>
+<div class="p-10 bg-surface-container-lowest rounded-xl border-l-4 border-tertiary space-y-6">
+<div class="flex text-tertiary scale-75 -ml-3">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<p class="text-on-surface italic leading-relaxed">"Surprisingly lightweight for such robust construction. Fits true to size after a short break-in period."</p>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold">SJ</div>
+<span class="text-xs font-bold uppercase tracking-widest">Sarah J. — verified artisan</span>
+</div>
+</div>
+<div class="p-10 bg-surface-container-lowest rounded-xl border-l-4 border-tertiary space-y-6">
+<div class="flex text-tertiary scale-75 -ml-3">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined">star</span>
+</div>
+<p class="text-on-surface italic leading-relaxed">"The attention to detail on the stitching is better than bespoke options I've seen in Milan."</p>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-[10px] font-bold">RK</div>
+<span class="text-xs font-bold uppercase tracking-widest">Robert K. — verified director</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Related Products -->
+<section class="py-24 space-y-16">
+<h2 class="text-4xl font-bold text-center">Complete The Look</h2>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+<!-- Related Item 1 -->
+<div class="group cursor-pointer">
+<div class="aspect-[3/4] overflow-hidden rounded-xl bg-surface-container-low mb-4">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Dark denim jacket for layering" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSBrKLuOLhlOfOs_bQis0k9ZSYrQEiE6LazJj514brfoL7J8T9KPeSqaPTLq_HxcCwNd6wSkSmH6g0OIzsuD8eKMf9dzGQ8jV9omIxB8GSDqJ3YxPh2ui-PzstXyKm1VHr_6bnQpLyTEs6RYvcEhNzaT33_akKgv_sIqNg_PkGIkHy0p7MDtWUXk_lLRCFco-RoNYT8DrScQSTCkDFH1kKQILP83WRmdIZ6cNSL-rJcFo58DuVJWFZw8hycaTH0igUVgf_aL8F7AOI"/>
+</div>
+<h3 class="font-bold text-lg">Raw Indigo Denim</h3>
+<p class="text-on-surface-variant text-sm">$220.00</p>
+</div>
+<!-- Related Item 2 -->
+<div class="group cursor-pointer">
+<div class="aspect-[3/4] overflow-hidden rounded-xl bg-surface-container-low mb-4">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Handcrafted leather belt in espresso" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDF7Q0xn_dsQvYg6tNC-9SPUB94wbYNEiyAc_Lz0PWbvP1HCubG11_WDVThSCAbiUDLBGaR_KYnsJBXtUU6oHv1Qqemnng_9qPeA-DpQLJuifH7wfw-5SMfPlWvjoNx42OOupxBJaoaDNbwExQwIDUHrNTeTtX-JxBlmVnj8bC0N-oe-LErK9l1qjyebe31vCdHSYlUJOKOXiHpp9pCLDUsDmDupONcfea9O-wvje0YIS7Exgzqi4O0sLTm3Ox584DBW2Y_45HX9gYU"/>
+</div>
+<h3 class="font-bold text-lg">Utility Belt</h3>
+<p class="text-on-surface-variant text-sm">$125.00</p>
+</div>
+<!-- Related Item 3 -->
+<div class="group cursor-pointer">
+<div class="aspect-[3/4] overflow-hidden rounded-xl bg-surface-container-low mb-4">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Heavy knit wool sweater in cream" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADrYKwL8ertm8xx3GPF-41z4nORoBqFwbRSQtPvqDLDp60xcUen2d6YEixbn6R_BGC2n4OoMe4lwDUfKSBBx5AjY5vyD4xdeMGo8rpVWDZX1i4N4M_00sndxsdxWqoSDxbUtBnd-YcLn_Vnfx67n85G_AbOtgXScRR9nV_J-I_m0CNTz7BYalcBGIoZRrgA0nYxktSBbdTDpofQVamZxwQKvjIdMSjBWvYKrW02d8ldCDr1r_uP7ER0BQ5P5KKi56yar48fomjrUv4"/>
+</div>
+<h3 class="font-bold text-lg">Merino Cable Knit</h3>
+<p class="text-on-surface-variant text-sm">$310.00</p>
+</div>
+<!-- Related Item 4 -->
+<div class="group cursor-pointer">
+<div class="aspect-[3/4] overflow-hidden rounded-xl bg-surface-container-low mb-4">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Premium leather tote bag" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPPlkPmu6UUK-28KZTE4Blt1SDxYUEVnmPu2OVGTVBryPUy7HCiTVOnLuVlZbU6eVMKla-4hJ0wus83qk8b__95tm6jL8hXTsnvfg9MdUyJ6MkXa3uviuyqhYr7gZVmB4EopOGsZuto9-p3Bk_0vbAdi9H_ketAP4lgu-G3OtqORxxEzTLRnTQtCZV1cdjAJV_UYYlQ4PWSRLntBfq5W4JGAczd6D-zOFy5FvtD-349E-hK8q4rebIpZ6rQfA4EITfDT7_gtocqKWE"/>
+</div>
+<h3 class="font-bold text-lg">Commuter Tote</h3>
+<p class="text-on-surface-variant text-sm">$395.00</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full pt-24 pb-12 bg-[#f5f3ee] dark:bg-[#1b1c19]">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 w-full max-w-screen-2xl mx-auto border-t border-outline-variant/10 pt-12">
+<div class="space-y-4 text-center md:text-left">
+<div class="text-lg font-semibold text-[#061b0e] dark:text-[#fbf9f4]">ND Shop</div>
+<p class="font-['Inter'] text-xs uppercase tracking-widest text-[#575d79]">© 2024 ND Shop. The Digital Atelier.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-8 mt-8 md:mt-0 font-['Inter'] text-[10px] uppercase tracking-[0.2em]">
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Sustainability</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Atelier Services</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Privacy</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all" href="#">Terms</a>
+</div>
+</div>
+</footer>
+</body></html>

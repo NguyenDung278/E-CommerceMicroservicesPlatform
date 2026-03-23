@@ -1,0 +1,63 @@
+# Tài liệu Đặc tả Luồng Đăng nhập & Đăng ký (ND Shop)
+
+## 1. Tổng quan & Mục tiêu
+Thiết kế luồng xác thực người dùng thân thiện, bảo mật và tinh tế cho hệ thống ND Shop, kết hợp giữa sự tiện lợi của Shopee/Lazada và phong cách "Editorial" của thương hiệu.
+
+---
+
+## 2. Các màn hình & Thành phần chi tiết
+
+### 2.1. Trang Đăng nhập (Login)
+- **Layout:** Chia làm 2 phần trên Desktop (Trái: Hình ảnh thương hiệu/Thông điệp; Phải: Form đăng nhập). Trên Mobile là layout 1 cột tập trung vào form.
+- **Thành phần:**
+  - Tiêu đề: "Chào mừng trở lại" (Serif font).
+  - Input: Email/Số điện thoại, Mật khẩu (có icon ẩn/hiện).
+  - Checkbox: "Ghi nhớ đăng nhập" & Link "Quên mật khẩu?".
+  - Button: "Đăng nhập" (Primary color - Forest Green).
+  - Social Login: Google, Facebook (Icon tối giản).
+  - Footer: "Chưa có tài khoản? Đăng ký ngay".
+- **Validation:** Kiểm tra định dạng email, mật khẩu không được trống.
+
+### 2.2. Trang Đăng ký (Register)
+- **Layout:** Tương tự trang đăng nhập để giữ sự nhất quán.
+- **Thành phần:**
+  - Tiêu đề: "Tạo tài khoản mới".
+  - Input: Họ tên, Email, Số điện thoại, Mật khẩu, Nhập lại mật khẩu.
+  - Checkbox: "Tôi đồng ý với Điều khoản & Chính sách".
+  - Button: "Đăng ký" (Primary color).
+  - Footer: "Đã có tài khoản? Đăng nhập".
+- **Validation:** Độ mạnh mật khẩu (min 8 ký tự, 1 chữ hoa, 1 số), mật khẩu khớp nhau, email hợp lệ.
+
+### 2.3. Trang Quên mật khẩu (Forgot Password)
+- **Layout:** Centered card (tập trung tối đa).
+- **Thành phần:**
+  - Tiêu đề: "Khôi phục mật khẩu".
+  - Hướng dẫn: "Nhập email của bạn để nhận mã xác thực".
+  - Input: Email.
+  - Button: "Gửi mã xác thực".
+  - Link: "Quay lại đăng nhập".
+
+### 2.4. Trang Xác thực OTP (OTP Verification)
+- **Layout:** Centered card.
+- **Thành phần:**
+  - Tiêu đề: "Xác thực tài khoản".
+  - Thông báo: "Mã OTP đã được gửi đến email [user-email]".
+  - Input: 6 ô nhập mã OTP riêng biệt.
+  - Timer: "Gửi lại mã sau (59s)".
+  - Button: "Xác nhận".
+
+---
+
+## 3. Luồng Chuyển đổi (User Flow)
+1. **Đăng nhập:** Nếu sai -> Báo lỗi; Nếu đúng -> Trang chủ.
+2. **Quên mật khẩu:** Nhập email -> Gửi -> Chuyển sang trang OTP.
+3. **Đăng ký:** Nhập thông tin -> Đăng ký -> Chuyển sang trang OTP -> Thành công -> Trang chủ.
+4. **OTP:** Nhập đúng -> Xác thực thành công -> (Nếu quên MK) Đổi MK mới / (Nếu đăng ký) Đăng nhập tự động.
+
+---
+
+## 4. Gợi ý Visual (UI Tokens)
+- **Màu sắc:** Forest Green (#1B3022), Warm Cream (#F9F7F2), Terracotta (#D48166) cho các thông báo quan trọng.
+- **Typography:** Noto Serif cho tiêu đề, Inter cho các trường nhập liệu và nút bấm.
+- **Bo góc:** 8px cho các input và button để tạo cảm giác hiện đại, mềm mại.
+- **Shadow:** Soft shadow (0 4px 20px rgba(0,0,0,0.05)) cho các form card.

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login | ND Shop</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-error": "#ffffff",
+              "tertiary-fixed": "#ffdbd0",
+              "surface-container-lowest": "#ffffff",
+              "on-tertiary-fixed": "#390b00",
+              "on-secondary-container": "#5b617d",
+              "on-primary-fixed": "#0b2013",
+              "surface-tint": "#4d6453",
+              "primary-container": "#1b3022",
+              "tertiary-fixed-dim": "#ffb59d",
+              "surface-bright": "#fbf9f4",
+              "primary": "#061b0e",
+              "on-primary-container": "#819986",
+              "on-secondary-fixed": "#141a32",
+              "surface-container-low": "#f5f3ee",
+              "on-primary": "#ffffff",
+              "background": "#fbf9f4",
+              "tertiary-container": "#501a07",
+              "on-error-container": "#93000a",
+              "inverse-on-surface": "#f2f1ec",
+              "secondary-container": "#d9deff",
+              "secondary": "#575d79",
+              "primary-fixed": "#d0e9d4",
+              "outline-variant": "#c3c8c1",
+              "inverse-surface": "#30312e",
+              "surface": "#fbf9f4",
+              "surface-variant": "#e4e2dd",
+              "secondary-fixed": "#dce1ff",
+              "inverse-primary": "#b4cdb8",
+              "primary-fixed-dim": "#b4cdb8",
+              "on-primary-fixed-variant": "#364c3c",
+              "outline": "#737973",
+              "error-container": "#ffdad6",
+              "surface-container-highest": "#e4e2dd",
+              "on-tertiary-container": "#d07d63",
+              "on-tertiary": "#ffffff",
+              "on-surface-variant": "#434843",
+              "error": "#ba1a1a",
+              "surface-dim": "#dbdad5",
+              "on-secondary-fixed-variant": "#404660",
+              "on-background": "#1b1c19",
+              "surface-container": "#f0eee9",
+              "secondary-fixed-dim": "#bfc5e5",
+              "on-secondary": "#ffffff",
+              "on-tertiary-fixed-variant": "#73341f",
+              "on-surface": "#1b1c19",
+              "tertiary": "#320900",
+              "surface-container-high": "#eae8e3"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-forest-gradient {
+            background: linear-gradient(135deg, #061b0e 0%, #1b3022 100%);
+        }
+        .input-underline {
+            border: none;
+            border-bottom: 1px solid #c3c8c1;
+            background: transparent;
+            border-radius: 0;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        .input-underline:focus {
+            outline: none;
+            border-bottom: 2px solid #061b0e;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-tertiary-fixed selection:text-on-tertiary-fixed overflow-x-hidden">
+<!-- Auth Layout Wrapper -->
+<main class="min-h-screen flex flex-col md:flex-row">
+<!-- Brand Visual Side (Desktop) -->
+<section class="hidden md:flex md:w-1/2 lg:w-3/5 relative bg-primary-container items-center justify-center overflow-hidden">
+<div class="absolute inset-0 opacity-40">
+<img alt="Forest Aesthetic" class="w-full h-full object-cover" data-alt="Deep evergreen forest with misty morning light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIsJktK36_aSW-UtyTylS7bIE2ag2K5vHEo9K5uBJWk3gz1aqmIxIwRCxvh34us8lJuqd38F1f1_5iV2bpMRvwvXSNMyiGATkYaLm7STijMcVISPQZHNt3D9CUfgonupg0m_MzMTO82sKbZCm2USnw5_ovQbp048QV1L1PX6UNbLo7BDur9ErKWBC0Nc9InTq493B4TV-aPEbU9sF6eHP6asBT15g5iFITrMLOqbdVJChAOCrr0gO-Exp_xb2duyf7o_lsTe6P7ed5"/>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
+<div class="relative z-10 p-12 lg:p-24 max-w-2xl text-on-primary">
+<div class="mb-8">
+<span class="font-headline italic font-bold text-4xl lg:text-5xl tracking-tighter">ND Shop</span>
+</div>
+<h2 class="font-headline text-5xl lg:text-7xl mb-6 leading-tight">Curated items for the modern hearth.</h2>
+<p class="text-on-primary-container text-lg max-w-md font-light leading-relaxed">
+                    Connecting ancestral quality with contemporary living through sustainably sourced forest-inspired goods.
+                </p>
+</div>
+<!-- Glassmorphism Detail -->
+<div class="absolute bottom-12 right-12 p-6 rounded-xl bg-surface/10 backdrop-blur-md border border-white/10 hidden lg:block">
+<span class="text-on-primary text-xs tracking-[0.2em] uppercase block mb-2 opacity-60">Featured Collection</span>
+<span class="font-headline text-xl text-on-primary">The Evergreen Series</span>
+</div>
+</section>
+<!-- Form Side -->
+<section class="flex-1 flex flex-col justify-center px-8 py-12 md:px-16 lg:px-24 bg-surface min-h-screen">
+<!-- Mobile Brand Mark -->
+<div class="md:hidden mb-12">
+<span class="font-headline italic font-bold text-2xl tracking-tighter text-primary">ND Shop</span>
+</div>
+<div class="max-w-md w-full mx-auto">
+<header class="mb-10">
+<h1 class="font-headline text-4xl font-bold text-on-surface mb-2">Welcome Back</h1>
+<p class="text-secondary font-body">Enter your details to access your atelier.</p>
+</header>
+<form class="space-y-8">
+<!-- Email Field -->
+<div class="relative">
+<label class="block text-xs font-semibold text-secondary uppercase tracking-widest mb-1" for="email">Email Address</label>
+<input class="w-full input-underline py-3 text-on-surface placeholder:text-outline/50 transition-all" id="email" name="email" placeholder="name@example.com" type="email"/>
+</div>
+<!-- Password Field -->
+<div class="relative">
+<label class="block text-xs font-semibold text-secondary uppercase tracking-widest mb-1" for="password">Password</label>
+<div class="relative">
+<input class="w-full input-underline py-3 text-on-surface placeholder:text-outline/50 transition-all" id="password" name="password" placeholder="••••••••" type="password"/>
+<button class="absolute right-0 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<!-- Options -->
+<div class="flex items-center justify-between py-2">
+<label class="flex items-center space-x-3 cursor-pointer group">
+<div class="relative">
+<input class="peer sr-only" type="checkbox"/>
+<div class="w-5 h-5 border-2 border-outline-variant rounded peer-checked:bg-primary peer-checked:border-primary transition-all"></div>
+<span class="material-symbols-outlined absolute inset-0 text-on-primary text-[16px] hidden peer-checked:block text-center pt-[1px]">check</span>
+</div>
+<span class="text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Remember me</span>
+</label>
+<a class="text-sm font-medium text-secondary hover:text-tertiary transition-colors decoration-tertiary/30 underline-offset-4 hover:underline" href="#">Forgot password?</a>
+</div>
+<!-- Action Button -->
+<div class="pt-4">
+<button class="w-full bg-forest-gradient text-on-primary py-4 px-6 rounded-lg font-semibold tracking-wide hover:opacity-90 active:scale-[0.98] transition-all duration-200 flex items-center justify-center space-x-2" type="submit">
+<span>Login</span>
+<span class="material-symbols-outlined text-[18px]">east</span>
+</button>
+</div>
+</form>
+<!-- Social Login Separator -->
+<div class="relative my-12 text-center">
+<div class="absolute inset-0 flex items-center">
+<div class="w-full border-t border-outline-variant/30"></div>
+</div>
+<span class="relative bg-surface px-4 text-xs font-semibold text-outline tracking-[0.2em] uppercase">Or continue with</span>
+</div>
+<!-- Social Grid -->
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-3 py-3 px-4 border border-outline-variant/40 rounded-lg hover:bg-surface-container-low transition-colors group">
+<svg class="w-5 h-5" viewbox="0 0 24 24">
+<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"></path>
+<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+</svg>
+<span class="text-sm font-medium text-on-surface-variant">Google</span>
+</button>
+<button class="flex items-center justify-center gap-3 py-3 px-4 border border-outline-variant/40 rounded-lg hover:bg-surface-container-low transition-colors group">
+<svg class="w-5 h-5" fill="#1877F2" viewbox="0 0 24 24">
+<path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"></path>
+</svg>
+<span class="text-sm font-medium text-on-surface-variant">Facebook</span>
+</button>
+</div>
+<!-- Register Prompt -->
+<footer class="mt-12 text-center">
+<p class="text-sm text-secondary">
+                        Don't have an account? 
+                        <a class="font-semibold text-primary ml-1 hover:text-[#8d4c32] transition-colors decoration-2 underline decoration-tertiary-fixed-dim/0 hover:decoration-tertiary-fixed-dim underline-offset-4" href="#">Register</a>
+</p>
+</footer>
+</div>
+</section>
+</main>
+<!-- Global Footer Fragment (from Shared Components) -->
+<footer class="w-full mt-auto bg-surface-container-low dark:bg-[#1b1c19]">
+<div class="flex flex-col md:flex-row justify-between items-center px-10 py-12 gap-6 w-full max-w-7xl mx-auto">
+<div class="font-noto-serif text-lg text-[#061b0e] font-bold">ND Shop</div>
+<div class="flex flex-wrap justify-center gap-8">
+<a class="font-inter text-xs tracking-wide uppercase text-secondary hover:text-[#8d4c32] transition-colors" href="#">Privacy Policy</a>
+<a class="font-inter text-xs tracking-wide uppercase text-secondary hover:text-[#8d4c32] transition-colors" href="#">Terms of Service</a>
+<a class="font-inter text-xs tracking-wide uppercase text-secondary hover:text-[#8d4c32] transition-colors" href="#">Contact Support</a>
+</div>
+<div class="font-inter text-xs tracking-wide uppercase text-secondary">
+                © 2024 ND Shop. All rights reserved.
+            </div>
+</div>
+</footer>
+</body></html>

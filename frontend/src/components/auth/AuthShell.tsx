@@ -39,6 +39,8 @@ export function AuthShell({
     <section className={`content-section auth-shell auth-shell-${mode}`}>
       <div className="auth-shell-grid">
         <aside className="auth-story-card">
+          <div className="auth-brand-mark">ND Shop</div>
+
           <div className="auth-story-head">
             <span className="section-kicker auth-story-kicker">{badge}</span>
             <h1>{title}</h1>
@@ -64,6 +66,11 @@ export function AuthShell({
                 </div>
               </article>
             ))}
+          </div>
+
+          <div className="auth-story-note">
+            <span>Atelier Mode</span>
+            <strong>{mode === "login" ? "The Evergreen Session" : "Join the curated collection"}</strong>
           </div>
         </aside>
 

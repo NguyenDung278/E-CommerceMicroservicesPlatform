@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-secondary-container": "#5b617d",
+              "inverse-surface": "#30312e",
+              "secondary-container": "#d9deff",
+              "on-tertiary": "#ffffff",
+              "outline-variant": "#c3c8c1",
+              "on-secondary-fixed": "#141a32",
+              "surface-tint": "#4d6453",
+              "surface-container-highest": "#e4e2dd",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#ffb59d",
+              "surface-container-high": "#eae8e3",
+              "surface-container": "#f0eee9",
+              "error": "#ba1a1a",
+              "on-tertiary-fixed-variant": "#73341f",
+              "on-primary-fixed-variant": "#364c3c",
+              "on-error": "#ffffff",
+              "on-tertiary-fixed": "#390b00",
+              "on-error-container": "#93000a",
+              "tertiary-container": "#501a07",
+              "on-surface-variant": "#434843",
+              "inverse-primary": "#b4cdb8",
+              "surface": "#fbf9f4",
+              "on-tertiary-container": "#d07d63",
+              "tertiary": "#320900",
+              "primary": "#061b0e",
+              "on-secondary-fixed-variant": "#404660",
+              "tertiary-fixed": "#ffdbd0",
+              "secondary-fixed-dim": "#bfc5e5",
+              "secondary-fixed": "#dce1ff",
+              "surface-container-lowest": "#ffffff",
+              "primary-container": "#1b3022",
+              "on-secondary": "#ffffff",
+              "inverse-on-surface": "#f2f1ec",
+              "background": "#fbf9f4",
+              "outline": "#737973",
+              "on-primary-fixed": "#0b2013",
+              "on-primary-container": "#819986",
+              "on-background": "#1b1c19",
+              "surface-dim": "#dbdad5",
+              "secondary": "#575d79",
+              "primary-fixed": "#d0e9d4",
+              "on-surface": "#1b1c19",
+              "surface-variant": "#e4e2dd",
+              "on-primary": "#ffffff",
+              "surface-container-low": "#f5f3ee",
+              "surface-bright": "#fbf9f4",
+              "primary-fixed-dim": "#b4cdb8"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-shadow {
+            box-shadow: 0 24px 48px -12px rgba(27, 28, 25, 0.08);
+        }
+        .glass-nav {
+            background-color: rgba(251, 249, 244, 0.8);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-tertiary-fixed selection:text-on-tertiary-fixed">
+<!-- TopNavBar Shell -->
+<nav class="w-full top-0 sticky z-50 glass-nav">
+<div class="flex justify-between items-center px-6 md:px-12 py-6 w-full max-w-screen-2xl mx-auto">
+<div class="flex items-center gap-8">
+<a class="text-2xl font-bold tracking-tighter text-[#061b0e] dark:text-[#fbf9f4]" href="#">ND Shop</a>
+<div class="hidden md:flex gap-8 items-center">
+<a class="text-[#061b0e] dark:text-[#fbf9f4] border-b-2 border-[#1B3022] pb-1 font-['Noto_Serif'] tracking-tight" href="#">Men</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Women</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Footwear</a>
+<a class="text-[#575d79] dark:text-[#a0a0a0] font-medium hover:text-[#1B3022] transition-colors duration-300" href="#">Accessories</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded-full scale-95 duration-200 ease-in-out cursor-pointer hover:bg-surface-container-highest">
+<span class="text-xs font-bold uppercase tracking-widest text-primary">Account</span>
+<span class="bg-secondary text-[10px] text-on-secondary px-2 py-0.5 rounded-full tracking-widest">DEV ONLY</span>
+</div>
+<button class="relative hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-primary" data-icon="shopping_bag">shopping_bag</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-tertiary rounded-full"></span>
+</button>
+</div>
+</div>
+</nav>
+<main>
+<!-- Hero Section: Forest & Hearth -->
+<section class="relative w-full h-[921px] flex items-end overflow-hidden">
+<div class="absolute inset-0 bg-primary-container">
+<img alt="Editorial fashion photography forest theme" class="w-full h-full object-cover opacity-80" data-alt="Deep forest editorial fashion photography with warm lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPKv1CtBwPM413euox0uKnxmUXjsuyZFpFIvDMoW9tfefpHVd_8BFtHSEnUjm5XAQu4WMkS8vgS56v7kIQYWar2OBBpzOurqNCin2KoM1hYEZHvbpagIiz8m2nCidCAiRbDaeJLBNHxra37cwt7QEG3UlOcKbs-W6WuTDZj3qjg9hWIs2YR26l-ijHVnj8ck1-5NDhyVXXQECwDKQJs1i-nYT93ubM2EFutXuxPWxUHWH2o2Zhbz_naP2SXRRL50t8HcB8sUf5LXiX"/>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent"></div>
+<div class="relative w-full max-w-screen-2xl mx-auto px-12 pb-24 grid grid-cols-12 items-end">
+<div class="col-span-12 md:col-span-7">
+<span class="text-tertiary-fixed font-medium tracking-[0.3em] uppercase text-xs mb-6 block">Winter 2024 Collection</span>
+<h1 class="font-headline text-display-lg md:text-[5rem] leading-[1] text-surface mb-8 tracking-tighter">Forest &amp; Hearth</h1>
+<p class="text-surface-container-low text-lg md:text-xl max-w-lg mb-10 font-light leading-relaxed">
+                        A tactile study of survival and comfort. Rooted in deep forest textures and the warmth of a mountain refuge.
+                    </p>
+<div class="flex gap-4">
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-10 py-4 rounded-lg font-medium tracking-wide hover:shadow-xl transition-all">Explore Collection</button>
+<button class="border border-surface/20 text-surface px-10 py-4 rounded-lg font-medium backdrop-blur-sm hover:bg-surface/10 transition-all">View Lookbook</button>
+</div>
+</div>
+<div class="hidden md:block md:col-span-4 md:col-start-9 border-l border-surface/20 pl-8 pb-2">
+<p class="text-surface/60 text-xs uppercase tracking-[0.2em] mb-4">The Technical Edge</p>
+<p class="text-surface/80 italic font-headline text-lg">"Microservice-driven inventory ensures real-time availability of limited atelier pieces."</p>
+</div>
+</div>
+</section>
+<!-- Category Grid (Asymmetric Bento) -->
+<section class="py-32 px-6 md:px-12 max-w-screen-2xl mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8 h-auto md:h-[1200px]">
+<!-- Shop Men -->
+<div class="md:col-span-7 md:row-span-1 relative group overflow-hidden bg-surface-container-low rounded-xl">
+<div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
+<img alt="Men's fashion category" class="w-full h-full object-cover grayscale-[20%]" data-alt="Sophisticated man wearing structured wool overcoat in forest" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW"/>
+</div>
+<div class="absolute bottom-12 left-12">
+<h2 class="font-headline text-4xl text-surface mb-4">Shop Men</h2>
+<a class="text-surface-container-low uppercase tracking-widest text-xs font-semibold flex items-center gap-2 group/link" href="#">
+                            Discover the tailoring
+                            <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Shop Women -->
+<div class="md:col-span-5 md:row-span-2 relative group overflow-hidden bg-surface-container-high rounded-xl">
+<div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
+<img alt="Women's fashion category" class="w-full h-full object-cover" data-alt="Woman in flowing knitwear posing in natural landscape" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n"/>
+</div>
+<div class="absolute top-12 left-12">
+<h2 class="font-headline text-4xl text-on-surface mb-4">Shop Women</h2>
+<a class="text-primary uppercase tracking-widest text-xs font-semibold flex items-center gap-2 group/link" href="#">
+                            View the edit
+                            <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Footwear Edit -->
+<div class="md:col-span-4 md:row-span-1 relative group overflow-hidden bg-surface-container rounded-xl">
+<div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
+<img alt="Footwear collection" class="w-full h-full object-cover" data-alt="Handcrafted leather boots on a textured surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w"/>
+</div>
+<div class="absolute bottom-10 left-10">
+<h2 class="font-headline text-3xl text-surface mb-3">The Footwear Edit</h2>
+<p class="text-surface/80 text-sm mb-4 max-w-[200px]">Handcrafted performance for the modern explorer.</p>
+<a class="inline-block border-b border-surface/40 text-surface text-xs uppercase tracking-widest pb-1" href="#">Shop Shoes</a>
+</div>
+</div>
+<!-- Curated Accessories -->
+<div class="md:col-span-3 md:row-span-1 relative group overflow-hidden bg-surface-container-highest rounded-xl">
+<div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
+<img alt="Accessories category" class="w-full h-full object-cover" data-alt="Close up of high quality leather belts and wallets" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI"/>
+</div>
+<div class="absolute inset-0 bg-primary/20"></div>
+<div class="relative h-full flex flex-col justify-end p-10">
+<h2 class="font-headline text-2xl text-surface mb-2">Curated Accessories</h2>
+<a class="text-tertiary-fixed font-semibold text-xs uppercase tracking-widest flex items-center gap-2" href="#">Explore <span class="material-symbols-outlined text-sm" data-icon="east">east</span></a>
+</div>
+</div>
+</div>
+</section>
+<!-- Technical Editorial Callout -->
+<section class="bg-surface-container-low py-32">
+<div class="max-w-screen-xl mx-auto px-6 md:px-12 grid grid-cols-1 md:grid-cols-2 items-center gap-24">
+<div class="order-2 md:order-1">
+<h3 class="font-headline text-display-lg text-primary mb-8 leading-tight">Digital Precision,<br/>Analogue Soul.</h3>
+<p class="text-on-surface-variant text-lg mb-12 leading-relaxed">
+                        Beyond the silhouette lies a sophisticated technological core. Our microservice-driven inventory architecture ensures that every piece in our Digital Atelier is accounted for in real-time, syncing artisanal supply with global demand.
+                    </p>
+<div class="grid grid-cols-2 gap-8">
+<div>
+<span class="text-tertiary font-bold text-2xl font-headline mb-2 block">0.4s</span>
+<p class="text-xs uppercase tracking-widest text-outline">Inventory Latency</p>
+</div>
+<div>
+<span class="text-tertiary font-bold text-2xl font-headline mb-2 block">100%</span>
+<p class="text-xs uppercase tracking-widest text-outline">Atelier Sourcing</p>
+</div>
+</div>
+</div>
+<div class="order-1 md:order-2 rounded-xl overflow-hidden editorial-shadow rotate-1 group">
+<img alt="Studio atelier process" class="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" data-alt="Designer working in a high-end fashion studio with rolls of fabric" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-QCiHmdCOxRlVT1rixfgiaLjtOyUpf_qCwS4N8rEMGTTVyJxqkHxQ1iiUeTIIjM9C_MgASpIzwLXa8wLI7ck0F5p1lc6AA6MfKkb3aN_Nbw5AhWsU9lBPxRcNlN7vOcvcId55iSoZRYNe8TCXUI_PC9zSeiPi6-O2ojrYX1RkopzPM8W9xTFEi3rS1s2qZ8IvVBPlgiJak9SR8Bp7wD71RSztHJCzs3MKTW0TNUGEn5sxJF68kLn8MLi1Kcp6ODrKfOGHNtCZKygx"/>
+</div>
+</div>
+</section>
+<!-- Featured Products Horizontal Scroll -->
+<section class="py-32 overflow-hidden">
+<div class="px-6 md:px-12 max-w-screen-2xl mx-auto mb-16 flex justify-between items-end">
+<div>
+<span class="text-tertiary uppercase tracking-[0.3em] text-xs font-bold mb-4 block">New Arrivals</span>
+<h2 class="font-headline text-5xl text-primary">Seasonal Essentials</h2>
+</div>
+<div class="hidden md:flex gap-4">
+<button class="w-12 h-12 rounded-full border border-outline-variant flex items-center justify-center hover:bg-primary hover:text-on-primary transition-all">
+<span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="w-12 h-12 rounded-full border border-outline-variant flex items-center justify-center hover:bg-primary hover:text-on-primary transition-all">
+<span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="flex gap-8 px-6 md:px-12 overflow-x-auto no-scrollbar">
+<!-- Product 1 -->
+<div class="min-w-[320px] md:min-w-[400px] group cursor-pointer">
+<div class="bg-surface-container-low rounded-xl overflow-hidden mb-6 aspect-[3/4]">
+<img alt="Featured wool coat" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="A luxury charcoal wool overcoat displayed on a mannequin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCa3-Fmj2OPCXWqdwp5OYMLCAxJsMAdzS28hAjgkTumpzEGpQ1to_NsjLtNjTAkinIpBCFqTXGVwFdxzK6JDwp9wzC2GCv9Wbd9j5AmWTQBFaEBnziahfN9D9pfQ_CGLHvIbSjd5EDw61pSk9vJT02isjdY1o3Lnt4gcquot-HOjiKT_DvaU3Hh98CJ7G3p7Xi8VyVOwSAddfEUmLT6UzAaRIQQe_2zcs-mpKSDPcfhlZnbMRXc_RjiHW6GWrk4kC0c08Er-ubEJZBD"/>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-xs uppercase tracking-widest text-outline mb-1">Outerwear</p>
+<h4 class="font-headline text-xl text-primary">Merino Hearth Coat</h4>
+</div>
+<span class="text-tertiary font-medium">$890</span>
+</div>
+</div>
+<!-- Product 2 -->
+<div class="min-w-[320px] md:min-w-[400px] group cursor-pointer">
+<div class="bg-surface-container-low rounded-xl overflow-hidden mb-6 aspect-[3/4]">
+<img alt="Featured boots" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Handcrafted espresso leather chelsea boots" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJjXyHWavtvOnqxf2HSxtUFPS75fj0eHEQTPERchwdS3P5mBOTdV_7ULa5jXHT9FkKX3slAGBRSRpcAg_mCPrXjfp3qi4p9RD03Dp9LbD_8oSSPApv3XAwuajOJsmDrxOmweeckIQhp7X7ezfVd18puxN9niUOOxY6yBxdaMg5pqp-2cqoi58XRAt3ZDkpcGYN-SKdWymB9cK4oxtnos_-RZ1k_6BXu0ckahbfXjLbjZJf4sRA0z7D1IMrFL2UhuDnq9reBY6wyBLr"/>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-xs uppercase tracking-widest text-outline mb-1">Footwear</p>
+<h4 class="font-headline text-xl text-primary">The Alpine Chelsea</h4>
+</div>
+<span class="text-tertiary font-medium">$450</span>
+</div>
+</div>
+<!-- Product 3 -->
+<div class="min-w-[320px] md:min-w-[400px] group cursor-pointer">
+<div class="bg-surface-container-low rounded-xl overflow-hidden mb-6 aspect-[3/4]">
+<img alt="Featured accessory" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Dark forest green cashmere scarf draped artistically" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWIHx9j08tmVu7SE-KcHl9_Hvmc15ShMaESgA9xxWlPUlvoBaOZVZ69dm5JJ8jKeN5B5CD37Um0td9STP6PZkuc5rYcWEUtvy6XDCTMz6tZBPw_eb8dl59Wk7IvUCvMLnjlO7HJr5Sql9DRJH4PpeIuyzN3KPs__DzyHc7WvxtcpjHKd0rr3wWYS0-1easd2mVVCJ-OSfdHKA9xMc9EWWlmNGSWgi52Pay6B-RxnMloK97jdpglz5I-58JC9wl51iqEy79ubiH90nx"/>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-xs uppercase tracking-widest text-outline mb-1">Accessories</p>
+<h4 class="font-headline text-xl text-primary">Raw Cashmere Scarf</h4>
+</div>
+<span class="text-tertiary font-medium">$225</span>
+</div>
+</div>
+<!-- Product 4 -->
+<div class="min-w-[320px] md:min-w-[400px] group cursor-pointer">
+<div class="bg-surface-container-low rounded-xl overflow-hidden mb-6 aspect-[3/4]">
+<img alt="Featured knitwear" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" data-alt="Textured oatmeal knit sweater on neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBudc6S_FuAKU4IhIpbDbt5_jiIiMuAb115lMXzctG3A5Rfx1-43UBUfIn6BnNTywNlm-ykdHTVHoLO5FZX-3qc7RKzTAIwDgeNnp7Icegrzflmi5JpMXSVsoihPgSv8rwENni_k-YR238-kYt4zHgc-sLUjrl6GuFFjFVPVaq7vuMVfaos3pUS4r6CAMRbsfC5fbU2pVB8WbOtQEtTE5tOc1yhsu6d1RhtIsJI3bsSH1lC1UKg9Zh2sAft9yoeqpRKm5wa-tM_ls2j"/>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<p class="text-xs uppercase tracking-widest text-outline mb-1">Knitwear</p>
+<h4 class="font-headline text-xl text-primary">Hearthstone Knit</h4>
+</div>
+<span class="text-tertiary font-medium">$340</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Shell -->
+<footer class="w-full pt-24 pb-12 bg-[#f5f3ee] dark:bg-[#1b1c19] tonal-shift-from-surface">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 w-full max-w-screen-2xl mx-auto border-t border-outline-variant/10 pt-16">
+<div class="mb-8 md:mb-0">
+<span class="text-lg font-semibold text-[#061b0e] dark:text-[#fbf9f4]">ND Shop</span>
+<p class="text-[#575d79] font-['Inter'] text-label-md uppercase tracking-widest mt-2">© 2024 ND Shop. The Digital Atelier.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-8">
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all font-['Inter'] text-label-md uppercase tracking-widest opacity-80 hover:opacity-100" href="#">Sustainability</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all font-['Inter'] text-label-md uppercase tracking-widest opacity-80 hover:opacity-100" href="#">Atelier Services</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all font-['Inter'] text-label-md uppercase tracking-widest opacity-80 hover:opacity-100" href="#">Privacy</a>
+<a class="text-[#575d79] hover:text-[#1B3022] transition-all font-['Inter'] text-label-md uppercase tracking-widest opacity-80 hover:opacity-100" href="#">Terms</a>
+</div>
+<div class="mt-8 md:mt-0 flex gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="language">language</span>
+<span class="material-symbols-outlined text-primary" data-icon="currency_exchange">currency_exchange</span>
+</div>
+</div>
+<div class="w-full text-center mt-12">
+<span class="text-[10px] tracking-[0.5em] text-outline-variant uppercase">Crafted for the Discerning</span>
+</div>
+</footer>
+<style>
+        /* Custom scrollbar utility */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>

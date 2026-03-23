@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ND Shop - Premium Product Catalog</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Serif:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "on-error": "#ffffff",
+                "inverse-on-surface": "#f2f1ec",
+                "tertiary-container": "#501a07",
+                "on-primary-fixed-variant": "#364c3c",
+                "on-tertiary-container": "#d07d63",
+                "outline-variant": "#c3c8c1",
+                "primary-fixed": "#d0e9d4",
+                "surface-bright": "#fbf9f4",
+                "primary-fixed-dim": "#b4cdb8",
+                "on-primary-fixed": "#0b2013",
+                "on-surface": "#1b1c19",
+                "surface-variant": "#e4e2dd",
+                "surface-container-low": "#f5f3ee",
+                "on-primary-container": "#819986",
+                "on-secondary": "#ffffff",
+                "surface-container-lowest": "#ffffff",
+                "surface-dim": "#dbdad5",
+                "on-primary": "#ffffff",
+                "tertiary-fixed": "#ffdbd0",
+                "on-tertiary-fixed": "#390b00",
+                "inverse-primary": "#b4cdb8",
+                "on-tertiary-fixed-variant": "#73341f",
+                "tertiary": "#320900",
+                "tertiary-fixed-dim": "#ffb59d",
+                "secondary-fixed": "#dce1ff",
+                "on-background": "#1b1c19",
+                "inverse-surface": "#30312e",
+                "surface-tint": "#4d6453",
+                "primary": "#061b0e",
+                "on-surface-variant": "#434843",
+                "surface-container": "#f0eee9",
+                "on-secondary-container": "#5b617d",
+                "secondary-fixed-dim": "#bfc5e5",
+                "secondary": "#575d79",
+                "primary-container": "#1b3022",
+                "surface-container-high": "#eae8e3",
+                "error": "#ba1a1a",
+                "surface": "#fbf9f4",
+                "outline": "#737973",
+                "surface-container-highest": "#e4e2dd",
+                "error-container": "#ffdad6",
+                "on-secondary-fixed": "#141a32",
+                "secondary-container": "#d9deff",
+                "on-error-container": "#93000a",
+                "on-secondary-fixed-variant": "#404660",
+                "background": "#fbf9f4",
+                "on-tertiary": "#ffffff"
+              },
+              fontFamily: {
+                "headline": ["Noto Serif"],
+                "body": ["Inter"],
+                "label": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-shadow {
+            box-shadow: 0 24px 48px -12px rgba(27, 28, 25, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-tertiary-fixed-dim selection:text-tertiary">
+<!-- TopAppBar -->
+<header class="bg-[#fbf9f4] sticky top-0 z-50 transition-all duration-200">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-screen-2xl mx-auto">
+<div class="flex items-center gap-12">
+<span class="text-2xl font-bold tracking-tight text-[#061b0e] font-headline">ND Shop</span>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-[#061b0e] border-b-2 border-[#1b3022] pb-1 font-semibold transition-colors" href="#">Storefront</a>
+<a class="text-stone-500 font-medium hover:text-[#1b3022] transition-colors" href="#">Admin</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none focus:ring-0 text-sm w-64 rounded-lg" placeholder="Search curated items..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">search</button>
+<div class="flex items-center gap-2 bg-surface-container-highest px-3 py-1.5 rounded-full cursor-pointer hover:bg-surface-variant transition-all active:scale-95">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">account_circle</span>
+<span class="text-sm font-medium text-primary">Account Chip</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-screen-2xl mx-auto px-8 pt-12 flex flex-col md:flex-row gap-12">
+<!-- Sidebar Filter -->
+<aside class="w-full md:w-64 flex-shrink-0 space-y-10">
+<div>
+<h3 class="font-headline text-lg mb-6 border-b border-outline-variant/20 pb-2">Category</h3>
+<ul class="space-y-3">
+<li><label class="flex items-center gap-3 cursor-pointer group"><input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/><span class="text-sm font-medium group-hover:text-primary transition-colors">Living Room</span></label></li>
+<li><label class="flex items-center gap-3 cursor-pointer group"><input checked="" class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/><span class="text-sm font-medium text-primary">Workspace</span></label></li>
+<li><label class="flex items-center gap-3 cursor-pointer group"><input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/><span class="text-sm font-medium group-hover:text-primary transition-colors">Bedroom</span></label></li>
+<li><label class="flex items-center gap-3 cursor-pointer group"><input class="rounded border-outline-variant text-primary focus:ring-primary" type="checkbox"/><span class="text-sm font-medium group-hover:text-primary transition-colors">Objects</span></label></li>
+</ul>
+</div>
+<div>
+<h3 class="font-headline text-lg mb-6 border-b border-outline-variant/20 pb-2">Price Range</h3>
+<div class="px-2">
+<input class="w-full h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" type="range"/>
+<div class="flex justify-between mt-4 text-xs font-medium text-on-surface-variant">
+<span>$0</span>
+<span>$5000+</span>
+</div>
+</div>
+</div>
+<div class="p-6 bg-surface-container-low rounded-xl">
+<div class="flex items-center gap-2 mb-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Inventory Service</span>
+</div>
+<p class="text-sm font-medium text-primary">Online &amp; Synchronized</p>
+<p class="text-[10px] text-outline mt-2 leading-relaxed">Our stock levels are updated in real-time from the central atelier.</p>
+</div>
+</aside>
+<!-- Product Grid -->
+<section class="flex-1">
+<div class="flex justify-between items-baseline mb-12">
+<h1 class="font-headline text-4xl font-bold tracking-tight text-primary">Workspace Essentials</h1>
+<p class="text-sm text-on-surface-variant italic">Showing 12 of 48 curated pieces</p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-16">
+<!-- Product Card 1 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Minimalist Desk Lamp" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Minimalist brass desk lamp on a wooden table" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnfWXk7LGXsY9gS8cGkKCGGU0vKqbg3Wpi6bIiI-sIOm6w-V348XnhhoU2XvpMWePdBHdOa3wmt8xjhOXndbI9gFgtoL9djwD-dnmyAPPacwwxyWt8KT9tirlqiEF-SMKQWX7Z2SmebNCrRogY9dngL4fyquoETw_DjUm0crUfifiYPv6MN-uft2b_Krv0MQjbTAEI3YU_hhsrEIVma2CE2Q-SoWAIJ0EOQUt8aEkpMdrs79KaOS5Fd67Nd_Ev2M3nRDph56LHGnCV"/>
+<div class="absolute top-4 left-4">
+<span class="bg-surface/90 backdrop-blur-sm px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-on-tertiary-fixed-variant rounded-full">New Arrival</span>
+</div>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">The Linear Brass Task Lamp</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">A hand-polished solid brass lamp with integrated touch-sensitive dimming and a woven silk cord.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$420.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Velvet Lounge Chair" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Deep forest green velvet lounge chair in a bright room" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdymbMpESOshPXIip3mtk6YKAyo_wbnVgP4Gci5Nfh1mzsxVX1JmC560PB-cXpt7rIGvuWLg6s-0qMhDvlZ4GqvQ8PBdYyzkfQiZ-ORNlvsaxhE9gzy0rD1cwTYM0W4yZYjJWdMhQ7BiGLEINnfohwyhjb21QagPPDTDb4Rx3SNHMLcWydZsOzPnXqi5VRwUQMpifubz_pX4I3PaO2KFpqAoyf5xTjKwF4zLAzOvkpxQvCN2bafQufYC3ZZi_ETZDrtoAMziwJ56k5"/>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">Sculptural Velvet Occasional Chair</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">Italian velvet upholstery wrapped over a precision-engineered steel frame. Available in Forest or Umber.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$1,850.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+<!-- Product Card 3 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Obsidian Desk Mat" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Black pebble grain leather desk mat with silver stationery" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCr30f0iubFfmFDyHzDKFjQ1rloW_6Oc5TOsfT34PNQwZk5HPFka12rPsSG34KhmdfTwSWsqL5Xq1pg_lTkiUMO6VJHMmofmLLhkzhsHU1xLteqt7MqyAbyKyqa1x14mBZNNDSx6p3qGE3YX8hslytKPwITNXO87oJbO-ERkIDn75x6hVUnh4RR9ODNTFfIa9OswqBCTVAYFeg1NUJdZJjSUuDAx2JWDMxvI7nmWq0LXsgHRPi0kVAvFLB13OAxBS5ruZ5L3Q2ifEz6"/>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">Pebbled Leather Obsidian Mat</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">Full-grain ethically sourced leather with a non-slip suede backing for the ultimate tactile surface.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$185.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Ceramic Object" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Matte white ceramic vase with an organic wave shape" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYkMnC6CdGCT1ynk9GlbFRsQEvBmDWXhi2CQVH7e066J1GK2RPbdzIA2JuPTEHwjTq0J1WeFnWSgmwbSVwbzwYHapJzwHp5H_XBoQfNkIXcE7zGOKCYK44SUaq3Wzv9QX8QEcO4MUxUARgPFWZ2dXrmYwC78O3Y1JLVwVs8eWrAaqQPO44BvlVeWi7ituR8Kkb2XfblPDXiQxu6FuJ8F9WFPoezRkAOqMZKzecTYB-RzKQUEpyDWN_cO55Uv3k8zN1f9aivfiyDx1r"/>
+<div class="absolute top-4 left-4">
+<span class="bg-primary text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full">Rare Piece</span>
+</div>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">Ceramic Totem No. 04</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">Hand-thrown stoneware from our Coastal studio. Each piece features unique cooling fractures.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$290.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+<!-- Product Card 5 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Oak Credenza" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Mid-century modern oak sideboard with slatted doors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuCirlkLTDG_qTid2MwUWLDgcnXKJXuMT83DQVaom8u68CzQJRMHFQLjSztfR9OrM2BCe8NUnYZHITQF3J-s3w1hQFCBnuNrRBpLi-_yu4nJEp19i1iIIdxR1t42I5gdLP2OT5etiV3sX3nCc7eGjmJFicKpdgc3LnM8EcS2pEnJLtB40FkqpORUDpFtpRHXUg9R6zi4BNAZ_eO21zAHxt6K1FnXY1w251vZ7DAPUpGlCAm82VL2oGuYdehAarTxuL0HMBkpgE_qdl"/>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">Slat-Front Oak Credenza</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">Solid white oak construction with soft-close tambour doors and integrated cable management.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$3,200.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+<!-- Product Card 6 -->
+<div class="group cursor-pointer">
+<div class="relative aspect-[4/5] overflow-hidden rounded-xl bg-surface-container mb-6">
+<img alt="Artistic Clock" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Minimalist wall clock with no numbers and thin wooden hands" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2A3pzrZjTapiU5Mw3DL8qSY4gbFemIyEDhvIwN9kWeEEHKIKRqjzULCnhbTn2b-yo_xJ0rYVc0tzlwsLUPaY8knt0J5ZFb_YSLFJ6GNvBb5RYqd8wPJx_mf7CBhDDcYTtt5Ea6oUpkAnn3pnuACFE2k1EZo8mbe2W_DGF00XLZ7BzgfjyybxQzFY2aX7G_zqmjXdaxfwQxJ_4xTo-YUV5LofO73wUQeAckq0YaK2wjwJDaP_PgiLbVq1LAk6RkIMUqx37Qgmy1mvp"/>
+</div>
+<div class="space-y-2">
+<h3 class="font-headline text-xl font-medium text-primary">Temporal Sand-Cast Clock</h3>
+<p class="text-sm text-on-surface-variant leading-relaxed line-clamp-2">A silent, sweeping movement housed in a raw sand-cast aluminum shell. A study in time and texture.</p>
+<div class="flex items-center justify-between pt-4">
+<span class="text-lg font-semibold text-primary">$510.00</span>
+<button class="bg-[#D48166] text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-[#b06a54] transition-all active:scale-95 editorial-shadow">Add to Cart</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full mt-20 bg-[#f5f3ee] py-12 px-8 flex flex-col items-center gap-4 text-center">
+<span class="text-lg font-headline italic text-stone-800">ND Shop</span>
+<div class="flex flex-wrap justify-center gap-8 my-4">
+<a class="text-stone-500 hover:text-[#1b3022] transition-colors text-sm font-light" href="#">Documentation</a>
+<a class="text-stone-500 hover:text-[#1b3022] transition-colors text-sm font-light" href="#">System Status</a>
+<a class="text-stone-500 hover:text-[#1b3022] transition-colors text-sm font-light" href="#">Source Code</a>
+<a class="text-stone-500 hover:text-[#1b3022] transition-colors text-sm font-light" href="#">Privacy</a>
+</div>
+<p class="text-stone-600 text-sm font-light">© 2024 ND Shop Technical Demo</p>
+</footer>
+<!-- Mobile Navigation -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-6 pt-2 bg-[#fbf9f4]/80 backdrop-blur-md border-t border-stone-200/20 z-50">
+<a class="flex flex-col items-center justify-center text-[#061b0e] font-bold bg-[#f5f3ee] rounded-xl px-4 py-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">storefront</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Shop</span>
+</a>
+<a class="flex flex-col items-center justify-center text-stone-400" href="#">
+<span class="material-symbols-outlined">search</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Search</span>
+</a>
+<a class="flex flex-col items-center justify-center text-stone-400" href="#">
+<span class="material-symbols-outlined">shopping_bag</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Orders</span>
+</a>
+<a class="flex flex-col items-center justify-center text-stone-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Account</span>
+</a>
+</nav>
+</body></html>

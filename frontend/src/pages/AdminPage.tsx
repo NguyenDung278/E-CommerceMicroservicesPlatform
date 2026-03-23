@@ -549,84 +549,223 @@ export function AdminPage() {
     }));
   }
 
-  const reportCards = report
-    ? [
-        { label: "Doanh thu", value: `$${report.total_revenue.toFixed(2)}` },
-        { label: "Đơn hàng", value: String(report.order_count) },
-        { label: "Đơn hủy", value: String(report.cancelled_count) },
-        { label: "AOV", value: `$${report.average_order_value.toFixed(2)}` }
-      ]
-    : [];
+  function scrollToAdminSection(sectionId: string) {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
+  function refreshDashboardData() {
+    void loadReport(reportDays);
+    void loadAdminOrders();
+    if (isAdmin) {
+      void loadUsers();
+    }
+    void loadCoupons();
+    void loadProducts();
+  }
+
+  function startNewProductEntry() {
+    resetForm();
+    scrollToAdminSection("admin-product-workbench");
+  }
+
+  const operationalOrderCount = orders.filter((order) =>
+    order.status === "pending" || order.status === "paid"
+  ).length;
+  const managedCustomerCount = isAdmin
+    ? users.length
+    : new Set(orders.map((order) => order.user_id)).size;
+  const overviewCards = [
+    {
+      label: "Total Sales",
+      value: report ? formatCurrency(report.total_revenue) : "--",
+      caption: report
+        ? `${report.order_count} đơn trong ${report.window_days} ngày gần nhất`
+        : "Đang chờ snapshot báo cáo"
+    },
+    {
+      label: "Active Orders",
+      value: String(operationalOrderCount),
+      caption:
+        operationalOrderCount > 0
+          ? "Đơn cần staff/admin theo dõi ngay"
+          : "Không có đơn cần can thiệp thủ công"
+    },
+    {
+      label: "Catalog Items",
+      value: String(products.length),
+      caption: editingProductId ? "Biểu mẫu đang ở chế độ chỉnh sửa" : "Catalog sẵn sàng nhận sản phẩm mới"
+    },
+    {
+      label: isAdmin ? "Managed Users" : "Visible Customers",
+      value: String(managedCustomerCount),
+      caption: isAdmin
+        ? "Sẵn sàng cho role governance"
+        : "Dựa trên danh sách đơn đang tải"
+    }
+  ];
+  const adminNavItems = [
+    {
+      id: "admin-overview",
+      group: "Core Analytics",
+      label: "Overview",
+      helper: "Tổng quan KPI và trạng thái sync"
+    },
+    {
+      id: "admin-order-ledger",
+      group: "Core Analytics",
+      label: "Orders",
+      helper: "Ledger đơn hàng và payment actions"
+    },
+    {
+      id: "admin-user-governance",
+      group: "Management",
+      label: "Users",
+      helper: "Role governance cho admin"
+    },
+    {
+      id: "admin-coupon-workbench",
+      group: "Management",
+      label: "Coupons",
+      helper: "Ưu đãi, điều kiện, thời hạn"
+    },
+    {
+      id: "admin-product-workbench",
+      group: "Management",
+      label: "Catalog",
+      helper: "Sản phẩm, gallery, variants"
+    }
+  ].filter((item) => item.id !== "admin-user-governance" || isAdmin);
 
   return (
-    <div className="page-stack">
-      <section className="content-section">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">Admin</span>
-            <h1>Quản lý catalog và báo cáo sprint 5-6</h1>
-          </div>
+    <div className="admin-console-page">
+      {isDevelopmentOperator ? (
+        <div className="admin-console-alert-strip" role="note">
+          <span className="admin-console-alert-icon" aria-hidden="true">
+            !
+          </span>
+          <span>Maintenance Mode: Seeded Development Account in Use.</span>
         </div>
+      ) : null}
 
-        {isDevelopmentOperator ? (
-          <div className="admin-warning-banner" role="note">
-            <div className="admin-warning-badge">Development Only</div>
-            <div className="admin-warning-copy">
-              <strong>Bạn đang dùng tài khoản seed dành cho môi trường local/demo.</strong>
-              <p>
-                Phiên hiện tại đang đăng nhập bằng quyền <strong>{currentRoleLabel}</strong> với tài khoản test.
-                Hãy tắt `bootstrap.dev_accounts` trước khi deploy production hoặc demo với dữ liệu thật.
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
-
-        <div className="admin-report-card">
-          <div className="section-heading">
-            <div>
-              <h2>Báo cáo kinh doanh</h2>
-              <p className="history-subtle">
-                Snapshot doanh thu, đơn hàng và top sản phẩm cho cửa sổ gần nhất.
-              </p>
-            </div>
-            <div className="category-filter-row">
-              {reportWindowOptions.map((days) => (
-                <button
-                  className={reportDays === days ? "filter-chip filter-chip-active" : "filter-chip"}
-                  key={days}
-                  type="button"
-                  onClick={() => setReportDays(days)}
-                >
-                  {days} ngày
-                </button>
-              ))}
-            </div>
+      <div className="admin-console-shell">
+        <aside className="admin-console-sidebar">
+          <div className="admin-console-sidebar-brand">
+            <span className="admin-console-sidebar-mark">ND Admin</span>
+            <p>
+              Bảng điều khiển vận hành cho catalog, coupon, order, payment và phân quyền người dùng.
+            </p>
           </div>
 
-          {isLoadingReport ? <div className="page-state">Đang tải báo cáo...</div> : null}
+          <div className="admin-console-sidebar-groups">
+            {["Core Analytics", "Management"].map((groupName) => (
+              <div className="admin-console-sidebar-group" key={groupName}>
+                <p className="admin-console-sidebar-label">{groupName}</p>
+                <div className="admin-console-sidebar-links">
+                  {adminNavItems
+                    .filter((item) => item.group === groupName)
+                    .map((item) => (
+                      <button
+                        className="admin-console-sidebar-link"
+                        key={item.id}
+                        type="button"
+                        onClick={() => scrollToAdminSection(item.id)}
+                      >
+                        <strong>{item.label}</strong>
+                        <span>{item.helper}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
 
-          {report ? (
-            <>
-              <div className="admin-report-grid">
-                {reportCards.map((card) => (
-                  <div className="summary-card" key={card.label}>
-                    <strong>{card.value}</strong>
-                    <span>{card.label}</span>
-                  </div>
+          <div className="admin-console-health-card">
+            <span className="admin-console-health-label">Database Health</span>
+            <strong>{report ? `Snapshot ${report.window_days}d` : "Waiting for sync"}</strong>
+            <div className="admin-console-health-track" aria-hidden="true">
+              <span className="admin-console-health-fill" />
+            </div>
+            <p>
+              Quyền hiện tại: <strong>{currentRoleLabel}</strong>
+              {isDevelopmentOperator ? " • development account" : " • production-like operator"}
+            </p>
+          </div>
+        </aside>
+
+        <div className="admin-console-main">
+          <section className="admin-console-hero" id="admin-overview">
+            <div className="admin-console-hero-copy">
+              <span className="section-kicker">Control Room</span>
+              <h1>System Dashboard</h1>
+              <p className="admin-console-hero-subtitle">
+                Không gian vận hành theo template Stitch, giữ nguyên data flow hiện tại của app nhưng trình bày
+                theo dashboard editorial rõ ràng hơn cho admin/staff.
+              </p>
+            </div>
+
+            <div className="admin-console-hero-actions">
+              <button className="ghost-button" type="button" onClick={refreshDashboardData}>
+                Làm mới dữ liệu
+              </button>
+              <button className="primary-button" type="button" onClick={startNewProductEntry}>
+                + Sản phẩm mới
+              </button>
+            </div>
+          </section>
+
+          {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
+
+          <div className="admin-console-stats">
+            {overviewCards.map((card) => (
+              <article className="admin-console-stat-card" key={card.label}>
+                <span className="admin-console-stat-label">{card.label}</span>
+                <strong>{card.value}</strong>
+                <p>{card.caption}</p>
+              </article>
+            ))}
+          </div>
+
+          <section className="admin-console-panel admin-console-analytics-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Báo cáo kinh doanh</h2>
+                <p className="history-subtle">
+                  Snapshot doanh thu, đơn hàng và top sản phẩm cho cửa sổ gần nhất.
+                </p>
+              </div>
+              <div className="category-filter-row">
+                {reportWindowOptions.map((days) => (
+                  <button
+                    className={reportDays === days ? "filter-chip filter-chip-active" : "filter-chip"}
+                    key={days}
+                    type="button"
+                    onClick={() => setReportDays(days)}
+                  >
+                    {days} ngày
+                  </button>
                 ))}
               </div>
+            </div>
 
-              <div className="two-column-grid">
-                <div className="card admin-report-subcard">
+            {isLoadingReport ? <div className="page-state">Đang tải báo cáo...</div> : null}
+
+            {report ? (
+              <div className="admin-console-split-grid">
+                <div className="admin-console-subpanel">
                   <h3>Top sản phẩm bán chạy</h3>
                   <div className="order-list">
                     {report.top_products.map((item) => (
                       <div className="order-card" key={item.product_id}>
                         <strong>{item.name}</strong>
-                        <span>So luong: {item.quantity}</span>
-                        <span>Doanh thu: ${item.revenue.toFixed(2)}</span>
+                        <span>Số lượng: {item.quantity}</span>
+                        <span>Doanh thu: {formatCurrency(item.revenue)}</span>
                       </div>
                     ))}
                     {report.top_products.length === 0 ? (
@@ -635,203 +774,207 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                <div className="card admin-report-subcard">
+                <div className="admin-console-subpanel">
                   <h3>Phân bổ trạng thái đơn</h3>
                   <div className="order-list">
                     {report.status_breakdown.map((item) => (
                       <div className="order-card" key={item.status}>
                         <strong>{item.status}</strong>
                         <span>Đơn: {item.orders}</span>
-                        <span>Giá trị: ${item.revenue.toFixed(2)}</span>
+                        <span>Giá trị: {formatCurrency(item.revenue)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
-            </>
-          ) : null}
-        </div>
-
-        <div className="card admin-report-subcard">
-          <div className="section-heading">
-            <div>
-              <h2>Đơn gần đây</h2>
-              <p className="history-subtle">
-                Staff/Admin có thể hủy thủ công đơn `pending` / `paid` và refund full cho các giao dịch charge đã completed.
-              </p>
-            </div>
-          </div>
-
-          {isLoadingOrders ? <div className="page-state">Đang tải đơn gần đây...</div> : null}
-
-          <div className="order-list">
-            {orders.map((order) => {
-              const payments = paymentsByOrder[order.id] ?? [];
-              return (
-                <article className="coupon-admin-card" key={order.id}>
-                  <div className="coupon-admin-head">
-                    <div>
-                      <strong>{order.id}</strong>
-                      <p className="history-subtle">
-                        User: {order.user_id} • {formatDateTime(order.created_at)}
-                      </p>
-                    </div>
-                    <span className="status-pill status-pill-neutral">{order.status}</span>
-                  </div>
-
-                  <div className="coupon-admin-grid">
-                    <div>
-                      <span>Tổng tiền</span>
-                      <strong>{formatCurrency(order.total_price)}</strong>
-                    </div>
-                    <div>
-                      <span>Vận chuyển</span>
-                      <strong>{order.shipping_method}</strong>
-                    </div>
-                  </div>
-
-                  {(order.status === "pending" || order.status === "paid") ? (
-                    <div className="history-actions">
-                      <button
-                        className="ghost-button"
-                        disabled={busyOrderId === order.id}
-                        type="button"
-                        onClick={() => void handleManualCancel(order)}
-                      >
-                        {busyOrderId === order.id ? "Đang hủy..." : "Hủy thủ công"}
-                      </button>
-                    </div>
-                  ) : null}
-
-                  <div className="order-list">
-                    {payments.map((payment) => (
-                      <div className="coupon-preview-card" key={payment.id}>
-                        <strong>{payment.id}</strong>
-                        <span>
-                          {payment.payment_method} • {payment.transaction_type} • {payment.status}
-                        </span>
-                        <span>{formatCurrency(payment.amount)}</span>
-                        {payment.transaction_type === "charge" && payment.status === "completed" ? (
-                          <button
-                            className="ghost-button"
-                            disabled={busyRefundId === payment.id}
-                            type="button"
-                            onClick={() => void handleRefund(payment)}
-                          >
-                            {busyRefundId === payment.id ? "Đang refund..." : "Refund full"}
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
-
-                    {payments.length === 0 ? (
-                      <p className="history-empty">Chưa có payment nào cho đơn này.</p>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-
-            {!isLoadingOrders && orders.length === 0 ? (
-              <p className="history-empty">Chưa có đơn hàng nào để vận hành.</p>
             ) : null}
-          </div>
-        </div>
+          </section>
 
-        {isAdmin ? (
-          <div className="card admin-user-card">
+          <section className="admin-console-panel" id="admin-order-ledger">
             <div className="section-heading">
               <div>
-                <h2>Phân quyền người dùng</h2>
+                <h2>Recent Transaction Ledger</h2>
                 <p className="history-subtle">
-                  Admin có thể gán `user`, `staff` hoặc `admin`. Staff sẽ vào được khu quản trị vận hành nhưng không đổi role người khác.
+                  Staff/Admin có thể hủy thủ công đơn `pending` / `paid` và refund full cho các giao dịch charge đã completed.
                 </p>
               </div>
             </div>
 
-            {isLoadingUsers ? <div className="page-state">Đang tải danh sách người dùng...</div> : null}
+            {isLoadingOrders ? <div className="page-state">Đang tải đơn gần đây...</div> : null}
 
             <div className="order-list">
-              {users.map((adminUser) => (
-                <article className="coupon-admin-card" key={adminUser.id}>
-                  <div className="coupon-admin-head">
-                    <div>
-                      <strong>{adminUser.email}</strong>
-                      <p className="history-subtle">
-                        {adminUser.first_name} {adminUser.last_name}
-                        {adminUser.phone ? ` • ${adminUser.phone}` : ""}
-                      </p>
+              {orders.map((order) => {
+                const payments = paymentsByOrder[order.id] ?? [];
+                return (
+                  <article className="coupon-admin-card admin-console-record" key={order.id}>
+                    <div className="coupon-admin-head">
+                      <div>
+                        <strong>{order.id}</strong>
+                        <p className="history-subtle">
+                          User: {order.user_id} • {formatDateTime(order.created_at)}
+                        </p>
+                      </div>
+                      <span className="status-pill status-pill-neutral">{order.status}</span>
                     </div>
-                    <span
-                      className={
-                        adminUser.email_verified
-                          ? "status-pill status-pill-success"
-                          : "status-pill status-pill-neutral"
-                      }
-                    >
-                      {adminUser.email_verified ? "Email đã xác minh" : "Email chưa xác minh"}
-                    </span>
-                  </div>
 
-                  <div className="coupon-admin-grid">
-                    <div>
-                      <span>Vai trò hiện tại</span>
-                      <strong>{adminUser.role}</strong>
+                    <div className="coupon-admin-grid">
+                      <div>
+                        <span>Tổng tiền</span>
+                        <strong>{formatCurrency(order.total_price)}</strong>
+                      </div>
+                      <div>
+                        <span>Vận chuyển</span>
+                        <strong>{order.shipping_method}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>Cập nhật quyền</span>
-                      <select
-                        disabled={busyUserId === adminUser.id}
-                        value={adminUser.role}
-                        onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
-                      >
-                        <option value="user">user</option>
-                        <option value="staff">staff</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </div>
-                  </div>
-                </article>
-              ))}
 
-              {!isLoadingUsers && users.length === 0 ? (
-                <p className="history-empty">Chưa có người dùng nào để phân quyền.</p>
+                    {(order.status === "pending" || order.status === "paid") ? (
+                      <div className="history-actions">
+                        <button
+                          className="ghost-button"
+                          disabled={busyOrderId === order.id}
+                          type="button"
+                          onClick={() => void handleManualCancel(order)}
+                        >
+                          {busyOrderId === order.id ? "Đang hủy..." : "Hủy thủ công"}
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <div className="order-list">
+                      {payments.map((payment) => (
+                        <div className="coupon-preview-card" key={payment.id}>
+                          <strong>{payment.id}</strong>
+                          <span>
+                            {payment.payment_method} • {payment.transaction_type} • {payment.status}
+                          </span>
+                          <span>{formatCurrency(payment.amount)}</span>
+                          {payment.transaction_type === "charge" && payment.status === "completed" ? (
+                            <button
+                              className="ghost-button"
+                              disabled={busyRefundId === payment.id}
+                              type="button"
+                              onClick={() => void handleRefund(payment)}
+                            >
+                              {busyRefundId === payment.id ? "Đang refund..." : "Refund full"}
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+
+                      {payments.length === 0 ? (
+                        <p className="history-empty">Chưa có payment nào cho đơn này.</p>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })}
+
+              {!isLoadingOrders && orders.length === 0 ? (
+                <p className="history-empty">Chưa có đơn hàng nào để vận hành.</p>
               ) : null}
             </div>
-          </div>
-        ) : null}
+          </section>
 
-        <div className="two-column-grid">
-          <form className="card" onSubmit={handleCreateCoupon}>
-            <h2>Tạo coupon mới</h2>
+          {isAdmin ? (
+            <section className="admin-console-panel admin-user-card" id="admin-user-governance">
+              <div className="section-heading">
+                <div>
+                  <h2>Phân quyền người dùng</h2>
+                  <p className="history-subtle">
+                    Admin có thể gán `user`, `staff` hoặc `admin`. Staff sẽ vào được khu quản trị vận hành nhưng không đổi role người khác.
+                  </p>
+                </div>
+              </div>
 
-            <div className="inline-grid">
-              <FormField htmlFor="admin-coupon-code" label="Mã coupon" required>
-                <input
-                  id="admin-coupon-code"
-                  placeholder="SAVE10"
-                  value={couponForm.code}
-                  onChange={(event) =>
-                    setCouponForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))
-                  }
-                />
-              </FormField>
-              <FormField htmlFor="admin-coupon-type" label="Kiểu giảm giá">
-                <select
-                  id="admin-coupon-type"
-                  value={couponForm.discountType}
-                  onChange={(event) =>
-                    setCouponForm((current) => ({
-                      ...current,
-                      discountType: event.target.value as CouponFormState["discountType"]
-                    }))
-                  }
-                >
-                  <option value="percentage">Theo phần trăm</option>
-                  <option value="fixed">Số tiền cố định</option>
-                </select>
-              </FormField>
-            </div>
+              {isLoadingUsers ? <div className="page-state">Đang tải danh sách người dùng...</div> : null}
+
+              <div className="order-list">
+                {users.map((adminUser) => (
+                  <article className="coupon-admin-card admin-console-record" key={adminUser.id}>
+                    <div className="coupon-admin-head">
+                      <div className="admin-console-user-block">
+                        <div className="admin-console-user-head">
+                          <strong>{adminUser.email}</strong>
+                          {isDevelopmentAccount(adminUser) ? (
+                            <span className="account-flag">DEV ONLY</span>
+                          ) : null}
+                        </div>
+                        <p className="history-subtle">
+                          {adminUser.first_name} {adminUser.last_name}
+                          {adminUser.phone ? ` • ${adminUser.phone}` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={
+                          adminUser.email_verified
+                            ? "status-pill status-pill-success"
+                            : "status-pill status-pill-neutral"
+                        }
+                      >
+                        {adminUser.email_verified ? "Email đã xác minh" : "Email chưa xác minh"}
+                      </span>
+                    </div>
+
+                    <div className="coupon-admin-grid">
+                      <div>
+                        <span>Vai trò hiện tại</span>
+                        <strong>{formatRoleLabel(adminUser.role)}</strong>
+                      </div>
+                      <div>
+                        <span>Cập nhật quyền</span>
+                        <select
+                          disabled={busyUserId === adminUser.id}
+                          value={adminUser.role}
+                          onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
+                        >
+                          <option value="user">user</option>
+                          <option value="staff">staff</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+
+                {!isLoadingUsers && users.length === 0 ? (
+                  <p className="history-empty">Chưa có người dùng nào để phân quyền.</p>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          <div className="two-column-grid admin-console-workbench" id="admin-coupon-workbench">
+            <form className="card admin-console-panel" onSubmit={handleCreateCoupon}>
+              <h2>Tạo coupon mới</h2>
+
+              <div className="inline-grid">
+                <FormField htmlFor="admin-coupon-code" label="Mã coupon" required>
+                  <input
+                    id="admin-coupon-code"
+                    placeholder="SAVE10"
+                    value={couponForm.code}
+                    onChange={(event) =>
+                      setCouponForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))
+                    }
+                  />
+                </FormField>
+                <FormField htmlFor="admin-coupon-type" label="Kiểu giảm giá">
+                  <select
+                    id="admin-coupon-type"
+                    value={couponForm.discountType}
+                    onChange={(event) =>
+                      setCouponForm((current) => ({
+                        ...current,
+                        discountType: event.target.value as CouponFormState["discountType"]
+                      }))
+                    }
+                  >
+                    <option value="percentage">Theo phần trăm</option>
+                    <option value="fixed">Số tiền cố định</option>
+                  </select>
+                </FormField>
+              </div>
 
             <FormField
               htmlFor="admin-coupon-description"
@@ -912,72 +1055,76 @@ export function AdminPage() {
               <span>Kích hoạt coupon ngay sau khi tạo</span>
             </label>
 
-            <button className="primary-button" disabled={isCreatingCoupon} type="submit">
-              {isCreatingCoupon ? "Đang tạo coupon..." : "Tạo coupon"}
-            </button>
-          </form>
+              <button className="primary-button" disabled={isCreatingCoupon} type="submit">
+                {isCreatingCoupon ? "Đang tạo coupon..." : "Tạo coupon"}
+              </button>
+            </form>
 
-          <div className="card">
-            <div className="section-heading">
-              <div>
-                <h2>Danh sách coupon</h2>
-                <p className="history-subtle">Quản trị nhanh ưu đãi đang hoạt động và mức độ sử dụng.</p>
+            <div className="card admin-console-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Danh sách coupon</h2>
+                  <p className="history-subtle">Quản trị nhanh ưu đãi đang hoạt động và mức độ sử dụng.</p>
+                </div>
+              </div>
+
+              <div className="order-list">
+                {coupons.map((coupon) => (
+                  <article className="coupon-admin-card admin-console-record" key={coupon.id}>
+                    <div className="coupon-admin-head">
+                      <div>
+                        <strong>{coupon.code}</strong>
+                        <p className="history-subtle">
+                          {coupon.description || "Chưa có mô tả. Coupon vẫn áp dụng theo rule hiện tại."}
+                        </p>
+                      </div>
+                      <span
+                        className={
+                          coupon.active ? "status-pill status-pill-success" : "status-pill status-pill-neutral"
+                        }
+                      >
+                        {coupon.active ? "Đang bật" : "Tạm tắt"}
+                      </span>
+                    </div>
+
+                    <div className="coupon-admin-grid">
+                      <div>
+                        <span>Ưu đãi</span>
+                        <strong>
+                          {coupon.discount_type === "percentage"
+                            ? `${coupon.discount_value}%`
+                            : formatCurrency(coupon.discount_value)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Đơn tối thiểu</span>
+                        <strong>{formatCurrency(coupon.min_order_amount)}</strong>
+                      </div>
+                      <div>
+                        <span>Đã dùng</span>
+                        <strong>
+                          {coupon.used_count}
+                          {coupon.usage_limit > 0 ? ` / ${coupon.usage_limit}` : " / không giới hạn"}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Hết hạn</span>
+                        <strong>{coupon.expires_at ? formatDateTime(coupon.expires_at) : "Không giới hạn"}</strong>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+
+                {coupons.length === 0 ? (
+                  <p className="history-empty">Chưa có coupon nào. Bạn có thể tạo coupon đầu tiên ở khung bên trái.</p>
+                ) : null}
               </div>
             </div>
-
-            <div className="order-list">
-              {coupons.map((coupon) => (
-                <article className="coupon-admin-card" key={coupon.id}>
-                  <div className="coupon-admin-head">
-                    <div>
-                      <strong>{coupon.code}</strong>
-                      <p className="history-subtle">
-                        {coupon.description || "Chưa có mô tả. Coupon vẫn áp dụng theo rule hiện tại."}
-                      </p>
-                    </div>
-                    <span className={coupon.active ? "status-pill status-pill-success" : "status-pill status-pill-neutral"}>
-                      {coupon.active ? "Đang bật" : "Tạm tắt"}
-                    </span>
-                  </div>
-
-                  <div className="coupon-admin-grid">
-                    <div>
-                      <span>Ưu đãi</span>
-                      <strong>
-                        {coupon.discount_type === "percentage"
-                          ? `${coupon.discount_value}%`
-                          : formatCurrency(coupon.discount_value)}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Đơn tối thiểu</span>
-                      <strong>{formatCurrency(coupon.min_order_amount)}</strong>
-                    </div>
-                    <div>
-                      <span>Đã dùng</span>
-                      <strong>
-                        {coupon.used_count}
-                        {coupon.usage_limit > 0 ? ` / ${coupon.usage_limit}` : " / không giới hạn"}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Hết hạn</span>
-                      <strong>{coupon.expires_at ? formatDateTime(coupon.expires_at) : "Không giới hạn"}</strong>
-                    </div>
-                  </div>
-                </article>
-              ))}
-
-              {coupons.length === 0 ? (
-                <p className="history-empty">Chưa có coupon nào. Bạn có thể tạo coupon đầu tiên ở khung bên trái.</p>
-              ) : null}
-            </div>
           </div>
-        </div>
 
-        <div className="two-column-grid">
-          <form className="card" onSubmit={handleCreate}>
-            <h2>{editingProductId ? "Chỉnh sửa sản phẩm" : "Tạo sản phẩm mới"}</h2>
+          <div className="two-column-grid admin-console-workbench" id="admin-product-workbench">
+            <form className="card admin-console-panel" onSubmit={handleCreate}>
+              <h2>{editingProductId ? "Chỉnh sửa sản phẩm" : "Tạo sản phẩm mới"}</h2>
 
             <FormField htmlFor="admin-product-name" label="Tên sản phẩm">
               <input
@@ -1239,41 +1386,42 @@ export function AdminPage() {
               </div>
             </div>
 
-            <button className="primary-button" disabled={isCreating} type="submit">
-              {isCreating ? "Đang xử lý..." : editingProductId ? "Lưu cập nhật" : "Tạo sản phẩm"}
-            </button>
-
-            {editingProductId ? (
-              <button className="ghost-button admin-cancel-button" onClick={resetForm} type="button">
-                Hủy sửa
+              <button className="primary-button" disabled={isCreating} type="submit">
+                {isCreating ? "Đang xử lý..." : editingProductId ? "Lưu cập nhật" : "Tạo sản phẩm"}
               </button>
-            ) : null}
-          </form>
 
-          <div className="card">
-            <h2>Danh sách sản phẩm</h2>
-            <div className="product-grid product-grid-admin">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  adminAction={{
-                    label: editingProductId === product.id ? "Đang sửa" : "Sửa sản phẩm",
-                    onClick: handleEdit,
-                    busy: false
-                  }}
-                  secondaryAdminAction={{
-                    label: "Xóa sản phẩm",
-                    onClick: handleDelete,
-                    danger: true,
-                    busy: busyProductId === product.id
-                  }}
-                  product={product}
-                />
-              ))}
+              {editingProductId ? (
+                <button className="ghost-button admin-cancel-button" onClick={resetForm} type="button">
+                  Hủy sửa
+                </button>
+              ) : null}
+            </form>
+
+            <div className="card admin-console-panel">
+              <h2>Danh sách sản phẩm</h2>
+              <div className="product-grid product-grid-admin">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    adminAction={{
+                      label: editingProductId === product.id ? "Đang sửa" : "Sửa sản phẩm",
+                      onClick: handleEdit,
+                      busy: false
+                    }}
+                    secondaryAdminAction={{
+                      label: "Xóa sản phẩm",
+                      onClick: handleDelete,
+                      danger: true,
+                      busy: busyProductId === product.id
+                    }}
+                    product={product}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

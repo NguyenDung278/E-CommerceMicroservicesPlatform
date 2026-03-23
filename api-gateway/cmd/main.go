@@ -1,8 +1,3 @@
-// API Gateway — Entry point
-//
-// STARTUP ORDER:
-//  1. Load configuration → 2. Init logger → 3. Wire dependencies → 4. Register routes
-//  5. Start server (graceful shutdown)
 package main
 
 import (
