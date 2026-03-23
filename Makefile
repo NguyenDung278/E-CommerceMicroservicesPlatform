@@ -1,11 +1,15 @@
 SHELL := /bin/bash
 
 MODULES := pkg api-gateway proto services/user-service services/product-service services/cart-service services/order-service services/payment-service services/notification-service
+DOCKER_BUILDKIT ?= 1
+COMPOSE_DOCKER_CLI_BUILD ?= 1
+COMPOSE_DIR := deployments/docker
+SERVICES ?=
 
 # Database connection details for migrations
 DB_URL ?= postgres://admin:change-me-db-password@localhost:5432/ecommerce?sslmode=disable
 
-.PHONY: fmt tidy test vet ci docker-config compose-up compose-down frontend-install frontend-dev frontend-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
 
 fmt:
 	@find api-gateway services pkg proto -name '*.go' -print0 | xargs -0 gofmt -w
@@ -31,13 +35,16 @@ vet:
 ci: fmt tidy vet test
 
 docker-config:
-	@cd deployments/docker && docker compose config >/tmp/ecommerce-compose.rendered.yaml && echo "Rendered compose saved to /tmp/ecommerce-compose.rendered.yaml"
+	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose config >/tmp/ecommerce-compose.rendered.yaml && echo "Rendered compose saved to /tmp/ecommerce-compose.rendered.yaml"
+
+compose-build:
+	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose build --progress plain $(SERVICES)
 
 compose-up:
-	@cd deployments/docker && docker compose up --build -d
+	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose up --build $(SERVICES)
 
 compose-down:
-	@cd deployments/docker && docker compose down
+	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose down
 
 frontend-install:
 	@cd frontend && npm install

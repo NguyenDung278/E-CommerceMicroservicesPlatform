@@ -64,7 +64,7 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -95,11 +95,6 @@ services:
       - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
     networks:
       - ecommerce-network
 
@@ -127,17 +122,17 @@ services:
       - ecommerce-network
     depends_on:
       user-service:
-        condition: service_healthy
+        condition: service_started
       product-service:
-        condition: service_healthy
+        condition: service_started
       cart-service:
-        condition: service_healthy
+        condition: service_started
       order-service:
-        condition: service_healthy
+        condition: service_started
       payment-service:
-        condition: service_healthy
+        condition: service_started
       notification-service:
-        condition: service_healthy
+        condition: service_started
 
   # Grafana for visualization
   grafana:
@@ -171,7 +166,7 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       api-gateway:
-        condition: service_healthy
+        condition: service_started
       frontend:
         condition: service_started
     networks:
@@ -202,24 +197,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/api-gateway.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
       user-service:
-        condition: service_healthy
+        condition: service_started
       product-service:
-        condition: service_healthy
+        condition: service_started
       cart-service:
-        condition: service_healthy
+        condition: service_started
       order-service:
-        condition: service_healthy
+        condition: service_started
       payment-service:
-        condition: service_healthy
+        condition: service_started
 
   # User Service
   user-service:
@@ -233,19 +223,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/user-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - minio
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # Product Service
   product-service:
@@ -259,19 +249,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/product-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - elasticsearch
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+      jaeger:
+        condition: service_started
 
   # Cart Service
   cart-service:
@@ -285,18 +275,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/cart-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # Order Service
   order-service:
@@ -311,18 +300,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/order-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # Payment Service
   payment-service:
@@ -337,18 +325,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/payment-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
   # Notification Service
   notification-service:
@@ -361,18 +348,17 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
     volumes:
       - ./config/notification-service.yaml:/config/config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     networks:
       - ecommerce-network
     depends_on:
-      - postgres
-      - redis
-      - rabbitmq
-      - jaeger
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
 
 # Volumes for persistent data
 volumes:

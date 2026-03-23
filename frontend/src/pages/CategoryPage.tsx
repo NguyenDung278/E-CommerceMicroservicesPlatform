@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ProductCard } from "../components/ProductCard";
 import { useCart } from "../hooks/useCart";
@@ -64,28 +64,38 @@ export function CategoryPage() {
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
-        <div className="product-grid">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              busy={busyProductId === product.id}
-              onAddToCart={handleAddToCart}
-              onBuyNow={(selected) =>
-                navigate("/checkout", {
-                  state: {
-                    directProduct: {
-                      id: selected.id,
-                      name: selected.name,
-                      price: selected.price,
-                      quantity: 1
+        {products.length > 0 ? (
+          <div className="product-grid">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                busy={busyProductId === product.id}
+                onAddToCart={handleAddToCart}
+                onBuyNow={(selected) =>
+                  navigate("/checkout", {
+                    state: {
+                      directProduct: {
+                        id: selected.id,
+                        name: selected.name,
+                        price: selected.price,
+                        quantity: 1
+                      }
                     }
-                  }
-                })
-              }
-              product={product}
-            />
-          ))}
-        </div>
+                  })
+                }
+                product={product}
+              />
+            ))}
+          </div>
+        ) : feedback ? null : (
+          <div className="empty-card">
+            <strong>Danh mục này chưa có sản phẩm active.</strong>
+            <span>Bạn có thể quay lại catalog để xem các mặt hàng khác đang hiển thị.</span>
+            <Link className="text-link" to="/products">
+              Quay lại catalog
+            </Link>
+          </div>
+        )}
       </section>
     </div>
   );

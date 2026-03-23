@@ -10,6 +10,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
 )
 
@@ -111,6 +112,9 @@ func (h *PaymentHandler) ListPaymentsByOrder(c echo.Context) error {
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
+	if payments == nil {
+		payments = []*model.Payment{}
+	}
 	return response.Success(c, http.StatusOK, "payments retrieved", payments)
 }
 
@@ -119,6 +123,9 @@ func (h *PaymentHandler) ListPaymentHistory(c echo.Context) error {
 	payments, err := h.paymentService.ListPaymentHistory(c.Request().Context(), claims.UserID)
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if payments == nil {
+		payments = []*model.Payment{}
 	}
 	return response.Success(c, http.StatusOK, "payments retrieved", payments)
 }
@@ -154,6 +161,9 @@ func (h *PaymentHandler) ListPaymentsByOrderAdmin(c echo.Context) error {
 	payments, err := h.paymentService.ListPaymentsByOrderAdmin(c.Request().Context(), c.Param("orderId"))
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if payments == nil {
+		payments = []*model.Payment{}
 	}
 
 	return response.Success(c, http.StatusOK, "payments retrieved", payments)

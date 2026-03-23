@@ -42,7 +42,8 @@ export function OrderHistoryList({
     <div className="history-grid">
       {orders.map((order) => {
         const payment = paymentsByOrder[order.id]?.[0] ?? null;
-        const remainingItems = order.items.length - 2;
+        const orderItems = Array.isArray(order.items) ? order.items : [];
+        const remainingItems = orderItems.length - 2;
 
         return (
           <article className="history-card" key={order.id}>
@@ -69,12 +70,12 @@ export function OrderHistoryList({
               </div>
               <div>
                 <span>Số sản phẩm</span>
-                <strong>{order.items.length}</strong>
+                <strong>{orderItems.length}</strong>
               </div>
             </div>
 
             <div className="history-item-preview">
-              {order.items.slice(0, 2).map((item) => (
+              {orderItems.slice(0, 2).map((item) => (
                 <div className="history-line" key={item.id}>
                   <span>
                     {item.name} x {item.quantity}

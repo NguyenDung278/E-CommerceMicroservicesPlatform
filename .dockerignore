@@ -1,5 +1,8 @@
 .git
 .gitignore
+.cache
+**/.cache
+**/.cache/**
 **/node_modules
 **/dist
 **/.DS_Store

@@ -10,6 +10,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
 )
 
@@ -74,6 +75,9 @@ func (h *AddressHandler) List(c echo.Context) error {
 	addresses, err := h.addressService.GetAddresses(c.Request().Context(), claims.UserID)
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to list addresses")
+	}
+	if addresses == nil {
+		addresses = []*model.Address{}
 	}
 
 	return response.Success(c, http.StatusOK, "addresses retrieved", addresses)

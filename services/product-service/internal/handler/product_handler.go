@@ -2,8 +2,8 @@ package handler
 
 import (
 	"errors"
-	"net/http"
 	"math"
+	"net/http"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -12,6 +12,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
 )
 
@@ -154,6 +155,9 @@ func (h *ProductHandler) List(c echo.Context) error {
 	products, total, err := h.productService.List(c.Request().Context(), query)
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if products == nil {
+		products = []*model.Product{}
 	}
 
 	if query.Page < 1 {

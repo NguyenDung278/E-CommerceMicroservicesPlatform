@@ -29,8 +29,14 @@ export function ProductCard({
   adminAction,
   secondaryAdminAction
 }: ProductCardProps) {
-  const productImages =
-    product.image_urls.length > 0 ? product.image_urls : product.image_url ? [product.image_url] : [];
+  const productImages = Array.isArray(product.image_urls)
+    ? product.image_urls
+    : product.image_url
+      ? [product.image_url]
+      : [];
+  const productTags = Array.isArray(product.tags) ? product.tags : [];
+  const productVariants = Array.isArray(product.variants) ? product.variants : [];
+  const productPrice = Number.isFinite(product.price) ? product.price : 0;
   const primaryImage = productImages[0] ?? "";
 
   return (
@@ -61,9 +67,9 @@ export function ProductCard({
       <h3>{product.name}</h3>
       <p className="product-description">{product.description || "Không có mô tả sản phẩm."}</p>
 
-      {product.tags.length > 0 ? (
+      {productTags.length > 0 ? (
         <div className="product-tag-row">
-          {product.tags.map((tag) => (
+          {productTags.map((tag) => (
             <span className="product-tag-chip" key={tag}>
               #{tag}
             </span>
@@ -71,12 +77,12 @@ export function ProductCard({
         </div>
       ) : null}
 
-      {product.variants.length > 0 ? (
-        <p className="product-variant-summary">{product.variants.length} biến thể SKU khả dụng</p>
+      {productVariants.length > 0 ? (
+        <p className="product-variant-summary">{productVariants.length} biến thể SKU khả dụng</p>
       ) : null}
 
       <div className="product-price-row">
-        <strong>${product.price.toFixed(2)}</strong>
+        <strong>${productPrice.toFixed(2)}</strong>
         <Link className="text-link" to={`/products/${product.id}`}>
           Xem chi tiết
         </Link>

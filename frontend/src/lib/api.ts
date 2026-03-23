@@ -6,11 +6,13 @@ import type {
   Cart,
   Coupon,
   Order,
+  OrderItem,
   OrderEvent,
   OrderPreview,
   Payment,
   ProductPopularity,
   Product,
+  ShippingAddress,
   UploadedProductImages,
   UserProfile
 } from "../types/api";
@@ -18,6 +20,194 @@ import type {
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
 export const apiBaseUrl = configuredApiBaseUrl ? configuredApiBaseUrl.replace(/\/+$/, "") : "";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : false;
+}
+
+function normalizeProductVariant(value: unknown): Product["variants"][number] {
+  const variant = isRecord(value) ? value : {};
+
+  return {
+    sku: normalizeString(variant.sku),
+    label: normalizeString(variant.label),
+    size: normalizeString(variant.size) || undefined,
+    color: normalizeString(variant.color) || undefined,
+    price: normalizeNumber(variant.price),
+    stock: normalizeNumber(variant.stock)
+  };
+}
+
+function normalizeProduct(value: unknown): Product {
+  const product = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(product.id),
+    name: normalizeString(product.name),
+    description: normalizeString(product.description),
+    price: normalizeNumber(product.price),
+    stock: normalizeNumber(product.stock),
+    category: normalizeString(product.category),
+    brand: normalizeString(product.brand),
+    tags: Array.isArray(product.tags)
+      ? product.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+      : [],
+    status: normalizeString(product.status),
+    sku: normalizeString(product.sku),
+    variants: Array.isArray(product.variants) ? product.variants.map((variant) => normalizeProductVariant(variant)) : [],
+    image_url: normalizeString(product.image_url),
+    image_urls: Array.isArray(product.image_urls)
+      ? product.image_urls.filter((url): url is string => typeof url === "string" && url.trim().length > 0)
+      : [],
+    created_at: normalizeString(product.created_at),
+    updated_at: normalizeString(product.updated_at)
+  };
+}
+
+function normalizeProductList(value: unknown) {
+  return Array.isArray(value) ? value.map((product) => normalizeProduct(product)) : [];
+}
+
+function normalizeAddress(value: unknown): Address {
+  const address = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(address.id),
+    user_id: normalizeString(address.user_id),
+    recipient_name: normalizeString(address.recipient_name),
+    phone: normalizeString(address.phone),
+    street: normalizeString(address.street),
+    ward: normalizeString(address.ward) || undefined,
+    district: normalizeString(address.district),
+    city: normalizeString(address.city),
+    is_default: normalizeBoolean(address.is_default),
+    created_at: normalizeString(address.created_at),
+    updated_at: normalizeString(address.updated_at)
+  };
+}
+
+function normalizeAddressList(value: unknown) {
+  return Array.isArray(value) ? value.map((address) => normalizeAddress(address)) : [];
+}
+
+function normalizeShippingAddress(value: unknown): ShippingAddress | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  return {
+    recipient_name: normalizeString(value.recipient_name),
+    phone: normalizeString(value.phone),
+    street: normalizeString(value.street),
+    ward: normalizeString(value.ward) || undefined,
+    district: normalizeString(value.district),
+    city: normalizeString(value.city)
+  };
+}
+
+function normalizeOrderItem(value: unknown): OrderItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(item.id),
+    order_id: normalizeString(item.order_id),
+    product_id: normalizeString(item.product_id),
+    name: normalizeString(item.name),
+    price: normalizeNumber(item.price),
+    quantity: normalizeNumber(item.quantity)
+  };
+}
+
+function normalizeOrder(value: unknown): Order {
+  const order = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(order.id),
+    user_id: normalizeString(order.user_id),
+    status: normalizeString(order.status),
+    subtotal_price: normalizeNumber(order.subtotal_price),
+    discount_amount: normalizeNumber(order.discount_amount),
+    coupon_code: normalizeString(order.coupon_code) || undefined,
+    shipping_method: normalizeString(order.shipping_method),
+    shipping_fee: normalizeNumber(order.shipping_fee),
+    shipping_address: normalizeShippingAddress(order.shipping_address),
+    total_price: normalizeNumber(order.total_price),
+    items: Array.isArray(order.items) ? order.items.map((item) => normalizeOrderItem(item)) : [],
+    created_at: normalizeString(order.created_at),
+    updated_at: normalizeString(order.updated_at)
+  };
+}
+
+function normalizeOrderList(value: unknown) {
+  return Array.isArray(value) ? value.map((order) => normalizeOrder(order)) : [];
+}
+
+function normalizeOrderEvent(value: unknown): OrderEvent {
+  const event = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(event.id),
+    order_id: normalizeString(event.order_id),
+    type: normalizeString(event.type),
+    status: normalizeString(event.status),
+    actor_id: normalizeString(event.actor_id) || undefined,
+    actor_role: normalizeString(event.actor_role) || undefined,
+    message: normalizeString(event.message),
+    created_at: normalizeString(event.created_at)
+  };
+}
+
+function normalizeOrderEventList(value: unknown) {
+  return Array.isArray(value) ? value.map((event) => normalizeOrderEvent(event)) : [];
+}
+
+function normalizePayment(value: unknown): Payment {
+  const payment = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(payment.id),
+    order_id: normalizeString(payment.order_id),
+    user_id: normalizeString(payment.user_id),
+    order_total: normalizeNumber(payment.order_total),
+    amount: normalizeNumber(payment.amount),
+    status: normalizeString(payment.status),
+    transaction_type: normalizeString(payment.transaction_type),
+    reference_payment_id: normalizeString(payment.reference_payment_id) || undefined,
+    payment_method: normalizeString(payment.payment_method),
+    gateway_provider: normalizeString(payment.gateway_provider),
+    gateway_transaction_id: normalizeString(payment.gateway_transaction_id) || undefined,
+    gateway_order_id: normalizeString(payment.gateway_order_id) || undefined,
+    checkout_url: normalizeString(payment.checkout_url) || undefined,
+    signature_verified: normalizeBoolean(payment.signature_verified),
+    failure_reason: normalizeString(payment.failure_reason) || undefined,
+    net_paid_amount:
+      isRecord(payment) && typeof payment.net_paid_amount === "number" && Number.isFinite(payment.net_paid_amount)
+        ? payment.net_paid_amount
+        : undefined,
+    outstanding_amount:
+      isRecord(payment) && typeof payment.outstanding_amount === "number" && Number.isFinite(payment.outstanding_amount)
+        ? payment.outstanding_amount
+        : undefined,
+    created_at: normalizeString(payment.created_at),
+    updated_at: normalizeString(payment.updated_at)
+  };
+}
+
+function normalizePaymentList(value: unknown) {
+  return Array.isArray(value) ? value.map((payment) => normalizePayment(payment)) : [];
+}
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
@@ -150,7 +340,10 @@ export const api = {
     return request<null>("/api/v1/users/verify-email/resend", { method: "POST", token });
   },
   listAddresses(token: string) {
-    return request<Address[]>("/api/v1/users/addresses", { token });
+    return request<unknown>("/api/v1/users/addresses", { token }).then((response) => ({
+      ...response,
+      data: normalizeAddressList(response.data)
+    }));
   },
   createAddress(
     token: string,
@@ -164,7 +357,10 @@ export const api = {
       is_default?: boolean;
     }
   ) {
-    return request<Address>("/api/v1/users/addresses", { method: "POST", token, body });
+    return request<unknown>("/api/v1/users/addresses", { method: "POST", token, body }).then((response) => ({
+      ...response,
+      data: normalizeAddress(response.data)
+    }));
   },
   listUsers(token: string) {
     return request<UserProfile[]>("/api/v1/admin/users", { token });
@@ -224,10 +420,22 @@ export const api = {
     }
 
     const query = `?${params.toString()}`;
-    return request<Product[]>(`/api/v1/products${query}`);
+    return request<unknown>(`/api/v1/products${query}`).then((response) => ({
+      ...response,
+      data: normalizeProductList(response.data)
+    }));
   },
   getProductById(productId: string) {
-    return request<Product>(`/api/v1/products/${encodeURIComponent(productId)}`);
+    return request<unknown>(`/api/v1/products/${encodeURIComponent(productId)}`).then((response) => {
+      if (!isRecord(response.data)) {
+        throw new ApiError(500, "Invalid product response", "Product payload missing");
+      }
+
+      return {
+        ...response,
+        data: normalizeProduct(response.data)
+      };
+    });
   },
   getProductPopularity(limit = 100) {
     return request<ProductPopularity[]>(`/api/v1/catalog/popularity?limit=${encodeURIComponent(String(limit))}`);
@@ -256,7 +464,10 @@ export const api = {
       image_urls: string[];
     }
   ) {
-    return request<Product>("/api/v1/products", { method: "POST", token, body });
+    return request<unknown>("/api/v1/products", { method: "POST", token, body }).then((response) => ({
+      ...response,
+      data: normalizeProduct(response.data)
+    }));
   },
   uploadProductImages(token: string, files: File[]) {
     const formData = new FormData();
@@ -299,7 +510,10 @@ export const api = {
       method: "PUT",
       token,
       body
-    });
+    }).then((response) => ({
+      ...response,
+      data: normalizeProduct(response.data)
+    }));
   },
   deleteProduct(token: string, productId: string) {
     return request<null>(`/api/v1/products/${encodeURIComponent(productId)}`, {
@@ -336,7 +550,10 @@ export const api = {
     return request<null>("/api/v1/cart", { method: "DELETE", token });
   },
   listOrders(token: string) {
-    return request<Order[]>("/api/v1/orders", { token });
+    return request<unknown>("/api/v1/orders", { token }).then((response) => ({
+      ...response,
+      data: normalizeOrderList(response.data)
+    }));
   },
   getAdminOrderReport(token: string, days = 30) {
     return request<AdminOrderReport>(`/api/v1/admin/orders/report?days=${encodeURIComponent(String(days))}`, {
@@ -344,7 +561,10 @@ export const api = {
     });
   },
   getOrderById(token: string, orderId: string) {
-    return request<Order>(`/api/v1/orders/${encodeURIComponent(orderId)}`, { token });
+    return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}`, { token }).then((response) => ({
+      ...response,
+      data: normalizeOrder(response.data)
+    }));
   },
   createOrder(
     token: string,
@@ -365,7 +585,10 @@ export const api = {
       };
     }
   ) {
-    return request<Order>("/api/v1/orders", { method: "POST", token, body });
+    return request<unknown>("/api/v1/orders", { method: "POST", token, body }).then((response) => ({
+      ...response,
+      data: normalizeOrder(response.data)
+    }));
   },
   previewOrder(
     token: string,
@@ -389,7 +612,10 @@ export const api = {
     return request<OrderPreview>("/api/v1/orders/preview", { method: "POST", token, body });
   },
   getOrderTimeline(token: string, orderId: string) {
-    return request<OrderEvent[]>(`/api/v1/orders/${encodeURIComponent(orderId)}/events`, { token });
+    return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}/events`, { token }).then((response) => ({
+      ...response,
+      data: normalizeOrderEventList(response.data)
+    }));
   },
   listAdminOrders(
     token: string,
@@ -412,13 +638,22 @@ export const api = {
       params.set("to", options.to);
     }
 
-    return request<Order[]>(`/api/v1/admin/orders?${params.toString()}`, { token });
+    return request<unknown>(`/api/v1/admin/orders?${params.toString()}`, { token }).then((response) => ({
+      ...response,
+      data: normalizeOrderList(response.data)
+    }));
   },
   getAdminOrder(token: string, orderId: string) {
-    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}`, { token });
+    return request<unknown>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}`, { token }).then((response) => ({
+      ...response,
+      data: normalizeOrder(response.data)
+    }));
   },
   getAdminOrderTimeline(token: string, orderId: string) {
-    return request<OrderEvent[]>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/events`, { token });
+    return request<unknown>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/events`, { token }).then((response) => ({
+      ...response,
+      data: normalizeOrderEventList(response.data)
+    }));
   },
   updateAdminOrderStatus(
     token: string,
@@ -428,11 +663,14 @@ export const api = {
       message?: string;
     }
   ) {
-    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/status`, {
+    return request<unknown>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/status`, {
       method: "PUT",
       token,
       body
-    });
+    }).then((response) => ({
+      ...response,
+      data: normalizeOrder(response.data)
+    }));
   },
   cancelAdminOrder(
     token: string,
@@ -441,11 +679,14 @@ export const api = {
       message?: string;
     }
   ) {
-    return request<Order>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
+    return request<unknown>(`/api/v1/admin/orders/${encodeURIComponent(orderId)}/cancel`, {
       method: "PUT",
       token,
       body
-    });
+    }).then((response) => ({
+      ...response,
+      data: normalizeOrder(response.data)
+    }));
   },
   listCoupons(token: string) {
     return request<Coupon[]>("/api/v1/admin/coupons", { token });
@@ -473,16 +714,28 @@ export const api = {
       amount?: number;
     }
   ) {
-    return request<Payment>("/api/v1/payments", { method: "POST", token, body });
+    return request<unknown>("/api/v1/payments", { method: "POST", token, body }).then((response) => ({
+      ...response,
+      data: normalizePayment(response.data)
+    }));
   },
   getPaymentByOrder(token: string, orderId: string) {
-    return request<Payment>(`/api/v1/payments/order/${encodeURIComponent(orderId)}`, { token });
+    return request<unknown>(`/api/v1/payments/order/${encodeURIComponent(orderId)}`, { token }).then((response) => ({
+      ...response,
+      data: normalizePayment(response.data)
+    }));
   },
   listPaymentsByOrder(token: string, orderId: string) {
-    return request<Payment[]>(`/api/v1/payments/order/${encodeURIComponent(orderId)}/history`, { token });
+    return request<unknown>(`/api/v1/payments/order/${encodeURIComponent(orderId)}/history`, { token }).then((response) => ({
+      ...response,
+      data: normalizePaymentList(response.data)
+    }));
   },
   listPaymentHistory(token: string) {
-    return request<Payment[]>("/api/v1/payments/history", { token });
+    return request<unknown>("/api/v1/payments/history", { token }).then((response) => ({
+      ...response,
+      data: normalizePaymentList(response.data)
+    }));
   },
   refundPayment(
     token: string,
@@ -492,15 +745,21 @@ export const api = {
       message?: string;
     }
     ) {
-    return request<Payment>(`/api/v1/admin/payments/${encodeURIComponent(paymentId)}/refunds`, {
+    return request<unknown>(`/api/v1/admin/payments/${encodeURIComponent(paymentId)}/refunds`, {
       method: "POST",
       token,
       body
-    });
+    }).then((response) => ({
+      ...response,
+      data: normalizePayment(response.data)
+    }));
   },
   listAdminPaymentsByOrder(token: string, orderId: string) {
-    return request<Payment[]>(`/api/v1/admin/payments/order/${encodeURIComponent(orderId)}/history`, {
+    return request<unknown>(`/api/v1/admin/payments/order/${encodeURIComponent(orderId)}/history`, {
       token
-    });
+    }).then((response) => ({
+      ...response,
+      data: normalizePaymentList(response.data)
+    }));
   }
 };

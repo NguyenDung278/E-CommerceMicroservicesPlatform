@@ -282,28 +282,35 @@ export function CatalogPage() {
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
-        <div className="product-grid">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              busy={busyProductId === product.id}
-              onAddToCart={handleAddToCart}
-              onBuyNow={(selected) =>
-                navigate("/checkout", {
-                  state: {
-                    directProduct: {
-                      id: selected.id,
-                      name: selected.name,
-                      price: selected.price,
-                      quantity: 1
+        {products.length > 0 ? (
+          <div className="product-grid">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                busy={busyProductId === product.id}
+                onAddToCart={handleAddToCart}
+                onBuyNow={(selected) =>
+                  navigate("/checkout", {
+                    state: {
+                      directProduct: {
+                        id: selected.id,
+                        name: selected.name,
+                        price: selected.price,
+                        quantity: 1
+                      }
                     }
-                  }
-                })
-              }
-              product={product}
-            />
-          ))}
-        </div>
+                  })
+                }
+                product={product}
+              />
+            ))}
+          </div>
+        ) : feedback ? null : (
+          <div className="empty-card">
+            <strong>Chưa có sản phẩm để hiển thị.</strong>
+            <span>Catalog hiện đang rỗng hoặc bộ lọc hiện tại chưa khớp sản phẩm nào.</span>
+          </div>
+        )}
 
         <div className="catalog-links">
           {categories.map((category) => (

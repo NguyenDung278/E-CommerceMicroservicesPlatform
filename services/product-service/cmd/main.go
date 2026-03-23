@@ -93,12 +93,8 @@ func main() {
 	productService := service.NewProductService(productRepo, productOptions...)
 	if searchIndex != nil {
 		searchCtx, cancelSearch := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := searchIndex.EnsureIndex(searchCtx); err != nil {
+		if err := ensureSearchReady(searchCtx, searchIndex, productService, cfg.Search.SyncOnStartup, log); err != nil {
 			log.Warn("failed to ensure Elasticsearch index", zap.Error(err))
-		} else if cfg.Search.SyncOnStartup {
-			if err := productService.SyncSearchIndex(searchCtx); err != nil {
-				log.Warn("failed to sync Elasticsearch index from PostgreSQL", zap.Error(err))
-			}
 		}
 		cancelSearch()
 	}
@@ -178,4 +174,46 @@ func main() {
 		log.Fatal("server forced shutdown", zap.Error(err))
 	}
 	log.Info("server shutdown complete")
+}
+
+func ensureSearchReady(
+	ctx context.Context,
+	searchIndex *search.ElasticsearchIndex,
+	productService *service.ProductService,
+	syncOnStartup bool,
+	log *zap.Logger,
+) error {
+	const retryDelay = 2 * time.Second
+
+	attempt := 1
+	for {
+		err := searchIndex.EnsureIndex(ctx)
+		if err == nil {
+			if !syncOnStartup {
+				return nil
+			}
+			if err := productService.SyncSearchIndex(ctx); err != nil {
+				return fmt.Errorf("failed to sync Elasticsearch index from PostgreSQL: %w", err)
+			}
+			return nil
+		}
+
+		if ctx.Err() != nil {
+			return err
+		}
+
+		log.Info(
+			"Elasticsearch not ready yet, retrying startup sync",
+			zap.Int("attempt", attempt),
+			zap.Duration("retry_in", retryDelay),
+			zap.Error(err),
+		)
+		attempt++
+
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(retryDelay):
+		}
+	}
 }

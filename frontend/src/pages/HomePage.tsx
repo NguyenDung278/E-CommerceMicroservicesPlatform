@@ -125,31 +125,40 @@ export function HomePage() {
           </Link>
         </div>
 
-        {error ? <div className="feedback feedback-error">{error}</div> : null}
-
-        <div className="product-grid">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              busy={busyProductId === product.id}
-              onAddToCart={handleAddToCart}
-              onBuyNow={(selected) =>
-                navigate("/checkout", {
-                  state: {
-                    directProduct: {
-                      id: selected.id,
-                      name: selected.name,
-                      price: selected.price,
-                      quantity: 1
-                    }
-                  }
-                })
-              }
-              product={product}
-            />
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+	        {error ? <div className="feedback feedback-error">{error}</div> : null}
+	        {products.length > 0 ? (
+	          <div className="product-grid">
+	            {products.map((product) => (
+	              <ProductCard
+	                key={product.id}
+	                busy={busyProductId === product.id}
+	                onAddToCart={handleAddToCart}
+	                onBuyNow={(selected) =>
+	                  navigate("/checkout", {
+	                    state: {
+	                      directProduct: {
+	                        id: selected.id,
+	                        name: selected.name,
+	                        price: selected.price,
+	                        quantity: 1
+	                      }
+	                    }
+	                  })
+	                }
+	                product={product}
+	              />
+	            ))}
+	          </div>
+	        ) : error ? null : (
+	          <div className="empty-card">
+	            <strong>Catalog hiện chưa có sản phẩm active.</strong>
+	            <span>Frontend đã tải xong, nhưng backend chưa có mặt hàng nào để tạo product card.</span>
+	            <Link className="text-link" to="/products">
+	              Mở trang catalog
+	            </Link>
+	          </div>
+	        )}
+	      </section>
+	    </div>
+	  );
 }

@@ -38,13 +38,13 @@ export function useOrderPayments(token: string) {
     void api
       .listOrders(token)
       .then(async (response) => {
-        const orders = response.data
+        const orders = (Array.isArray(response.data) ? response.data : [])
           .slice()
           .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 
         const paymentHistoryResponse = await api.listPaymentHistory(token);
         const paymentsByOrder: Record<string, Payment[]> = {};
-        paymentHistoryResponse.data.forEach((payment) => {
+        (Array.isArray(paymentHistoryResponse.data) ? paymentHistoryResponse.data : []).forEach((payment) => {
           if (!paymentsByOrder[payment.order_id]) {
             paymentsByOrder[payment.order_id] = [];
           }

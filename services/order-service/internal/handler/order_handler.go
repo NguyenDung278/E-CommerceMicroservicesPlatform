@@ -122,6 +122,9 @@ func (h *OrderHandler) GetUserOrders(c echo.Context) error {
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
+	if orders == nil {
+		orders = []*model.Order{}
+	}
 	return response.Success(c, http.StatusOK, "orders retrieved", orders)
 }
 
@@ -156,6 +159,9 @@ func (h *OrderHandler) GetOrderTimeline(c echo.Context) error {
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
+	if events == nil {
+		events = []*model.OrderEvent{}
+	}
 	return response.Success(c, http.StatusOK, "order timeline retrieved", events)
 }
 
@@ -182,6 +188,9 @@ func (h *OrderHandler) ListAdminOrders(c echo.Context) error {
 	orders, total, err := h.orderService.ListAdminOrders(c.Request().Context(), filters)
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to list orders")
+	}
+	if orders == nil {
+		orders = []*model.Order{}
 	}
 
 	return response.SuccessWithMeta(c, http.StatusOK, "orders retrieved", orders, &response.Meta{
@@ -210,6 +219,9 @@ func (h *OrderHandler) GetAdminOrderTimeline(c echo.Context) error {
 			return response.Error(c, http.StatusNotFound, "not found", "order not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if events == nil {
+		events = []*model.OrderEvent{}
 	}
 	return response.Success(c, http.StatusOK, "order timeline retrieved", events)
 }

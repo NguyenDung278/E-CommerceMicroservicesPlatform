@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
@@ -6,14 +7,18 @@ COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY services/notification-service/go.mod services/notification-service/go.sum ./services/notification-service/
 
 WORKDIR /src/services/notification-service
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
 WORKDIR /src
 COPY pkg ./pkg
 COPY services/notification-service ./services/notification-service
 
 WORKDIR /src/services/notification-service
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/notification-service ./cmd/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/notification-service ./cmd/main.go
 
 FROM gcr.io/distroless/static-debian12:nonroot
 
