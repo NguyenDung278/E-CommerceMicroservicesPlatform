@@ -27,3 +27,7 @@ grpc:
 
 frontend:
   base_url: "http://localhost:4173"
+
+bootstrap:
+  dev_accounts:
+    enabled: true

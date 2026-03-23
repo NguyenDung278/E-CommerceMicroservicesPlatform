@@ -5,6 +5,7 @@ import { ProductCard } from "../components/ProductCard";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../lib/api";
 import type { AdminOrderReport, Coupon, Order, Payment, Product, ProductVariant, UserProfile } from "../types/api";
+import { formatRoleLabel, isDevelopmentAccount } from "../utils/devAccounts";
 import { formatCurrency, formatDateTime } from "../utils/format";
 import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "../utils/sanitize";
 import { validateProduct } from "../utils/validation";
@@ -96,7 +97,7 @@ function createDefaultCouponForm(): CouponFormState {
 }
 
 export function AdminPage() {
-  const { token, isAdmin } = useAuth();
+  const { token, isAdmin, user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -120,6 +121,8 @@ export function AdminPage() {
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [form, setForm] = useState<ProductFormState>(createDefaultForm);
   const [couponForm, setCouponForm] = useState<CouponFormState>(createDefaultCouponForm);
+  const isDevelopmentOperator = isDevelopmentAccount(user);
+  const currentRoleLabel = formatRoleLabel(user?.role);
 
   useEffect(() => {
     void loadProducts();
@@ -564,6 +567,19 @@ export function AdminPage() {
             <h1>Quản lý catalog và báo cáo sprint 5-6</h1>
           </div>
         </div>
+
+        {isDevelopmentOperator ? (
+          <div className="admin-warning-banner" role="note">
+            <div className="admin-warning-badge">Development Only</div>
+            <div className="admin-warning-copy">
+              <strong>Bạn đang dùng tài khoản seed dành cho môi trường local/demo.</strong>
+              <p>
+                Phiên hiện tại đang đăng nhập bằng quyền <strong>{currentRoleLabel}</strong> với tài khoản test.
+                Hãy tắt `bootstrap.dev_accounts` trước khi deploy production hoặc demo với dữ liệu thật.
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 

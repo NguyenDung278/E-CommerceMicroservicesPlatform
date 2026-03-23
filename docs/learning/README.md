@@ -1,19 +1,28 @@
-# Learning Path cho project backend này
+# Learning Path
 
-Bộ tài liệu này không thay thế source code. Nó là lớp giải thích để giúp bạn đọc source có định hướng hơn.
+Thư mục này dành cho developer mới hoặc người đang dùng repo như một playground để học backend/full-stack thực chiến.
 
 ## Thứ tự học khuyến nghị
 
-1. Đọc [01-go-backend-foundations.md](./01-go-backend-foundations.md)
-2. Đọc [02-project-technologies-explained.md](./02-project-technologies-explained.md)
-3. Đọc [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
-4. Đọc song song bộ [deep-dive](../deep-dive/README.md)
-5. Khi đã bắt đầu đọc source thật, chuyển sang bộ [annotated](../annotated/README.md)
-6. Dùng [04-study-prompts.md](./04-study-prompts.md) để tự học tiếp theo từng vòng
+1. [00-local-setup.md](./00-local-setup.md)
+2. [01-go-backend-foundations.md](./01-go-backend-foundations.md)
+3. [02-project-technologies-explained.md](./02-project-technologies-explained.md)
+4. [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
+5. [05-first-contribution-walkthrough.md](./05-first-contribution-walkthrough.md)
+6. [06-testing-and-verification.md](./06-testing-and-verification.md)
+7. [07-core-concepts-and-terms.md](./07-core-concepts-and-terms.md)
+8. [04-study-prompts.md](./04-study-prompts.md)
 
-## Mục tiêu của bộ learning này
+## Bộ tài liệu này giúp bạn làm gì
 
-- giúp bạn không bị "ngợp" trước microservices,
-- hiểu vì sao project dùng từng công nghệ,
-- biết nên học khái niệm nào trước khái niệm nào sau,
-- biến project này thành một khóa tự học Golang backend thực chiến.
+- dựng môi trường local mà không đoán mò
+- hiểu thuật ngữ repo trước khi đọc source
+- biết nên đọc service nào trước service nào sau
+- biết cách verify thay đổi trước khi mở PR
+
+## Khi nào chuyển sang `deep-dive/` và `annotated/`
+
+- Khi bạn đã chạy được repo local, chuyển sang `deep-dive/`
+- Khi bạn đã hiểu luồng tổng thể, chuyển sang `annotated/`
+
+Ba thư mục `learning`, `deep-dive`, `annotated` được thiết kế như ba tầng: vào nghề, hiểu hệ thống, rồi đọc source.

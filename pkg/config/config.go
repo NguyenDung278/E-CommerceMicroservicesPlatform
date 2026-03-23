@@ -31,6 +31,17 @@ type Config struct {
 	ObjectStorage  ObjectStorageConfig  `mapstructure:"object_storage"`
 	Tracing        TracingConfig        `mapstructure:"tracing"`
 	Search         SearchConfig         `mapstructure:"search"`
+	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
+}
+
+type BootstrapConfig struct {
+	DevAccounts DevAccountsConfig `mapstructure:"dev_accounts"`
+}
+
+type DevAccountsConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	AdminPassword string `mapstructure:"admin_password"`
+	StaffPassword string `mapstructure:"staff_password"`
 }
 
 // GRPCConfig holds gRPC server settings.
@@ -224,6 +235,9 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("search.api_key", "")
 	v.SetDefault("search.request_timeout", 5)
 	v.SetDefault("search.sync_on_startup", true)
+	v.SetDefault("bootstrap.dev_accounts.enabled", false)
+	v.SetDefault("bootstrap.dev_accounts.admin_password", "")
+	v.SetDefault("bootstrap.dev_accounts.staff_password", "")
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port

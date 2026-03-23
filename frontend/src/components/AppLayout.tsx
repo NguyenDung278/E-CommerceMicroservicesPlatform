@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
+import { formatRoleLabel, getUserDisplayName, getUserInitial, isDevelopmentAccount } from "../utils/devAccounts";
 
 function navClassName({ isActive }: { isActive: boolean }) {
   return isActive ? "nav-link nav-link-active" : "nav-link";
@@ -10,6 +11,10 @@ function navClassName({ isActive }: { isActive: boolean }) {
 export function AppLayout() {
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
+  const isDevelopmentUser = isDevelopmentAccount(user);
+  const displayName = getUserDisplayName(user);
+  const userInitial = getUserInitial(user);
+  const roleLabel = formatRoleLabel(user?.role);
 
   return (
     <div className="app-shell">
@@ -59,8 +64,21 @@ export function AppLayout() {
           {isAuthenticated ? (
             <>
               <div className="account-chip">
-                <strong>{user?.first_name || "User"}</strong>
-                <span>{user?.role}</span>
+                <div className="account-avatar" aria-hidden="true">
+                  {userInitial}
+                </div>
+
+                <div className="account-copy">
+                  <div className="account-copy-head">
+                    <strong>{displayName}</strong>
+                    {isDevelopmentUser ? <span className="account-flag">DEV ONLY</span> : null}
+                  </div>
+
+                  <div className="account-copy-meta">
+                    <span className="account-role">{roleLabel}</span>
+                    {user?.email ? <span className="account-email">{user.email}</span> : null}
+                  </div>
+                </div>
               </div>
               <button className="ghost-button" type="button" onClick={logout}>
                 Đăng xuất

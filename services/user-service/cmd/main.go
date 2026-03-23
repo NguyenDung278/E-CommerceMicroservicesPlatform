@@ -2,7 +2,8 @@
 //
 // STARTUP ORDER:
 //  1. Load configuration → 2. Init logger → 3. Connect DB → 4. Migrate
-//  5. Wire dependencies → 6. Register routes → 7. Start server (graceful shutdown)
+//  5. Bootstrap development accounts (optional) → 6. Wire dependencies
+//  7. Register routes → 8. Start servers (graceful shutdown)
 package main
 
 import (
@@ -78,8 +79,24 @@ func main() {
 	}
 	log.Info("database migrations completed")
 
-	// 5. Dependency injection: repo → service → handler.
+	// 5. Bootstrap development-only test accounts if explicitly enabled.
 	userRepo := repository.NewUserRepository(db)
+	if cfg.Bootstrap.DevAccounts.Enabled {
+		devAccountBootstrapper := service.NewDevAccountBootstrapper(
+			userRepo,
+			log,
+			cfg.Bootstrap.DevAccounts.AdminPassword,
+			cfg.Bootstrap.DevAccounts.StaffPassword,
+		)
+		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := devAccountBootstrapper.Ensure(bootstrapCtx); err != nil {
+			cancel()
+			log.Fatal("failed to bootstrap development test accounts", zap.Error(err))
+		}
+		cancel()
+	}
+
+	// 6. Dependency injection: repo → service → handler.
 	emailSender := email.NewSender(cfg.SMTP, log)
 	userService := service.NewUserService(
 		userRepo,
@@ -94,7 +111,7 @@ func main() {
 	addressService := service.NewAddressService(addressRepo)
 	addressHandler := handler.NewAddressHandler(addressService)
 
-	// 6. Set up Echo and register routes.
+	// 7. Set up Echo and register routes.
 	e := echo.New()
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
@@ -118,11 +135,11 @@ func main() {
 	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	addressHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
-	// 7. Set up gRPC server.
+	// 8. Set up gRPC server.
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("user-service")))
 	pb.RegisterUserServiceServer(grpcServer, grpc_handler.NewUserGRPCServer(userService))
 
-	// 8. Start servers with graceful shutdown.
+	// 9. Start servers with graceful shutdown.
 	go func() {
 		// Start HTTP server
 		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)

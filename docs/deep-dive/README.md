@@ -1,32 +1,33 @@
-# Backend Deep Dive theo từng service
+# Deep Dive
 
-Bộ tài liệu này tách phần backend thành nhiều file nhỏ để người học Golang có thể đọc theo từng domain thay vì phải nuốt toàn bộ hệ thống trong một lần.
+Thư mục này dành cho việc hiểu hệ thống ở cấp kiến trúc và runtime behavior, trước khi đi xuống từng dòng code.
 
-## Cách đọc khuyến nghị
+## Nên đọc theo thứ tự này
 
-1. Đọc [api-gateway.md](./api-gateway.md) để hiểu cửa vào của hệ thống.
-2. Đọc [user-service.md](./user-service.md) để nắm auth, JWT, profile.
-3. Đọc [product-service.md](./product-service.md) để hiểu CRUD và repository SQL.
-4. Đọc [cart-service.md](./cart-service.md) để hiểu Redis và source of truth.
-5. Đọc [order-service.md](./order-service.md) để hiểu business flow phức tạp nhất.
-6. Đọc [payment-service.md](./payment-service.md) để hiểu authorization cho domain nhạy cảm.
-7. Đọc [notification-service.md](./notification-service.md) để hiểu event-driven worker.
+1. [system-overview.md](./system-overview.md)
+2. [technology-stack.md](./technology-stack.md)
+3. [api-gateway.md](./api-gateway.md)
+4. [user-service.md](./user-service.md)
+5. [product-service.md](./product-service.md)
+6. [cart-service.md](./cart-service.md)
+7. [order-service.md](./order-service.md)
+8. [payment-service.md](./payment-service.md)
+9. [notification-service.md](./notification-service.md)
 
-## Mục tiêu của bộ tài liệu
+## Mục tiêu của bộ tài liệu này
 
-- Giúp bạn trace một request thật từ đầu tới cuối.
-- Giúp bạn hiểu vai trò của từng tầng `handler -> service -> repository`.
-- Giúp bạn luyện tư duy backend Golang theo hướng nghề nghiệp thực tế.
-- Khi muốn đọc sâu tới cấp độ file và block code, hãy đi tiếp sang bộ [annotated](../annotated/README.md).
+- hiểu service nào chịu trách nhiệm domain nào
+- phân biệt source of truth của từng loại dữ liệu
+- nắm được luồng HTTP, gRPC và RabbitMQ
+- hiểu vì sao repo dùng nhiều thành phần infra khác nhau
 
-## Tư duy khi đọc code
+## Tư duy đọc kiến trúc
 
-Khi mở một service, hãy luôn tự hỏi 5 câu:
+Mỗi khi mở một file deep-dive, hãy tự trả lời bốn câu:
 
-1. Service này chịu trách nhiệm domain gì?
-2. Request đi vào ở đâu?
-3. Business logic nằm ở file nào?
-4. Dữ liệu được lưu hoặc lấy ở đâu?
-5. Service này đang gọi hoặc bị gọi bởi service nào khác?
+1. Input vào service là gì
+2. Dependency bắt buộc và dependency tùy chọn là gì
+3. Dữ liệu được lưu ở đâu
+4. Service phát hay consume tín hiệu gì từ service khác
 
-Nếu bạn trả lời được 5 câu này cho từng service, bạn đã đi rất đúng hướng của một Golang Back-end Developer.
+Sau khi trả lời được bốn câu này cho từng service, bạn sẽ đọc source nhanh hơn rất nhiều.

@@ -1,79 +1,64 @@
-# Backend Annotated Reading
+# Annotated Source Reading
 
-Đây là bộ tài liệu "mentor annotate" cho những file backend quan trọng nhất trong project.
+Thư mục này dành cho việc đọc source code theo từng block quan trọng. Mục tiêu không phải là diễn giải mọi dòng, mà là:
 
-Mục tiêu của bộ này không phải là tóm tắt source code. Mục tiêu là:
+- chỉ ra những đoạn quyết định flow xử lý,
+- giải thích vì sao block đó tồn tại,
+- cho bạn biết nên đặt câu hỏi gì khi đọc source thật.
 
-- giúp bạn đọc file lớn mà không bị ngợp,
-- chỉ ra line nào là trọng tâm,
-- giải thích vì sao đoạn code được viết theo cách đó,
-- và biến việc đọc source thành một quá trình học Golang backend có phương pháp.
-
-## Cách đọc khuyến nghị
+## Cách đọc hiệu quả
 
 1. Mở file markdown annotate tương ứng.
-2. Mở source code thật song song.
-3. Đọc theo từng block line number.
-4. Sau mỗi block, dừng lại và tự trả lời:
-   - đoạn này đang giải quyết bài toán gì?
-   - nếu bỏ đoạn này đi thì hệ thống hỏng ở đâu?
-   - đoạn này thuộc layer nào: middleware, handler, service, repository, infra?
-5. Sau khi đọc xong, thử tự giải thích lại file đó bằng lời của chính bạn.
+2. Mở source code thật song song trong IDE.
+3. Đi theo từng block line number hoặc từng function chính.
+4. Tự trace dữ liệu đi qua các layer: `handler -> service -> repository` hoặc `context -> hook -> page`.
 
-## Thứ tự đọc nên bắt đầu
+## Thứ tự đọc khuyến nghị
 
-1. [api-gateway-main.md](./api-gateway-main.md)
-2. [auth-go.md](./auth-go.md)
-3. [user-service.md](./user-service.md)
-4. [order-service.md](./order-service.md)
-5. [payment-service.md](./payment-service.md)
+1. [shared-packages.md](./shared-packages.md)
+2. [api-gateway-main.md](./api-gateway-main.md)
+3. [frontend-app.md](./frontend-app.md)
+4. [auth-go.md](./auth-go.md)
+5. [user-service.md](./user-service.md)
+6. [product-service.md](./product-service.md)
+7. [cart-service.md](./cart-service.md)
+8. [order-service.md](./order-service.md)
+9. [payment-service.md](./payment-service.md)
+10. [notification-service.md](./notification-service.md)
 
-## Bộ file hiện có
+## File annotate theo module
 
+- [shared-packages.md](./shared-packages.md)
+- [frontend-app.md](./frontend-app.md)
 - [api-gateway-main.md](./api-gateway-main.md)
 - [auth-go.md](./auth-go.md)
 - [user-service.md](./user-service.md)
+- [product-service.md](./product-service.md)
+- [cart-service.md](./cart-service.md)
 - [order-service.md](./order-service.md)
 - [payment-service.md](./payment-service.md)
+- [notification-service.md](./notification-service.md)
 - [order-repository.md](./order-repository.md)
 - [payment-repository.md](./payment-repository.md)
 
-## Bộ line-by-line sâu hơn
-
-Nếu bạn muốn học sát từng cụm dòng quan trọng, đọc tiếp bộ này sau khi đã xem bản annotate thường:
+## File line-by-line sâu hơn
 
 - [line-by-line-auth-go.md](./line-by-line-auth-go.md)
 - [line-by-line-order-service.md](./line-by-line-order-service.md)
 - [line-by-line-payment-service.md](./line-by-line-payment-service.md)
 
-## Thứ tự đọc persistence mình khuyên
+## Khi nào nên đọc annotate nào
 
-Sau khi đọc:
+- Sửa auth, role, JWT: bắt đầu từ `shared-packages.md`, `auth-go.md`, `user-service.md`
+- Sửa catalog hoặc search: đọc `product-service.md`
+- Sửa guest cart hoặc cart merge: đọc `frontend-app.md`, `cart-service.md`
+- Sửa order/payment flow: đọc `order-service.md`, `payment-service.md`, `notification-service.md`
 
-- [line-by-line-order-service.md](./line-by-line-order-service.md)
+## Kết quả mong đợi
 
-hãy đọc tiếp:
+Sau khi đọc xong bộ này, bạn nên trả lời được:
 
-- [order-repository.md](./order-repository.md)
-
-Sau khi đọc:
-
-- [line-by-line-payment-service.md](./line-by-line-payment-service.md)
-
-hãy đọc tiếp:
-
-- [payment-repository.md](./payment-repository.md)
-
-## Cách dùng bộ annotate để học giỏi hơn
-
-Nếu bạn muốn học thật sâu, hãy lặp chu kỳ này:
-
-1. Đọc annotate file.
-2. Đọc line-by-line file tương ứng nếu file đó là lõi của hệ thống.
-3. Đọc source thật.
-4. Tự vẽ lại flow bằng text hoặc Mermaid.
-5. Tự viết pseudo-code cho file đó.
-6. Trả lời các câu hỏi "vì sao" trong đầu.
-7. Tự sửa nhỏ hoặc viết lại một phần tương tự.
-
-Đây là cách rất tốt để tăng khả năng đọc source và dần tiến tới khả năng tự thiết kế backend bằng Go.
+- request vào từ đâu,
+- business rule nằm ở layer nào,
+- source of truth của mỗi domain là gì,
+- service nào gọi service nào bằng HTTP, gRPC hoặc RabbitMQ.
