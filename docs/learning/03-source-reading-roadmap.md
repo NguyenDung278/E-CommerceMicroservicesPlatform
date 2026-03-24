@@ -1,55 +1,55 @@
-# 03. Roadmap đọc source code của project này
+# 03. Roadmap đọc source code
 
-Tài liệu này giúp bạn biết nên đọc gì trước, đọc gì sau, và đọc như thế nào để không bị ngợp.
+Tài liệu này là "kim chỉ nam" giúp bạn biết nên mở file nào trước, file nào sau để hiểu dự án này nhanh nhất mà không bị lạc trong Microservices.
 
-## Giai đoạn 1: Nhìn bức tranh lớn
+---
 
-### Mục tiêu
+## 🏎️ 1. Quick Start (5 phút để hiểu cấu trúc)
 
-- biết project có những service nào,
-- mỗi service làm domain gì,
-- request đi vào từ đâu.
+Nếu bạn vừa clone repo này và muốn biết "nó làm cái gì ở đâu", hãy đọc theo đúng thứ tự này:
 
-### Cần đọc
+1. **`api-gateway/cmd/main.go`**: Điểm vào của mọi request. Bạn sẽ thấy các route công khai.
+2. **`pkg/middleware/auth.go`**: Cách hệ thống bảo vệ API bằng JWT.
+3. **`services/user-service/internal/service/user_service.go`**: Business logic cơ bản nhất (Đăng ký/Đăng nhập).
+4. **`pkg/response/response.go`**: Cách backend trả dữ liệu JSON tiêu chuẩn.
 
-1. `README.md`
-2. `docs/ecommerce-backend-golang-analysis.md`
-3. `docs/deep-dive/README.md`
-4. `api-gateway/cmd/main.go`
+---
 
-### Câu hỏi tự kiểm tra
+## 🏗️ 2. Quy tắc "3 Lớp" (Phải hiểu trước khi đọc tiếp)
 
-- API Gateway làm gì?
-- có bao nhiêu service backend?
-- service nào dùng PostgreSQL, service nào dùng Redis?
-- service nào publish event, service nào consume event?
+Mọi service trong dự án này (User, Product, Order...) đều tuân theo một khuôn mẫu (Pattern) duy nhất. Khi bạn hiểu khuôn này, bạn sẽ đọc file nào cũng thấy quen thuộc:
 
-## Giai đoạn 2: Học shared package trước
+1. **`internal/handler/` (Tầng Giao Diện)**: Nhận request từ HTTP, kiểm tra dữ liệu đầu vào (Validation).
+2. **`internal/service/` (Tầng Nghiệp Vụ)**: Nơi chứa logic chính (Tính tiền, kiểm kho, gửi mail). Đây là phần quan trọng nhất.
+3. **`internal/repository/` (Tầng Dữ Liệu)**: Nơi viết các câu lệnh SQL hoặc gọi Redis để lưu/lấy dữ liệu.
 
-### Vì sao?
+---
 
-Vì rất nhiều service dùng chung `pkg`.
+## 📅 3. Lộ trình đọc chi tiết theo từng giai đoạn
 
-### Cần đọc
+### Giai đoạn 1: Hiểu "Xương sống" (`pkg/` và `api-gateway/`)
 
-1. `pkg/config/config.go`
-2. `pkg/middleware/auth.go`
-3. `pkg/middleware/rate_limit.go`
-4. `pkg/middleware/logging.go`
-5. `pkg/validation/validator.go`
-6. `pkg/response/response.go`
-7. `pkg/database/postgres.go`
+Đừng đọc logic nghiệp vụ ngay. Hãy đọc những thứ bổ trợ trước vì service nào cũng dùng chúng.
 
-### Sau khi đọc xong, bạn nên hiểu
+- [ ] **Lớp bảo vệ**: `pkg/middleware/auth.go` (JWT) và `rate_limit.go`.
+- [ ] **Cấu hình**: `pkg/config/config.go` (Cách load file `.yaml` và `.env`).
+- [ ] **Dữ liệu trả về**: `pkg/response/response.go` (Bạn sẽ thấy `success`, `message`, `data`).
+- [ ] **Cổng vào**: `api-gateway/internal/proxy/service_proxy.go` (Cách Gateway forward request đi).
 
-- request được auth thế nào,
-- config được load thế nào,
-- validation hoạt động ra sao,
-- response JSON được chuẩn hóa thế nào.
+### Giai đoạn 2: Đọc Service mô hình mẫu (`user-service`)
 
-## Giai đoạn 3: Đọc service dễ trước
+`user-service` là service đơn giản nhất để học trọn vẹn quy trình:
+1. Mở `internal/handler/user_handler.go` để xem các endpoint.
+2. Mở `internal/service/user_service.go` để xem logic đăng ký.
+3. Mở `internal/repository/user_repository.go` để xem cách viết SQL.
 
-### Bắt đầu với `user-service`
+### Giai đoạn 3: Học về giao tiếp giữa các Service (`product-service` & `cart-service`)
+
+Ở đây bạn sẽ học được cách các service "nói chuyện" với nhau:
+- [ ] **gRPC Server**: Đọc `services/product-service/internal/handler/grpc_handler.go`.
+- [ ] **gRPC Client**: Đọc `services/cart-service/internal/service/cart_service.go`. Bạn sẽ thấy Cart gọi Product để lấy giá thật.
+- [ ] **Redis**: Đọc `services/cart-service/internal/repository/cart_repository.go` để xem cách dùng DB bộ nhớ tạm.
+
 
 Vì service này có:
 

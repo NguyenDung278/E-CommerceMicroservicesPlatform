@@ -3,13 +3,11 @@ import { Link, Navigate, useLocation, useNavigate, type Location as RouterLocati
 
 import { FormField } from "../components/FormField";
 import { NotificationStack, type NotificationItem } from "../components/NotificationStack";
-import { AuthShell } from "../components/auth/AuthShell";
 import { useAuth } from "../hooks/useAuth";
-import { api, getErrorMessage } from "../lib/api";
+import { getErrorMessage } from "../lib/api";
 import { getVisibleErrors, inputClassName, normalizeIdentifier, type TouchedFields } from "../utils/authForm";
 import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "../utils/authStorage";
-import { sanitizeEmail } from "../utils/sanitize";
-import { isValidEmail, type LoginFormValues, validateLoginFields } from "../utils/validation";
+import { type LoginFormValues, validateLoginFields } from "../utils/validation";
 
 type AuthLocationState = {
   from?: RouterLocation;
@@ -21,34 +19,9 @@ const defaultLoginForm: LoginFormValues = {
   rememberMe: false
 };
 
-const loginStats = [
-  {
-    value: "1 chạm",
-    label: "Mở lại phiên mua sắm đang dang dở"
-  },
-  {
-    value: "Cục bộ",
-    label: "Lưu tài khoản trên thiết bị bằng localStorage"
-  },
-  {
-    value: "Responsive",
-    label: "Form tối ưu cho mobile và desktop"
-  }
-];
-
-const loginHighlights = [
-  {
-    title: "Luồng đăng nhập rõ ràng",
-    description: "Trường thông tin gọn, CTA nổi bật và đường đi sang đăng ký nhìn thấy ngay."
-  },
-  {
-    title: "Bám sát hành vi mua hàng",
-    description: "Sau khi đăng nhập xong, người dùng được trả về đúng nơi họ đang thao tác trước đó."
-  },
-  {
-    title: "Nhớ tài khoản theo yêu cầu",
-    description: "Checkbox ghi nhớ chỉ lưu tài khoản cục bộ để lần sau điền lại nhanh hơn mà không giữ plaintext password."
-  }
+const loginVisualHighlights = [
+  "Sustainably sourced forest-inspired goods.",
+  "Editorial storefront with a calm, tactile authentication flow."
 ];
 
 export function LoginPage() {
@@ -70,12 +43,10 @@ export function LoginPage() {
   });
   const [touched, setTouched] = useState<TouchedFields<LoginFormValues>>({});
   const [submitted, setSubmitted] = useState(false);
-  const [showRecoveryHelp, setShowRecoveryHelp] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
-  const [isRecoveryBusy, setIsRecoveryBusy] = useState(false);
   const [delayRedirect, setDelayRedirect] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [recoveryFormEmail, setRecoveryFormEmail] = useState("");
 
   const navigationState = location.state as AuthLocationState | null;
   const redirectTo = navigationState?.from
@@ -83,7 +54,6 @@ export function LoginPage() {
     : "/profile";
   const loginErrors = validateLoginFields(loginForm);
   const visibleErrors = getVisibleErrors(loginErrors, touched, submitted);
-  const recoveryEmail = isValidEmail(loginForm.identifier) ? sanitizeEmail(loginForm.identifier) : "";
 
   useEffect(() => {
     if (!error) {
@@ -118,29 +88,6 @@ export function LoginPage() {
 
   function markTouched<Key extends keyof LoginFormValues>(field: Key) {
     setTouched((current) => ({ ...current, [field]: true }));
-  }
-
-  async function handleForgotPassword() {
-    const emailToRecover = sanitizeEmail(recoveryFormEmail || recoveryEmail);
-    if (!emailToRecover || !isValidEmail(emailToRecover)) {
-      pushNotification("error", "Chưa gửi được yêu cầu", "Hãy nhập email hợp lệ để nhận liên kết đặt lại mật khẩu.");
-      return;
-    }
-
-    try {
-      setIsRecoveryBusy(true);
-      await api.forgotPassword({ email: emailToRecover });
-      pushNotification(
-        "success",
-        "Đã ghi nhận yêu cầu",
-        "Nếu email tồn tại trong hệ thống, chúng tôi sẽ gửi liên kết đặt lại mật khẩu trong ít phút."
-      );
-      setRecoveryFormEmail(emailToRecover);
-    } catch (reason) {
-      pushNotification("error", "Không thể gửi yêu cầu", getErrorMessage(reason));
-    } finally {
-      setIsRecoveryBusy(false);
-    }
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -194,121 +141,146 @@ export function LoginPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="auth-page auth-page-login">
       <NotificationStack items={notifications} onDismiss={dismissNotification} />
 
-      <AuthShell
-        badge="Đăng nhập"
-        description="Trang đăng nhập riêng giúp người dùng quay lại mua hàng nhanh hơn, ít nhiễu hơn và rõ ràng hơn trên mọi kích thước màn hình."
-        highlights={loginHighlights}
-        mode="login"
-        panelDescription="Điền thông tin đăng nhập để tiếp tục checkout, xem đơn hàng và quản lý tài khoản."
-        panelLabel="Chào mừng trở lại"
-        panelTitle="Đăng nhập tài khoản"
-        stats={loginStats}
-        title="Truy cập lại tài khoản của bạn trong một giao diện gọn, sáng và chuyên nghiệp."
-      >
-        <form className="auth-form-stack" noValidate onSubmit={handleLogin}>
-          <FormField
-            error={visibleErrors.identifier}
-            hint="Nhập email đã đăng ký hoặc số điện thoại dùng để đăng nhập."
-            htmlFor="login-identifier"
-            label="Email / Số điện thoại"
-            required
-          >
-            <input
-              aria-invalid={Boolean(visibleErrors.identifier)}
-              autoComplete="username"
-              className={inputClassName(Boolean(visibleErrors.identifier))}
-              id="login-identifier"
-              inputMode={loginForm.identifier.includes("@") ? "email" : "text"}
-              placeholder="name@example.com"
-              value={loginForm.identifier}
-              onBlur={() => markTouched("identifier")}
-              onChange={(event) => updateField("identifier", event.target.value)}
-            />
-          </FormField>
+      <main className="auth-login-shell">
+        <section className="auth-login-visual">
+          <div className="auth-login-visual-backdrop" />
+          <div className="auth-login-visual-overlay" />
 
-          <FormField
-            error={visibleErrors.password}
-            htmlFor="login-password"
-            label="Mật khẩu"
-            required
-          >
-            <input
-              aria-invalid={Boolean(visibleErrors.password)}
-              autoComplete="current-password"
-              className={inputClassName(Boolean(visibleErrors.password))}
-              id="login-password"
-              placeholder="Nhập mật khẩu"
-              type="password"
-              value={loginForm.password}
-              onBlur={() => markTouched("password")}
-              onChange={(event) => updateField("password", event.target.value)}
-            />
-          </FormField>
+          <div className="auth-login-visual-content">
+            <div className="auth-login-brand">ND Shop</div>
+            <div className="auth-login-copy">
+              <h1>Curated items for the modern hearth.</h1>
+              <p>Connecting ancestral quality with contemporary living through sustainably sourced forest-inspired goods.</p>
+            </div>
 
-          <div className="auth-meta-row">
-            <label className="auth-shell-check" htmlFor="login-remember">
-              <input
-                checked={loginForm.rememberMe}
-                id="login-remember"
-                type="checkbox"
-                onChange={(event) => updateField("rememberMe", event.target.checked)}
-              />
-              <span>Ghi nhớ tài khoản</span>
-            </label>
+            <div className="auth-login-visual-list">
+              {loginVisualHighlights.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          </div>
 
-            <button
-              className="auth-text-link"
-              type="button"
-              onClick={() => {
-                setShowRecoveryHelp((current) => !current);
-                if (!recoveryFormEmail && recoveryEmail) {
-                  setRecoveryFormEmail(recoveryEmail);
+          <div className="auth-login-featured-note">
+            <span>Featured Collection</span>
+            <strong>The Evergreen Series</strong>
+          </div>
+        </section>
+
+        <section className="auth-login-form-panel">
+          <div className="auth-mobile-brand">ND Shop</div>
+
+          <div className="auth-login-form-card">
+            <header className="auth-login-form-head">
+              <h2>Welcome Back</h2>
+              <p>Enter your details to access your atelier.</p>
+            </header>
+
+            <form className="auth-login-form" noValidate onSubmit={handleLogin}>
+              <FormField error={visibleErrors.identifier} htmlFor="login-identifier" label="Email Address" required>
+                <input
+                  aria-invalid={Boolean(visibleErrors.identifier)}
+                  autoComplete="username"
+                  className={inputClassName(Boolean(visibleErrors.identifier))}
+                  id="login-identifier"
+                  inputMode={loginForm.identifier.includes("@") ? "email" : "text"}
+                  placeholder="name@example.com"
+                  value={loginForm.identifier}
+                  onBlur={() => markTouched("identifier")}
+                  onChange={(event) => updateField("identifier", event.target.value)}
+                />
+              </FormField>
+
+              <FormField
+                action={
+                  <button
+                    className="auth-inline-action"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
                 }
-              }}
-            >
-              Quên mật khẩu?
-            </button>
+                error={visibleErrors.password}
+                htmlFor="login-password"
+                label="Password"
+                required
+              >
+                <input
+                  aria-invalid={Boolean(visibleErrors.password)}
+                  autoComplete="current-password"
+                  className={inputClassName(Boolean(visibleErrors.password))}
+                  id="login-password"
+                  placeholder="••••••••"
+                  type={showPassword ? "text" : "password"}
+                  value={loginForm.password}
+                  onBlur={() => markTouched("password")}
+                  onChange={(event) => updateField("password", event.target.value)}
+                />
+              </FormField>
+
+              <div className="auth-login-options">
+                <label className="auth-checkbox-row" htmlFor="login-remember">
+                  <input
+                    checked={loginForm.rememberMe}
+                    id="login-remember"
+                    type="checkbox"
+                    onChange={(event) => updateField("rememberMe", event.target.checked)}
+                  />
+                  <span>Remember me</span>
+                </label>
+
+                <Link className="auth-forgot-link" to="/forgot-password">
+                  Forgot password?
+                </Link>
+              </div>
+
+              <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
+                <span>{isBusy ? "Đang đăng nhập..." : "Login"}</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </form>
+
+            <div className="auth-login-separator">
+              <span>Or continue with</span>
+            </div>
+
+            <div className="auth-social-grid">
+              <button className="auth-social-button" type="button">
+                <span>G</span>
+                <span>Google</span>
+              </button>
+              <button className="auth-social-button" type="button">
+                <span>f</span>
+                <span>Facebook</span>
+              </button>
+            </div>
+
+            <footer className="auth-login-footer">
+              <p>
+                Don&apos;t have an account?
+                <Link state={location.state} to="/register">
+                  Register
+                </Link>
+              </p>
+            </footer>
           </div>
+        </section>
+      </main>
 
-          <p className="auth-storage-note">
-            Khi bật, hệ thống sẽ lưu lại tài khoản trên thiết bị này để điền nhanh hơn ở lần sau.
-          </p>
-
-          <button className="secondary-button auth-submit-full" disabled={isBusy} type="submit">
-            {isBusy ? "Đang đăng nhập..." : "Đăng nhập"}
-          </button>
-        </form>
-
-        {showRecoveryHelp ? (
-          <div className="auth-help-card" role="region">
-            <strong>Khôi phục mật khẩu</strong>
-            <p>Nhập email đăng ký để nhận liên kết đặt lại mật khẩu. Liên kết sẽ được gửi qua email.</p>
-            <FormField htmlFor="recovery-email" label="Email khôi phục" required>
-              <input
-                id="recovery-email"
-                inputMode="email"
-                placeholder="name@example.com"
-                type="email"
-                value={recoveryFormEmail}
-                onChange={(event) => setRecoveryFormEmail(event.target.value)}
-              />
-            </FormField>
-            <button className="ghost-button" disabled={isRecoveryBusy} type="button" onClick={() => void handleForgotPassword()}>
-              {isRecoveryBusy ? "Đang gửi liên kết..." : "Gửi liên kết đặt lại mật khẩu"}
-            </button>
+      <footer className="auth-global-footer">
+        <div className="auth-global-footer-inner">
+          <div className="auth-global-footer-brand">ND Shop</div>
+          <div className="auth-global-footer-links">
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms of Service</a>
+            <a href="#">Contact Support</a>
           </div>
-        ) : null}
-
-        <p className="auth-switch-copy">
-          Chưa có tài khoản?{" "}
-          <Link className="auth-switch-link" state={location.state} to="/register">
-            Đăng ký ngay
-          </Link>
-        </p>
-      </AuthShell>
+          <div className="auth-global-footer-copy">© 2024 ND Shop. All rights reserved.</div>
+        </div>
+      </footer>
     </div>
   );
 }

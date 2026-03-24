@@ -4,8 +4,9 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
-import type { OrderPreview } from "../types/api";
+import type { OrderPreview, Product } from "../types/api";
 import { formatCurrency } from "../utils/format";
+import "./cart.css";
 
 export function CartPage() {
   const { token, isAuthenticated } = useAuth();
@@ -14,6 +15,7 @@ export function CartPage() {
   const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
   const [couponFeedback, setCouponFeedback] = useState("");
   const [isPreviewingCoupon, setIsPreviewingCoupon] = useState(false);
+  const [productMap, setProductMap] = useState<Record<string, Product>>({});
 
   const previewItems = useMemo(
     () =>
@@ -29,9 +31,45 @@ export function CartPage() {
     [previewItems]
   );
 
+  const totalUnits = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+
   useEffect(() => {
     setCouponPreview(null);
   }, [cartSignature]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (cart.items.length === 0) {
+      setProductMap({});
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.allSettled(
+      cart.items.map((item) =>
+        api.getProductById(item.product_id).then((response) => [item.product_id, response.data] as const)
+      )
+    ).then((results) => {
+      if (!active) {
+        return;
+      }
+
+      const next: Record<string, Product> = {};
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const [productId, product] = result.value;
+          next[productId] = product;
+        }
+      }
+      setProductMap(next);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [cart.items]);
 
   async function handleQuantityChange(productId: string, nextQuantity: number) {
     try {
@@ -98,73 +136,123 @@ export function CartPage() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="content-section">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">Giỏ hàng</span>
-            <h1>Giỏ hàng của bạn</h1>
-          </div>
+    <div className="page-stack cart-editorial-page">
+      <header className="cart-editorial-header">
+        <div>
+          <h1>Shopping Bag</h1>
+          <p className="cart-editorial-subtitle">
+            ND_S26 / EDITORIAL COLLECTION
+            <span className="cart-editorial-badge">Dev Note: Cart Microservice Active</span>
+          </p>
         </div>
+      </header>
 
-        {error ? <div className="feedback feedback-error">{error}</div> : null}
-        {!isAuthenticated && cart.items.length > 0 ? (
-          <div className="feedback feedback-info">
-            Đây là giỏ hàng dành cho khách vãng lai trên thiết bị hiện tại. Khi bạn đăng nhập, hệ thống sẽ tự động merge các món này vào tài khoản.
-          </div>
-        ) : null}
+      {error ? <div className="feedback feedback-error">{error}</div> : null}
+      {!isAuthenticated && cart.items.length > 0 ? (
+        <div className="feedback feedback-info">
+          Đây là giỏ hàng dành cho khách vãng lai trên thiết bị hiện tại. Khi bạn đăng nhập, hệ thống sẽ tự động merge
+          các món này vào tài khoản.
+        </div>
+      ) : null}
 
-        {isLoading ? <div className="page-state">Đang tải giỏ hàng...</div> : null}
+      {isLoading ? <div className="page-state">Đang tải giỏ hàng...</div> : null}
 
-        {cart.items.length === 0 ? (
-          <div className="empty-card">
-            <h2>Giỏ hàng đang trống</h2>
-            <p>Hãy thêm sản phẩm từ catalog trước khi thanh toán.</p>
-            <Link className="primary-link" to="/products">
-              Đi đến catalog
-            </Link>
-          </div>
-        ) : (
-          <div className="cart-layout">
-            <div className="card">
-              <div className="cart-items">
-                {cart.items.map((item) => (
-                  <article className="cart-item" key={item.product_id}>
-                    <div>
-                      <h3>{item.name}</h3>
-                      <p>${item.price.toFixed(2)}</p>
+      {cart.items.length === 0 ? (
+        <div className="empty-card cart-editorial-empty">
+          <span className="section-kicker">Bag Empty</span>
+          <h2>Giỏ hàng đang trống</h2>
+          <p>Hãy thêm sản phẩm từ catalog trước khi thanh toán.</p>
+          <Link className="primary-link" to="/products">
+            Đi đến catalog
+          </Link>
+        </div>
+      ) : (
+        <div className="cart-editorial-layout">
+          <section className="cart-editorial-items">
+            {cart.items.map((item) => {
+              const product = productMap[item.product_id];
+              const imageUrl = product?.image_urls[0] ?? product?.image_url ?? "";
+
+              return (
+                <article className="cart-editorial-item" key={item.product_id}>
+                  <div className="cart-editorial-media">
+                    {imageUrl ? (
+                      <img alt={item.name} src={imageUrl} />
+                    ) : (
+                      <div className="cart-editorial-fallback">{item.name.slice(0, 1).toUpperCase()}</div>
+                    )}
+                  </div>
+
+                  <div className="cart-editorial-copy">
+                    <div className="cart-editorial-item-head">
+                      <div>
+                        <span className="cart-editorial-kicker">
+                          {product?.category || product?.brand || "Storefront item"}
+                        </span>
+                        <h3>{item.name}</h3>
+                        <p>{product?.brand || "ND Atelier"} / {product?.sku || "Catalog sync pending"}</p>
+                      </div>
+                      <strong>{formatCurrency(item.price * item.quantity)}</strong>
                     </div>
-                    <div className="cart-item-actions">
-                      <input
-                        min="1"
-                        step="1"
-                        type="number"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          void handleQuantityChange(
-                            item.product_id,
-                            Number.parseInt(event.target.value, 10) || 1
-                          )
-                        }
-                      />
-                      <button className="ghost-button" onClick={() => void removeItem(item.product_id)} type="button">
-                        Xóa
+
+                    <div className="cart-editorial-item-meta">
+                      <div className="cart-editorial-meta-block">
+                        <span>Collection</span>
+                        <strong>{product?.category || "General archive"}</strong>
+                      </div>
+                      <div className="cart-editorial-meta-block">
+                        <span>Quantity</span>
+                        <div className="cart-editorial-quantity">
+                          <button type="button" onClick={() => void handleQuantityChange(item.product_id, item.quantity - 1)}>
+                            -
+                          </button>
+                          <span>{item.quantity}</span>
+                          <button type="button" onClick={() => void handleQuantityChange(item.product_id, item.quantity + 1)}>
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="cart-editorial-item-actions">
+                      <Link className="text-link" to={`/products/${item.product_id}`}>
+                        Xem chi tiết
+                      </Link>
+                      <button
+                        className="cart-editorial-remove"
+                        type="button"
+                        onClick={() => void removeItem(item.product_id)}
+                      >
+                        Remove
                       </button>
                     </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
 
-            <aside className="summary-panel">
-              <h2>Tổng kết</h2>
-              <div className="summary-row">
-                <span>Số mặt hàng</span>
-                <strong>{cart.items.length}</strong>
-              </div>
-              <div className="summary-row">
-                <span>Tạm tính</span>
-                <strong>{formatCurrency(cart.total)}</strong>
+          <aside className="cart-editorial-sidebar">
+            <div className="cart-editorial-summary">
+              <h2>Order Summary</h2>
+
+              <div className="cart-editorial-summary-list">
+                <div className="summary-row">
+                  <span>Items</span>
+                  <strong>{totalUnits}</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Subtotal</span>
+                  <strong>{formatCurrency(cart.total)}</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Shipping</span>
+                  <strong>Calculated at checkout</strong>
+                </div>
+                <div className="summary-row">
+                  <span>Estimated Tax</span>
+                  <strong>Calculated at checkout</strong>
+                </div>
               </div>
 
               <label className="field" htmlFor="cart-coupon-code">
@@ -185,16 +273,16 @@ export function CartPage() {
                 <button
                   className="secondary-button"
                   disabled={isPreviewingCoupon}
-                  onClick={() => void handlePreviewCoupon()}
                   type="button"
+                  onClick={() => void handlePreviewCoupon()}
                 >
                   {isPreviewingCoupon ? "Đang kiểm tra..." : "Áp dụng voucher"}
                 </button>
                 <button
                   className="ghost-button"
                   disabled={!couponCode && !couponPreview}
-                  onClick={handleClearCoupon}
                   type="button"
+                  onClick={handleClearCoupon}
                 >
                   Gỡ voucher
                 </button>
@@ -216,24 +304,40 @@ export function CartPage() {
               ) : null}
 
               <div className="summary-row summary-total">
-                <span>Thành tiền</span>
+                <span>Total</span>
                 <strong>{formatCurrency(couponPreview?.total_price ?? cart.total)}</strong>
               </div>
 
               {couponFeedback ? <div className="feedback feedback-info">{couponFeedback}</div> : null}
 
-              <div className="summary-actions">
-                <Link className="primary-link" to="/checkout">
-                  Đi đến checkout
-                </Link>
-                <button className="danger-button" onClick={() => void handleClearCart()} type="button">
-                  Xóa giỏ hàng
-                </button>
+              <Link className="secondary-link cart-editorial-cta" to="/checkout">
+                Proceed to Checkout
+              </Link>
+
+              <div className="cart-editorial-assurance">
+                <div>
+                  <strong>Secure encrypted payment processing</strong>
+                </div>
+                <div>
+                  <strong>Shipping và tax được tính chính xác ở bước checkout</strong>
+                </div>
               </div>
-            </aside>
-          </div>
-        )}
-      </section>
+
+              <button className="danger-button cart-editorial-clear" type="button" onClick={() => void handleClearCart()}>
+                Xóa giỏ hàng
+              </button>
+            </div>
+
+            <div className="cart-editorial-promo">
+              <span>Exclusive Offer</span>
+              <p>Join ND Atelier for free shipping and early access to the next preview collection.</p>
+              <Link className="text-link" to="/register">
+                Join Now
+              </Link>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

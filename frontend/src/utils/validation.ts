@@ -21,8 +21,10 @@ export type LoginFormValues = {
 export type RegisterFormValues = {
   fullName: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
+  agreeToTerms: boolean;
 };
 
 export type FormErrors<T extends Record<string, unknown>> = Partial<Record<keyof T, string>>;
@@ -81,6 +83,10 @@ export function validateRegisterFields(
     errors.email = "Email chưa đúng định dạng.";
   }
 
+  if (sanitizeText(values.phone) && !isValidPhone(values.phone)) {
+    errors.phone = "Số điện thoại chưa đúng định dạng.";
+  }
+
   if (!isStrongPassword(values.password)) {
     errors.password = "Mật khẩu cần ít nhất 8 ký tự và gồm cả chữ lẫn số.";
   }
@@ -89,6 +95,10 @@ export function validateRegisterFields(
     errors.confirmPassword = "Vui lòng xác nhận lại mật khẩu.";
   } else if (values.confirmPassword !== values.password) {
     errors.confirmPassword = "Mật khẩu xác nhận chưa khớp.";
+  }
+
+  if (!values.agreeToTerms) {
+    errors.agreeToTerms = "Bạn cần đồng ý với điều khoản và chính sách để tiếp tục.";
   }
 
   return errors;

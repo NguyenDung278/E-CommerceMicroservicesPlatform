@@ -1,103 +1,100 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
-import { formatRoleLabel, getUserDisplayName, getUserInitial, isDevelopmentAccount } from "../utils/devAccounts";
-
-function navClassName({ isActive }: { isActive: boolean }) {
-  return isActive ? "nav-link nav-link-active" : "nav-link";
-}
+import { isDevelopmentAccount } from "../utils/devAccounts";
+import "./app-layout.css";
 
 export function AppLayout() {
+  const location = useLocation();
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
-  const isDevelopmentUser = isDevelopmentAccount(user);
-  const displayName = getUserDisplayName(user);
-  const userInitial = getUserInitial(user);
-  const roleLabel = formatRoleLabel(user?.role);
+  const categoryNavigation = [
+    { label: "Men", category: "Shop Men" },
+    { label: "Women", category: "Shop Women" },
+    { label: "Footwear", category: "Footwear" },
+    { label: "Accessories", category: "Accessories" }
+  ];
+  const accountHref = isAuthenticated ? "/profile" : "/login";
+  const accountLabel = isAuthenticated ? "Account" : "Login";
+  const showDevBadge = isAuthenticated && isDevelopmentAccount(user);
+  const currentCategory =
+    location.pathname.startsWith("/categories/") ? decodeURIComponent(location.pathname.replace("/categories/", "")) : "";
 
   return (
-    <div className="app-shell">
-      <header className="site-header">
-        <div className="brand-block">
-          <NavLink className="brand-mark" to="/">
-            ND Shop
-          </NavLink>
-          <p className="brand-copy">Storefront demo cho hệ thống e-commerce microservices bằng Go.</p>
-        </div>
+    <div className="editorial-app-shell">
+      <header className="editorial-site-header">
+        <div className="editorial-header-inner">
+          <div className="editorial-header-left">
+            <NavLink className="editorial-brand-mark" to="/">
+              ND Shop
+            </NavLink>
 
-        <nav className="main-nav" aria-label="Main navigation">
-          <NavLink className={navClassName} to="/">
-            Trang chủ
-          </NavLink>
-          <NavLink className={navClassName} to="/products">
-            Sản phẩm
-          </NavLink>
-          <NavLink className={navClassName} to="/cart">
-            Giỏ hàng ({itemCount})
-          </NavLink>
-          <NavLink className={navClassName} to="/checkout">
-            Đặt hàng
-          </NavLink>
-          {isAuthenticated ? (
-            <NavLink className={navClassName} to="/profile">
-              Tài khoản
-            </NavLink>
-          ) : (
-            <NavLink className={navClassName} to="/login">
-              Đăng nhập
-            </NavLink>
-          )}
-          {isAuthenticated ? (
-            <NavLink className={navClassName} to="/payments">
-              Thanh toán
-            </NavLink>
-          ) : null}
-          {canAccessAdmin ? (
-            <NavLink className={navClassName} to="/admin">
-              Quản trị
-            </NavLink>
-          ) : null}
-        </nav>
+            <nav className="editorial-main-nav" aria-label="Main navigation">
+              {categoryNavigation.map((item, index) => {
+                const isActive = currentCategory === item.category || (location.pathname === "/" && index === 0);
 
-        <div className="header-actions">
-          {isAuthenticated ? (
-            <>
-              <div className="account-chip">
-                <div className="account-avatar" aria-hidden="true">
-                  {userInitial}
-                </div>
+                return (
+                  <Link
+                    className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
+                    key={item.category}
+                    to={`/categories/${encodeURIComponent(item.category)}`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
 
-                <div className="account-copy">
-                  <div className="account-copy-head">
-                    <strong>{displayName}</strong>
-                    {isDevelopmentUser ? <span className="account-flag">DEV ONLY</span> : null}
-                  </div>
-
-                  <div className="account-copy-meta">
-                    <span className="account-role">{roleLabel}</span>
-                    {user?.email ? <span className="account-email">{user.email}</span> : null}
-                  </div>
-                </div>
-              </div>
-              <button className="ghost-button" type="button" onClick={logout}>
-                Đăng xuất
-              </button>
-            </>
-          ) : (
-            <NavLink className="primary-link" to="/register">
-              Bắt đầu
-            </NavLink>
-          )}
+          <div className="editorial-header-actions">
+            <div className="editorial-account-area">
+              {canAccessAdmin ? (
+                <NavLink
+                  className={({ isActive }) =>
+                    isActive ? "editorial-utility-link editorial-utility-link-active" : "editorial-utility-link"
+                  }
+                  to="/admin"
+                >
+                  Admin
+                </NavLink>
+              ) : null}
+              {isAuthenticated ? (
+                <button className="editorial-utility-link" type="button" onClick={logout}>
+                  Logout
+                </button>
+              ) : null}
+              <NavLink className="editorial-account-pill" to={accountHref}>
+                <span>{accountLabel}</span>
+                {showDevBadge ? <span className="editorial-account-badge">Dev Only</span> : null}
+              </NavLink>
+              <NavLink className="editorial-bag-link" to="/cart">
+                <span className="editorial-bag-icon" aria-hidden="true" />
+                <span className="editorial-bag-count">{itemCount}</span>
+              </NavLink>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="page-frame">
+      <main className="editorial-page-frame">
         <Outlet />
       </main>
 
-      <footer className="site-footer">
-        <p>Frontend đã được gom theo page, context và API layer để dễ scale và dễ maintain.</p>
+      <footer className="editorial-site-footer">
+        <div className="editorial-footer-inner">
+          <div className="editorial-footer-brand">
+            <strong>ND Shop</strong>
+            <p>2026 ND Shop. Editorial storefront layered on the current Go commerce platform.</p>
+          </div>
+          <div className="editorial-footer-links">
+            <NavLink to="/">Home</NavLink>
+            <NavLink to="/products">Archive</NavLink>
+            <NavLink to="/cart">Bag</NavLink>
+            <NavLink to={accountHref}>{accountLabel}</NavLink>
+            {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}
+          </div>
+        </div>
       </footer>
     </div>
   );

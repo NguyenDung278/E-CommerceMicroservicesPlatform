@@ -9,6 +9,7 @@ import { CartPage } from "./pages/CartPage";
 import { CategoryPage } from "./pages/CategoryPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
@@ -25,6 +26,12 @@ export default function App() {
       <CartProvider>
         <BrowserRouter>
           <Routes>
+            <Route element={<LoginPage />} path="/login" />
+            <Route element={<RegisterPage />} path="/register" />
+            <Route element={<ForgotPasswordPage />} path="/forgot-password" />
+            <Route element={<VerifyEmailPage />} path="/verify-email" />
+            <Route element={<ResetPasswordPage />} path="/reset-password" />
+
             <Route element={<AppLayout />} path="/">
               <Route element={<HomePage />} index />
               <Route element={<CatalogPage />} path="products" />
@@ -32,10 +39,6 @@ export default function App() {
               <Route element={<CategoryPage />} path="categories/:categoryName" />
               <Route element={<CartPage />} path="cart" />
               <Route element={<CheckoutPage />} path="checkout" />
-              <Route element={<LoginPage />} path="login" />
-              <Route element={<RegisterPage />} path="register" />
-              <Route element={<VerifyEmailPage />} path="verify-email" />
-              <Route element={<ResetPasswordPage />} path="reset-password" />
               <Route
                 element={
                   <ProtectedRoute>

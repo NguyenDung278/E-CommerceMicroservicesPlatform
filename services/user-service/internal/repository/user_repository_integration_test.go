@@ -82,16 +82,16 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 	repo := NewUserRepository(db)
 	now := time.Now()
 	user := &model.User{
-		ID:        "user-1",
-		Email:     "alice@example.com",
-		Phone:     "0901234567",
-		Password:  "hashed-password",
-		FirstName: "Alice",
-		LastName:  "Nguyen",
-		Role:      "user",
+		ID:            "user-1",
+		Email:         "alice@example.com",
+		Phone:         "0901234567",
+		Password:      "hashed-password",
+		FirstName:     "Alice",
+		LastName:      "Nguyen",
+		Role:          "user",
 		EmailVerified: false,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := repo.Create(ctx, user); err != nil {

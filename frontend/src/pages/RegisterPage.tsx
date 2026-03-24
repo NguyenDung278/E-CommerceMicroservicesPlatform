@@ -3,11 +3,10 @@ import { Link, Navigate, useLocation, useNavigate, type Location as RouterLocati
 
 import { FormField } from "../components/FormField";
 import { NotificationStack, type NotificationItem } from "../components/NotificationStack";
-import { AuthShell } from "../components/auth/AuthShell";
 import { useAuth } from "../hooks/useAuth";
 import { getErrorMessage } from "../lib/api";
 import { getVisibleErrors, inputClassName, splitFullName, type TouchedFields } from "../utils/authForm";
-import { sanitizeEmail } from "../utils/sanitize";
+import { sanitizeEmail, sanitizeText } from "../utils/sanitize";
 import { type RegisterFormValues, validateRegisterFields } from "../utils/validation";
 
 type AuthLocationState = {
@@ -17,39 +16,11 @@ type AuthLocationState = {
 const defaultRegisterForm: RegisterFormValues = {
   fullName: "",
   email: "",
+  phone: "",
   password: "",
-  confirmPassword: ""
+  confirmPassword: "",
+  agreeToTerms: false
 };
-
-const registerStats = [
-  {
-    value: "4 trường",
-    label: "Form gọn đúng với yêu cầu tạo tài khoản"
-  },
-  {
-    value: "Realtime",
-    label: "Validation client-side rõ ràng ngay khi nhập"
-  },
-  {
-    value: "Fast",
-    label: "Đăng ký xong có thể đi thẳng vào tài khoản"
-  }
-];
-
-const registerHighlights = [
-  {
-    title: "Tập trung vào chuyển đổi",
-    description: "Không nhồi quá nhiều trường, chỉ giữ lại dữ liệu thực sự cần cho bước khởi tạo."
-  },
-  {
-    title: "Thiết kế dễ tin cậy",
-    description: "Mảng sáng, khoảng thở rộng, typography đậm và CTA rõ như các landing auth hiện đại."
-  },
-  {
-    title: "Sẵn sàng tích hợp thật",
-    description: "Frontend tách riêng page và route nên sau này nối SSO hoặc OTP cũng không phải phá layout."
-  }
-];
 
 export function RegisterPage() {
   const location = useLocation();
@@ -68,20 +39,6 @@ export function RegisterPage() {
     : "/profile";
   const formErrors = validateRegisterFields(form);
   const visibleErrors = getVisibleErrors(formErrors, touched, submitted);
-  const passwordChecks = [
-    {
-      label: "Từ 8 ký tự",
-      passed: form.password.trim().length >= 8
-    },
-    {
-      label: "Có chữ cái",
-      passed: /[A-Za-z]/.test(form.password)
-    },
-    {
-      label: "Có số",
-      passed: /\d/.test(form.password)
-    }
-  ];
 
   useEffect(() => {
     if (!error) {
@@ -127,8 +84,10 @@ export function RegisterPage() {
       setTouched({
         fullName: true,
         email: true,
+        phone: true,
         password: true,
-        confirmPassword: true
+        confirmPassword: true,
+        agreeToTerms: true
       });
       pushNotification(
         "error",
@@ -145,7 +104,7 @@ export function RegisterPage() {
       await register(
         {
           email: sanitizeEmail(form.email),
-          phone: "",
+          phone: sanitizeText(form.phone),
           password: form.password.trim(),
           first_name: name.firstName,
           last_name: name.lastName
@@ -168,117 +127,158 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="auth-page auth-page-register">
       <NotificationStack items={notifications} onDismiss={dismissNotification} />
 
-      <AuthShell
-        badge="Đăng ký"
-        description="Trang đăng ký được tách riêng để người dùng mới tập trung hoàn tất thông tin nhanh, ít nhầm lẫn và dễ thao tác hơn trên mobile."
-        highlights={registerHighlights}
-        mode="register"
-        panelDescription="Tạo tài khoản mới với form sạch, validation rõ và cấu trúc sẵn sàng tích hợp vào luồng thương mại điện tử thực tế."
-        panelLabel="Khách hàng mới"
-        panelTitle="Tạo tài khoản"
-        stats={registerStats}
-        title="Đăng ký tài khoản mới với trải nghiệm gọn, hiện đại và đủ tin cậy để dùng như một storefront thật."
-      >
-        <form className="auth-form-stack" noValidate onSubmit={handleRegister}>
-          <FormField
-            error={visibleErrors.fullName}
-            hint="Nhập đúng họ tên để thuận tiện cho giao hàng và chăm sóc đơn hàng."
-            htmlFor="register-full-name"
-            label="Họ và tên"
-            required
-          >
-            <input
-              aria-invalid={Boolean(visibleErrors.fullName)}
-              autoComplete="name"
-              className={inputClassName(Boolean(visibleErrors.fullName))}
-              id="register-full-name"
-              placeholder="Nguyễn Văn Minh"
-              value={form.fullName}
-              onBlur={() => markTouched("fullName")}
-              onChange={(event) => updateField("fullName", event.target.value)}
-            />
-          </FormField>
-
-          <FormField error={visibleErrors.email} htmlFor="register-email" label="Email" required>
-            <input
-              aria-invalid={Boolean(visibleErrors.email)}
-              autoComplete="email"
-              className={inputClassName(Boolean(visibleErrors.email))}
-              id="register-email"
-              inputMode="email"
-              placeholder="name@example.com"
-              type="email"
-              value={form.email}
-              onBlur={() => markTouched("email")}
-              onChange={(event) => updateField("email", event.target.value)}
-            />
-          </FormField>
-
-          <FormField
-            error={visibleErrors.password}
-            hint="Mật khẩu nên có chữ và số để đủ mạnh nhưng vẫn dễ nhớ."
-            htmlFor="register-password"
-            label="Mật khẩu"
-            required
-          >
-            <input
-              aria-invalid={Boolean(visibleErrors.password)}
-              autoComplete="new-password"
-              className={inputClassName(Boolean(visibleErrors.password))}
-              id="register-password"
-              placeholder="Tạo mật khẩu"
-              type="password"
-              value={form.password}
-              onBlur={() => markTouched("password")}
-              onChange={(event) => updateField("password", event.target.value)}
-            />
-          </FormField>
-
-          <div className="auth-password-grid" aria-live="polite">
-            {passwordChecks.map((item) => (
-              <div
-                className={item.passed ? "auth-password-item auth-password-item-checked" : "auth-password-item"}
-                key={item.label}
-              >
-                {item.label}
-              </div>
-            ))}
-          </div>
-
-          <FormField
-            error={visibleErrors.confirmPassword}
-            htmlFor="register-confirm-password"
-            label="Xác nhận mật khẩu"
-            required
-          >
-            <input
-              aria-invalid={Boolean(visibleErrors.confirmPassword)}
-              autoComplete="new-password"
-              className={inputClassName(Boolean(visibleErrors.confirmPassword))}
-              id="register-confirm-password"
-              placeholder="Nhập lại mật khẩu"
-              type="password"
-              value={form.confirmPassword}
-              onBlur={() => markTouched("confirmPassword")}
-              onChange={(event) => updateField("confirmPassword", event.target.value)}
-            />
-          </FormField>
-
-          <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
-            {isBusy ? "Đang tạo tài khoản..." : "Đăng ký"}
-          </button>
-        </form>
-
-        <p className="auth-switch-copy">
-          Đã có tài khoản?{" "}
-          <Link className="auth-switch-link" state={location.state} to="/login">
-            Đăng nhập ngay
+      <header className="auth-register-topbar">
+        <div className="auth-register-topbar-inner">
+          <Link className="auth-register-brand" to="/">
+            ND Shop
           </Link>
-        </p>
-      </AuthShell>
+          <button className="auth-register-help" type="button">
+            ?
+          </button>
+        </div>
+      </header>
+
+      <main className="auth-register-shell">
+        <section className="auth-register-visual">
+          <div className="auth-register-visual-image" />
+          <div className="auth-register-visual-copy">
+            <p>
+              Join the <span>Atelier</span> of Curated Essentials.
+            </p>
+            <small>Experience a sanctuary of quality, crafted for the modern aesthetic.</small>
+          </div>
+        </section>
+
+        <section className="auth-register-form-panel">
+          <div className="auth-register-form-card">
+            <header className="auth-register-head">
+              <h1>Create Account</h1>
+              <p>Begin your journey with ND Shop.</p>
+            </header>
+
+            <form className="auth-register-form" noValidate onSubmit={handleRegister}>
+              <div className="auth-register-fields">
+                <FormField error={visibleErrors.fullName} htmlFor="register-full-name" label="Full Name" required>
+                  <input
+                    aria-invalid={Boolean(visibleErrors.fullName)}
+                    autoComplete="name"
+                    className={inputClassName(Boolean(visibleErrors.fullName))}
+                    id="register-full-name"
+                    placeholder="Julianna Thorne"
+                    value={form.fullName}
+                    onBlur={() => markTouched("fullName")}
+                    onChange={(event) => updateField("fullName", event.target.value)}
+                  />
+                </FormField>
+
+                <FormField error={visibleErrors.email} htmlFor="register-email" label="Email" required>
+                  <input
+                    aria-invalid={Boolean(visibleErrors.email)}
+                    autoComplete="email"
+                    className={inputClassName(Boolean(visibleErrors.email))}
+                    id="register-email"
+                    inputMode="email"
+                    placeholder="hello@example.com"
+                    type="email"
+                    value={form.email}
+                    onBlur={() => markTouched("email")}
+                    onChange={(event) => updateField("email", event.target.value)}
+                  />
+                </FormField>
+
+                <FormField error={visibleErrors.phone} htmlFor="register-phone" label="Phone Number">
+                  <input
+                    aria-invalid={Boolean(visibleErrors.phone)}
+                    autoComplete="tel"
+                    className={inputClassName(Boolean(visibleErrors.phone))}
+                    id="register-phone"
+                    inputMode="tel"
+                    placeholder="+1 (555) 000-0000"
+                    type="tel"
+                    value={form.phone}
+                    onBlur={() => markTouched("phone")}
+                    onChange={(event) => updateField("phone", event.target.value)}
+                  />
+                </FormField>
+
+                <FormField error={visibleErrors.password} htmlFor="register-password" label="Password" required>
+                  <input
+                    aria-invalid={Boolean(visibleErrors.password)}
+                    autoComplete="new-password"
+                    className={inputClassName(Boolean(visibleErrors.password))}
+                    id="register-password"
+                    placeholder="••••••••"
+                    type="password"
+                    value={form.password}
+                    onBlur={() => markTouched("password")}
+                    onChange={(event) => updateField("password", event.target.value)}
+                  />
+                </FormField>
+
+                <FormField
+                  error={visibleErrors.confirmPassword}
+                  htmlFor="register-confirm-password"
+                  label="Confirm Password"
+                  required
+                >
+                  <input
+                    aria-invalid={Boolean(visibleErrors.confirmPassword)}
+                    autoComplete="new-password"
+                    className={inputClassName(Boolean(visibleErrors.confirmPassword))}
+                    id="register-confirm-password"
+                    placeholder="••••••••"
+                    type="password"
+                    value={form.confirmPassword}
+                    onBlur={() => markTouched("confirmPassword")}
+                    onChange={(event) => updateField("confirmPassword", event.target.value)}
+                  />
+                </FormField>
+              </div>
+
+              <div className="auth-register-checkbox-wrap">
+                <label className="auth-checkbox-row auth-checkbox-row-start" htmlFor="register-terms">
+                  <input
+                    checked={form.agreeToTerms}
+                    id="register-terms"
+                    type="checkbox"
+                    onChange={(event) => updateField("agreeToTerms", event.target.checked)}
+                  />
+                  <span>Agree to Terms &amp; Privacy</span>
+                </label>
+                {visibleErrors.agreeToTerms ? <span className="field-error">{visibleErrors.agreeToTerms}</span> : null}
+              </div>
+
+              <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
+                {isBusy ? "Đang tạo tài khoản..." : "Register"}
+              </button>
+
+              <div className="auth-register-footer">
+                <p>
+                  Already have an account?
+                  <Link state={location.state} to="/login">
+                    Login
+                  </Link>
+                </p>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <footer className="auth-global-footer auth-global-footer-muted">
+        <div className="auth-global-footer-inner">
+          <div className="auth-global-footer-brand">ND Shop</div>
+          <div className="auth-global-footer-links">
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms of Service</a>
+            <a href="#">Contact Support</a>
+          </div>
+          <div className="auth-global-footer-copy">© 2024 ND Shop. All rights reserved.</div>
+        </div>
+      </footer>
     </div>
   );
 }

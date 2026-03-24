@@ -9,7 +9,7 @@ SERVICES ?=
 # Database connection details for migrations
 DB_URL ?= postgres://admin:change-me-db-password@localhost:5432/ecommerce?sslmode=disable
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
 
 fmt:
 	@find api-gateway services pkg proto -name '*.go' -print0 | xargs -0 gofmt -w
@@ -54,6 +54,15 @@ frontend-dev:
 
 frontend-build:
 	@cd frontend && npm run build
+
+client-install:
+	@cd client && npm install
+
+client-dev:
+	@cd client && npm run dev
+
+client-build:
+	@cd client && npm run build
 
 k8s-apply:
 	kubectl apply -f deployments/k8s/

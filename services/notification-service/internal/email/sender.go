@@ -20,7 +20,7 @@ type Sender interface {
 }
 
 // NewSender creates a new email sender based on configuration.
-// 
+//
 // LOGIC CHUYỂN ĐỔI (FALLBACK):
 // Nếu bạn chưa cấu hình thông số SMTP thực tế (Host, FromAddress rỗng), hệ thống sẽ
 // tự động dùng `logSender` để in nội dung email ra Terminal thay vì gửi thật. Việc này giúp Developer

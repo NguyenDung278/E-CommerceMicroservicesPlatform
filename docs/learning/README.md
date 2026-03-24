@@ -11,7 +11,8 @@ Thư mục này dành cho developer mới hoặc người đang dùng repo như 
 5. [05-first-contribution-walkthrough.md](./05-first-contribution-walkthrough.md)
 6. [06-testing-and-verification.md](./06-testing-and-verification.md)
 7. [07-core-concepts-and-terms.md](./07-core-concepts-and-terms.md)
-8. [04-study-prompts.md](./04-study-prompts.md)
+8. [08-career-path-golang-backend.md](./08-career-path-golang-backend.md)
+9. [04-study-prompts.md](./04-study-prompts.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 

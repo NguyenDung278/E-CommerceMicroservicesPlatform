@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	ErrAddressNotFound = errors.New("address not found")
+	ErrAddressNotFound  = errors.New("address not found")
 	ErrTooManyAddresses = errors.New("maximum number of addresses reached")
 )
 

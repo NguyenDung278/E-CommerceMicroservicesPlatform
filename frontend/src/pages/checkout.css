@@ -13,9 +13,9 @@
 .checkout-hero-panel,
 .checkout-guide-card {
   overflow: hidden;
-  border: 1px solid rgba(22, 33, 29, 0.08);
+  border: 1px solid rgba(87, 93, 121, 0.08);
   border-radius: 32px;
-  box-shadow: 0 22px 46px rgba(27, 28, 25, 0.08);
+  box-shadow: 0 24px 48px -20px rgba(27, 28, 25, 0.18);
 }
 
 .checkout-hero-panel {
@@ -153,6 +153,7 @@
   display: grid;
   gap: 20px;
   align-content: start;
+  border-radius: 30px;
 }
 
 .checkout-card-intro {
@@ -191,6 +192,7 @@
   padding: 20px;
   border-radius: 26px;
   background: rgba(245, 243, 238, 0.7);
+  border: 1px solid rgba(87, 93, 121, 0.06);
 }
 
 .checkout-item-row {
@@ -240,6 +242,7 @@
   background:
     radial-gradient(circle at top right, rgba(255, 171, 110, 0.12), transparent 30%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 247, 0.92));
+  box-shadow: 0 24px 48px -28px rgba(27, 28, 25, 0.24);
 }
 
 .checkout-order-form .primary-button,

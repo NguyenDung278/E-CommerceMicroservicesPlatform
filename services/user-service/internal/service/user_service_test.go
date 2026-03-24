@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 )
 

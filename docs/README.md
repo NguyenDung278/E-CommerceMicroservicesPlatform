@@ -15,6 +15,7 @@ Nếu bạn là developer mới:
 2. Đọc [deep-dive/system-overview.md](./deep-dive/system-overview.md)
 3. Xem [learning/05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md)
 4. Chuyển sang [annotated/README.md](./annotated/README.md) để đọc source có hướng dẫn
+5. Định hướng sự nghiệp tại [learning/08-career-path-golang-backend.md](./learning/08-career-path-golang-backend.md)
 
 Nếu bạn cần hiểu runtime flow:
 
@@ -83,6 +84,7 @@ flowchart TD
 - [learning/05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md): tutorial cho contributor mới.
 - [learning/06-testing-and-verification.md](./learning/06-testing-and-verification.md): cách test, verify, debug nhanh.
 - [learning/07-core-concepts-and-terms.md](./learning/07-core-concepts-and-terms.md): glossary của repo.
+- [learning/08-career-path-golang-backend.md](./learning/08-career-path-golang-backend.md): **lộ trình phát triển sự nghiệp Backend Golang.**
 
 ### `deep-dive/`
 

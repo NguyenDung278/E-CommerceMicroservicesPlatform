@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 
 import type { Product } from "../types/api";
+import { formatCurrency } from "../utils/format";
 
 type ProductCardProps = {
   product: Product;
   onAddToCart?: (product: Product) => void | Promise<void>;
   onBuyNow?: (product: Product) => void;
   busy?: boolean;
+  variant?: "default" | "archive";
   adminAction?: {
     label: string;
     onClick: (product: Product) => void | Promise<void>;
@@ -26,6 +28,7 @@ export function ProductCard({
   onAddToCart,
   onBuyNow,
   busy = false,
+  variant = "default",
   adminAction,
   secondaryAdminAction
 }: ProductCardProps) {
@@ -41,19 +44,88 @@ export function ProductCard({
   const primaryImage = productImages[0] ?? "";
   const accentTag = productTags[0] ?? "";
   const stockLabel = product.stock === 0 ? "Hết hàng" : `${product.stock} còn lại`;
+  const stockSignalClassName =
+    product.stock === 0 || product.stock <= 2
+      ? "product-card-archive-signal product-card-archive-signal-alert"
+      : "product-card-archive-signal";
+
+  if (variant === "archive") {
+    return (
+      <article className="product-card-archive">
+        <div className="product-card-archive-media-shell">
+          <Link className="product-card-archive-media" to={`/products/${product.id}`}>
+            {primaryImage ? (
+              <img alt={product.name} src={primaryImage} />
+            ) : (
+              <div className="product-card-archive-fallback">{product.name.slice(0, 1).toUpperCase()}</div>
+            )}
+          </Link>
+
+          {accentTag ? <span className="product-card-archive-badge">#{accentTag}</span> : null}
+
+          {onAddToCart ? (
+            <button
+              className="product-card-archive-action"
+              disabled={busy || product.stock === 0}
+              aria-label={`Thêm ${product.name} vào giỏ hàng`}
+              type="button"
+              onClick={() => void onAddToCart(product)}
+            >
+              {busy ? "..." : "+"}
+            </button>
+          ) : null}
+        </div>
+
+        <div className="product-card-archive-copy">
+          <div className="product-card-archive-head">
+            <h3>
+              <Link to={`/products/${product.id}`}>{product.name}</Link>
+            </h3>
+            <strong>{formatCurrency(productPrice)}</strong>
+          </div>
+
+          <p className="product-card-archive-subtitle">{product.brand || product.category || "ND Atelier"}</p>
+
+          <div className={stockSignalClassName}>
+            <span className="product-card-archive-dot" aria-hidden="true" />
+            <span>
+              {product.stock === 0
+                ? "Out of stock"
+                : product.stock <= 2
+                  ? "Low stock - real-time sync"
+                  : "In stock - ready to ship"}
+            </span>
+          </div>
+
+          {onBuyNow ? (
+            <div className="product-card-archive-links">
+              <Link className="text-link" to={`/products/${product.id}`}>
+                Xem chi tiết
+              </Link>
+              <button className="catalog-archive-buy-link" type="button" onClick={() => onBuyNow(product)}>
+                Mua ngay
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article className={isAdminCard ? "product-card product-card-admin-shell" : "product-card product-card-editorial"}>
       <div className="product-card-media-shell">
-        {primaryImage ? (
-          <div className="product-card-media">
-            <img alt={product.name} src={primaryImage} />
-          </div>
-        ) : (
-          <div className="product-card-media product-card-media-fallback">
-            <span>{product.name.slice(0, 1).toUpperCase()}</span>
-          </div>
-        )}
+        <Link className="product-card-media-link" to={`/products/${product.id}`}>
+          {primaryImage ? (
+            <div className="product-card-media">
+              <img alt={product.name} src={primaryImage} />
+            </div>
+          ) : (
+            <div className="product-card-media product-card-media-fallback">
+              <span>{product.name.slice(0, 1).toUpperCase()}</span>
+            </div>
+          )}
+        </Link>
 
         <div className="product-card-badge-row">
           <span className="product-card-badge">{product.category || "atelier item"}</span>
@@ -77,6 +149,11 @@ export function ProductCard({
 
         <p className="product-description">{product.description || "Không có mô tả sản phẩm."}</p>
 
+        <p className="product-card-collection">
+          {product.category || "Curated collection"} • {product.brand || "ND Atelier"} •{" "}
+          {productVariants.length > 0 ? `${productVariants.length} biến thể live` : stockLabel}
+        </p>
+
         {productTags.length > 1 ? (
           <div className="product-tag-row">
             {productTags.slice(1, 4).map((tag) => (
@@ -93,7 +170,7 @@ export function ProductCard({
 
         <div className="product-price-row">
           <div className="product-price-block">
-            <strong>${productPrice.toFixed(2)}</strong>
+            <strong>{formatCurrency(productPrice)}</strong>
             <span>{product.category || "General collection"}</span>
           </div>
           <Link className="text-link" to={`/products/${product.id}`}>

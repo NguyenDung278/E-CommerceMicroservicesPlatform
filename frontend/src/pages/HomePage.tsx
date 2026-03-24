@@ -1,43 +1,78 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-import { ProductCard } from "../components/ProductCard";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
 import type { Product } from "../types/api";
 import { formatCurrency } from "../utils/format";
 
+const fallbackEditorialImages = {
+  hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuCPKv1CtBwPM413euox0uKnxmUXjsuyZFpFIvDMoW9tfefpHVd_8BFtHSEnUjm5XAQu4WMkS8vgS56v7kIQYWar2OBBpzOurqNCin2KoM1hYEZHvbpagIiz8m2nCidCAiRbDaeJLBNHxra37cwt7QEG3UlOcKbs-W6WuTDZj3qjg9hWIs2YR26l-ijHVnj8ck1-5NDhyVXXQECwDKQJs1i-nYT93ubM2EFutXuxPWxUHWH2o2Zhbz_naP2SXRRL50t8HcB8sUf5LXiX",
+  studio: "https://lh3.googleusercontent.com/aida-public/AB6AXuA-QCiHmdCOxRlVT1rixfgiaLjtOyUpf_qCwS4N8rEMGTTVyJxqkHxQ1iiUeTIIjM9C_MgASpIzwLXa8wLI7ck0F5p1lc6AA6MfKkb3aN_Nbw5AhWsU9lBPxRcNlN7vOcvcId55iSoZRYNe8TCXUI_PC9zSeiPi6-O2ojrYX1RkopzPM8W9xTFEi3rS1s2qZ8IvVBPlgiJak9SR8Bp7wD71RSztHJCzs3MKTW0TNUGEn5sxJF68kLn8MLi1Kcp6ODrKfOGHNtCZKygx",
+  men: "https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW",
+  women: "https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n",
+  footwear: "https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w",
+  accessories: "https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI"
+};
+
+const categoryDefinitions = [
+  {
+    label: "Shop Men",
+    navLabel: "Men",
+    aliases: ["Shop Men", "Men"],
+    imageUrl: fallbackEditorialImages.men,
+    cta: "Discover the tailoring"
+  },
+  {
+    label: "Shop Women",
+    navLabel: "Women",
+    aliases: ["Shop Women", "Women"],
+    imageUrl: fallbackEditorialImages.women,
+    cta: "View the edit"
+  },
+  {
+    label: "The Footwear Edit",
+    navLabel: "Footwear",
+    aliases: ["Footwear", "Shoes"],
+    imageUrl: fallbackEditorialImages.footwear,
+    cta: "Shop shoes"
+  },
+  {
+    label: "Curated Accessories",
+    navLabel: "Accessories",
+    aliases: ["Accessories"],
+    imageUrl: fallbackEditorialImages.accessories,
+    cta: "Explore"
+  }
+];
+
+function matchesCategory(product: Product, aliases: string[]) {
+  const productCategory = product.category.trim().toLowerCase();
+  return aliases.some((alias) => productCategory === alias.trim().toLowerCase());
+}
+
 export function HomePage() {
-  const navigate = useNavigate();
   const { addItem } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
 
   useEffect(() => {
     let active = true;
 
     void api
-      .listProducts({ status: "active" })
+      .listProducts({ status: "active", limit: 24 })
       .then((response) => {
-        if (active) {
-          setProducts(response.data);
-          setCategories(
-            Array.from(
-              new Set(
-                response.data
-                  .map((product) => product.category)
-                  .filter((category) => Boolean(category))
-                  .slice(0, 4)
-              )
-            )
-          );
+        if (!active) {
+          return;
         }
+
+        setProducts(response.data);
+        setFeedback("");
       })
       .catch((reason) => {
         if (active) {
-          setError(getErrorMessage(reason));
+          setFeedback(getErrorMessage(reason));
         }
       });
 
@@ -53,213 +88,174 @@ export function HomePage() {
         product_id: product.id,
         quantity: 1
       });
-      setError("");
+      setFeedback(`${product.name} đã được thêm vào bag.`);
     } catch (reason) {
-      setError(getErrorMessage(reason));
+      setFeedback(getErrorMessage(reason));
     } finally {
       setBusyProductId("");
     }
   }
 
-  const featuredProducts = products.slice(0, 4);
-  const heroProduct = featuredProducts[0] ?? null;
-  const categoryHighlights = categories
-    .map((category) => {
-      const categoryProducts = products.filter((product) => product.category === category);
-      const featuredProduct = categoryProducts[0];
+  const heroProduct = products[0] ?? null;
+  const heroImage = fallbackEditorialImages.hero;
+  const featuredProducts = products.slice(0, 8);
+  const categoryCards = categoryDefinitions.map((category, index) => {
+    const categoryProducts = products.filter((product) => matchesCategory(product, category.aliases));
+    const featuredProduct = categoryProducts[0] ?? null;
 
-      return {
-        category,
-        count: categoryProducts.length,
-        featuredProduct
-      };
-    })
-    .filter((item) => item.featuredProduct);
-  const seasonalPriceRange = featuredProducts.length > 0
-    ? `${formatCurrency(Math.min(...featuredProducts.map((item) => item.price)))} - ${formatCurrency(
-        Math.max(...featuredProducts.map((item) => item.price))
-      )}`
-    : "Đang đồng bộ";
-  const technicalHighlights = [
-    {
-      value: `${products.length}+`,
-      label: "Catalog live",
-      description: "Sản phẩm active lấy trực tiếp từ backend qua gateway."
-    },
-    {
-      value: `${categories.length || 1}`,
-      label: "Curated categories",
-      description: "Danh mục động để điều hướng sang storefront thật."
-    },
-    {
-      value: seasonalPriceRange,
-      label: "Season range",
-      description: "Khoảng giá hiện có để demo purchase flow và checkout."
-    }
+    return {
+      ...category,
+      href: `/categories/${encodeURIComponent(category.aliases[0])}`,
+      count: categoryProducts.length,
+      featuredProduct,
+      imageUrl: featuredProduct?.image_urls[0] ?? featuredProduct?.image_url ?? category.imageUrl,
+      subtitle:
+        featuredProduct?.name ??
+        [
+          "Sophisticated tailoring in deep forest tones.",
+          "Fluid silhouettes and warm cream layers.",
+          "Handcrafted performance for the modern explorer.",
+          "Finishing pieces for the atelier wardrobe."
+        ][index]
+    };
+  });
+  const metrics = [
+    { value: "0.4s", label: "Inventory Latency" },
+    { value: "100%", label: "Atelier Sourcing" },
+    { value: `${categoryCards.filter((item) => item.count > 0).length || 4}`, label: "Curated Categories" }
   ];
 
   return (
-    <div className="page-stack">
-      <section className="editorial-home-hero">
-        <div className="editorial-home-hero-panel">
-          <div className="editorial-home-hero-copy">
-            <span className="eyebrow">Digital Atelier</span>
-            <h1>Storefront demo cho hệ e-commerce Go với giao diện editorial, rõ flow và sẵn sàng test thật.</h1>
+    <div className="page-stack home-editorial-page">
+      <section className="home-editorial-hero">
+        <div className="home-editorial-hero-media">
+          <img alt={heroProduct?.name || "Forest editorial backdrop"} src={heroImage} />
+        </div>
+        <div className="home-editorial-hero-overlay" />
+
+        <div className="home-editorial-hero-inner">
+          <div className="home-editorial-hero-copy">
+            <span className="home-editorial-section-label">Winter 2024 Collection</span>
+            <h1>Forest &amp; Hearth</h1>
             <p>
-              ND Shop giữ nguyên luồng backend microservices hiện tại nhưng trình bày theo bề mặt storefront cao cấp hơn:
-              duyệt catalog, vào chi tiết sản phẩm, thêm giỏ hàng, checkout, quản lý tài khoản và khu admin riêng.
+              A tactile study of survival and comfort. Rooted in deep forest textures and the warmth of a mountain
+              refuge.
             </p>
 
             <div className="hero-actions">
               <Link className="primary-link" to="/products">
                 Explore Collection
               </Link>
-              <Link className="secondary-link" to="/register">
-                Tạo tài khoản
+              <Link className="secondary-link" to="/products">
+                View Lookbook
               </Link>
             </div>
           </div>
 
-          <div className="editorial-home-hero-metrics">
-            {technicalHighlights.map((item) => (
-              <article className="summary-card editorial-home-metric-card" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <p>{item.description}</p>
-              </article>
-            ))}
-          </div>
+          <aside className="home-editorial-hero-quote">
+            <span>The Technical Edge</span>
+            <p>"Microservice-driven inventory ensures real-time availability of limited atelier pieces."</p>
+          </aside>
         </div>
-
-        <aside className="editorial-home-spotlight">
-          <div className="editorial-home-spotlight-media">
-            {heroProduct?.image_urls[0] ?? heroProduct?.image_url ? (
-              <img
-                alt={heroProduct?.name || "ND Shop spotlight"}
-                src={heroProduct?.image_urls[0] ?? heroProduct?.image_url}
-              />
-            ) : (
-              <div className="editorial-home-spotlight-fallback">ND</div>
-            )}
-          </div>
-
-          <div className="editorial-home-spotlight-copy">
-            <span className="section-kicker">Featured Flow</span>
-            <strong>{heroProduct?.name || "Catalog đang đồng bộ"}</strong>
-            <p>
-              {heroProduct
-                ? `${heroProduct.brand || "ND Atelier"} • ${formatCurrency(heroProduct.price)}`
-                : "Khi backend có sản phẩm active, spotlight sẽ hiện item đầu tiên ngay tại đây."}
-            </p>
-            <Link className="text-link" to={heroProduct ? `/products/${heroProduct.id}` : "/products"}>
-              {heroProduct ? "Mở trang chi tiết" : "Đi tới catalog"}
-            </Link>
-          </div>
-        </aside>
       </section>
 
-      <section className="content-section editorial-home-categories-section">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">Curated Categories</span>
-            <h2>Mua theo danh mục nổi bật</h2>
-          </div>
-        </div>
-
-        <div className="editorial-home-category-grid">
-          {categoryHighlights.map((item, index) => (
-            <Link
-              className={`editorial-home-category-card editorial-home-category-card-${(index % 4) + 1}`}
-              key={item.category}
-              to={`/categories/${encodeURIComponent(item.category)}`}
-            >
-              {item.featuredProduct?.image_urls[0] ?? item.featuredProduct?.image_url ? (
-                <img
-                  alt={item.category}
-                  src={item.featuredProduct?.image_urls[0] ?? item.featuredProduct?.image_url}
-                />
-              ) : (
-                <div className="editorial-home-category-fallback">{item.category.slice(0, 1).toUpperCase()}</div>
-              )}
-              <div className="editorial-home-category-overlay" />
-              <div className="editorial-home-category-copy">
-                <span>{item.count} sản phẩm</span>
-                <strong>{item.category}</strong>
-                <small>{item.featuredProduct?.name || "Mở bộ sưu tập"}</small>
+      <section className="home-editorial-category-section">
+        <div className="home-editorial-category-grid">
+          {categoryCards.map((item, index) => (
+            <Link className={`home-editorial-category-card home-editorial-category-card-${index + 1}`} key={item.label} to={item.href}>
+              <img alt={item.label} src={item.imageUrl} />
+              <div className="home-editorial-category-scrim" />
+              <div className="home-editorial-category-content">
+                <h2>{item.label}</h2>
+                {index === 2 ? <p>{item.subtitle}</p> : null}
+                <span>{item.cta}</span>
               </div>
             </Link>
           ))}
         </div>
       </section>
 
-      <section className="content-section editorial-home-callout">
-        <div className="editorial-home-callout-copy">
-          <span className="section-kicker">System Story</span>
-          <h2>Digital precision, storefront soul.</h2>
-          <p>
-            Bộ giao diện mới bọc quanh cùng data flow cũ của dự án: product service cho catalog, cart service cho giỏ,
-            checkout và payment cho luồng đặt hàng, cộng thêm khu admin dành cho admin/staff.
-          </p>
-        </div>
+      <section className="home-editorial-callout">
+        <div className="home-editorial-callout-inner">
+          <div className="home-editorial-callout-copy">
+            <span className="home-editorial-section-label">ND Atelier</span>
+            <h2>
+              Digital Precision,
+              <br />
+              Analogue Soul.
+            </h2>
+            <p>
+              Beyond the silhouette lies a sophisticated technological core. Our inventory architecture keeps each
+              piece in the Digital Atelier synced in real time, connecting backend precision with the quieter visual
+              rhythm from Stitch.
+            </p>
 
-        <div className="editorial-home-callout-grid">
-          <article className="editorial-home-callout-card">
-            <strong>Catalog API</strong>
-            <span>Danh sách sản phẩm, chi tiết và phân loại hoạt động trên dữ liệu thật.</span>
-          </article>
-          <article className="editorial-home-callout-card">
-            <strong>Redis Cart</strong>
-            <span>Thêm vào giỏ và quay lại checkout với flow người dùng thực tế hơn.</span>
-          </article>
-          <article className="editorial-home-callout-card">
-            <strong>Admin Console</strong>
-            <span>Admin/staff có backend UI riêng để quản lý sản phẩm, coupon, user role và order.</span>
-          </article>
+            <div className="home-editorial-callout-metrics">
+              {metrics.map((item) => (
+                <article className="home-editorial-callout-metric" key={item.label}>
+                  <strong>{item.value}</strong>
+                  <span>{item.label}</span>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="home-editorial-callout-media">
+            <img alt="Studio atelier process" src={fallbackEditorialImages.studio} />
+          </div>
         </div>
       </section>
 
-      <section className="content-section">
-        <div className="section-heading">
+      <section className="home-editorial-featured-section">
+        <div className="home-editorial-featured-head">
           <div>
-            <span className="section-kicker">Seasonal Essentials</span>
-            <h2>Sản phẩm nổi bật lấy trực tiếp từ backend</h2>
+            <span className="home-editorial-section-label home-editorial-section-label-accent">New Arrivals</span>
+            <h2>Seasonal Essentials</h2>
           </div>
-          <Link className="text-link" to="/products">
-            Xem toàn bộ catalog
+          <Link className="home-editorial-inline-link" to="/products">
+            View all
           </Link>
         </div>
 
-        {error ? <div className="feedback feedback-error">{error}</div> : null}
+        {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
+
         {featuredProducts.length > 0 ? (
-          <div className="product-grid">
+          <div className="home-editorial-product-rail">
             {featuredProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                busy={busyProductId === product.id}
-                onAddToCart={handleAddToCart}
-                onBuyNow={(selected) =>
-                  navigate("/checkout", {
-                    state: {
-                      directProduct: {
-                        id: selected.id,
-                        name: selected.name,
-                        price: selected.price,
-                        quantity: 1
-                      }
-                    }
-                  })
-                }
-                product={product}
-              />
+              <article className="home-editorial-product-card" key={product.id}>
+                <Link className="home-editorial-product-link" to={`/products/${product.id}`}>
+                  <div className="home-editorial-product-media">
+                    <img
+                      alt={product.name}
+                      src={product.image_urls[0] ?? product.image_url ?? fallbackEditorialImages.hero}
+                    />
+                  </div>
+                  <div className="home-editorial-product-copy">
+                    <p>{product.category || product.brand || "Archive"}</p>
+                    <div className="home-editorial-product-row">
+                      <h3>{product.name}</h3>
+                      <span>{formatCurrency(product.price)}</span>
+                    </div>
+                  </div>
+                </Link>
+
+                <button
+                  className="home-editorial-product-button"
+                  disabled={busyProductId === product.id}
+                  type="button"
+                  onClick={() => {
+                    void handleAddToCart(product);
+                  }}
+                >
+                  {busyProductId === product.id ? "Adding..." : "Add to Bag"}
+                </button>
+              </article>
             ))}
           </div>
-        ) : error ? null : (
+        ) : (
           <div className="empty-card">
-            <strong>Catalog hiện chưa có sản phẩm active.</strong>
-            <span>Frontend đã tải xong, nhưng backend chưa có mặt hàng nào để tạo product card.</span>
-            <Link className="text-link" to="/products">
-              Mở trang catalog
-            </Link>
+            <strong>Danh mục đang chờ sản phẩm active.</strong>
+            <span>Mình đã giữ sẵn đúng bố cục home-editorial, chỉ cần backend có thêm dữ liệu để lấp đầy product rail.</span>
           </div>
         )}
       </section>
