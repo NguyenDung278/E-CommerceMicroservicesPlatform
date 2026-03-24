@@ -5,6 +5,8 @@ Repo này là một nền tảng e-commerce demo theo kiến trúc Go microservi
 ## Tổng quan nhanh
 
 - `api-gateway`: cửa vào HTTP chung cho frontend và client.
+- `client/`: Ứng dụng Next.js mới cho UI implementation (MCP/Stitch-driven).
+- `frontend/`: Ứng dụng React + Vite legacy để test flow end-to-end.
 - `services/user-service`: đăng ký, đăng nhập, JWT, profile, address.
 - `services/product-service`: catalog, media upload, search, gRPC product lookup.
 - `services/cart-service`: giỏ hàng trên Redis, đồng bộ giá/stock qua gRPC.
@@ -65,7 +67,8 @@ Lưu ý:
 - Messaging: RabbitMQ
 - Catalog infra: MinIO, Elasticsearch
 - Observability: Prometheus, Grafana, Jaeger
-- Frontend: React, Vite, TypeScript
+- Frontend (Legacy): React, Vite, TypeScript
+- Frontend (Next.js): Next.js 16.2.1, React 19, TypeScript
 
 ## Luồng chạy local
 

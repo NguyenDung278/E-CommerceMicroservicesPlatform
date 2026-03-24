@@ -1,37 +1,31 @@
+/**
+ * Session Token Hook
+ * Provides secure token management with React state integration
+ */
+
 import { useEffect, useState } from "react";
+import {
+  readInitialToken,
+  saveToken,
+  clearToken,
+  type TokenState,
+} from "../utils/auth/token";
 
-const sessionTokenKey = "ecommerce_frontend_session_token";
-const persistentTokenKey = "ecommerce_frontend_persistent_token";
-
-type StoredTokenState = {
+/**
+ * Session token hook result
+ */
+export type UseSessionTokenResult = {
   token: string;
   remember: boolean;
+  setToken: (token: string, remember?: boolean) => void;
+  clearToken: () => void;
 };
 
-function readInitialToken() {
-  if (typeof window === "undefined") {
-    return {
-      token: "",
-      remember: false
-    } satisfies StoredTokenState;
-  }
-
-  const persistentToken = window.localStorage.getItem(persistentTokenKey) ?? "";
-  if (persistentToken) {
-    return {
-      token: persistentToken,
-      remember: true
-    } satisfies StoredTokenState;
-  }
-
-  return {
-    token: window.sessionStorage.getItem(sessionTokenKey) ?? "",
-    remember: false
-  } satisfies StoredTokenState;
-}
-
-export function useSessionToken() {
-  const [state, setState] = useState(readInitialToken);
+/**
+ * Custom hook for managing session tokens
+ */
+export function useSessionToken(): UseSessionTokenResult {
+  const [state, setState] = useState<TokenState>(readInitialToken);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -39,29 +33,24 @@ export function useSessionToken() {
     }
 
     if (state.token) {
-      if (state.remember) {
-        window.localStorage.setItem(persistentTokenKey, state.token);
-        window.sessionStorage.removeItem(sessionTokenKey);
-        return;
-      }
-
-      window.sessionStorage.setItem(sessionTokenKey, state.token);
-      window.localStorage.removeItem(persistentTokenKey);
+      saveToken(state.token, state.remember);
       return;
     }
 
-    window.sessionStorage.removeItem(sessionTokenKey);
-    window.localStorage.removeItem(persistentTokenKey);
+    clearToken();
   }, [state]);
 
   return {
     token: state.token,
     remember: state.remember,
-    setToken: (token: string, remember = false) => setState({ token, remember }),
+    setToken: (token: string, remember = false) =>
+      setState({ token, remember }),
     clearToken: () =>
       setState({
         token: "",
-        remember: false
-      })
+        remember: false,
+      }),
   };
 }
+
+export default useSessionToken;

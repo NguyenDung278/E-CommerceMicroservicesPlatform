@@ -2,99 +2,30 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { FormField } from "../components/FormField";
 import { ProductCard } from "../components/ProductCard";
+import {
+  createEmptyVariant,
+  createDefaultCouponForm,
+  createDefaultProductForm,
+  mergeImageUrls,
+  normalizeProductImageUrls,
+  parseTags,
+  parseVariantRows,
+  productStatusOptions,
+  reportWindowOptions,
+  toOptionalIsoDateTime,
+  toVariantFormRow,
+  type CouponFormState,
+  type ProductFormState,
+  type VariantFormRow,
+  validateSelectedImageFiles
+} from "../features/admin/forms";
 import { useAuth } from "../hooks/useAuth";
 import { api, getErrorMessage } from "../lib/api";
-import type { AdminOrderReport, Coupon, Order, Payment, Product, ProductVariant, UserProfile } from "../types/api";
+import type { AdminOrderReport, Coupon, Order, Payment, Product, UserProfile } from "../types/api";
 import { formatRoleLabel, isDevelopmentAccount } from "../utils/devAccounts";
 import { formatCurrency, formatDateTime } from "../utils/format";
 import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "../utils/sanitize";
 import { validateProduct } from "../utils/validation";
-
-type VariantFormRow = {
-  id: string;
-  label: string;
-  sku: string;
-  size: string;
-  color: string;
-  price: string;
-  stock: string;
-};
-
-type ProductFormState = {
-  name: string;
-  description: string;
-  price: string;
-  stock: string;
-  category: string;
-  brand: string;
-  status: string;
-  sku: string;
-  tags: string;
-  imageUrls: string[];
-  manualImageUrl: string;
-  variants: VariantFormRow[];
-};
-
-type CouponFormState = {
-  code: string;
-  description: string;
-  discountType: "fixed" | "percentage";
-  discountValue: string;
-  minOrderAmount: string;
-  usageLimit: string;
-  expiresAt: string;
-  active: boolean;
-};
-
-const productStatusOptions = [
-  { value: "active", label: "Active" },
-  { value: "draft", label: "Draft" },
-  { value: "inactive", label: "Inactive" }
-];
-
-const reportWindowOptions = [7, 30, 90];
-
-function createEmptyVariant(): VariantFormRow {
-  return {
-    id: `variant-${Math.random().toString(36).slice(2, 10)}`,
-    label: "",
-    sku: "",
-    size: "",
-    color: "",
-    price: "",
-    stock: "0"
-  };
-}
-
-function createDefaultForm(): ProductFormState {
-  return {
-    name: "",
-    description: "",
-    price: "",
-    stock: "0",
-    category: "",
-    brand: "",
-    status: "active",
-    sku: "",
-    tags: "",
-    imageUrls: [],
-    manualImageUrl: "",
-    variants: []
-  };
-}
-
-function createDefaultCouponForm(): CouponFormState {
-  return {
-    code: "",
-    description: "",
-    discountType: "percentage",
-    discountValue: "",
-    minOrderAmount: "0",
-    usageLimit: "0",
-    expiresAt: "",
-    active: true
-  };
-}
 
 export function AdminPage() {
   const { token, isAdmin, user } = useAuth();
@@ -119,7 +50,7 @@ export function AdminPage() {
   const [reportDays, setReportDays] = useState(30);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
-  const [form, setForm] = useState<ProductFormState>(createDefaultForm);
+  const [form, setForm] = useState<ProductFormState>(createDefaultProductForm);
   const [couponForm, setCouponForm] = useState<CouponFormState>(createDefaultCouponForm);
   const isDevelopmentOperator = isDevelopmentAccount(user);
   const currentRoleLabel = formatRoleLabel(user?.role);
@@ -413,7 +344,7 @@ export function AdminPage() {
     try {
       setBusyProductId(product.id);
       await api.deleteProduct(token, product.id);
-      setProducts((current) => current.filter((item) => item.id !== product.id));
+    setProducts((current) => current.filter((item) => item.id !== product.id));
       setFeedback(`Đã xóa sản phẩm ${product.name}.`);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
@@ -461,7 +392,7 @@ export function AdminPage() {
   }
 
   function resetForm() {
-    setForm(createDefaultForm());
+    setForm(createDefaultProductForm());
     setEditingProductId("");
     setSelectedImageFiles([]);
     setUploadInputKey((current) => current + 1);
@@ -482,7 +413,13 @@ export function AdminPage() {
   }
 
   function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedImageFiles(Array.from(event.target.files ?? []));
+    const nextFiles = Array.from(event.target.files ?? []);
+    const result = validateSelectedImageFiles(nextFiles);
+
+    setSelectedImageFiles(result.files);
+    if (result.errors.length > 0) {
+      setFeedback(result.errors.join(" "));
+    }
   }
 
   async function handleUploadImages() {
@@ -1424,85 +1361,4 @@ export function AdminPage() {
       </div>
     </div>
   );
-}
-
-function parseTags(value: string) {
-  return value
-    .split(",")
-    .map((tag) => sanitizeText(tag).toLowerCase())
-    .filter(Boolean);
-}
-
-function parseVariantRows(rows: VariantFormRow[]) {
-  const errors: string[] = [];
-
-  const variants = rows
-    .filter((row) => row.label || row.sku || row.price || row.stock)
-    .map((row, index) => {
-      const price = toPositiveFloat(row.price);
-      const stock = Number.parseInt(row.stock, 10);
-      const label = sanitizeText(row.label);
-      const sku = sanitizeText(row.sku);
-
-      if (!label || !sku || price <= 0 || stock < 0 || Number.isNaN(stock)) {
-        errors.push(`Biến thể #${index + 1} cần đủ tên, SKU, giá > 0 và tồn kho >= 0.`);
-      }
-
-      return {
-        label,
-        sku,
-        size: sanitizeText(row.size),
-        color: sanitizeText(row.color),
-        price,
-        stock: Number.isNaN(stock) ? 0 : stock
-      } satisfies ProductVariant;
-    });
-
-  return { variants, errors };
-}
-
-function toVariantFormRow(variant: ProductVariant): VariantFormRow {
-  return {
-    id: `variant-${variant.sku}`,
-    label: variant.label,
-    sku: variant.sku,
-    size: variant.size ?? "",
-    color: variant.color ?? "",
-    price: String(variant.price),
-    stock: String(variant.stock)
-  };
-}
-
-function toOptionalIsoDateTime(value: string) {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-
-  return parsed.toISOString();
-}
-
-function normalizeProductImageUrls(urls: string[]) {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-
-  urls.forEach((imageUrl) => {
-    const sanitized = sanitizeUrl(imageUrl);
-    if (!sanitized || seen.has(sanitized)) {
-      return;
-    }
-
-    seen.add(sanitized);
-    normalized.push(sanitized);
-  });
-
-  return normalized;
-}
-
-function mergeImageUrls(current: string[], incoming: string[]) {
-  return normalizeProductImageUrls([...current, ...incoming]);
 }

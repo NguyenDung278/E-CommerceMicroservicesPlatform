@@ -72,7 +72,8 @@ Push back clearly when requests introduce complexity without demonstrated need, 
 This repo already includes:
 
 - Go services
-- React + Vite frontend
+- React + Vite frontend (legacy)
+- Next.js 16.2.1 frontend (new)
 - Docker Compose local environment
 - PostgreSQL
 - Redis

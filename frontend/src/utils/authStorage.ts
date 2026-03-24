@@ -1,18 +1,26 @@
+/**
+ * Auth Storage Utilities - Backward Compatibility Layer
+ * Maintains the existing interface while using the new token module
+ */
+
 import { sanitizeText } from "./sanitize";
 
-const rememberedLoginKey = "ecommerce_frontend_saved_login";
+const REMEMBERED_LOGIN_KEY = "ecommerce_frontend_saved_login";
 
 type RememberedLogin = {
   identifier: string;
 };
 
-export function readRememberedLogin() {
+/**
+ * Read remembered login from local storage
+ */
+export function readRememberedLogin(): { identifier: string } | null {
   if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(rememberedLoginKey);
+    const raw = window.localStorage.getItem(REMEMBERED_LOGIN_KEY);
     if (!raw) {
       return null;
     }
@@ -25,14 +33,17 @@ export function readRememberedLogin() {
     }
 
     return {
-      identifier
-    } satisfies RememberedLogin;
+      identifier,
+    };
   } catch {
     return null;
   }
 }
 
-export function saveRememberedLogin(value: RememberedLogin) {
+/**
+ * Save remembered login to local storage
+ */
+export function saveRememberedLogin(value: RememberedLogin): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -46,24 +57,27 @@ export function saveRememberedLogin(value: RememberedLogin) {
 
   try {
     window.localStorage.setItem(
-      rememberedLoginKey,
+      REMEMBERED_LOGIN_KEY,
       JSON.stringify({
-        identifier
-      } satisfies RememberedLogin)
+        identifier,
+      })
     );
   } catch {
-    // Ignore storage write failures so the form still works normally.
+    // Ignore storage write failures
   }
 }
 
-export function clearRememberedLogin() {
+/**
+ * Clear remembered login from local storage
+ */
+export function clearRememberedLogin(): void {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.localStorage.removeItem(rememberedLoginKey);
+    window.localStorage.removeItem(REMEMBERED_LOGIN_KEY);
   } catch {
-    // Ignore storage delete failures so logout/login flows are unaffected.
+    // Ignore storage delete failures
   }
 }

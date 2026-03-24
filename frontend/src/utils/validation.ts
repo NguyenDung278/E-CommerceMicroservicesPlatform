@@ -1,16 +1,36 @@
-import {
-  sanitizeEmail,
-  sanitizeMultiline,
-  sanitizeText,
-  sanitizeUrl,
-  toPositiveFloat,
-  toPositiveInteger
-} from "./sanitize";
+/**
+ * Validation Utilities - Backward Compatibility Layer
+ * Preserves the legacy form-level contracts while delegating primitive checks
+ * to the newer security-focused validation helpers.
+ */
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^[+]?[\d\s().-]{10,20}$/;
-const passwordLetterPattern = /[A-Za-z]/;
-const passwordDigitPattern = /\d/;
+import { sanitizeIdentifier, sanitizePhoneNumber, sanitizeText, sanitizeUrl } from "./sanitize";
+import {
+  isNotEmpty,
+  isPositiveFloat,
+  isPositiveInteger,
+  isStrongPassword,
+  isValidEmail,
+  isValidLength,
+  validateField,
+  ValidationRules,
+  type ValidationResult,
+} from "./security/validation";
+
+export {
+  isValidEmail,
+  isStrongPassword,
+  isNotEmpty,
+  isValidLength,
+  isPositiveInteger,
+  isPositiveFloat,
+  validateField,
+  ValidationRules,
+  type ValidationResult,
+} from "./security/validation";
+export { isValidPhone, isInRange, isValidUrl } from "./security/validation";
+
+export type FormErrors<T extends Record<string, unknown>> = Partial<Record<keyof T, string>>;
 
 export type LoginFormValues = {
   identifier: string;
@@ -27,188 +47,150 @@ export type RegisterFormValues = {
   agreeToTerms: boolean;
 };
 
-export type FormErrors<T extends Record<string, unknown>> = Partial<Record<keyof T, string>>;
+type ProfileValues = {
+  firstName: string;
+  lastName: string;
+};
 
-export function isValidEmail(value: string) {
-  return emailPattern.test(sanitizeEmail(value));
-}
+type ProductValidationValues = {
+  name: string;
+  description: string;
+  price: string;
+  stock: string;
+  imageUrl?: string;
+};
 
-export function isValidPhone(value: string) {
-  return phonePattern.test(sanitizeText(value));
-}
+type PaymentValidationValues = {
+  orderId: string;
+  paymentMethod: string;
+  amount: string;
+};
 
-export function isStrongPassword(value: string) {
-  const trimmed = value.trim();
-
-  return (
-    trimmed.length >= 8 &&
-    passwordLetterPattern.test(trimmed) &&
-    passwordDigitPattern.test(trimmed)
-  );
-}
+const MAX_NAME_LENGTH = 120;
+const MAX_DESCRIPTION_LENGTH = 5000;
 
 export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFormValues> {
   const errors: FormErrors<LoginFormValues> = {};
-  const identifier = sanitizeText(values.identifier);
+  const identifier = sanitizeIdentifier(values.identifier);
 
   if (!identifier) {
-    errors.identifier = "Vui lòng nhập email hoặc số điện thoại.";
-  } else if (identifier.includes("@")) {
-    if (!isValidEmail(identifier)) {
-      errors.identifier = "Email chưa đúng định dạng.";
-    }
-  } else if (!isValidPhone(identifier)) {
+    errors.identifier = "Email hoặc số điện thoại không được để trống.";
+  } else if (identifier.includes("@") && !isValidEmail(identifier)) {
+    errors.identifier = "Email chưa đúng định dạng.";
+  } else if (!identifier.includes("@") && sanitizePhoneNumber(identifier).length < 10) {
     errors.identifier = "Số điện thoại chưa đúng định dạng.";
   }
 
-  if (!sanitizeText(values.password)) {
-    errors.password = "Vui lòng nhập mật khẩu.";
+  if (!values.password.trim()) {
+    errors.password = "Mật khẩu không được để trống.";
   }
 
   return errors;
 }
 
-export function validateRegisterFields(
-  values: RegisterFormValues
-): FormErrors<RegisterFormValues> {
+export function validateRegisterFields(values: RegisterFormValues): FormErrors<RegisterFormValues> {
   const errors: FormErrors<RegisterFormValues> = {};
+  const fullName = sanitizeText(values.fullName);
+  const email = sanitizeText(values.email);
+  const phone = sanitizePhoneNumber(values.phone);
 
-  if (!sanitizeText(values.fullName)) {
-    errors.fullName = "Vui lòng nhập họ và tên.";
-  } else if (sanitizeText(values.fullName).split(" ").length < 2) {
-    errors.fullName = "Hãy nhập đầy đủ họ và tên để giao hàng chính xác.";
+  if (!fullName) {
+    errors.fullName = "Họ tên không được để trống.";
+  } else if (!isValidLength(fullName, 2, MAX_NAME_LENGTH)) {
+    errors.fullName = "Họ tên cần từ 2 đến 120 ký tự.";
   }
 
-  if (!isValidEmail(values.email)) {
+  if (!email) {
+    errors.email = "Email không được để trống.";
+  } else if (!isValidEmail(email)) {
     errors.email = "Email chưa đúng định dạng.";
   }
 
-  if (sanitizeText(values.phone) && !isValidPhone(values.phone)) {
-    errors.phone = "Số điện thoại chưa đúng định dạng.";
+  if (phone && phone.length < 10) {
+    errors.phone = "Số điện thoại cần ít nhất 10 ký tự số.";
   }
 
-  if (!isStrongPassword(values.password)) {
+  if (!values.password.trim()) {
+    errors.password = "Mật khẩu không được để trống.";
+  } else if (!isStrongPassword(values.password)) {
     errors.password = "Mật khẩu cần ít nhất 8 ký tự và gồm cả chữ lẫn số.";
   }
 
   if (!values.confirmPassword.trim()) {
-    errors.confirmPassword = "Vui lòng xác nhận lại mật khẩu.";
+    errors.confirmPassword = "Hãy xác nhận lại mật khẩu.";
   } else if (values.confirmPassword !== values.password) {
     errors.confirmPassword = "Mật khẩu xác nhận chưa khớp.";
   }
 
   if (!values.agreeToTerms) {
-    errors.agreeToTerms = "Bạn cần đồng ý với điều khoản và chính sách để tiếp tục.";
+    errors.agreeToTerms = "Bạn cần đồng ý với điều khoản để tiếp tục.";
   }
 
   return errors;
 }
 
-export function validateRegister(values: {
-  email: string;
-  password: string;
-  firstName: string;
-  lastName: string;
-}) {
+export function validateProfile(values: ProfileValues): string[] {
   const errors: string[] = [];
+  const firstName = sanitizeText(values.firstName);
+  const lastName = sanitizeText(values.lastName);
+  const displayName = `${lastName} ${firstName}`.trim();
 
-  if (!isValidEmail(values.email)) {
-    errors.push("Email không hợp lệ.");
-  }
-  if (!isStrongPassword(values.password)) {
-    errors.push("Mật khẩu cần ít nhất 8 ký tự và gồm cả chữ lẫn số.");
-  }
-  if (!sanitizeText(values.firstName)) {
+  if (!firstName) {
     errors.push("Tên không được để trống.");
   }
-  if (!sanitizeText(values.lastName)) {
-    errors.push("Họ không được để trống.");
+  if (!displayName) {
+    errors.push("Hồ sơ cần có ít nhất một tên hiển thị.");
+  }
+  if (displayName && !isValidLength(displayName, 2, MAX_NAME_LENGTH)) {
+    errors.push("Tên hiển thị cần từ 2 đến 120 ký tự.");
   }
 
   return errors;
 }
 
-export function validateLogin(values: { email: string; password: string }) {
-  const errors: string[] = [];
-
-  if (!isValidEmail(values.email)) {
-    errors.push("Email không hợp lệ.");
-  }
-  if (!sanitizeText(values.password)) {
-    errors.push("Mật khẩu không được để trống.");
-  }
-
-  return errors;
-}
-
-export function validateProfile(values: { firstName: string; lastName: string }) {
-  const errors: string[] = [];
-
-  if (!sanitizeText(values.firstName)) {
-    errors.push("Tên không được để trống.");
-  }
-  if (!sanitizeText(values.lastName)) {
-    errors.push("Họ không được để trống.");
-  }
-
-  return errors;
-}
-
-export function validateProduct(values: {
-  name: string;
-  description: string;
-  price: string;
-  stock: string;
-  imageUrl: string;
-}) {
+export function validateProduct(values: ProductValidationValues): string[] {
   const errors: string[] = [];
 
   if (!sanitizeText(values.name)) {
     errors.push("Tên sản phẩm không được để trống.");
+  } else if (!isValidLength(values.name, 2, MAX_NAME_LENGTH)) {
+    errors.push("Tên sản phẩm cần từ 2 đến 120 ký tự.");
   }
-  if (toPositiveFloat(values.price) <= 0) {
+
+  if (!sanitizeText(values.description)) {
+    errors.push("Mô tả sản phẩm không được để trống.");
+  } else if (!isValidLength(values.description, 10, MAX_DESCRIPTION_LENGTH)) {
+    errors.push("Mô tả sản phẩm cần ít nhất 10 ký tự.");
+  }
+
+  if (!isPositiveFloat(values.price)) {
     errors.push("Giá sản phẩm phải lớn hơn 0.");
   }
-  if (Number.parseInt(values.stock, 10) < 0 || Number.isNaN(Number.parseInt(values.stock, 10))) {
-    errors.push("Tồn kho phải là số nguyên >= 0.");
+
+  const stockValue = Number.parseInt(values.stock, 10);
+  if (Number.isNaN(stockValue) || stockValue < 0) {
+    errors.push("Tồn kho phải là số nguyên không âm.");
   }
-  if (values.description && !sanitizeMultiline(values.description)) {
-    errors.push("Mô tả không hợp lệ.");
-  }
+
   if (values.imageUrl && !sanitizeUrl(values.imageUrl)) {
-    errors.push("Ảnh URL phải bắt đầu bằng http:// hoặc https://.");
+    errors.push("Ảnh đại diện phải là URL http:// hoặc https:// hợp lệ.");
   }
 
   return errors;
 }
 
-export function validateOrder(values: { productId: string; quantity: string }) {
-  const errors: string[] = [];
-
-  if (!sanitizeText(values.productId)) {
-    errors.push("Bạn chưa chọn sản phẩm.");
-  }
-  if (toPositiveInteger(values.quantity) <= 0) {
-    errors.push("Số lượng phải lớn hơn 0.");
-  }
-
-  return errors;
-}
-
-export function validatePayment(values: {
-  orderId: string;
-  paymentMethod: string;
-  amount?: string;
-}) {
+export function validatePayment(values: PaymentValidationValues): string[] {
   const errors: string[] = [];
 
   if (!sanitizeText(values.orderId)) {
-    errors.push("Mã đơn hàng không được để trống.");
+    errors.push("Thiếu mã đơn hàng để xử lý thanh toán.");
   }
+
   if (!sanitizeText(values.paymentMethod)) {
-    errors.push("Bạn chưa chọn phương thức thanh toán.");
+    errors.push("Phương thức thanh toán không được để trống.");
   }
-  if (values.amount && toPositiveFloat(values.amount) <= 0) {
+
+  if (values.amount.trim() && !isPositiveFloat(values.amount)) {
     errors.push("Số tiền thanh toán phải lớn hơn 0.");
   }
 

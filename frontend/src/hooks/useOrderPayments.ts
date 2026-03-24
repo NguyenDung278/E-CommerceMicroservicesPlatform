@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { api, getErrorMessage } from "../lib/api";
+import { orderApi, paymentApi } from "../lib/api";
+import { getErrorMessage } from "../lib/errors/handler";
 import type { Order, Payment } from "../types/api";
 
 type OrderPaymentsState = {
@@ -35,14 +36,14 @@ export function useOrderPayments(token: string) {
 
     setState((current) => ({ ...current, isLoading: true, error: "" }));
 
-    void api
+    void orderApi
       .listOrders(token)
       .then(async (response) => {
         const orders = (Array.isArray(response.data) ? response.data : [])
           .slice()
           .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 
-        const paymentHistoryResponse = await api.listPaymentHistory(token);
+        const paymentHistoryResponse = await paymentApi.listPaymentHistory(token);
         const paymentsByOrder: Record<string, Payment[]> = {};
         (Array.isArray(paymentHistoryResponse.data) ? paymentHistoryResponse.data : []).forEach((payment) => {
           if (!paymentsByOrder[payment.order_id]) {
