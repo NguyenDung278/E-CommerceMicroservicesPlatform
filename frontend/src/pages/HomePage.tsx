@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
 import type { Product } from "../types/api";
 import { formatCurrency } from "../utils/format";
@@ -52,10 +51,8 @@ function matchesCategory(product: Product, aliases: string[]) {
 }
 
 export function HomePage() {
-  const { addItem } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState("");
-  const [busyProductId, setBusyProductId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -81,24 +78,17 @@ export function HomePage() {
     };
   }, []);
 
-  async function handleAddToCart(product: Product) {
-    try {
-      setBusyProductId(product.id);
-      await addItem({
-        product_id: product.id,
-        quantity: 1
-      });
-      setFeedback(`${product.name} đã được thêm vào bag.`);
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setBusyProductId("");
-    }
-  }
-
   const heroProduct = products[0] ?? null;
   const heroImage = fallbackEditorialImages.hero;
-  const featuredProducts = products.slice(0, 8);
+  const featuredProducts = [
+    products.find((product) => product.name === "Forest Wool Overcoat"),
+    products.find((product) => product.name === "Alpine Commando Boot") ??
+      products.find((product) => product.name === "Explorer Leather Boots"),
+    products.find((product) => product.name === "Stone Compass Scarf") ??
+      products.find((product) => product.name === "Indigo Utility Belt"),
+    products.find((product) => product.name === "Softlight Merino Cardigan") ??
+      products.find((product) => product.name === "Warm Cream Knit Dress")
+  ].filter(Boolean) as Product[];
   const categoryCards = categoryDefinitions.map((category, index) => {
     const categoryProducts = products.filter((product) => matchesCategory(product, category.aliases));
     const featuredProduct = categoryProducts[0] ?? null;
@@ -108,7 +98,7 @@ export function HomePage() {
       href: `/categories/${encodeURIComponent(category.aliases[0])}`,
       count: categoryProducts.length,
       featuredProduct,
-      imageUrl: featuredProduct?.image_urls[0] ?? featuredProduct?.image_url ?? category.imageUrl,
+      imageUrl: category.imageUrl,
       subtitle:
         featuredProduct?.name ??
         [
@@ -121,8 +111,7 @@ export function HomePage() {
   });
   const metrics = [
     { value: "0.4s", label: "Inventory Latency" },
-    { value: "100%", label: "Atelier Sourcing" },
-    { value: `${categoryCards.filter((item) => item.count > 0).length || 4}`, label: "Curated Categories" }
+    { value: "100%", label: "Atelier Sourcing" }
   ];
 
   return (
@@ -212,15 +201,16 @@ export function HomePage() {
             <span className="home-editorial-section-label home-editorial-section-label-accent">New Arrivals</span>
             <h2>Seasonal Essentials</h2>
           </div>
-          <Link className="home-editorial-inline-link" to="/products">
-            View all
-          </Link>
+          <div className="home-editorial-arrow-group" aria-hidden="true">
+            <span className="home-editorial-arrow-button">‹</span>
+            <span className="home-editorial-arrow-button">›</span>
+          </div>
         </div>
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
         {featuredProducts.length > 0 ? (
-          <div className="home-editorial-product-rail">
+          <div className="home-editorial-product-grid">
             {featuredProducts.map((product) => (
               <article className="home-editorial-product-card" key={product.id}>
                 <Link className="home-editorial-product-link" to={`/products/${product.id}`}>
@@ -238,17 +228,6 @@ export function HomePage() {
                     </div>
                   </div>
                 </Link>
-
-                <button
-                  className="home-editorial-product-button"
-                  disabled={busyProductId === product.id}
-                  type="button"
-                  onClick={() => {
-                    void handleAddToCart(product);
-                  }}
-                >
-                  {busyProductId === product.id ? "Adding..." : "Add to Bag"}
-                </button>
               </article>
             ))}
           </div>
