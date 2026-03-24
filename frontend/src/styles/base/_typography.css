@@ -1,0 +1,35 @@
+/* ============================================
+   Typography - Font styles
+   ============================================ */
+
+/* Headings */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+/* Body text */
+p {
+  color: var(--color-text-soft);
+  line-height: 1.5;
+}
+
+/* Small text */
+small {
+  font-size: 0.875em;
+}
+
+/* Strong text */
+strong, b {
+  font-weight: 600;
+}
+
+/* Labels */
+label {
+  font-weight: 500;
+  color: var(--color-text);
+}

@@ -1,0 +1,52 @@
+/* ============================================
+   Variables - Design Tokens
+   ============================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&display=swap");
+
+:root {
+  /* Fonts */
+  --font-body: "Inter", "Segoe UI", sans-serif;
+  --font-display: "Noto Serif", Georgia, serif;
+
+  /* Colors - Primary */
+  --color-primary: #061b0e;
+  --color-primary-soft: #1b3022;
+  --color-on-primary: #fbf9f4;
+
+  /* Colors - Surface */
+  --color-surface: #fbf9f4;
+  --color-surface-low: #f5f3ee;
+  --color-surface-high: #e4e2dd;
+  --color-surface-contrast: rgba(255, 255, 255, 0.82);
+
+  /* Colors - Text */
+  --color-text: #1b1c19;
+  --color-text-soft: rgba(27, 28, 25, 0.72);
+  --color-text-muted: rgba(67, 72, 67, 0.82);
+
+  /* Colors - Outline */
+  --color-outline: rgba(87, 93, 121, 0.18);
+  --color-outline-strong: rgba(87, 93, 121, 0.32);
+
+  /* Colors - Accent/Tertiary */
+  --color-tertiary: #d48166;
+  --color-tertiary-deep: #a85843;
+
+  /* Colors - Semantic */
+  --color-success: #2f5b38;
+  --color-success-soft: rgba(129, 166, 132, 0.16);
+  --color-error: #8f2d21;
+  --color-error-soft: rgba(181, 84, 71, 0.14);
+  --color-info-soft: rgba(6, 27, 14, 0.06);
+
+  /* Shadows */
+  --shadow-soft: 0 24px 48px -12px rgba(27, 28, 25, 0.08);
+  --shadow-card: 0 22px 52px -18px rgba(27, 28, 25, 0.14);
+
+  /* Border Radius */
+  --radius-card: 32px;
+  --radius-panel: 24px;
+  --radius-control: 18px;
+}

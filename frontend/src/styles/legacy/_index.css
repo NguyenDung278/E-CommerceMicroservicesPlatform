@@ -1,0 +1,6 @@
+/* Legacy styles split from the former monolithic stylesheet. */
+@import "./_home.css";
+@import "./_product-detail.css";
+@import "./_admin.css";
+@import "./_auth.css";
+@import "./_shared.css";

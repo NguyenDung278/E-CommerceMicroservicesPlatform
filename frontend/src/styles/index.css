@@ -1,0 +1,31 @@
+/* ============================================
+   E-Commerce Platform - Main Stylesheet
+   ============================================
+   
+   This is the main entry point that imports all CSS modules.
+   The styles are organized following a modular architecture:
+   
+   - base/     : Design tokens, reset, typography
+   - components/ : Reusable UI components
+   - layout/   : Page layout structures
+   - utilities : Helper classes
+   
+   ============================================ */
+
+/* Base styles - must come first */
+@import "./base/_index.css";
+
+/* Components */
+@import "./components/_index.css";
+
+/* Layout */
+@import "./layout/_index.css";
+
+/* Utilities - should come last for override precedence */
+@import "./utilities/_index.css";
+
+/* Page-specific styles */
+@import "./pages/_index.css";
+
+/* Unmigrated feature styles kept here so styles.css can be removed safely */
+@import "./legacy/_index.css";

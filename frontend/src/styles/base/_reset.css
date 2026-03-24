@@ -1,0 +1,100 @@
+/* ============================================
+   Reset - CSS Reset/Normalize
+   ============================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Reset margins and paddings */
+body,
+h1, h2, h3, h4, h5, h6,
+p, ul, ol, li,
+dl, dt, dd,
+figure,
+blockquote,
+pre,
+form, fieldset, legend,
+input, textarea, select,
+button {
+  margin: 0;
+  padding: 0;
+}
+
+/* Box sizing reset for form elements */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Button reset */
+button {
+  border: 0;
+  cursor: pointer;
+  background: none;
+}
+
+/* Link reset */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Image reset */
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* Form element defaults */
+input,
+textarea,
+select {
+  width: 100%;
+}
+
+/* Table reset */
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+/* Remove default list styles */
+ul, ol {
+  list-style: none;
+}
+
+/* Remove default quotes */
+blockquote, q {
+  quotes: none;
+}
+
+blockquote::before,
+blockquote::after,
+q::before,
+q::after {
+  content: '';
+  content: none;
+}
+
+/* Accessibility - improve defaults */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(212, 129, 102, 0.28);
+  outline-offset: 3px;
+}
+
+/* Smooth rendering */
+html {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

@@ -1,0 +1,132 @@
+/* ============================================
+   Cards - Card and panel component styles
+   ============================================ */
+
+/* Base card styles */
+.card,
+.product-card,
+.summary-panel,
+.empty-card,
+.hero-banner,
+.content-section {
+  max-width: 1280px;
+  margin: 0 auto;
+  border: 1px solid rgba(87, 93, 121, 0.08);
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(245, 243, 238, 0.82));
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+}
+
+/* Hero banner specific */
+.hero-banner,
+.content-section {
+  padding: 32px;
+}
+
+.hero-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.9fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* Card padding variations */
+.card,
+.summary-panel,
+.empty-card {
+  padding: 24px;
+}
+
+/* Product card specific */
+.product-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Summary card styles */
+.summary-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border-radius: var(--radius-panel);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 243, 238, 0.84));
+  border: 1px solid rgba(87, 93, 121, 0.1);
+}
+
+.summary-card span {
+  color: var(--color-text-muted);
+}
+
+.summary-card p {
+  margin: 0;
+  color: var(--color-text-soft);
+}
+
+/* Empty card state */
+.empty-card {
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.empty-card p {
+  color: var(--color-text-muted);
+  margin: 16px 0;
+}
+
+/* Card with image */
+.card-image {
+  width: 100%;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  border-radius: var(--radius-control);
+}
+
+/* Card content area */
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.card-description {
+  color: var(--color-text-soft);
+  font-size: 0.9375rem;
+}
+
+/* Card footer */
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--color-outline);
+}
+
+/* Eyebrow label */
+.eyebrow,
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(212, 129, 102, 0.12);
+  color: #7a3f2d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}

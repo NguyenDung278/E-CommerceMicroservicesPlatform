@@ -1,0 +1,104 @@
+/* ============================================
+   Buttons - Button and link styles
+   ============================================ */
+
+/* Base button/link styles */
+.primary-link,
+.secondary-link,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition:
+    transform 150ms ease,
+    opacity 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+/* Primary button */
+.primary-link,
+.primary-button {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-soft) 100%);
+  color: var(--color-on-primary);
+  box-shadow: 0 16px 32px -18px rgba(6, 27, 14, 0.65);
+}
+
+/* Secondary button */
+.secondary-link,
+.secondary-button {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(87, 93, 121, 0.18);
+  color: var(--color-text);
+}
+
+/* Ghost button */
+.ghost-button {
+  background: rgba(245, 243, 238, 0.92);
+  border-color: rgba(87, 93, 121, 0.18);
+  color: var(--color-primary);
+}
+
+/* Danger button */
+.danger-button {
+  background: rgba(181, 84, 71, 0.08);
+  border-color: rgba(181, 84, 71, 0.16);
+  color: var(--color-error);
+}
+
+/* Disabled state */
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled,
+.danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Hover state */
+.primary-link:hover,
+.secondary-link:hover,
+.primary-button:hover,
+.secondary-button:hover,
+.ghost-button:hover,
+.danger-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 30px -18px rgba(27, 28, 25, 0.28);
+}
+
+/* Active/pressed state */
+.primary-link:active,
+.secondary-link:active,
+.primary-button:active,
+.secondary-button:active,
+.ghost-button:active,
+.danger-button:active {
+  transform: translateY(0);
+}
+
+/* Button sizes (optional utility classes) */
+.button-sm {
+  min-height: 36px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+}
+
+.button-lg {
+  min-height: 56px;
+  padding: 16px 28px;
+  font-size: 1.125rem;
+}
+
+/* Full width button */
+.button-full {
+  width: 100%;
+}

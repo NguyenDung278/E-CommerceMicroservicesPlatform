@@ -1,0 +1,42 @@
+/* ============================================
+   Base - Base styles entry point
+   ============================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&display=swap");
+
+@import "./_variables.css";
+@import "./_reset.css";
+@import "./_typography.css";
+
+/* Global base styles */
+:root {
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at top left, rgba(212, 129, 102, 0.18), transparent 20%),
+    radial-gradient(circle at top right, rgba(27, 48, 34, 0.16), transparent 18%),
+    linear-gradient(180deg, #faf7f1 0%, #f2f5ef 100%);
+  font-family: var(--font-body);
+  line-height: 1.5;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--color-text);
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(212, 129, 102, 0.14), transparent 20%),
+    radial-gradient(circle at 100% 0%, rgba(6, 27, 14, 0.12), transparent 18%),
+    linear-gradient(180deg, #fbf9f4 0%, #f3f5ef 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Default text styling */
+p {
+  margin: 0;
+}
