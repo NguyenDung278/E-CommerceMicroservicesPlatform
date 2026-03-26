@@ -31,6 +31,9 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	auth.POST("/verify-email", h.forwardRequest)
 	auth.POST("/forgot-password", h.forwardRequest)
 	auth.POST("/reset-password", h.forwardRequest)
+	auth.GET("/oauth/google/start", h.forwardRequest)
+	auth.GET("/oauth/google/callback", h.forwardRequest)
+	auth.POST("/oauth/exchange", h.forwardRequest)
 
 	users := e.Group("/api/v1/users")
 	users.Use(appmw.JWTAuth(jwtSecret))

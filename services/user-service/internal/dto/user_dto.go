@@ -33,6 +33,10 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
+type OAuthExchangeRequest struct {
+	Ticket string `json:"ticket" validate:"required"`
+}
+
 type VerifyEmailRequest struct {
 	Token string `json:"token" validate:"required"`
 }

@@ -7,18 +7,21 @@
 import {
   createContext,
   startTransition,
+  useCallback,
   useEffect,
   useState,
   type ReactNode,
 } from "react";
 
 import { useSessionToken } from "../hooks/useSessionToken";
-import { authApi } from "../lib/api/auth";
-import { getErrorMessage } from "../lib/errors/handler";
-import type { UserProfile } from "../types/api";
-import type { ApiEnvelope } from "../types/api";
+import { authApi, type OAuthProvider } from "../lib/api/auth";
+import { getErrorMessage, isHttpError } from "../lib/errors/handler";
+import type { ApiEnvelope, UserProfile } from "../types/api";
+import {
+  clearPendingOAuthRemember,
+  savePendingOAuthRemember,
+} from "../utils/auth/oauth";
 
-// Input types
 type RegisterInput = {
   email: string;
   phone: string;
@@ -37,14 +40,19 @@ type AuthOptions = {
   remember?: boolean;
 };
 
+type OAuthLoginOptions = {
+  redirectTo?: string;
+  remember?: boolean;
+};
+
 type UpdateProfileInput = {
   first_name: string;
   last_name: string;
 };
 
-// Context value type
 type AuthContextValue = {
   token: string;
+  refreshToken: string;
   user: UserProfile | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -54,6 +62,8 @@ type AuthContextValue = {
   error: string;
   register: (input: RegisterInput, options?: AuthOptions) => Promise<UserProfile>;
   login: (input: LoginInput, options?: AuthOptions) => Promise<UserProfile>;
+  beginOAuthLogin: (provider: OAuthProvider, options?: OAuthLoginOptions) => void;
+  exchangeOAuthTicket: (ticket: string, options?: AuthOptions) => Promise<UserProfile>;
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
@@ -61,38 +71,71 @@ type AuthContextValue = {
   clearError: () => void;
 };
 
-// Create context
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-/**
- * Authentication Provider Component
- * Manages authentication state and provides auth methods to children
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { token, setToken, clearToken } = useSessionToken();
+  const { token, refreshToken, remember, hasSession, setTokens, clearTokens } = useSessionToken();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [error, setError] = useState("");
-  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(token));
+  const [isBootstrapping, setIsBootstrapping] = useState(hasSession);
 
-  // Fetch user profile when token changes
+  const completeAuth = useCallback(
+    (response: ApiEnvelope<{ token: string; refresh_token: string; user: UserProfile }>, rememberSession: boolean) => {
+      startTransition(() => {
+        setTokens(response.data.token, response.data.refresh_token, rememberSession);
+        setUser(response.data.user);
+        setError("");
+      });
+    },
+    [setTokens]
+  );
+
+  const refreshSession = useCallback(
+    async (rememberSession = remember) => {
+      if (!refreshToken) {
+        throw new Error("Missing refresh token");
+      }
+
+      const response = await authApi.refreshToken({ refresh_token: refreshToken });
+      completeAuth(response, rememberSession);
+      return response.data.token;
+    },
+    [completeAuth, refreshToken, remember]
+  );
+
+  const withFreshToken = useCallback(
+    async <T,>(operation: (activeToken: string) => Promise<T>): Promise<T> => {
+      if (token) {
+        try {
+          return await operation(token);
+        } catch (reason) {
+          if (!isHttpError(reason) || reason.status !== 401 || !refreshToken) {
+            throw reason;
+          }
+        }
+      }
+
+      const refreshedToken = await refreshSession();
+      return operation(refreshedToken);
+    },
+    [token, refreshToken, refreshSession]
+  );
+
   useEffect(() => {
     let active = true;
 
-    // No token - clear user state
-    if (!token) {
+    if (!hasSession) {
       startTransition(() => {
         setUser(null);
         setError("");
         setIsBootstrapping(false);
       });
-
       return () => {
         active = false;
       };
     }
 
-    // Already have user - skip loading
-    if (user) {
+    if (user && token) {
       setIsBootstrapping(false);
       return () => {
         active = false;
@@ -101,88 +144,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsBootstrapping(true);
 
-    // Fetch profile
-    authApi
-      .getProfile(token)
-      .then((response: ApiEnvelope<UserProfile>) => {
+    const bootstrap = async () => {
+      try {
+        const profile = await withFreshToken((activeToken) => authApi.getProfile(activeToken));
         if (!active) {
           return;
         }
 
         startTransition(() => {
-          setUser(response.data);
+          setUser(profile.data);
           setError("");
         });
-      })
-      .catch((reason) => {
+      } catch (reason) {
         if (!active) {
           return;
         }
 
-        // Clear token on auth failure
-        clearToken();
+        clearTokens();
+        clearPendingOAuthRemember();
         startTransition(() => {
           setUser(null);
           setError(getErrorMessage(reason));
         });
-      })
-      .finally(() => {
+      } finally {
         if (active) {
           setIsBootstrapping(false);
         }
-      });
+      }
+    };
+
+    void bootstrap();
 
     return () => {
       active = false;
     };
-  }, [token, user, clearToken]);
+  }, [token, refreshToken, user, hasSession, withFreshToken, clearTokens]);
 
-  /**
-   * Register a new user
-   */
   async function register(input: RegisterInput, options?: AuthOptions) {
     setError("");
     const response = await authApi.register(input);
-    startTransition(() => {
-      setToken(response.data.token, options?.remember ?? false);
-      setUser(response.data.user);
-    });
+    completeAuth(response, options?.remember ?? false);
     return response.data.user;
   }
 
-  /**
-   * Login user
-   */
   async function login(input: LoginInput, options?: AuthOptions) {
     setError("");
     const response = await authApi.login(input);
-    startTransition(() => {
-      setToken(response.data.token, options?.remember ?? false);
-      setUser(response.data.user);
-    });
+    completeAuth(response, options?.remember ?? false);
     return response.data.user;
   }
 
-  /**
-   * Logout user
-   */
+  function beginOAuthLogin(provider: OAuthProvider, options?: OAuthLoginOptions) {
+    savePendingOAuthRemember(options?.remember ?? false);
+    window.location.assign(authApi.buildOAuthStartUrl(provider, options?.redirectTo ?? "/profile"));
+  }
+
+  async function exchangeOAuthTicket(ticket: string, options?: AuthOptions) {
+    setError("");
+    const response = await authApi.exchangeOAuthTicket({ ticket });
+    completeAuth(response, options?.remember ?? false);
+    clearPendingOAuthRemember();
+    return response.data.user;
+  }
+
   function logout() {
-    clearToken();
+    clearTokens();
+    clearPendingOAuthRemember();
     startTransition(() => {
       setUser(null);
       setError("");
     });
   }
 
-  /**
-   * Refresh user profile
-   */
   async function refreshProfile() {
-    if (!token) {
-      throw new Error("Missing JWT token");
-    }
-
-    const response = await authApi.getProfile(token);
+    const response = await withFreshToken((activeToken) => authApi.getProfile(activeToken));
     startTransition(() => {
       setUser(response.data);
       setError("");
@@ -190,15 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   }
 
-  /**
-   * Update user profile
-   */
   async function updateProfile(input: UpdateProfileInput) {
-    if (!token) {
-      throw new Error("Missing JWT token");
-    }
-
-    const response = await authApi.updateProfile(token, input);
+    const response = await withFreshToken((activeToken) => authApi.updateProfile(activeToken, input));
     startTransition(() => {
       setUser(response.data);
       setError("");
@@ -206,18 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   }
 
-  /**
-   * Resend verification email
-   */
   async function resendVerificationEmail() {
-    if (!token) {
-      throw new Error("Missing JWT token");
-    }
-
-    await authApi.resendVerificationEmail(token);
+    await withFreshToken((activeToken) => authApi.resendVerificationEmail(activeToken));
   }
 
-  // Compute derived state
   const isAdmin = user?.role === "admin";
   const isStaff = user?.role === "staff";
   const canAccessAdmin = isAdmin || isStaff;
@@ -226,8 +246,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         token,
+        refreshToken,
         user,
-        isAuthenticated: Boolean(token),
+        isAuthenticated: Boolean(token || refreshToken),
         isAdmin,
         isStaff,
         canAccessAdmin,
@@ -235,6 +256,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         register,
         login,
+        beginOAuthLogin,
+        exchangeOAuthTicket,
         logout,
         refreshProfile,
         updateProfile,

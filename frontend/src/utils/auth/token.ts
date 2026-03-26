@@ -1,117 +1,110 @@
-/**
- * Token Management Module
- * Provides secure token storage and retrieval with
- * support for both session and persistent storage.
- */
+const SESSION_ACCESS_TOKEN_KEY = "ecommerce_frontend_session_token";
+const SESSION_REFRESH_TOKEN_KEY = "ecommerce_frontend_session_refresh_token";
+const PERSISTENT_ACCESS_TOKEN_KEY = "ecommerce_frontend_persistent_token";
+const PERSISTENT_REFRESH_TOKEN_KEY = "ecommerce_frontend_persistent_refresh_token";
 
-const SESSION_TOKEN_KEY = "ecommerce_frontend_session_token";
-const PERSISTENT_TOKEN_KEY = "ecommerce_frontend_persistent_token";
-
-/**
- * Token storage state
- */
 export type TokenState = {
   token: string;
+  refreshToken: string;
   remember: boolean;
 };
 
-/**
- * Read initial token from storage
- */
-export function readInitialToken(): TokenState {
+type StoredPair = {
+  accessToken: string;
+  refreshToken: string;
+  remember: boolean;
+} | null;
+
+export function readInitialTokens(): TokenState {
   if (typeof window === "undefined") {
     return {
       token: "",
+      refreshToken: "",
       remember: false,
     };
   }
 
-  // Check persistent storage first
-  const persistentToken = window.localStorage.getItem(PERSISTENT_TOKEN_KEY) ?? "";
-  if (isStoredTokenUsable(persistentToken)) {
+  const persistentTokens = readStoredPair(window.localStorage, true);
+  if (persistentTokens) {
     return {
-      token: persistentToken,
-      remember: true,
+      token: persistentTokens.accessToken,
+      refreshToken: persistentTokens.refreshToken,
+      remember: persistentTokens.remember,
     };
   }
 
-  // Fall back to session storage
-  const sessionToken = window.sessionStorage.getItem(SESSION_TOKEN_KEY) ?? "";
-  if (isStoredTokenUsable(sessionToken)) {
+  const sessionTokens = readStoredPair(window.sessionStorage, false);
+  if (sessionTokens) {
     return {
-      token: sessionToken,
-      remember: false,
+      token: sessionTokens.accessToken,
+      refreshToken: sessionTokens.refreshToken,
+      remember: sessionTokens.remember,
     };
   }
 
-  clearToken();
+  clearTokens();
   return {
     token: "",
+    refreshToken: "",
     remember: false,
   };
 }
 
-/**
- * Save token to appropriate storage
- */
-export function saveToken(token: string, remember: boolean): void {
+export function saveTokens(token: string, refreshToken: string, remember: boolean): void {
   if (typeof window === "undefined") {
     return;
   }
 
-  if (!isStoredTokenUsable(token)) {
-    clearToken();
+  const normalizedAccessToken = normalizeStoredToken(token, false);
+  const normalizedRefreshToken = normalizeStoredToken(refreshToken, true);
+
+  if (!normalizedAccessToken && !normalizedRefreshToken) {
+    clearTokens();
     return;
   }
 
   if (remember) {
-    window.localStorage.setItem(PERSISTENT_TOKEN_KEY, token);
-    window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  } else {
-    window.sessionStorage.setItem(SESSION_TOKEN_KEY, token);
-    window.localStorage.removeItem(PERSISTENT_TOKEN_KEY);
+    window.localStorage.setItem(PERSISTENT_ACCESS_TOKEN_KEY, normalizedAccessToken);
+    window.localStorage.setItem(PERSISTENT_REFRESH_TOKEN_KEY, normalizedRefreshToken);
+    window.sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
+    window.sessionStorage.removeItem(SESSION_REFRESH_TOKEN_KEY);
+    return;
   }
+
+  window.sessionStorage.setItem(SESSION_ACCESS_TOKEN_KEY, normalizedAccessToken);
+  window.sessionStorage.setItem(SESSION_REFRESH_TOKEN_KEY, normalizedRefreshToken);
+  window.localStorage.removeItem(PERSISTENT_ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(PERSISTENT_REFRESH_TOKEN_KEY);
 }
 
-/**
- * Clear all token storage
- */
-export function clearToken(): void {
+export function clearTokens(): void {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  window.localStorage.removeItem(PERSISTENT_TOKEN_KEY);
+  window.sessionStorage.removeItem(SESSION_ACCESS_TOKEN_KEY);
+  window.sessionStorage.removeItem(SESSION_REFRESH_TOKEN_KEY);
+  window.localStorage.removeItem(PERSISTENT_ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(PERSISTENT_REFRESH_TOKEN_KEY);
 }
 
-/**
- * Check if token exists
- */
 export function hasToken(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
 
-  const { token } = readInitialToken();
-  return Boolean(token);
+  const { token, refreshToken } = readInitialTokens();
+  return Boolean(token || refreshToken);
 }
 
-/**
- * Validate token format (basic check)
- */
 export function isValidTokenFormat(token: string): boolean {
-  // JWT format: header.payload.signature
   if (!token || token.split(".").length !== 3) {
     return false;
   }
 
-  // Check if it's a valid JWT format (base64 encoded parts)
   try {
     const parts = token.split(".");
-    // Verify each part is valid base64
     parts.forEach((part) => {
-      // Replace URL-safe characters and check if it's valid base64
       decodeBase64Url(part);
     });
     return true;
@@ -120,19 +113,13 @@ export function isValidTokenFormat(token: string): boolean {
   }
 }
 
-/**
- * Decode JWT payload (without verification)
- */
-export function decodeJwtPayload(
-  token: string
-): Record<string, unknown> | null {
+export function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) {
       return null;
     }
 
-    // Decode the payload (second part)
     const decoded = decodeBase64Url(parts[1]);
     return JSON.parse(decoded);
   } catch {
@@ -140,32 +127,58 @@ export function decodeJwtPayload(
   }
 }
 
-/**
- * Check if token is expired
- */
 export function isTokenExpired(token: string): boolean {
   const payload = decodeJwtPayload(token);
-
   if (!payload || typeof payload.exp !== "number") {
-    // If no expiration claim, assume token is valid
     return false;
   }
 
-  const expirationTime = payload.exp * 1000; // Convert to milliseconds
-  return Date.now() >= expirationTime;
+  return Date.now() >= payload.exp * 1000;
 }
 
-/**
- * Get token expiration time
- */
 export function getTokenExpiration(token: string): Date | null {
   const payload = decodeJwtPayload(token);
-
   if (!payload || typeof payload.exp !== "number") {
     return null;
   }
 
   return new Date(payload.exp * 1000);
+}
+
+function readStoredPair(storage: Storage, remember: boolean): StoredPair {
+  const accessToken = normalizeStoredToken(
+    storage.getItem(remember ? PERSISTENT_ACCESS_TOKEN_KEY : SESSION_ACCESS_TOKEN_KEY) ?? "",
+    false
+  );
+  const refreshToken = normalizeStoredToken(
+    storage.getItem(remember ? PERSISTENT_REFRESH_TOKEN_KEY : SESSION_REFRESH_TOKEN_KEY) ?? "",
+    true
+  );
+
+  if (!accessToken && !refreshToken) {
+    return null;
+  }
+
+  return {
+    accessToken,
+    refreshToken,
+    remember,
+  };
+}
+
+function normalizeStoredToken(token: string, allowExpired: boolean): string {
+  const trimmed = token.trim();
+  if (!trimmed || !isValidTokenFormat(trimmed)) {
+    return "";
+  }
+  if (!allowExpired && isTokenExpired(trimmed)) {
+    return "";
+  }
+  if (allowExpired && isTokenExpired(trimmed)) {
+    return "";
+  }
+
+  return trimmed;
 }
 
 function decodeBase64Url(value: string): string {
@@ -174,18 +187,10 @@ function decodeBase64Url(value: string): string {
   return atob(`${normalized}${padding}`);
 }
 
-function isStoredTokenUsable(token: string): boolean {
-  if (!token) {
-    return false;
-  }
-
-  return isValidTokenFormat(token) && !isTokenExpired(token);
-}
-
 export default {
-  readInitialToken,
-  saveToken,
-  clearToken,
+  readInitialTokens,
+  saveTokens,
+  clearTokens,
   hasToken,
   isValidTokenFormat,
   decodeJwtPayload,

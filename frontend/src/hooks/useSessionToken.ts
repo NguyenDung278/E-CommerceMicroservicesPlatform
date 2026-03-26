@@ -1,55 +1,54 @@
-/**
- * Session Token Hook
- * Provides secure token management with React state integration
- */
+import { useCallback, useEffect, useState } from "react";
 
-import { useEffect, useState } from "react";
 import {
-  readInitialToken,
-  saveToken,
-  clearToken,
+  clearTokens,
+  readInitialTokens,
+  saveTokens,
   type TokenState,
 } from "../utils/auth/token";
 
-/**
- * Session token hook result
- */
 export type UseSessionTokenResult = {
   token: string;
+  refreshToken: string;
   remember: boolean;
-  setToken: (token: string, remember?: boolean) => void;
-  clearToken: () => void;
+  hasSession: boolean;
+  setTokens: (token: string, refreshToken: string, remember?: boolean) => void;
+  clearTokens: () => void;
 };
 
-/**
- * Custom hook for managing session tokens
- */
 export function useSessionToken(): UseSessionTokenResult {
-  const [state, setState] = useState<TokenState>(readInitialToken);
+  const [state, setState] = useState<TokenState>(readInitialTokens);
+  const setTokens = useCallback((token: string, refreshToken: string, remember = false) => {
+    setState({ token, refreshToken, remember });
+  }, []);
+  const clearAllTokens = useCallback(() => {
+    setState({
+      token: "",
+      refreshToken: "",
+      remember: false,
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    if (state.token) {
-      saveToken(state.token, state.remember);
+    if (state.token || state.refreshToken) {
+      saveTokens(state.token, state.refreshToken, state.remember);
       return;
     }
 
-    clearToken();
+    clearTokens();
   }, [state]);
 
   return {
     token: state.token,
+    refreshToken: state.refreshToken,
     remember: state.remember,
-    setToken: (token: string, remember = false) =>
-      setState({ token, remember }),
-    clearToken: () =>
-      setState({
-        token: "",
-        remember: false,
-      }),
+    hasSession: Boolean(state.token || state.refreshToken),
+    setTokens,
+    clearTokens: clearAllTokens,
   };
 }
 

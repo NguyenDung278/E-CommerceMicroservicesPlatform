@@ -48,3 +48,38 @@ func TestServiceProxyPreservesQueryStringAndResponseHeaders(t *testing.T) {
 		t.Fatalf("unexpected body: %s", string(body))
 	}
 }
+
+func TestServiceProxyPreservesRedirectResponses(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client", http.StatusFound)
+	}))
+	defer backend.Close()
+
+	proxy := NewServiceProxy(backend.URL, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/oauth/google/start?redirect_to=%2Fprofile", nil)
+	resp, err := proxy.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("proxy.Do returned error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected status 302, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got == "" {
+		t.Fatal("expected Location header to be preserved")
+	}
+
+	rec := httptest.NewRecorder()
+	if err := proxy.ForwardResponse(rec, resp); err != nil {
+		t.Fatalf("ForwardResponse returned error: %v", err)
+	}
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected forwarded status 302, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got == "" {
+		t.Fatal("expected forwarded Location header to be present")
+	}
+}

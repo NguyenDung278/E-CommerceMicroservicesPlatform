@@ -89,9 +89,11 @@ import { getErrorMessage as _getErrorMessage } from "./errors/handler";
 export const api = {
   register: _authApi.register,
   login: _authApi.login,
+  refreshToken: _authApi.refreshToken,
   verifyEmail: _authApi.verifyEmail,
   forgotPassword: _authApi.forgotPassword,
   resetPassword: _authApi.resetPassword,
+  exchangeOAuthTicket: _authApi.exchangeOAuthTicket,
   getProfile: _authApi.getProfile,
   updateProfile: _authApi.updateProfile,
   resendVerificationEmail: _authApi.resendVerificationEmail,

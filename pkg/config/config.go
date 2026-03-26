@@ -25,6 +25,7 @@ type Config struct {
 	JWT            JWTConfig            `mapstructure:"jwt"`
 	GRPC           GRPCConfig           `mapstructure:"grpc"`
 	SMTP           SMTPConfig           `mapstructure:"smtp"`
+	OAuth          OAuthConfig          `mapstructure:"oauth"`
 	Services       ServicesConfig       `mapstructure:"services"`
 	Frontend       FrontendConfig       `mapstructure:"frontend"`
 	PaymentGateway PaymentGatewayConfig `mapstructure:"payment_gateway"`
@@ -66,6 +67,16 @@ type SMTPConfig struct {
 	Password    string `mapstructure:"password"`
 	FromName    string `mapstructure:"from_name"`
 	FromAddress string `mapstructure:"from_address"`
+}
+
+type OAuthConfig struct {
+	Google OAuthProviderConfig `mapstructure:"google"`
+}
+
+type OAuthProviderConfig struct {
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+	RedirectURL  string `mapstructure:"redirect_url"`
 }
 
 type FrontendConfig struct {
@@ -208,6 +219,9 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("smtp.password", "")
 	v.SetDefault("smtp.from_name", "ND Shop")
 	v.SetDefault("smtp.from_address", "")
+	v.SetDefault("oauth.google.client_id", "")
+	v.SetDefault("oauth.google.client_secret", "")
+	v.SetDefault("oauth.google.redirect_url", "http://localhost:8080/api/v1/auth/oauth/google/callback")
 	v.SetDefault("services.product_service", "product-service:8082")
 	v.SetDefault("services.product_service_grpc", "product-service:50052")
 	v.SetDefault("services.user_service", "user-service:8081")

@@ -1,0 +1,25 @@
+.account-page {
+  gap: 24px;
+}
+
+.account-shell {
+  width: min(100%, 1536px);
+  margin: 0 auto;
+  padding: 22px 40px 0;
+}
+
+.account-content {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .account-shell {
+    padding-inline: 24px;
+  }
+}
+
+@media (max-width: 720px) {
+  .account-shell {
+    padding-inline: 18px;
+  }
+}

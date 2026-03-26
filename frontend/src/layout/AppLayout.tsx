@@ -2,77 +2,116 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
-import { isDevelopmentAccount } from "../utils/devAccounts";
+import { getUserDisplayName, isDevelopmentAccount } from "../utils/devAccounts";
 import "./AppLayout.css";
 
 export function AppLayout() {
   const location = useLocation();
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
+  const isTransactionalSurface = location.pathname === "/checkout" || location.pathname.startsWith("/orders/");
+  const isAccountSurface = location.pathname.startsWith("/profile");
   const categoryNavigation = [
     { label: "Men", category: "Shop Men" },
     { label: "Women", category: "Shop Women" },
     { label: "Footwear", category: "Footwear" },
     { label: "Accessories", category: "Accessories" }
   ];
+  const transactionalNavigation = categoryNavigation.map((item) => ({
+    label: item.label,
+    to: `/categories/${encodeURIComponent(item.category)}`
+  }));
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const accountLabel = isAuthenticated ? "Account" : "Login";
+  const profileDisplayName = getUserDisplayName(user);
   const showDevBadge = isAuthenticated && isDevelopmentAccount(user);
   const currentCategory =
     location.pathname.startsWith("/categories/") ? decodeURIComponent(location.pathname.replace("/categories/", "")) : "";
 
   return (
-    <div className="editorial-app-shell">
-      <header className="editorial-site-header">
+    <div className={isTransactionalSurface ? "editorial-app-shell editorial-app-shell-transactional" : "editorial-app-shell"}>
+      <header className={isTransactionalSurface ? "editorial-site-header editorial-site-header-transactional" : "editorial-site-header"}>
         <div className="editorial-header-inner">
           <div className="editorial-header-left">
-            <NavLink className="editorial-brand-mark" to="/">
+            <NavLink className={isTransactionalSurface ? "editorial-brand-mark editorial-brand-mark-transactional" : "editorial-brand-mark"} to="/">
               ND Shop
             </NavLink>
 
             <nav className="editorial-main-nav" aria-label="Main navigation">
-              {categoryNavigation.map((item, index) => {
-                const isActive = currentCategory === item.category || (location.pathname === "/" && index === 0);
+              {isTransactionalSurface
+                ? transactionalNavigation.map((item) => (
+                    <Link className="editorial-nav-link editorial-nav-link-transactional" key={item.label} to={item.to}>
+                      {item.label}
+                    </Link>
+                  ))
+                : categoryNavigation.map((item, index) => {
+                    const isActive = currentCategory === item.category || (location.pathname === "/" && index === 0);
 
-                return (
-                  <Link
-                    className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
-                    key={item.category}
-                    to={`/categories/${encodeURIComponent(item.category)}`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+                    return (
+                      <Link
+                        className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
+                        key={item.category}
+                        to={`/categories/${encodeURIComponent(item.category)}`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
             </nav>
           </div>
 
           <div className="editorial-header-actions">
-            <div className="editorial-account-area">
-              {canAccessAdmin ? (
-                <NavLink
-                  className={({ isActive }) =>
-                    isActive ? "editorial-utility-link editorial-utility-link-active" : "editorial-utility-link"
-                  }
-                  to="/admin"
-                >
-                  Admin
+            {isTransactionalSurface ? (
+              <div className="editorial-account-area editorial-account-area-transactional">
+                <NavLink aria-label="Cart" className="editorial-bag-link" to="/cart">
+                  <span className="editorial-bag-icon" aria-hidden="true" />
+                  <span className="editorial-bag-count">{itemCount}</span>
                 </NavLink>
-              ) : null}
-              {isAuthenticated ? (
-                <button className="editorial-utility-link" type="button" onClick={logout}>
-                  Logout
-                </button>
-              ) : null}
-              <NavLink className="editorial-account-pill" to={accountHref}>
-                <span>{accountLabel}</span>
-                {showDevBadge ? <span className="editorial-account-badge">Dev Only</span> : null}
-              </NavLink>
-              <NavLink className="editorial-bag-link" to="/cart">
-                <span className="editorial-bag-icon" aria-hidden="true" />
-                <span className="editorial-bag-count">{itemCount}</span>
-              </NavLink>
-            </div>
+                <NavLink aria-label={accountLabel} className="editorial-person-link" to={accountHref}>
+                  <span className="editorial-person-icon" aria-hidden="true" />
+                </NavLink>
+              </div>
+            ) : isAccountSurface && isAuthenticated ? (
+              <div className="editorial-account-area editorial-account-area-profile">
+                <NavLink className="editorial-profile-pill" to="/profile">
+                  <span>{profileDisplayName}</span>
+                  <span className="editorial-profile-pill-dot" aria-hidden="true" />
+                </NavLink>
+                <NavLink aria-label="Cart" className="editorial-bag-link" to="/cart">
+                  <span className="editorial-bag-icon" aria-hidden="true" />
+                  <span className="editorial-bag-count">{itemCount}</span>
+                </NavLink>
+                <NavLink aria-label={accountLabel} className="editorial-account-circle-link editorial-account-circle-link-active" to={accountHref}>
+                  <span className="editorial-account-circle-icon" aria-hidden="true" />
+                </NavLink>
+              </div>
+            ) : (
+              <div className="editorial-account-area">
+                {canAccessAdmin ? (
+                  <NavLink
+                    className={({ isActive }) =>
+                      isActive ? "editorial-utility-link editorial-utility-link-active" : "editorial-utility-link"
+                    }
+                    to="/admin"
+                  >
+                    Admin
+                  </NavLink>
+                ) : null}
+                {isAuthenticated ? (
+                  <button className="editorial-utility-link" type="button" onClick={logout}>
+                    Logout
+                  </button>
+                ) : null}
+                <NavLink className="editorial-account-pill" to={accountHref}>
+                  <span>{accountLabel}</span>
+                  {showDevBadge ? <span className="editorial-account-badge">Dev Only</span> : null}
+                </NavLink>
+                <NavLink className="editorial-bag-link" to="/cart">
+                  <span className="editorial-bag-icon" aria-hidden="true" />
+                  <span className="editorial-bag-count">{itemCount}</span>
+                </NavLink>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -81,18 +120,34 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      <footer className="editorial-site-footer">
+      <footer className={isTransactionalSurface ? "editorial-site-footer editorial-site-footer-transactional" : "editorial-site-footer"}>
         <div className="editorial-footer-inner">
           <div className="editorial-footer-brand">
             <strong>ND Shop</strong>
-            <p>2026 ND Shop. Editorial storefront layered on the current Go commerce platform.</p>
+            <p>
+              {isTransactionalSurface
+                ? "2026 ND Shop. All rights reserved."
+                : "2026 ND Shop. Editorial storefront layered on the current Go commerce platform."}
+            </p>
           </div>
           <div className="editorial-footer-links">
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/products">Archive</NavLink>
-            <NavLink to="/cart">Bag</NavLink>
-            <NavLink to={accountHref}>{accountLabel}</NavLink>
-            {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}
+            {isTransactionalSurface ? (
+              <>
+                {transactionalNavigation.map((item) => (
+                  <NavLink key={item.label} to={item.to}>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </>
+            ) : (
+              <>
+                <NavLink to="/">Home</NavLink>
+                <NavLink to="/products">Archive</NavLink>
+                <NavLink to="/cart">Bag</NavLink>
+                <NavLink to={accountHref}>{accountLabel}</NavLink>
+                {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}
+              </>
+            )}
           </div>
         </div>
       </footer>

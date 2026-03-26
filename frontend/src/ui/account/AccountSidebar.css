@@ -1,0 +1,154 @@
+.account-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 44px;
+  align-items: start;
+}
+
+.account-sidebar-panel {
+  position: sticky;
+  top: 108px;
+  display: grid;
+  gap: 28px;
+  padding: 48px 34px 30px;
+  border-radius: 48px;
+  background: #fffdf9;
+  box-shadow:
+    0 32px 72px -46px rgba(27, 28, 25, 0.28),
+    inset 0 0 0 1px rgba(115, 121, 115, 0.08);
+}
+
+.account-sidebar-head {
+  display: grid;
+  gap: 8px;
+}
+
+.account-sidebar-head h2 {
+  margin: 0;
+  color: #1b1c19;
+  font-family: "Noto Serif", Georgia, serif;
+  font-size: 4rem;
+  line-height: 0.96;
+  letter-spacing: -0.08em;
+}
+
+.account-sidebar-head p {
+  margin: 0;
+  color: #737973;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-sidebar-nav {
+  display: grid;
+  gap: 18px;
+}
+
+.account-sidebar-link,
+.account-sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 90px;
+  padding: 0 26px;
+  border-radius: 24px;
+  color: #525852;
+  font-size: 1.08rem;
+  font-weight: 500;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.account-sidebar-link:hover {
+  color: #061b0e;
+}
+
+.account-sidebar-link-active {
+  background: #e9e7df;
+  color: #061b0e;
+}
+
+.account-sidebar-link span:last-child,
+.account-sidebar-logout span:last-child {
+  flex: 1;
+}
+
+.account-sidebar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+}
+
+.account-sidebar-icon svg {
+  width: 30px;
+  height: 30px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.85;
+}
+
+.account-sidebar-footer {
+  margin-top: 14px;
+  padding-top: 30px;
+  border-top: 1px solid rgba(195, 200, 193, 0.62);
+}
+
+.account-sidebar-logout {
+  min-height: 74px;
+  padding-inline: 26px;
+  color: #c52722;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.account-sidebar-logout:hover {
+  background: rgba(255, 218, 214, 0.45);
+}
+
+@media (max-width: 1180px) {
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .account-sidebar-panel {
+    position: static;
+    gap: 20px;
+    padding: 30px 24px 24px;
+    border-radius: 32px;
+  }
+
+  .account-sidebar-head h2 {
+    font-size: 2.9rem;
+  }
+
+  .account-sidebar-link,
+  .account-sidebar-logout {
+    min-height: 62px;
+    padding-inline: 18px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .account-sidebar-link,
+  .account-sidebar-logout {
+    gap: 14px;
+  }
+
+  .account-sidebar-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .account-sidebar-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+}

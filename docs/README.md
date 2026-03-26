@@ -40,6 +40,8 @@ Dành cho khi bạn cần hiểu cách hệ thống giao tiếp.
 - [technology-stack.md](./deep-dive/technology-stack.md): Phân tích công nghệ.
 - [database-schema.md](./deep-dive/database-schema.md): Tổng quan kiến trúc Database-per-service và schema.
 - [shared-libraries.md](./deep-dive/shared-libraries.md): Phân tích tập thư viện dùng chung `pkg/`.
+- [user-service.md](./deep-dive/user-service.md): Luồng auth, verify/reset password và social login Google/Facebook.
+- [api-gateway.md](./deep-dive/api-gateway.md): Cách gateway forward route auth thường, callback OAuth và ticket exchange.
 - Phân tích Domain: `api-gateway.md`, `user-service.md`, `product-service.md`, `order-service.md`, `payment-service.md`, v.v.
 
 ### 3. Thư mục `annotated/` (Đọc Source Code)

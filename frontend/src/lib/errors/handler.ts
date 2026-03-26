@@ -115,6 +115,9 @@ function getUserFriendlyMessage(error: HttpError): string {
     if (detail.includes("phone already exists")) {
       return "Số điện thoại đã được sử dụng. Hãy dùng số khác hoặc đăng nhập.";
     }
+    if (detail.includes("oauth")) {
+      return "Không thể liên kết tài khoản mạng xã hội do dữ liệu đang xung đột.";
+    }
   }
 
   if (status === 401) {
@@ -130,6 +133,9 @@ function getUserFriendlyMessage(error: HttpError): string {
     if (detail.includes("invalid or expired token")) {
       return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
     }
+    if (detail.includes("invalid or expired oauth login ticket")) {
+      return "Phiên đăng nhập mạng xã hội đã hết hạn. Hãy thử lại từ màn hình đăng nhập.";
+    }
   }
 
   if (status === 403) {
@@ -142,6 +148,10 @@ function getUserFriendlyMessage(error: HttpError): string {
 
   if (status === 422) {
     return detail || "Dữ liệu không hợp lệ.";
+  }
+
+  if (status === 400 && detail.includes("oauth")) {
+    return detail;
   }
 
   // Generic message with details

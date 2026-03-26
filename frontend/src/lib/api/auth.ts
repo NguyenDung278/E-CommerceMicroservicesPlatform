@@ -4,9 +4,11 @@
  * registration, login, password reset, and email verification.
  */
 
-import { request } from "../http/client";
+import { API_BASE_URL, request } from "../http/client";
 import type { ApiEnvelope, AuthPayload, UserProfile } from "../../types/api";
 import { normalizeUserProfile } from "../normalizers";
+
+export type OAuthProvider = "google";
 
 /**
  * Login credentials
@@ -35,6 +37,10 @@ export interface VerifyEmailData {
   token: string;
 }
 
+export interface RefreshTokenData {
+  refresh_token: string;
+}
+
 /**
  * Forgot password data
  */
@@ -58,6 +64,10 @@ export interface UpdateProfileData {
   last_name: string;
 }
 
+export interface OAuthExchangeData {
+  ticket: string;
+}
+
 /**
  * Auth API functions
  */
@@ -77,6 +87,20 @@ export const authApi = {
    */
   login(body: LoginCredentials): Promise<ApiEnvelope<AuthPayload>> {
     return request<AuthPayload>("/api/v1/auth/login", {
+      method: "POST",
+      body,
+    });
+  },
+
+  refreshToken(body: RefreshTokenData): Promise<ApiEnvelope<AuthPayload>> {
+    return request<AuthPayload>("/api/v1/auth/refresh", {
+      method: "POST",
+      body,
+    });
+  },
+
+  exchangeOAuthTicket(body: OAuthExchangeData): Promise<ApiEnvelope<AuthPayload>> {
+    return request<AuthPayload>("/api/v1/auth/oauth/exchange", {
       method: "POST",
       body,
     });
@@ -148,6 +172,33 @@ export const authApi = {
       token,
     });
   },
+
+  buildOAuthStartUrl(provider: OAuthProvider, redirectTo = "/profile"): string {
+    const path = `/api/v1/auth/oauth/${provider}/start?redirect_to=${encodeURIComponent(redirectTo)}`;
+    const baseUrl = resolveOAuthBaseUrl();
+
+    return `${baseUrl}${path}`;
+  },
 };
+
+function resolveOAuthBaseUrl(): string {
+  if (typeof window === "undefined") {
+    return API_BASE_URL || "http://localhost:8080";
+  }
+
+  if (API_BASE_URL) {
+    if (/^https?:\/\//i.test(API_BASE_URL)) {
+      return API_BASE_URL;
+    }
+
+    return `${window.location.origin}${API_BASE_URL}`;
+  }
+
+  if (window.location.port === "8080") {
+    return window.location.origin;
+  }
+
+  return `${window.location.protocol}//${window.location.hostname}:8080`;
+}
 
 export default authApi;

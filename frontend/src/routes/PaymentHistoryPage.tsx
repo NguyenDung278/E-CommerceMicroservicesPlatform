@@ -1,10 +1,18 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 import { useOrderPayments } from "../hooks/useOrderPayments";
 import type { Payment } from "../types/api";
+import { AccountPageFrame } from "../ui/account/AccountPageFrame";
+import {
+  buildTileLabel,
+  formatShortDate,
+  formatShortOrderId,
+  getPaymentStatusTone,
+  humanizeToken
+} from "../ui/account/accountConfig";
 import { formatCurrency, formatDateTime, formatStatusLabel } from "../utils/format";
-import "../ui/orders/OrderHistoryList.css";
 import "./PaymentHistoryPage.css";
 
 type PaymentEntry = {
@@ -12,35 +20,33 @@ type PaymentEntry = {
   orderCreatedAt: string;
 };
 
-function paymentBadgeClassName(status: string) {
-  const normalized = status.toLowerCase();
-
-  if (normalized.includes("refund")) {
-    return "status-pill status-pill-neutral";
-  }
-  if (normalized.includes("fail")) {
-    return "status-pill status-pill-danger";
-  }
-
-  return "status-pill status-pill-success";
-}
+type PaymentMethodHighlight = {
+  key: string;
+  title: string;
+  subtitle: string;
+  amount: number;
+  recordCount: number;
+};
 
 export function PaymentHistoryPage() {
   const { token } = useAuth();
   const { orders, paymentsByOrder, isLoading, error } = useOrderPayments(token);
 
-  const paymentEntries: PaymentEntry[] = orders
-    .flatMap((order) =>
-      (paymentsByOrder[order.id] ?? []).map((payment) => ({
-        payment,
-        orderCreatedAt: order.created_at
-      }))
-    )
-    .filter((entry): entry is PaymentEntry => entry !== null)
-    .sort(
-      (left, right) =>
-        new Date(right.payment.created_at).getTime() - new Date(left.payment.created_at).getTime()
-    );
+  const paymentEntries = useMemo(
+    () =>
+      orders
+        .flatMap((order) =>
+          (paymentsByOrder[order.id] ?? []).map((payment) => ({
+            payment,
+            orderCreatedAt: order.created_at
+          }))
+        )
+        .sort(
+          (left, right) =>
+            new Date(right.payment.created_at).getTime() - new Date(left.payment.created_at).getTime()
+        ),
+    [orders, paymentsByOrder]
+  );
 
   const totalPaid = paymentEntries.reduce((sum, entry) => {
     const direction = entry.payment.transaction_type === "refund" ? -1 : 1;
@@ -48,181 +54,190 @@ export function PaymentHistoryPage() {
   }, 0);
   const pendingCount = paymentEntries.filter((entry) => entry.payment.status.toLowerCase().includes("pending")).length;
   const failedCount = paymentEntries.filter((entry) => entry.payment.status.toLowerCase().includes("fail")).length;
-  const refundCount = paymentEntries.filter((entry) => entry.payment.transaction_type === "refund").length;
-  const paymentMetrics = [
-    {
-      label: "Recorded transactions",
-      value: `${paymentEntries.length}`,
-      description: "Toàn bộ giao dịch lấy từ payment records của các order đã có."
-    },
-    {
-      label: "Net amount",
-      value: formatCurrency(totalPaid),
-      description: "Đã trừ các khoản refund nếu có."
-    },
-    {
-      label: "Needs attention",
-      value: `${pendingCount + failedCount}`,
-      description: "Bao gồm giao dịch pending hoặc failed cần theo dõi."
-    }
-  ];
+  const paymentMethodHighlights = useMemo(
+    () => buildPaymentMethodHighlights(paymentEntries.map((entry) => entry.payment)),
+    [paymentEntries]
+  );
 
   return (
-    <div className="page-stack payments-page">
-      <section className="payments-hero">
-        <div className="payments-hero-panel">
-          <div className="payments-hero-copy">
-            <span className="eyebrow">Payment Ledger</span>
-            <h1>Lịch sử thanh toán với ledger rõ trạng thái, dễ audit và dễ demo.</h1>
+    <AccountPageFrame>
+      <div className="payments-route">
+        <section className="payments-route-hero">
+          <div className="payments-route-hero-copy">
+            <span className="payments-route-kicker">Secure Billing</span>
+            <h1>Payment Methods</h1>
             <p>
-              Màn này tổng hợp tất cả payment records theo order, giúp bạn nhìn nhanh khoản nào đã thanh toán, đang chờ
-              callback, thất bại hoặc bị hoàn tiền.
+              Securely manage your saved payment options and review your recent billing history within the ND Shop account
+              area.
             </p>
           </div>
 
-          <div className="payments-metric-grid">
-            {paymentMetrics.map((item) => (
-              <article className="summary-card payments-metric-card" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <p>{item.description}</p>
-              </article>
-            ))}
+          <div className="payments-route-metrics">
+            <article className="payments-route-metric">
+              <span>Recorded transactions</span>
+              <strong>{paymentEntries.length}</strong>
+              <p>Every payment record tied to the orders we can fetch.</p>
+            </article>
+            <article className="payments-route-metric">
+              <span>Net amount</span>
+              <strong>{formatCurrency(totalPaid)}</strong>
+              <p>Refunds are already deducted.</p>
+            </article>
+            <article className="payments-route-metric">
+              <span>Needs attention</span>
+              <strong>{pendingCount + failedCount}</strong>
+              <p>Pending or failed transactions worth checking.</p>
+            </article>
           </div>
-        </div>
-
-        <aside className="payments-side-panel">
-          <span className="section-kicker">Status Mix</span>
-          <h2>Snapshot giao dịch</h2>
-          <div className="payments-status-list">
-            <div className="payments-status-row">
-              <span>Pending</span>
-              <strong>{pendingCount}</strong>
-            </div>
-            <div className="payments-status-row">
-              <span>Failed</span>
-              <strong>{failedCount}</strong>
-            </div>
-            <div className="payments-status-row">
-              <span>Refunds</span>
-              <strong>{refundCount}</strong>
-            </div>
-          </div>
-
-          <div className="payments-side-links">
-            <Link className="text-link" to="/profile">
-              Quay lại hồ sơ
-            </Link>
-            <Link className="text-link" to="/products">
-              Tiếp tục mua sắm
-            </Link>
-          </div>
-        </aside>
-      </section>
-
-      <section className="content-section payments-workbench">
-        <div className="section-heading payments-workbench-head">
-          <div>
-            <span className="section-kicker">Transaction Feed</span>
-            <h2>Danh sách giao dịch gần nhất</h2>
-          </div>
-          <span className="payments-caption">
-            {paymentEntries[0]?.payment.created_at
-              ? `Mới nhất: ${formatDateTime(paymentEntries[0].payment.created_at)}`
-              : "Chưa có giao dịch nào"}
-          </span>
-        </div>
+        </section>
 
         {error ? <div className="feedback feedback-error">{error}</div> : null}
 
-        {isLoading ? (
-          <div className="page-state">Đang tải lịch sử thanh toán...</div>
-        ) : paymentEntries.length === 0 ? (
-          <div className="empty-card history-empty payments-empty-state">
-            <span className="section-kicker">No Transactions</span>
-            <h2>Bạn chưa có giao dịch nào</h2>
-            <p>Hãy hoàn tất một đơn hàng để giao dịch xuất hiện tại đây.</p>
-            <Link className="primary-link" to="/products">
-              Tiếp tục mua sắm
+        <section className="payments-route-overview">
+          <div className="payments-route-methods">
+            {paymentMethodHighlights.length === 0 ? (
+              <div className="payments-route-empty">
+                <h3>No payment methods recorded yet</h3>
+                <p>Once checkout succeeds, the payment methods you use most will be summarized here.</p>
+              </div>
+            ) : (
+              paymentMethodHighlights.map((item) => (
+                <article className="payments-route-card" key={item.key}>
+                  <div className="payments-route-card-head">
+                    <div className="payments-route-card-ident">
+                      <span className="payments-route-card-badge">{buildTileLabel(item.title)}</span>
+                      <div>
+                        <h3>{item.title}</h3>
+                        <p>{item.subtitle}</p>
+                      </div>
+                    </div>
+
+                    <span className="payments-route-card-chip">
+                      {item.recordCount} {item.recordCount === 1 ? "record" : "records"}
+                    </span>
+                  </div>
+
+                  <div className="payments-route-card-amount">
+                    <span>Processed amount</span>
+                    <strong>{formatCurrency(item.amount)}</strong>
+                  </div>
+                </article>
+              ))
+            )}
+
+            <Link className="payments-route-primary" to="/checkout">
+              Add Payment Method
             </Link>
           </div>
-        ) : (
-          <div className="payment-history-grid payments-ledger-grid">
-            {paymentEntries.map(({ payment, orderCreatedAt }) => (
-              <article className="history-card payments-ledger-card" key={payment.id}>
-                <div className="history-card-head payments-ledger-head">
-                  <div>
-                    <p className="history-kicker">Giao dịch</p>
-                    <h3>{payment.id}</h3>
-                  </div>
-                  <span className={paymentBadgeClassName(payment.status)}>
-                    {formatStatusLabel(payment.status)}
-                  </span>
-                </div>
 
-                <div className="payments-ledger-amount">
-                  <span>{payment.transaction_type === "refund" ? "Khoản hoàn tiền" : "Giá trị giao dịch"}</span>
-                  <strong>{formatCurrency(payment.amount)}</strong>
-                </div>
+          <div className="payments-route-rail">
+            <article className="payments-route-note">
+              <h3>Payment Security</h3>
+              <p>
+                Your payment data is encrypted and handled by gateway providers. We only surface the transaction trail and
+                verification state.
+              </p>
+            </article>
 
-                <div className="history-meta-grid payments-meta-grid">
-                  <div>
-                    <span>Ngày thanh toán</span>
-                    <strong>{formatDateTime(payment.created_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Phương thức</span>
-                    <strong>{payment.payment_method}</strong>
-                  </div>
-                  <div>
-                    <span>Gateway</span>
-                    <strong>{payment.gateway_provider}</strong>
-                  </div>
-                  <div>
-                    <span>Loại giao dịch</span>
-                    <strong>{formatStatusLabel(payment.transaction_type)}</strong>
-                  </div>
-                  <div>
-                    <span>Ngày đặt hàng</span>
-                    <strong>{formatDateTime(orderCreatedAt)}</strong>
-                  </div>
-                  <div>
-                    <span>Outstanding</span>
-                    <strong>
-                      {typeof payment.outstanding_amount === "number"
-                        ? formatCurrency(payment.outstanding_amount)
-                        : "N/A"}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="history-line">
-                  <span>Mã đơn hàng</span>
-                  <strong>{payment.order_id}</strong>
-                </div>
-
-                {payment.failure_reason ? (
-                  <div className="coupon-preview-card payments-note-card">
-                    <strong>Failure reason</strong>
-                    <span>{payment.failure_reason}</span>
-                  </div>
-                ) : null}
-
-                <div className="history-actions">
-                  <Link className="text-link" to={`/orders/${payment.order_id}`}>
-                    Xem đơn hàng
-                  </Link>
-                  {payment.checkout_url ? (
-                    <a className="text-link" href={payment.checkout_url} rel="noreferrer" target="_blank">
-                      Mở checkout URL
-                    </a>
-                  ) : null}
-                </div>
-              </article>
-            ))}
+            <article className="payments-route-note payments-route-note-accent">
+              <span className="payments-route-kicker">Latest update</span>
+              <strong>{paymentEntries[0] ? formatDateTime(paymentEntries[0].payment.created_at) : "No records yet"}</strong>
+            </article>
           </div>
-        )}
-      </section>
-    </div>
+        </section>
+
+        <section className="payments-route-history">
+          <div className="payments-route-history-head">
+            <div>
+              <h2>Billing History</h2>
+              <p>View your past transaction states and jump back into any related order.</p>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="page-state">Đang tải lịch sử thanh toán...</div>
+          ) : paymentEntries.length === 0 ? (
+            <div className="empty-card history-empty payments-route-empty">
+              <h3>Bạn chưa có giao dịch nào</h3>
+              <p>Hoàn tất một đơn hàng để payment records xuất hiện tại đây.</p>
+            </div>
+          ) : (
+            <div className="payments-route-table-shell">
+              <table className="payments-route-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Date</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Amount</th>
+                    <th aria-label="actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentEntries.map(({ payment, orderCreatedAt }) => (
+                    <tr key={payment.id}>
+                      <td>
+                        <div className="payments-route-order-cell">
+                          <strong>{formatShortOrderId(payment.order_id)}</strong>
+                          <span>Order from {formatShortDate(orderCreatedAt)}</span>
+                        </div>
+                      </td>
+                      <td>{formatShortDate(payment.created_at)}</td>
+                      <td>{`${humanizeToken(payment.gateway_provider)} · ${humanizeToken(payment.payment_method)}`}</td>
+                      <td>
+                        <span className={`payments-route-status payments-route-status-${getPaymentStatusTone(payment.status)}`}>
+                          {formatStatusLabel(payment.status)}
+                        </span>
+                      </td>
+                      <td>{formatCurrency(payment.amount)}</td>
+                      <td>
+                        <div className="payments-route-actions">
+                          <Link className="payments-route-link" to={`/orders/${payment.order_id}`}>
+                            View Order
+                          </Link>
+                          {payment.checkout_url ? (
+                            <a className="payments-route-link" href={payment.checkout_url} rel="noreferrer" target="_blank">
+                              Checkout URL
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    </AccountPageFrame>
   );
+}
+
+function buildPaymentMethodHighlights(payments: Payment[]) {
+  const methods = new Map<string, PaymentMethodHighlight>();
+
+  payments.forEach((payment) => {
+    const key = `${payment.gateway_provider}:${payment.payment_method}`;
+    const current = methods.get(key);
+
+    if (current) {
+      current.recordCount += 1;
+      current.amount += payment.amount;
+      return;
+    }
+
+    methods.set(key, {
+      key,
+      title: humanizeToken(payment.gateway_provider),
+      subtitle: humanizeToken(payment.payment_method),
+      amount: payment.amount,
+      recordCount: 1
+    });
+  });
+
+  return Array.from(methods.values())
+    .sort((left, right) => right.recordCount - left.recordCount || right.amount - left.amount)
+    .slice(0, 2);
 }

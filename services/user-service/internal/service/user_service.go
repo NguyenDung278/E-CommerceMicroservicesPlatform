@@ -19,12 +19,18 @@ import (
 
 // Common business errors.
 var (
-	ErrUserNotFound       = errors.New("user not found")
-	ErrEmailAlreadyExists = errors.New("email already exists")
-	ErrPhoneAlreadyExists = errors.New("phone already exists")
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-	ErrInvalidRole        = errors.New("invalid user role")
+	ErrUserNotFound               = errors.New("user not found")
+	ErrEmailAlreadyExists         = errors.New("email already exists")
+	ErrPhoneAlreadyExists         = errors.New("phone already exists")
+	ErrInvalidCredentials         = errors.New("invalid email or password")
+	ErrInvalidToken               = errors.New("invalid or expired token")
+	ErrInvalidRole                = errors.New("invalid user role")
+	ErrInvalidOAuthProvider       = errors.New("invalid oauth provider")
+	ErrOAuthProviderNotConfigured = errors.New("oauth provider not configured")
+	ErrInvalidOAuthState          = errors.New("invalid oauth state")
+	ErrOAuthEmailRequired         = errors.New("oauth email required")
+	ErrInvalidOAuthTicket         = errors.New("invalid oauth ticket")
+	ErrOAuthAccountConflict       = errors.New("oauth account conflict")
 )
 
 // UserService contains business logic for user operations.
@@ -32,9 +38,11 @@ var (
 // makes the code testable and prevents mixing HTTP concerns with domain logic.
 type UserService struct {
 	repo            repository.UserRepository
+	oauthRepo       repository.OAuthAccountRepository
 	jwtSecret       string
 	jwtExpiry       int // hours — for access tokens
 	emailSender     email.Sender
+	oauthClient     OAuthProviderClient
 	frontendBaseURL string
 }
 
@@ -43,6 +51,18 @@ type UserServiceOption func(*UserService)
 func WithEmailSender(sender email.Sender) UserServiceOption {
 	return func(s *UserService) {
 		s.emailSender = sender
+	}
+}
+
+func WithOAuthAccountRepository(repo repository.OAuthAccountRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.oauthRepo = repo
+	}
+}
+
+func WithOAuthProviderClient(client OAuthProviderClient) UserServiceOption {
+	return func(s *UserService) {
+		s.oauthClient = client
 	}
 }
 

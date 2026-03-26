@@ -221,6 +221,16 @@ services:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:4173}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-ND Shop}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
+      OAUTH_GOOGLE_REDIRECT_URL: ${OAUTH_GOOGLE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/oauth/google/callback}
     volumes:
       - ./config/user-service.yaml:/config/config.yaml
     networks:

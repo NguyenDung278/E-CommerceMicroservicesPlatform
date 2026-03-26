@@ -28,7 +28,7 @@ const loginVisualHighlights = [
 export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, login, error, clearError } = useAuth();
+  const { isAuthenticated, login, beginOAuthLogin, error, clearError } = useAuth();
   const [loginForm, setLoginForm] = useState<LoginFormValues>(() => {
     const remembered = readRememberedLogin();
 
@@ -141,6 +141,14 @@ export function LoginPage() {
     }
   }
 
+  function handleOAuthLogin(provider: "google") {
+    clearError();
+    beginOAuthLogin(provider, {
+      redirectTo,
+      remember: loginForm.rememberMe
+    });
+  }
+
   return (
     <div className="auth-page auth-page-login">
       <NotificationStack items={notifications} onDismiss={dismissNotification} />
@@ -249,13 +257,9 @@ export function LoginPage() {
             </div>
 
             <div className="auth-social-grid">
-              <button className="auth-social-button" type="button">
+              <button className="auth-social-button" type="button" onClick={() => handleOAuthLogin("google")}>
                 <span>G</span>
-                <span>Google</span>
-              </button>
-              <button className="auth-social-button" type="button">
-                <span>f</span>
-                <span>Facebook</span>
+                <span>Continue with Google</span>
               </button>
             </div>
 

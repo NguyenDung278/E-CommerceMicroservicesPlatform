@@ -98,11 +98,15 @@ func main() {
 
 	// 6. Dependency injection: repo → service → handler.
 	emailSender := email.NewSender(cfg.SMTP, log)
+	oauthRepo := repository.NewOAuthAccountRepository(db)
+	oauthClient := service.NewOAuthProviderClient(cfg.OAuth)
 	userService := service.NewUserService(
 		userRepo,
 		cfg.JWT.Secret,
 		cfg.JWT.Expiration,
 		service.WithEmailSender(emailSender),
+		service.WithOAuthAccountRepository(oauthRepo),
+		service.WithOAuthProviderClient(oauthClient),
 		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
 	)
 	userHandler := handler.NewUserHandler(userService)

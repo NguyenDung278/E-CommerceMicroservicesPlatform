@@ -24,6 +24,9 @@ Public:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
+- `GET /api/v1/auth/oauth/google/start`
+- `GET /api/v1/auth/oauth/google/callback`
+- `POST /api/v1/auth/oauth/exchange`
 
 Protected:
 
@@ -125,7 +128,30 @@ Hai tính năng quan trọng vừa được thêm vào:
 
 *Bài học về Token Hash*: Backend không bao giờ lưu raw token vào DB. Hàm `hashToken()` băm token bằng SHA256 để dù DB bị lộ, hacker cũng không thể dùng claim token đó để mạo danh reset password. Mọi Token thao tác đặc biệt (Reset/Verify) đều có cờ `ExpiresAt`.
 
-## 5.2 Quản lý địa chỉ giao hàng (Shipping Address)
+## 5.2 Luồng OAuth Google / Facebook
+
+`user-service` giờ chịu trách nhiệm luôn cho social login:
+
+1. `GET /auth/oauth/:provider/start`
+2. service tạo `state` đã ký và `nonce` cookie ngắn hạn
+3. redirect người dùng sang Google hoặc Facebook
+4. provider callback về `GET /auth/oauth/:provider/callback`
+5. service verify `state`, `nonce` và `code`
+6. gọi provider API để lấy profile chuẩn hóa về `OAuthIdentity`
+7. nếu đã có `user_oauth_accounts(provider, provider_user_id)` thì đăng nhập user cũ
+8. nếu chưa có nhưng email trùng user hiện hữu thì tự động link vào account đó
+9. nếu chưa có user nào thì tạo user mới với `email_verified=true`
+10. sinh `login_ticket` ngắn hạn rồi redirect người dùng về frontend `/auth/callback`
+11. frontend gọi `POST /auth/oauth/exchange` để đổi `login_ticket` thành token pair chuẩn của hệ thống
+
+Điểm thiết kế chính:
+
+- không đưa JWT thật lên URL,
+- không cần service OAuth riêng,
+- không đổi schema `users.password` thành nullable,
+- mapping social account được lưu tại bảng `user_oauth_accounts`.
+
+## 5.3 Quản lý địa chỉ giao hàng (Shipping Address)
 
 User có thể quản lý nhiều địa chỉ giao hàng (`Address` model). Điểm thú vị:
 - Giới hạn tối đa 10 địa chỉ/user để tránh lạm dụng DB.
@@ -147,6 +173,26 @@ Nơi nhận HTTP request, bind DTO, gọi service, mapping error thành HTTP sta
 - `UpdateProfile(...)`
 - `generateToken(...)`
 - `normalizeIdentifier(...)`
+
+### `internal/service/oauth_service.go`
+
+Nơi chứa business logic social login:
+
+- tạo state đã ký,
+- xác thực callback,
+- auto-link account theo email,
+- sinh `login_ticket`,
+- đổi ticket sang `access token + refresh token`.
+
+Đây là file đáng đọc nếu bạn muốn học cách thêm OAuth vào một auth service Go đang chạy ổn mà không tạo thêm microservice.
+
+### `internal/service/oauth_provider_client.go`
+
+Adapter HTTP tối giản cho Google OAuth 2.0 và Facebook Login API:
+
+- build authorization URL,
+- exchange authorization code,
+- lấy profile provider rồi normalize về cùng một shape.
 
 ### `internal/repository/user_repository.go`
 

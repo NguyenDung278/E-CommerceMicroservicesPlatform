@@ -35,6 +35,11 @@ func NewServiceProxy(baseURL string, log *zap.Logger) *ServiceProxy {
 		log:     log,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
+			// OAuth và các flow redirect cần được chuyển nguyên vẹn về client.
+			// Gateway không tự follow redirect của service phía sau.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 			Transport: appobs.WrapHTTPTransport(&http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 20,

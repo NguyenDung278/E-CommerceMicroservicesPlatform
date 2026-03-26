@@ -26,7 +26,7 @@ const defaultRegisterForm: RegisterFormValues = {
 export function RegisterPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, register, error, clearError } = useAuth();
+  const { isAuthenticated, register, beginOAuthLogin, error, clearError } = useAuth();
   const [form, setForm] = useState(defaultRegisterForm);
   const [touched, setTouched] = useState<TouchedFields<RegisterFormValues>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -125,6 +125,14 @@ export function RegisterPage() {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  function handleOAuthLogin(provider: "google") {
+    clearError();
+    beginOAuthLogin(provider, {
+      redirectTo,
+      remember: false
+    });
   }
 
   return (
@@ -255,6 +263,17 @@ export function RegisterPage() {
               <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
                 {isBusy ? "Đang tạo tài khoản..." : "Register"}
               </button>
+
+              <div className="auth-login-separator">
+                <span>Or continue with</span>
+              </div>
+
+              <div className="auth-social-grid">
+                <button className="auth-social-button" type="button" onClick={() => handleOAuthLogin("google")}>
+                  <span>G</span>
+                  <span>Continue with Google</span>
+                </button>
+              </div>
 
               <div className="auth-register-footer">
                 <p>

@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 type fakeUserRepo struct {
@@ -21,6 +23,16 @@ type fakeEmailSender struct {
 	err error
 }
 
+type fakeOAuthAccountRepo struct {
+	accountsByProvider map[string]*model.OAuthAccount
+	accountsByUser     map[string]*model.OAuthAccount
+}
+
+type fakeOAuthProviderClient struct {
+	redirects  map[string]string
+	identities map[string]*OAuthIdentity
+}
+
 func (s *fakeEmailSender) Send(_ email.Message) error {
 	return s.err
 }
@@ -30,6 +42,13 @@ func newFakeUserRepo() *fakeUserRepo {
 		usersByEmail: map[string]*model.User{},
 		usersByPhone: map[string]*model.User{},
 		usersByID:    map[string]*model.User{},
+	}
+}
+
+func newFakeOAuthAccountRepo() *fakeOAuthAccountRepo {
+	return &fakeOAuthAccountRepo{
+		accountsByProvider: map[string]*model.OAuthAccount{},
+		accountsByUser:     map[string]*model.OAuthAccount{},
 	}
 }
 
@@ -87,6 +106,57 @@ func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
 	}
 	r.usersByID[user.ID] = user
 	return nil
+}
+
+func (r *fakeOAuthAccountRepo) Create(_ context.Context, account *model.OAuthAccount) error {
+	providerKey := account.Provider + ":" + account.ProviderUserID
+	if _, exists := r.accountsByProvider[providerKey]; exists {
+		return repository.ErrOAuthAccountAlreadyExists
+	}
+
+	userKey := account.UserID + ":" + account.Provider
+	if _, exists := r.accountsByUser[userKey]; exists {
+		return repository.ErrOAuthAccountAlreadyExists
+	}
+
+	r.accountsByProvider[providerKey] = account
+	r.accountsByUser[userKey] = account
+	return nil
+}
+
+func (r *fakeOAuthAccountRepo) GetByProviderUserID(_ context.Context, provider, providerUserID string) (*model.OAuthAccount, error) {
+	return r.accountsByProvider[provider+":"+providerUserID], nil
+}
+
+func (r *fakeOAuthAccountRepo) GetByUserIDAndProvider(_ context.Context, userID, provider string) (*model.OAuthAccount, error) {
+	return r.accountsByUser[userID+":"+provider], nil
+}
+
+func (c *fakeOAuthProviderClient) AuthorizationURL(provider, state, _ string) (string, error) {
+	baseURL, ok := c.redirects[provider]
+	if !ok {
+		return "", ErrOAuthProviderNotConfigured
+	}
+
+	return baseURL + "?state=" + url.QueryEscape(state), nil
+}
+
+func (c *fakeOAuthProviderClient) ExchangeCode(_ context.Context, provider, _ string, _ string) (*OAuthIdentity, error) {
+	identity, ok := c.identities[provider]
+	if !ok {
+		return nil, ErrOAuthProviderNotConfigured
+	}
+
+	return identity, nil
+}
+
+func (c *fakeOAuthProviderClient) DefaultRedirectURL(provider string) (string, error) {
+	redirectURL, ok := c.redirects[provider]
+	if !ok {
+		return "", ErrOAuthProviderNotConfigured
+	}
+
+	return redirectURL, nil
 }
 
 const testSecret = "super-secret-test-key-1234567890"
@@ -440,5 +510,192 @@ func TestUpdateUserRoleSupportsStaff(t *testing.T) {
 	}
 	if updated.Role != "staff" {
 		t.Fatalf("expected role staff, got %q", updated.Role)
+	}
+}
+
+func TestCompleteOAuthCallbackCreatesNewUserAndExchangeTicket(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-1",
+				Email:          "social@example.com",
+				FirstName:      "Social",
+				LastName:       "Login",
+				FullName:       "Social Login",
+				EmailVerified:  true,
+			},
+		},
+	}
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/checkout", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+
+	authURL, err := url.Parse(startResult.AuthorizationURL)
+	if err != nil {
+		t.Fatalf("failed to parse auth URL: %v", err)
+	}
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, err := url.Parse(redirectURL)
+	if err != nil {
+		t.Fatalf("failed to parse callback URL: %v", err)
+	}
+	params := url.Values{}
+	if callbackURL.Fragment != "" {
+		params, _ = url.ParseQuery(callbackURL.Fragment)
+	}
+
+	authResp, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket"))
+	if err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	if authResp.User.(*model.User).Email != "social@example.com" {
+		t.Fatalf("expected social user email to be returned, got %#v", authResp.User)
+	}
+	if params.Get("next") != "/checkout" {
+		t.Fatalf("expected next path /checkout, got %q", params.Get("next"))
+	}
+	if oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-1"] == nil {
+		t.Fatal("expected oauth account link to be stored")
+	}
+}
+
+func TestCompleteOAuthCallbackAutoLinksExistingEmail(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-2",
+				Email:          "alice@example.com",
+				FirstName:      "Alice",
+				LastName:       "Nguyen",
+				FullName:       "Alice Nguyen",
+				EmailVerified:  true,
+			},
+		},
+	}
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	if _, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "alice@example.com",
+		Password:  "password123",
+		FirstName: "Alice",
+		LastName:  "Nguyen",
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	existingUser := repo.usersByEmail["alice@example.com"]
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+	authURL, _ := url.Parse(startResult.AuthorizationURL)
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, _ := url.Parse(redirectURL)
+	params, _ := url.ParseQuery(callbackURL.Fragment)
+	authResp, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket"))
+	if err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	linkedUser := authResp.User.(*model.User)
+	if linkedUser.ID != existingUser.ID {
+		t.Fatalf("expected oauth login to reuse existing user %q, got %q", existingUser.ID, linkedUser.ID)
+	}
+}
+
+func TestCompleteOAuthCallbackRejectsMissingEmail(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-1",
+				FullName:       "Nameless Social",
+			},
+		},
+	}
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+	authURL, _ := url.Parse(startResult.AuthorizationURL)
+
+	_, err = svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if !errors.Is(err, ErrOAuthEmailRequired) {
+		t.Fatalf("expected ErrOAuthEmailRequired, got %v", err)
 	}
 }

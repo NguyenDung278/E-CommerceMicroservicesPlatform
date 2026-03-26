@@ -95,6 +95,20 @@ Các handler này gần như chỉ:
 
 Đây là một bài học kiến trúc quan trọng: không nhét domain logic vào gateway.
 
+## 5.1 OAuth route mới đi qua gateway như thế nào?
+
+Gateway vẫn giữ đúng vai trò "mỏng" cho social login:
+
+- frontend redirect người dùng tới `/api/v1/auth/oauth/:provider/start`,
+- gateway forward nguyên request sang `user-service`,
+- `user-service` tạo `state` đã ký, set `nonce` cookie rồi redirect sang Google,
+- provider callback quay về gateway tại `/api/v1/auth/oauth/:provider/callback`,
+- gateway forward callback đó về `user-service`,
+- `user-service` đổi `code` thành `login_ticket` ngắn hạn rồi redirect người dùng về frontend `/auth/callback`,
+- frontend gọi `POST /api/v1/auth/oauth/exchange` qua gateway để đổi `login_ticket` sang `access token + refresh token`.
+
+Điểm quan trọng là gateway không tự xử lý business logic OAuth, không giữ provider secret, và cũng không tự ký JWT cho client. Nó chỉ làm đúng phần forward route và response.
+
 ## 6. Middleware đáng chú ý
 
 Gateway dùng shared middleware trong `pkg/middleware`:
