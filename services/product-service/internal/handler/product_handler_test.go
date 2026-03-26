@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"sort"
 	"testing"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 
 type fakeProductRepo struct {
 	created []*model.Product
+	reviews map[string]*model.ProductReview
 }
 
 type fakeMediaStore struct{}
@@ -58,6 +61,113 @@ func (r *fakeProductRepo) UpdateStock(_ context.Context, id string, quantity int
 func (r *fakeProductRepo) RestoreStock(_ context.Context, id string, quantity int) error { return nil }
 func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
 	return []*model.Product{}, nil
+}
+
+func (r *fakeProductRepo) CreateReview(_ context.Context, review *model.ProductReview) error {
+	if r.reviews == nil {
+		r.reviews = make(map[string]*model.ProductReview)
+	}
+	key := fakeReviewKey(review.ProductID, review.UserID)
+	if _, exists := r.reviews[key]; exists {
+		return fmt.Errorf("duplicate product review")
+	}
+	copyReview := *review
+	r.reviews[key] = &copyReview
+	return nil
+}
+
+func (r *fakeProductRepo) GetReviewByProductAndUser(_ context.Context, productID, userID string) (*model.ProductReview, error) {
+	if r.reviews == nil {
+		return nil, nil
+	}
+	review, ok := r.reviews[fakeReviewKey(productID, userID)]
+	if !ok {
+		return nil, nil
+	}
+	copyReview := *review
+	return &copyReview, nil
+}
+
+func (r *fakeProductRepo) UpdateReview(_ context.Context, review *model.ProductReview) error {
+	if r.reviews == nil {
+		r.reviews = make(map[string]*model.ProductReview)
+	}
+	key := fakeReviewKey(review.ProductID, review.UserID)
+	copyReview := *review
+	r.reviews[key] = &copyReview
+	return nil
+}
+
+func (r *fakeProductRepo) DeleteReviewByProductAndUser(_ context.Context, productID, userID string) (bool, error) {
+	if r.reviews == nil {
+		return false, nil
+	}
+	key := fakeReviewKey(productID, userID)
+	if _, exists := r.reviews[key]; !exists {
+		return false, nil
+	}
+	delete(r.reviews, key)
+	return true, nil
+}
+
+func (r *fakeProductRepo) ListReviewsByProduct(_ context.Context, productID string, offset, limit int) ([]*model.ProductReview, int64, error) {
+	reviews := make([]*model.ProductReview, 0)
+	for _, review := range r.reviews {
+		if review.ProductID != productID {
+			continue
+		}
+		copyReview := *review
+		reviews = append(reviews, &copyReview)
+	}
+
+	sort.Slice(reviews, func(left, right int) bool {
+		if reviews[left].CreatedAt.Equal(reviews[right].CreatedAt) {
+			return reviews[left].ID > reviews[right].ID
+		}
+		return reviews[left].CreatedAt.After(reviews[right].CreatedAt)
+	})
+
+	total := int64(len(reviews))
+	if offset >= len(reviews) {
+		return []*model.ProductReview{}, total, nil
+	}
+
+	end := offset + limit
+	if end > len(reviews) {
+		end = len(reviews)
+	}
+
+	return reviews[offset:end], total, nil
+}
+
+func (r *fakeProductRepo) GetReviewSummary(_ context.Context, productID string) (*model.ProductReviewSummary, error) {
+	summary := &model.ProductReviewSummary{}
+	for _, review := range r.reviews {
+		if review.ProductID != productID {
+			continue
+		}
+		summary.ReviewCount++
+		summary.AverageRating += float64(review.Rating)
+
+		switch review.Rating {
+		case 1:
+			summary.RatingBreakdown.One++
+		case 2:
+			summary.RatingBreakdown.Two++
+		case 3:
+			summary.RatingBreakdown.Three++
+		case 4:
+			summary.RatingBreakdown.Four++
+		case 5:
+			summary.RatingBreakdown.Five++
+		}
+	}
+
+	if summary.ReviewCount > 0 {
+		summary.AverageRating = summary.AverageRating / float64(summary.ReviewCount)
+	}
+
+	return summary, nil
 }
 
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
@@ -193,11 +303,15 @@ func TestUploadAllowsStaffRole(t *testing.T) {
 }
 
 func signedToken(t *testing.T, secret string, role string) string {
+	return signedTokenForUser(t, secret, "user-1", "test@example.com", role)
+}
+
+func signedTokenForUser(t *testing.T, secret, userID, email, role string) string {
 	t.Helper()
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, appmw.JWTClaims{
-		UserID: "user-1",
-		Email:  "test@example.com",
+		UserID: userID,
+		Email:  email,
 		Role:   role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
@@ -211,4 +325,8 @@ func signedToken(t *testing.T, secret string, role string) string {
 	}
 
 	return signed
+}
+
+func fakeReviewKey(productID, userID string) string {
+	return productID + "::" + userID
 }

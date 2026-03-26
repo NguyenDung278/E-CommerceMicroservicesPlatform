@@ -9,12 +9,16 @@ import type {
   ApiEnvelope,
   Product,
   ProductPopularity,
+  ProductReview,
+  ProductReviewList,
   UploadedProductImages,
 } from "../../types/api";
 import {
   normalizeProduct,
   normalizeProductList,
   normalizeProductPopularity,
+  normalizeProductReview,
+  normalizeProductReviewList,
 } from "../normalizers";
 
 /**
@@ -32,6 +36,16 @@ export interface ProductListOptions {
   color?: string;
   sort?: "latest" | "price_asc" | "price_desc" | "popular";
   limit?: number;
+}
+
+export interface ProductReviewListOptions {
+  page?: number;
+  limit?: number;
+}
+
+export interface ProductReviewData {
+  rating: number;
+  comment?: string;
 }
 
 /**
@@ -142,6 +156,74 @@ export const productApi = {
         };
       }
     );
+  },
+
+  listProductReviews(
+    productId: string,
+    options: ProductReviewListOptions = {}
+  ): Promise<ApiEnvelope<ProductReviewList>> {
+    const params = new URLSearchParams();
+    params.set("page", String(options.page ?? 1));
+    params.set("limit", String(options.limit ?? 10));
+
+    return request<unknown>(
+      `/api/v1/products/${encodeURIComponent(productId)}/reviews?${params.toString()}`
+    ).then((response) => ({
+      ...response,
+      data: normalizeProductReviewList(response.data),
+    }));
+  },
+
+  getMyProductReview(
+    token: string,
+    productId: string
+  ): Promise<ApiEnvelope<ProductReview>> {
+    return request<unknown>(`/api/v1/products/${encodeURIComponent(productId)}/reviews/me`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProductReview(response.data),
+    }));
+  },
+
+  createProductReview(
+    token: string,
+    productId: string,
+    body: ProductReviewData
+  ): Promise<ApiEnvelope<ProductReview>> {
+    return request<unknown>(`/api/v1/products/${encodeURIComponent(productId)}/reviews`, {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProductReview(response.data),
+    }));
+  },
+
+  updateMyProductReview(
+    token: string,
+    productId: string,
+    body: ProductReviewData
+  ): Promise<ApiEnvelope<ProductReview>> {
+    return request<unknown>(`/api/v1/products/${encodeURIComponent(productId)}/reviews/me`, {
+      method: "PUT",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProductReview(response.data),
+    }));
+  },
+
+  deleteMyProductReview(
+    token: string,
+    productId: string
+  ): Promise<ApiEnvelope<null>> {
+    return request<null>(`/api/v1/products/${encodeURIComponent(productId)}/reviews/me`, {
+      method: "DELETE",
+      token,
+    });
   },
 
   /**

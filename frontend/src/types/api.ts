@@ -56,6 +56,36 @@ export type ProductVariant = {
   stock: number;
 };
 
+export type ProductRatingBreakdown = {
+  one: number;
+  two: number;
+  three: number;
+  four: number;
+  five: number;
+};
+
+export type ProductReviewSummary = {
+  average_rating: number;
+  review_count: number;
+  rating_breakdown: ProductRatingBreakdown;
+};
+
+export type ProductReview = {
+  id: string;
+  product_id: string;
+  user_id: string;
+  author_label: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProductReviewList = {
+  summary: ProductReviewSummary;
+  items: ProductReview[];
+};
+
 export type CartItem = {
   product_id: string;
   name: string;

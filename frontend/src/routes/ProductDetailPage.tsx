@@ -1,17 +1,53 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import { useAuth } from "../hooks/useAuth";
 import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage } from "../lib/api";
-import type { Product, ProductVariant } from "../types/api";
+import { api, getErrorMessage, isHttpError } from "../lib/api";
+import type {
+  Product,
+  ProductReview,
+  ProductReviewList,
+  ProductReviewSummary,
+  ProductVariant
+} from "../types/api";
 import { formatCurrency } from "../utils/format";
 import "../ui/form/FormField.css";
 import "../ui/product/ProductCard.css";
 import "./ProductDetailPage.css";
 
+type ReviewFormState = {
+  rating: number;
+  comment: string;
+};
+
+const emptyReviewSummary: ProductReviewSummary = {
+  average_rating: 0,
+  review_count: 0,
+  rating_breakdown: {
+    one: 0,
+    two: 0,
+    three: 0,
+    four: 0,
+    five: 0
+  }
+};
+
+const emptyReviewList: ProductReviewList = {
+  summary: emptyReviewSummary,
+  items: []
+};
+
+const defaultReviewForm: ReviewFormState = {
+  rating: 0,
+  comment: ""
+};
+
 export function ProductDetailPage() {
   const { productId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { token, isAuthenticated } = useAuth();
   const { addItem } = useCart();
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -21,37 +57,93 @@ export function ProductDetailPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [activeImage, setActiveImage] = useState("");
   const [selectedVariantSku, setSelectedVariantSku] = useState("");
+  const [reviewList, setReviewList] = useState<ProductReviewList>(emptyReviewList);
+  const [myReview, setMyReview] = useState<ProductReview | null>(null);
+  const [reviewForm, setReviewForm] = useState<ReviewFormState>(defaultReviewForm);
+  const [reviewFeedback, setReviewFeedback] = useState("");
+  const [reviewBusyAction, setReviewBusyAction] = useState<"" | "submit" | "delete">("");
+  const [isReviewLoading, setIsReviewLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
 
-    void api
-      .getProductById(productId)
-      .then((response) => {
-        if (active) {
-          setProduct(response.data);
+    setFeedback("");
+    setReviewFeedback("");
+    setReviewList(emptyReviewList);
+    setMyReview(null);
+    setReviewForm(defaultReviewForm);
+    setIsReviewLoading(true);
+
+    const productRequest = api.getProductById(productId);
+    const reviewListRequest = api.listProductReviews(productId, { page: 1, limit: 6 });
+    const myReviewRequest =
+      isAuthenticated && token
+        ? api
+            .getMyProductReview(token, productId)
+            .then((response) => response.data)
+            .catch((reason) => {
+              if (isHttpError(reason) && reason.status === 404) {
+                return null;
+              }
+
+              throw reason;
+            })
+        : Promise.resolve(null);
+
+    void Promise.allSettled([productRequest, reviewListRequest, myReviewRequest]).then(
+      ([productResult, reviewListResult, myReviewResult]) => {
+        if (!active) {
+          return;
+        }
+
+        if (productResult.status === "fulfilled") {
+          const nextProduct = productResult.value.data;
+          setProduct(nextProduct);
+
           const images =
-            response.data.image_urls.length > 0
-              ? response.data.image_urls
-              : response.data.image_url
-                ? [response.data.image_url]
+            nextProduct.image_urls.length > 0
+              ? nextProduct.image_urls
+              : nextProduct.image_url
+                ? [nextProduct.image_url]
                 : [];
           setActiveImage(images[0] ?? "");
-          const defaultVariant = response.data.variants.find((variant) => variant.stock > 0) ?? response.data.variants[0];
+
+          const defaultVariant = nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
           setSelectedVariantSku(defaultVariant?.sku ?? "");
           setQuantity(1);
+        } else {
+          setProduct(null);
+          setFeedback(getErrorMessage(productResult.reason));
         }
-      })
-      .catch((reason) => {
-        if (active) {
-          setFeedback(getErrorMessage(reason));
+
+        if (reviewListResult.status === "fulfilled") {
+          setReviewList(reviewListResult.value.data);
+        } else {
+          setReviewFeedback(getErrorMessage(reviewListResult.reason));
         }
-      });
+
+        if (myReviewResult.status === "fulfilled") {
+          setMyReview(myReviewResult.value);
+          setReviewForm(
+            myReviewResult.value
+              ? {
+                  rating: myReviewResult.value.rating,
+                  comment: myReviewResult.value.comment
+                }
+              : defaultReviewForm
+          );
+        } else {
+          setReviewFeedback(getErrorMessage(myReviewResult.reason));
+        }
+
+        setIsReviewLoading(false);
+      }
+    );
 
     return () => {
       active = false;
     };
-  }, [productId]);
+  }, [isAuthenticated, productId, token]);
 
   useEffect(() => {
     let active = true;
@@ -129,6 +221,129 @@ export function ProductDetailPage() {
     }
   }
 
+  async function refreshReviews(nextMessage = "") {
+    setIsReviewLoading(true);
+
+    try {
+      const [reviewResponse, nextMyReview] = await Promise.all([
+        api.listProductReviews(productId, { page: 1, limit: 6 }),
+        isAuthenticated && token
+          ? api
+              .getMyProductReview(token, productId)
+              .then((response) => response.data)
+              .catch((reason) => {
+                if (isHttpError(reason) && reason.status === 404) {
+                  return null;
+                }
+
+                throw reason;
+              })
+          : Promise.resolve(null)
+      ]);
+
+      setReviewList(reviewResponse.data);
+      setMyReview(nextMyReview);
+      setReviewForm(
+        nextMyReview
+          ? {
+              rating: nextMyReview.rating,
+              comment: nextMyReview.comment
+            }
+          : defaultReviewForm
+      );
+      setReviewFeedback(nextMessage);
+    } catch (reason) {
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setIsReviewLoading(false);
+    }
+  }
+
+  function handleReviewCallToAction() {
+    if (!isAuthenticated) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    document.getElementById("detail-review-form")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
+  async function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!product) {
+      return;
+    }
+
+    if (!isAuthenticated || !token) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
+      setReviewFeedback("Hãy chọn số sao từ 1 đến 5 trước khi gửi đánh giá.");
+      return;
+    }
+
+    if (reviewForm.comment.trim().length > 2000) {
+      setReviewFeedback("Nhận xét tối đa 2000 ký tự.");
+      return;
+    }
+
+    try {
+      setReviewBusyAction("submit");
+      setReviewFeedback("");
+
+      if (myReview) {
+        await api.updateMyProductReview(token, product.id, {
+          rating: reviewForm.rating,
+          comment: reviewForm.comment.trim()
+        });
+        await refreshReviews("Đánh giá của bạn đã được cập nhật.");
+      } else {
+        await api.createProductReview(token, product.id, {
+          rating: reviewForm.rating,
+          comment: reviewForm.comment.trim()
+        });
+        await refreshReviews("Cảm ơn bạn đã gửi đánh giá.");
+      }
+    } catch (reason) {
+      if (isHttpError(reason) && reason.status === 401) {
+        navigate("/login", { state: { from: location } });
+        return;
+      }
+
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setReviewBusyAction("");
+    }
+  }
+
+  async function handleDeleteReview() {
+    if (!product || !token || !myReview) {
+      return;
+    }
+
+    try {
+      setReviewBusyAction("delete");
+      setReviewFeedback("");
+      await api.deleteMyProductReview(token, product.id);
+      await refreshReviews("Đánh giá của bạn đã được xóa.");
+    } catch (reason) {
+      if (isHttpError(reason) && reason.status === 401) {
+        navigate("/login", { state: { from: location } });
+        return;
+      }
+
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setReviewBusyAction("");
+    }
+  }
+
   const productImages =
     product?.image_urls.length ? product.image_urls : product?.image_url ? [product.image_url] : [];
   const normalizedCategory = (product?.category ?? "").trim().toLowerCase();
@@ -180,25 +395,27 @@ export function ProductDetailPage() {
       description: "Từ trang này có thể thêm giỏ hoặc đi thẳng sang checkout với quantity hiện tại."
     }
   ];
-  const reviewCards = [
-    {
-      quote: "The patina after three months of wear is incredible. These feel precise, quiet, and built to last.",
-      author: "Elias M.",
-      role: "Verified Architect"
-    },
-    {
-      quote: "Surprisingly lightweight for such robust construction. Fits true to size after a short break-in period.",
-      author: "Sarah J.",
-      role: "Verified Artisan"
-    },
-    {
-      quote: "The attention to detail on the stitching is better than bespoke options I've seen in Milan.",
-      author: "Robert K.",
-      role: "Verified Director"
-    }
-  ];
   const alphaScale = ["XS", "S", "M", "L", "XL"];
   const sizeOptions = product ? buildSizeOptions(product.variants, { isApparel, isFootwear, alphaScale }) : [];
+  const averageRatingLabel =
+    reviewList.summary.review_count > 0 ? reviewList.summary.average_rating.toFixed(1) : "0.0";
+  const reviewSummaryStars = renderStars(Math.round(reviewList.summary.average_rating || 0));
+  const reviewBreakdown = [
+    { label: "5 sao", count: reviewList.summary.rating_breakdown.five },
+    { label: "4 sao", count: reviewList.summary.rating_breakdown.four },
+    { label: "3 sao", count: reviewList.summary.rating_breakdown.three },
+    { label: "2 sao", count: reviewList.summary.rating_breakdown.two },
+    { label: "1 sao", count: reviewList.summary.rating_breakdown.one }
+  ];
+  const hasExistingReview = Boolean(myReview);
+  const reviewSubmitLabel =
+    reviewBusyAction === "submit"
+      ? hasExistingReview
+        ? "Đang cập nhật..."
+        : "Đang gửi..."
+      : hasExistingReview
+        ? "Cập nhật đánh giá"
+        : "Gửi đánh giá";
 
   useEffect(() => {
     if (activeStock > 0 && quantity > activeStock) {
@@ -431,25 +648,148 @@ export function ProductDetailPage() {
               <div className="detail-review-head">
                 <div>
                   <h2>The Wearer's Voice</h2>
-                  <p className="detail-review-summary">★★★★★ 4.8 based on 128 reviews</p>
+                  <p className="detail-review-summary">
+                    {reviewSummaryStars} {averageRatingLabel} dựa trên {reviewList.summary.review_count} đánh giá
+                  </p>
                 </div>
-                <button className="detail-review-link" type="button">
-                  Write a Review
+                <button className="detail-review-link" type="button" onClick={handleReviewCallToAction}>
+                  {isAuthenticated ? "Viết / sửa đánh giá" : "Đăng nhập để đánh giá"}
                 </button>
               </div>
 
-              <div className="detail-review-grid">
-                {reviewCards.map((review) => (
-                  <article className="detail-review-card" key={review.author}>
-                    <span className="detail-review-stars">★★★★★</span>
-                    <p>{review.quote}</p>
-                    <div className="detail-review-author">
-                      <strong>{review.author}</strong>
-                      <span>{review.role}</span>
+              <div className="detail-review-shell">
+                <div className="detail-review-summary-panel">
+                  <div className="detail-review-average">
+                    <strong>{averageRatingLabel}</strong>
+                    <span>{reviewSummaryStars}</span>
+                    <p>{reviewList.summary.review_count} đánh giá công khai cho sản phẩm này.</p>
+                  </div>
+
+                  <div className="detail-review-breakdown">
+                    {reviewBreakdown.map((row) => {
+                      const width =
+                        reviewList.summary.review_count > 0
+                          ? `${(row.count / reviewList.summary.review_count) * 100}%`
+                          : "0%";
+
+                      return (
+                        <div className="detail-review-breakdown-row" key={row.label}>
+                          <span className="detail-review-breakdown-label">{row.label}</span>
+                          <div className="detail-review-breakdown-track" aria-hidden="true">
+                            <span className="detail-review-breakdown-fill" style={{ width }} />
+                          </div>
+                          <strong className="detail-review-breakdown-count">{row.count}</strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="detail-review-form-panel" id="detail-review-form">
+                  {isAuthenticated ? (
+                    <form className="detail-review-form" onSubmit={handleReviewSubmit}>
+                      <div className="detail-review-form-head">
+                        <strong>{hasExistingReview ? "Đánh giá của bạn" : "Chia sẻ cảm nhận"}</strong>
+                        <span>
+                          {hasExistingReview
+                            ? "Bạn có thể chỉnh sửa số sao hoặc nội dung nhận xét bất kỳ lúc nào."
+                            : "Chọn số sao và để lại nhận xét ngắn gọn cho sản phẩm này."}
+                        </span>
+                      </div>
+
+                      <div className="detail-review-star-row" role="radiogroup" aria-label="Chọn số sao">
+                        {[1, 2, 3, 4, 5].map((rating) => (
+                          <button
+                            key={rating}
+                            type="button"
+                            className={
+                              rating <= reviewForm.rating
+                                ? "detail-review-star-button detail-review-star-button-active"
+                                : "detail-review-star-button"
+                            }
+                            aria-pressed={rating === reviewForm.rating}
+                            onClick={() => setReviewForm((current) => ({ ...current, rating }))}
+                          >
+                            <span aria-hidden="true">★</span>
+                            <span>{rating}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <label className="field" htmlFor="detail-review-comment">
+                        <span className="field-label">Nhận xét</span>
+                        <textarea
+                          id="detail-review-comment"
+                          className="detail-review-textarea"
+                          maxLength={2000}
+                          placeholder="Sản phẩm có đúng kỳ vọng không? Chất liệu, kích cỡ, độ hoàn thiện ra sao?"
+                          value={reviewForm.comment}
+                          onChange={(event) =>
+                            setReviewForm((current) => ({
+                              ...current,
+                              comment: event.target.value
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <div className="detail-review-form-actions">
+                        <button className="primary-button" disabled={reviewBusyAction !== ""} type="submit">
+                          {reviewSubmitLabel}
+                        </button>
+                        {hasExistingReview ? (
+                          <button
+                            className="ghost-button"
+                            disabled={reviewBusyAction !== ""}
+                            type="button"
+                            onClick={() => void handleDeleteReview()}
+                          >
+                            {reviewBusyAction === "delete" ? "Đang xóa..." : "Xóa đánh giá"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="detail-review-login-card">
+                      <strong>Đăng nhập để đánh giá sản phẩm</strong>
+                      <p>
+                        Review chỉ dành cho người dùng đã đăng nhập. Sau khi đăng nhập, bạn sẽ được quay lại đúng trang
+                        hiện tại để tiếp tục viết đánh giá.
+                      </p>
+                      <button className="primary-button" type="button" onClick={handleReviewCallToAction}>
+                        Đi tới đăng nhập
+                      </button>
                     </div>
-                  </article>
-                ))}
+                  )}
+                </div>
               </div>
+
+              {reviewFeedback ? <div className="feedback feedback-info detail-review-feedback">{reviewFeedback}</div> : null}
+
+              {isReviewLoading ? (
+                <div className="page-state">Đang tải đánh giá sản phẩm...</div>
+              ) : reviewList.items.length > 0 ? (
+                <div className="detail-review-grid">
+                  {reviewList.items.map((review) => (
+                    <article className="detail-review-card" key={review.id}>
+                      <div className="detail-review-card-head">
+                        <span className="detail-review-stars">{renderStars(review.rating)}</span>
+                        <span className="detail-review-date">{formatReviewDate(review.updated_at || review.created_at)}</span>
+                      </div>
+                      <p>{review.comment || "Người dùng này đã chấm sao nhưng chưa để lại nhận xét chi tiết."}</p>
+                      <div className="detail-review-author">
+                        <strong>{review.author_label}</strong>
+                        <span>{myReview?.id === review.id ? "Đánh giá của bạn" : "Người mua đã đăng nhập"}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="detail-review-empty">
+                  <strong>Chưa có đánh giá nào cho sản phẩm này.</strong>
+                  <span>Hãy trở thành người đầu tiên chia sẻ cảm nhận của bạn.</span>
+                </div>
+              )}
             </section>
 
             <section className="detail-look-section">
@@ -480,6 +820,28 @@ export function ProductDetailPage() {
       </section>
     </div>
   );
+}
+
+function renderStars(rating: number) {
+  const clamped = Math.max(0, Math.min(5, rating));
+  return `${"★".repeat(clamped)}${"☆".repeat(5 - clamped)}`;
+}
+
+function formatReviewDate(value: string) {
+  if (!value) {
+    return "Vừa xong";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Vừa xong";
+  }
+
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
 }
 
 function buildSizeOptions(

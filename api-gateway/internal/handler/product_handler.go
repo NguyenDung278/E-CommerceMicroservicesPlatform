@@ -25,6 +25,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public := e.Group("/api/v1/products")
 	public.GET("", h.forwardRequest)
 	public.GET("/:id", h.forwardRequest)
+	public.GET("/:id/reviews", h.forwardRequest)
 
 	protected := e.Group("/api/v1/products")
 	protected.Use(appmw.JWTAuth(jwtSecret))
@@ -33,6 +34,13 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	protected.POST("/uploads", h.forwardRequest)
 	protected.PUT("/:id", h.forwardRequest)
 	protected.DELETE("/:id", h.forwardRequest)
+
+	reviews := e.Group("/api/v1/products/:id/reviews")
+	reviews.Use(appmw.JWTAuth(jwtSecret))
+	reviews.GET("/me", h.forwardRequest)
+	reviews.POST("", h.forwardRequest)
+	reviews.PUT("/me", h.forwardRequest)
+	reviews.DELETE("/me", h.forwardRequest)
 }
 
 // forwardRequest proxies the request to the product service

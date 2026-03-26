@@ -1,105 +1,53 @@
 # Project Documentation Map
 
-Thư mục `docs/` được tổ chức để phục vụ ba nhu cầu khác nhau:
+Chào mừng bạn đến với tài liệu kỹ thuật của dự án E-Commerce Platform. Thư mục `docs/` được tổ chức cực kỳ cẩn thận để phục vụ những nhu cầu từ **học hỏi nguyên lý cơ bản**, **đọc hiểu source code**, cho đến **tự tay phát triển tính năng mới**.
 
-- `learning/`: onboarding, setup, tutorial và vocabulary cho người mới.
-- `learning/`: onboarding, setup, tutorial, test accounts và vocabulary cho người mới.
-- `deep-dive/`: hiểu kiến trúc, runtime flow, stack và design decisions.
-- `annotated/`: đọc source theo từng block code quan trọng.
+Cấu trúc gồm ba phần chính:
+- `learning/`: Onboarding, setup, tutorial, học cách tự build tính năng và kỹ năng debug.
+- `deep-dive/`: Hiểu kiến trúc, runtime flow, công nghệ lõi và thiết kế database.
+- `annotated/`: Đọc source code theo từng block quan trọng (giải thích từng dòng code).
 
-## Cách dùng bộ docs này
+---
 
-Nếu bạn là developer mới:
+## 🗺️ Lộ trình dành cho Developer Mới
 
-1. Bắt đầu ở [learning/00-local-setup.md](./learning/00-local-setup.md)
-2. Đọc [deep-dive/system-overview.md](./deep-dive/system-overview.md)
-3. Xem [learning/05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md)
-4. Chuyển sang [annotated/README.md](./annotated/README.md) để đọc source có hướng dẫn
-5. Định hướng sự nghiệp tại [learning/08-career-path-golang-backend.md](./learning/08-career-path-golang-backend.md)
+Nếu bạn vừa clone repository này về, hãy đi theo đúng thứ tự sau để không bị ngợp:
 
-Nếu bạn cần hiểu runtime flow:
+1. **Khởi động**: Bắt đầu ở [learning/00-local-setup.md](./learning/00-local-setup.md) để biết cách chạy project.
+2. **Kiến trúc**: Đọc [deep-dive/system-overview.md](./deep-dive/system-overview.md) để nhìn thấy bức tranh tổng thể (Microservices, gRPC, RabbitMQ).
+3. **Thử nghiệm**: Xem [learning/05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md) để biết cách đóng góp cơ bản.
+4. **Đọc hiểu Code**: Chuyển sang [annotated/README.md](./annotated/README.md) để bắt đầu đọc code có hướng dẫn chi tiết. Đừng lướt qua [annotated/shared-packages.md](./annotated/shared-packages.md).
+5. **Thực hành Code**: Hãy thử sức với [learning/09-how-to-add-new-feature.md](./learning/09-how-to-add-new-feature.md) để tự tay viết 1 API xuyên suốt hệ thống.
+6. **Gỡ lỗi**: Đọc [learning/10-guide-to-debugging.md](./learning/10-guide-to-debugging.md) để biết cách xem log và trace lỗi 500.
 
-1. [deep-dive/system-overview.md](./deep-dive/system-overview.md)
-2. [deep-dive/technology-stack.md](./deep-dive/technology-stack.md)
-3. Các file service-specific trong [deep-dive/](./deep-dive/)
+---
 
-Nếu bạn đang sửa code:
+## 📚 Mục lục Chi tiết
 
-1. [annotated/shared-packages.md](./annotated/shared-packages.md)
-2. File annotate theo service hoặc frontend component tương ứng
-3. [learning/06-testing-and-verification.md](./learning/06-testing-and-verification.md)
+### 1. Thư mục `learning/` (Học tập & Thực hành)
+Nơi lý tưởng để bắt đầu.
+- [00-local-setup.md](./learning/00-local-setup.md): Hướng dẫn setup và chạy Docker.
+- [01-go-backend-foundations.md](./learning/01-go-backend-foundations.md): Nền tảng Go.
+- [02-project-technologies-explained.md](./learning/02-project-technologies-explained.md): Giải thích các công nghệ dùng trong dự án.
+- [05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md): Tutorial commit đầu tiên.
+- [08-career-path-golang-backend.md](./learning/08-career-path-golang-backend.md): **Lộ trình phát triển sự nghiệp Backend Golang (Rất hay).**
+- [09-how-to-add-new-feature.md](./learning/09-how-to-add-new-feature.md): **[MỚI]** Hướng dẫn thêm API mới (Flow chi tiết).
+- [10-guide-to-debugging.md](./learning/10-guide-to-debugging.md): **[MỚI]** Kỹ năng Debug và đọc log.
 
-## Bản đồ kiến trúc cấp cao
+### 2. Thư mục `deep-dive/` (Kiến trúc & Hệ thống)
+Dành cho khi bạn cần hiểu cách hệ thống giao tiếp.
+- [system-overview.md](./deep-dive/system-overview.md): Luồng request, event, dependency runtime.
+- [technology-stack.md](./deep-dive/technology-stack.md): Phân tích công nghệ.
+- [database-schema.md](./deep-dive/database-schema.md): Tổng quan kiến trúc Database-per-service và schema.
+- [shared-libraries.md](./deep-dive/shared-libraries.md): Phân tích tập thư viện dùng chung `pkg/`.
+- Phân tích Domain: `api-gateway.md`, `user-service.md`, `product-service.md`, `order-service.md`, `payment-service.md`, v.v.
 
-```mermaid
-flowchart TD
-    Client[Browser / API Client]
-    Gateway[API Gateway]
-    User[User Service]
-    Product[Product Service]
-    Cart[Cart Service]
-    Order[Order Service]
-    Payment[Payment Service]
-    Notification[Notification Service]
-    Postgres[(PostgreSQL)]
-    Redis[(Redis)]
-    RabbitMQ[(RabbitMQ)]
-    MinIO[(MinIO)]
-    ES[(Elasticsearch)]
-    Observe[Prometheus / Grafana / Jaeger]
+### 3. Thư mục `annotated/` (Đọc Source Code)
+Cầm tay chỉ việc đọc code.
+- [README.md](./annotated/README.md): Hướng dẫn đọc phân hoá.
+- [shared-packages.md](./annotated/shared-packages.md): Lõi của hệ thống (Auth, config, database).
+- [frontend-app.md](./annotated/frontend-app.md): Đọc code Frontend React + Vite.
+- Các file giải thích logic phức tạp: `line-by-line-order-service.md`, `auth-go.md`...
 
-    Client --> Gateway
-    Gateway --> User
-    Gateway --> Product
-    Gateway --> Cart
-    Gateway --> Order
-    Gateway --> Payment
-    Cart --> Redis
-    Cart -->|gRPC| Product
-    Order --> Postgres
-    Order -->|gRPC| Product
-    Order --> RabbitMQ
-    Payment --> Postgres
-    Payment --> RabbitMQ
-    Notification --> RabbitMQ
-    User --> Postgres
-    Product --> Postgres
-    Product --> MinIO
-    Product --> ES
-    Gateway --> Observe
-    User --> Observe
-    Product --> Observe
-    Cart --> Observe
-    Order --> Observe
-    Payment --> Observe
-    Notification --> Observe
-```
-
-## Nội dung chính
-
-### `learning/`
-
-- [learning/README.md](./learning/README.md): lộ trình học tổng quát.
-- [learning/00-local-setup.md](./learning/00-local-setup.md): setup môi trường dev.
-- [learning/05-first-contribution-walkthrough.md](./learning/05-first-contribution-walkthrough.md): tutorial cho contributor mới.
-- [learning/06-testing-and-verification.md](./learning/06-testing-and-verification.md): cách test, verify, debug nhanh.
-- [learning/07-core-concepts-and-terms.md](./learning/07-core-concepts-and-terms.md): glossary của repo.
-- [learning/08-career-path-golang-backend.md](./learning/08-career-path-golang-backend.md): **lộ trình phát triển sự nghiệp Backend Golang.**
-
-### `deep-dive/`
-
-- [deep-dive/README.md](./deep-dive/README.md): bản đồ đọc kiến trúc.
-- [deep-dive/system-overview.md](./deep-dive/system-overview.md): luồng request, event, dependency runtime.
-- [deep-dive/technology-stack.md](./deep-dive/technology-stack.md): giải thích từng công nghệ và lý do tồn tại.
-- Các file service-specific hiện có: `api-gateway`, `user-service`, `product-service`, `cart-service`, `order-service`, `payment-service`, `notification-service`.
-
-### `annotated/`
-
-- [annotated/README.md](./annotated/README.md): hướng dẫn đọc source theo block.
-- [annotated/shared-packages.md](./annotated/shared-packages.md): config, auth, validation, database helpers.
-- [annotated/frontend-app.md](./annotated/frontend-app.md): router, auth state, cart state, API client.
-- Các file annotate theo service: `api-gateway`, `user-service`, `product-service`, `cart-service`, `order-service`, `payment-service`, `notification-service`.
-
-## Ghi chú
-
-- Repo vẫn giữ một số tài liệu cũ như `00-system-architecture.md`, `00-database-schema.md` và handbook trước đó. Bạn có thể xem như tài liệu tham khảo bổ sung, nhưng lộ trình chính nên đi từ các README mới trong ba thư mục con.
+---
+*Chúc bạn có hành trình khám phá source code và học tập thú vị cùng dự án E-Commerce này!*

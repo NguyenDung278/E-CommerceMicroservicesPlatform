@@ -1,195 +1,85 @@
-# 04. Bộ prompt để học sâu project này
+# 04. Bộ Prompt Học Tập (Active Learning Prompts)
 
-Tài liệu này cho bạn các prompt để tiếp tục học với AI hoặc tự luyện theo kiểu active learning. Mục tiêu là ép bản thân suy nghĩ và giải thích lại source code, không chỉ đọc thụ động.
+Tài liệu này cung cấp bộ "Prompt" để biến AI (ChatGPT, Claude, Gemini, v.v.) thành một **Mentor (Người hướng dẫn) thực thụ**, giúp bạn đào sâu source code dự án E-Commerce Platform và thăng tiến trong sự nghiệp Backend Golang.
 
-## Cách dùng bộ prompt
+Học thụ động bằng cách đọc lướt sẽ rất nhanh quên. Hãy dùng các prompt này để "ép" AI kiểm tra bạn, hoặc giảng giải source code theo tiêu chuẩn của một Senior.
 
-- Chọn đúng service bạn đang học.
-- Mỗi lần chỉ dùng 1 prompt.
-- Sau khi đọc câu trả lời, quay lại source code để verify.
-- Tự viết lại flow bằng lời của chính bạn.
+---
 
-## 1. Prompt để hiểu kiến trúc
+## 🚀 Bước 1: Khởi tạo "Mentor Persona" cho AI (Rất Quan Trọng)
 
-### Prompt 1
+Trước khi gửi bất kỳ câu hỏi nào về source code dự án, hãy mở một luồng chat mới với AI và dán đoạn **System Prompt** dưới đây. Nó sẽ giúp AI định hình phong cách trả lời chuyên nghiệp, tập trung vào xây dựng kỹ năng nghề nghiệp cho bạn:
 
 ```text
-Hãy giải thích kiến trúc backend của project này như đang dạy cho một lập trình viên Go mới vào team. Mô tả vai trò của api-gateway, user-service, product-service, cart-service, order-service, payment-service, notification-service và cách chúng nói chuyện với nhau.
+You are an expert Go (Golang) developer and technical mentor. Your task is to analyze Go source code and system architecture to provide comprehensive educational guidance, helping advance my Go programming career.
+
+When answering my questions or analyzing the provided Go source code, please:
+
+1. **Code Analysis & Explanation:**
+   - Break down the code structure and explain each major component.
+   - Identify and explain key Go concepts, patterns, and idioms used.
+   - Highlight any advanced Go features or best practices demonstrated.
+   - Point out potential improvements or alternative approaches.
+
+2. **Educational Insights:**
+   - Explain the business logic and purpose of the code.
+   - Identify learning opportunities and key takeaways.
+   - Connect the code examples to real-world Go development scenarios.
+
+3. **Career Development Guidance:**
+   - Assess the complexity level and suggest what skill level this represents.
+   - Recommend next steps for skill progression based on the code.
+   - Identify industry-relevant patterns or practices shown.
+
+4. **Practical Recommendations:**
+   - Provide specific suggestions for improving or extending the code.
+   - Recommend relevant Go tools, libraries, or frameworks to explore.
+   - Suggest hands-on exercises or projects to reinforce learning.
+
+Please provide your analysis in Vietnamese, using clear explanations suitable for someone looking to advance their Go programming career. Include code snippets with explanations where helpful.
 ```
 
-### Prompt 2
+---
 
-```text
-Hãy so sánh trong project này: khi nào dùng HTTP, khi nào dùng gRPC, khi nào dùng RabbitMQ. Giải thích bằng chính các use case có trong source code.
-```
+## 🚀 Bước 2: Bộ Prompt Chuyên Sâu (Sử dụng sau Bước 1)
 
-## 2. Prompt để học Go backend foundations
+Sau khi AI đã nhận vai trò Mentor, bạn hãy lần lượt dùng các prompt dưới đây. Lưu ý: **Với các prompt liên quan đến file code, hãy copy nội dung file code đó dán kèm vào cùng với prompt**.
 
-### Prompt 3
+### Phần 1: Phân tích Kiến trúc & Foundation
+**Prompt 1 (Tổng quan Hệ thống):**
+> "Hãy giải thích kiến trúc backend của project này như đang dạy cho một lập trình viên Go mới vào team. Dựa trên mô hình Microservices, hãy mô tả vai trò của api-gateway, user-service, product-service, cart-service, order-service, payment-service, notification-service và cách chúng giao tiếp (Sync vs Async)."
 
-```text
-Dùng project này để giải thích cho tôi: package, module, internal, context.Context, defer, error wrapping, constructor pattern, interface, middleware, DTO, repository pattern.
-```
+**Prompt 2 (Go Foundations):**
+> "Dùng project này làm ví dụ để giải thích cho tôi các khái niệm Backend Go thực chiến: context propagation, database transaction, dependency injection qua constructor pattern, error wrapping, và HTTP middleware. Hãy cung cấp code snippet minh hoạ."
 
-### Prompt 4
+### Phần 2: Đọc hiểu Service Code (Line-by-Line)
+*(Lưu ý: Bạn cần dán source code tương ứng vào cùng prompt dưới đây)*
 
-```text
-Hãy chỉ ra trong project này các ví dụ cụ thể cho từng khái niệm Go backend: context propagation, transaction, dependency injection, JWT middleware, gRPC client, event consumer.
-```
+**Prompt 3 (Auth & Middleware):**
+> "Dưới đây là nội dung file `pkg/middleware/auth.go`. Hãy giải thích line-by-line cách JWT chặn request không hợp lệ. Chỉ rõ nguyên tắc bảo mật backend nào đang được áp dụng."
 
-## 3. Prompt để đọc theo từng service
+**Prompt 4 (Cart & Caching):**
+> "Dưới đây là một phần mã nguồn của `cart-service`. Hãy deep dive cách nó tương tác với Redis. Trọng tâm của tôi là hiểu tại sao backend không nên tin tưởng giá trị `price` gửi lên từ frontend và cách gRPC gọi sang Product Service."
 
-### Prompt 5
+**Prompt 5 (Transaction & Orchestration):**
+> "Dưới đây là hàm CreateOrder trong `order-service`. Hãy giải thích chi tiết: Đâu là validation, đâu là orchestration (gọi gRPC), đâu là persistence (ghi DB), và đâu là event publishing (RabbitMQ). Đánh giá mức độ phức tạp của luồng này."
 
-```text
-Hãy deep dive user-service trong project này. Tôi muốn hiểu route, handler, service, repository, migration và auth flow. Giải thích theo kiểu dạy học, không tóm tắt quá ngắn.
-```
+**Prompt 6 (Message Broker Worker):**
+> "Dưới đây là Worker tiêu thụ message của `notification-service`. Hãy giải thích mô hình Exchange, Queue, Routing key, khái niệm Ack/Nack, và phong cách viết thư viện Consumer bằng Go."
 
-### Prompt 6
+### Phần 3: Truy vết Flow End-to-End (System Trace)
+**Prompt 7 (Checkout Flow):**
+> "Hãy trace luồng thanh toán Checkout end-to-end trong một hệ thống Microservices chuẩn. Bắt đầu từ lúc User ấn 'Thanh toán'. Chỉ rõ nơi nào kiểm tra tồn kho (stock), nơi mở DB transaction, khái niệm Trust Boundary và khi nào thì phát sự kiện `payment.completed`."
 
-```text
-Hãy deep dive product-service trong project này và giải thích vì sao nó phù hợp để học CRUD, pagination, filtering, authorization và gRPC exposure.
-```
+**Prompt 8 (Refactoring & System Design):**
+> "Nếu tôi muốn chuyển project Microservices này thành một Modular Monolith để giảm thiểu chi phí Server, tôi nên gom các module lại như thế nào? Chỗ nào nên giữ chung DB, chỗ nào phải gộp lại? Dựa trên tư duy thiết kế hệ thống, hãy đề xuất 1 phương án."
 
-### Prompt 7
+### Phần 4: Luyện Tập & Thực Hành (Pair Programming)
+**Prompt 9 (Thử thách viết code):**
+> "Tôi muốn thực hành code thêm tính năng 'Huỷ Đơn Hàng' (Order Cancellation) cho project này. Hãy đóng vai Mentor: Đưa ra yêu cầu cụ thể, gợi ý mình cần sửa những file `proto`, `repository`, `service` nào, nhưng dắt tôi đi từng bước một chứ đừng đưa ra code ngay."
 
-```text
-Hãy deep dive cart-service trong project này. Tập trung vào Redis, source of truth, gRPC product client và vì sao backend không tin giá từ frontend.
-```
+**Prompt 10 (Review Code):**
+> "Tôi vừa viết thử một đoạn code Go cho tính năng ABCD của dự án. Hãy review code của tôi dưới góc độ của một Senior Go Developer. Tập trung bắt lỗi: Bug tiềm ẩn, lỗ hổng bảo mật, vi phạm kiến trúc (Clean Architecture), và tính Go Idiomatic (viết Go sao cho 'chuẩn' Go)."
 
-### Prompt 8
-
-```text
-Hãy deep dive order-service trong project này. Tôi muốn hiểu transaction, orchestration, stock validation, total price calculation và publish event.
-```
-
-### Prompt 9
-
-```text
-Hãy deep dive payment-service trong project này. Giải thích kỹ ownership check, order verification, duplicate payment protection và tại sao amount phải được lấy từ backend thay vì client.
-```
-
-### Prompt 10
-
-```text
-Hãy deep dive notification-service trong project này. Giải thích exchange, queue, routing key, ack/nack, QoS và flow của một worker service viết bằng Go.
-```
-
-## 4. Prompt để trace use case end-to-end
-
-### Prompt 11
-
-```text
-Hãy trace login flow end-to-end trong project này, bắt đầu từ frontend request đến khi JWT được trả về. Chỉ rõ file nào xử lý bước nào.
-```
-
-### Prompt 12
-
-```text
-Hãy trace add-to-cart flow end-to-end trong project này. Tôi muốn biết dữ liệu nào đến từ frontend, dữ liệu nào được backend tự lấy, và Redis được dùng ở bước nào.
-```
-
-### Prompt 13
-
-```text
-Hãy trace create-order flow end-to-end trong project này. Giải thích rõ nơi kiểm tra stock, nơi tính total price, nơi mở transaction và nơi publish event.
-```
-
-### Prompt 14
-
-```text
-Hãy trace process-payment flow end-to-end trong project này. Tập trung vào trust boundary, authorization, database write và event publishing.
-```
-
-## 5. Prompt để luyện tư duy thiết kế
-
-### Prompt 15
-
-```text
-Nếu tôi biến project này thành modular monolith thì phần nào có thể gộp lại, phần nào nên giữ tách? Giải thích theo hướng đơn giản hóa nhưng vẫn robust.
-```
-
-### Prompt 16
-
-```text
-Hãy chỉ ra trong project này những nơi thể hiện rõ separation of concerns. Đồng thời chỉ ra những nơi có thể refactor tiếp để người học dễ đọc hơn.
-```
-
-### Prompt 17
-
-```text
-Trong project này, đâu là source of truth cho user, product, cart, order, payment? Hãy giải thích bằng mindset backend thực chiến.
-```
-
-## 6. Prompt để luyện đọc code cấp độ dòng
-
-### Prompt 18
-
-```text
-Hãy giải thích line-by-line file pkg/middleware/auth.go trong project này. Tôi muốn hiểu không chỉ code làm gì mà còn vì sao phải làm như vậy.
-```
-
-### Prompt 19
-
-```text
-Hãy giải thích line-by-line hàm CreateOrder trong order_service.go. Chỉ rõ đâu là validation, đâu là orchestration, đâu là persistence, đâu là event publishing.
-```
-
-### Prompt 20
-
-```text
-Hãy giải thích line-by-line hàm ProcessPayment trong payment_service.go và chỉ ra những nguyên tắc bảo mật backend được áp dụng.
-```
-
-## 7. Prompt để tự kiểm tra mức hiểu
-
-### Prompt 21
-
-```text
-Hãy hỏi tôi 15 câu kiểm tra mức hiểu backend project này, từ cơ bản đến nâng cao, nhưng đừng cho đáp án ngay.
-```
-
-### Prompt 22
-
-```text
-Hãy đóng vai mentor và kiểm tra xem tôi đã hiểu cart-service hay chưa. Hỏi tôi theo kiểu từng bước, sau đó phân tích điểm tôi trả lời chưa tốt.
-```
-
-### Prompt 23
-
-```text
-Sau khi tôi giải thích order-service bằng lời của mình, hãy chỉ ra những chỗ hiểu sai, chỗ còn mơ hồ, và cách sửa tư duy cho đúng.
-```
-
-## 8. Prompt để luyện viết code theo project style
-
-### Prompt 24
-
-```text
-Hãy hướng dẫn tôi thêm một endpoint mới vào project này theo đúng style hiện tại: route, handler, service, repository, DTO, validation, migration nếu cần.
-```
-
-### Prompt 25
-
-```text
-Hãy đưa cho tôi một bài tập code nhỏ dựa trên project này, ví dụ thêm order cancellation hoặc password reset, nhưng chia nhỏ theo từng bước để tôi tự làm.
-```
-
-### Prompt 26
-
-```text
-Hãy review đoạn code tôi viết theo đúng style của repo này: ưu tiên bug, security, architecture, readability và Go idioms.
-```
-
-## 9. Cách học hiệu quả nhất với bộ prompt này
-
-Mỗi service nên học theo chu kỳ:
-
-1. Đọc deep-dive file của service.
-2. Mở source code thật.
-3. Dùng 1 prompt trace use case.
-4. Tự tóm tắt lại bằng tay.
-5. Dùng 1 prompt kiểm tra mức hiểu.
-6. Dùng 1 prompt bài tập để tự code thêm.
-
-Nếu bạn lặp chu kỳ này đủ lâu, khả năng đọc source và viết backend Go của bạn sẽ tăng rất rõ.
+## 💡 Lời khuyên
+Để lên trình độ Mid/Senior Backend Go, đừng để AI viết code thay bạn. Hãy yêu cầu AI **review**, **đặt câu hỏi ngược lại**, và **bóc tách (breakdown) kiến trúc** như các prompt ở phần 4. Chúc bạn mau chóng giỏi Go!

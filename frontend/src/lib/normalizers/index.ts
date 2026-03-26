@@ -18,7 +18,11 @@ import type {
   OrderPreview,
   Payment,
   Product,
+  ProductRatingBreakdown,
   ProductPopularity,
+  ProductReview,
+  ProductReviewList,
+  ProductReviewSummary,
   ProductVariant,
   ShippingAddress,
   UserProfile,
@@ -114,6 +118,54 @@ export function normalizeProductList(value: unknown): Product[] {
   return Array.isArray(value)
     ? value.map((item) => normalizeProduct(item))
     : [];
+}
+
+function normalizeProductRatingBreakdown(value: unknown): ProductRatingBreakdown {
+  const breakdown = isRecord(value) ? value : {};
+
+  return {
+    one: normalizeNumber(breakdown.one),
+    two: normalizeNumber(breakdown.two),
+    three: normalizeNumber(breakdown.three),
+    four: normalizeNumber(breakdown.four),
+    five: normalizeNumber(breakdown.five),
+  };
+}
+
+export function normalizeProductReviewSummary(value: unknown): ProductReviewSummary {
+  const summary = isRecord(value) ? value : {};
+
+  return {
+    average_rating: normalizeNumber(summary.average_rating),
+    review_count: normalizeNumber(summary.review_count),
+    rating_breakdown: normalizeProductRatingBreakdown(summary.rating_breakdown),
+  };
+}
+
+export function normalizeProductReview(value: unknown): ProductReview {
+  const review = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(review.id),
+    product_id: normalizeString(review.product_id),
+    user_id: normalizeString(review.user_id),
+    author_label: normalizeString(review.author_label),
+    rating: normalizeNumber(review.rating),
+    comment: normalizeString(review.comment),
+    created_at: normalizeString(review.created_at),
+    updated_at: normalizeString(review.updated_at),
+  };
+}
+
+export function normalizeProductReviewList(value: unknown): ProductReviewList {
+  const reviewList = isRecord(value) ? value : {};
+
+  return {
+    summary: normalizeProductReviewSummary(reviewList.summary),
+    items: Array.isArray(reviewList.items)
+      ? reviewList.items.map((item) => normalizeProductReview(item))
+      : [],
+  };
 }
 
 /**
@@ -470,6 +522,9 @@ export default {
   normalizeAdminOrderReport,
   normalizeProduct,
   normalizeProductList,
+  normalizeProductReview,
+  normalizeProductReviewList,
+  normalizeProductReviewSummary,
   normalizeProductVariant,
   normalizeAddress,
   normalizeAddressList,

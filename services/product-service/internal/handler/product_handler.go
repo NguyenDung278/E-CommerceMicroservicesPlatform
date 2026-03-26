@@ -38,6 +38,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public := e.Group("/api/v1/products")
 	public.GET("", h.List)
 	public.GET("/:id", h.GetByID)
+	public.GET("/:id/reviews", h.ListReviews)
 
 	// Admin-only routes.
 	admin := e.Group("/api/v1/products")
@@ -47,6 +48,14 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	admin.POST("/uploads", h.UploadImages)
 	admin.PUT("/:id", h.Update)
 	admin.DELETE("/:id", h.Delete)
+
+	// Authenticated user review routes.
+	reviews := e.Group("/api/v1/products/:id/reviews")
+	reviews.Use(middleware.JWTAuth(jwtSecret))
+	reviews.GET("/me", h.GetMyReview)
+	reviews.POST("", h.CreateReview)
+	reviews.PUT("/me", h.UpdateMyReview)
+	reviews.DELETE("/me", h.DeleteMyReview)
 }
 
 // Create handles POST /api/v1/products
