@@ -1,0 +1,43 @@
+.field {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-label {
+  color: rgba(67, 72, 67, 0.92);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field-required {
+  color: #ef6b22;
+}
+
+.field-action {
+  display: inline-flex;
+}
+
+.field-hint {
+  color: rgba(67, 72, 67, 0.76);
+  font-size: 0.86rem;
+}
+
+.field-error {
+  color: var(--color-error);
+  font-size: 0.88rem;
+}
+
+.input-error {
+  border-color: rgba(181, 84, 71, 0.44);
+  box-shadow: 0 0 0 4px rgba(181, 84, 71, 0.1);
+}

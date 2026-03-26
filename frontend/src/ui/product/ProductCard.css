@@ -1,0 +1,241 @@
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.product-grid-admin {
+  grid-template-columns: 1fr;
+}
+
+.product-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 30px;
+  border: 1px solid rgba(87, 93, 121, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 243, 238, 0.86));
+  box-shadow: 0 22px 40px -20px rgba(27, 28, 25, 0.24);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.product-card-editorial {
+  align-content: start;
+}
+
+.product-card-admin-shell {
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.product-card-media-shell {
+  position: relative;
+}
+
+.product-card-media {
+  overflow: hidden;
+  min-height: 320px;
+  border-radius: 26px;
+  background: rgba(19, 61, 51, 0.06);
+}
+
+.product-card-media-link {
+  display: block;
+}
+
+.product-card-media img {
+  display: block;
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  transition: transform 600ms ease;
+}
+
+.product-card-admin-shell .product-card-media,
+.product-card-admin-shell .product-card-media img {
+  min-height: 240px;
+  height: 240px;
+}
+
+.product-card:hover .product-card-media img {
+  transform: scale(1.04);
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card);
+}
+
+.product-card-media-fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #133d33, #2d7462);
+  color: #f2fff8;
+  font-size: 3.6rem;
+  font-weight: 800;
+}
+
+.product-card-badge-row {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.product-card-badge,
+.product-card-head,
+.product-price-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+}
+
+.product-card-badge,
+.stock-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.product-card-badge {
+  background: rgba(251, 249, 244, 0.88);
+  color: var(--color-primary);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-card-badge-muted {
+  background: rgba(87, 93, 121, 0.84);
+  color: #ffffff;
+}
+
+.stock-chip {
+  background: rgba(6, 27, 14, 0.07);
+  color: var(--color-primary);
+}
+
+.stock-chip-empty {
+  background: rgba(181, 84, 71, 0.12);
+  color: var(--color-error);
+}
+
+.product-card-copy {
+  display: grid;
+  gap: 14px;
+}
+
+.product-card-title-block {
+  display: grid;
+  gap: 8px;
+}
+
+.product-card-brand {
+  color: rgba(22, 33, 29, 0.52);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.product-card h3 {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.08;
+}
+
+.product-description {
+  margin: 0;
+  min-height: 70px;
+  color: rgba(67, 72, 67, 0.84);
+}
+
+.product-card-collection {
+  margin: -4px 0 0;
+  color: rgba(67, 72, 67, 0.72);
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+}
+
+.product-meta-row,
+.product-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: rgba(22, 33, 29, 0.6);
+  font-size: 0.84rem;
+}
+
+.product-tag-chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(212, 129, 102, 0.16);
+  color: #7a3f2d;
+}
+
+.product-variant-summary {
+  margin: 0 0 14px;
+  color: rgba(22, 33, 29, 0.62);
+  font-size: 0.92rem;
+}
+
+.product-price-block {
+  display: grid;
+  gap: 4px;
+}
+
+.product-price-block span {
+  color: rgba(22, 33, 29, 0.56);
+  font-size: 0.84rem;
+}
+
+.product-price-row strong {
+  font-size: 1.4rem;
+  letter-spacing: -0.04em;
+}
+
+.product-actions-admin {
+  grid-column: 2;
+}
+
+.product-card .primary-button {
+  background: linear-gradient(135deg, var(--color-tertiary) 0%, var(--color-tertiary-deep) 100%);
+  color: #ffffff;
+}
+
+.product-card .ghost-button {
+  background: rgba(245, 243, 238, 0.92);
+}
+
+@media (max-width: 1100px) {
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .product-card-admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .product-actions-admin {
+    grid-column: auto;
+  }
+
+  .product-card-head,
+  .product-price-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

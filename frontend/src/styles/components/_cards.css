@@ -4,7 +4,6 @@
 
 /* Base card styles */
 .card,
-.product-card,
 .summary-panel,
 .empty-card,
 .hero-banner,
@@ -36,14 +35,6 @@
 .summary-panel,
 .empty-card {
   padding: 24px;
-}
-
-/* Product card specific */
-.product-card {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 /* Summary card styles */

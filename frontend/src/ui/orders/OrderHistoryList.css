@@ -1,0 +1,105 @@
+.history-grid,
+.payment-history-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.history-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 252, 249, 0.9));
+  border: 1px solid rgba(22, 33, 29, 0.08);
+}
+
+.history-card-head,
+.history-line,
+.history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.history-card-head h3 {
+  margin: 6px 0 0;
+  font-size: 1.08rem;
+  word-break: break-word;
+}
+
+.history-kicker {
+  margin: 0;
+  color: rgba(22, 33, 29, 0.56);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.history-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.history-meta-grid div {
+  display: grid;
+  gap: 6px;
+}
+
+.history-meta-grid span,
+.history-subtle {
+  color: rgba(22, 33, 29, 0.58);
+}
+
+.history-item-preview {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(19, 61, 51, 0.05);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.status-pill-success {
+  background: rgba(31, 113, 93, 0.12);
+  color: #155646;
+}
+
+.status-pill-danger {
+  background: rgba(177, 45, 45, 0.12);
+  color: #8b2020;
+}
+
+.status-pill-neutral {
+  background: rgba(22, 33, 29, 0.08);
+  color: #16211d;
+}
+
+.history-empty {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .history-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .history-card-head,
+  .history-line,
+  .history-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

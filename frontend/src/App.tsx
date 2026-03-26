@@ -1,24 +1,24 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { AppLayout } from "./components/AppLayout";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { AuthProvider } from "./contexts/AuthContext";
-import { CartProvider } from "./contexts/CartContext";
-import { AdminPage } from "./pages/AdminPage";
-import { CartPage } from "./pages/CartPage";
-import { CategoryPage } from "./pages/CategoryPage";
-import { CatalogPage } from "./pages/CatalogPage";
-import { CheckoutPage } from "./pages/CheckoutPage";
-import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
-import { HomePage } from "./pages/HomePage";
-import { LoginPage } from "./pages/LoginPage";
-import { OrderDetailPage } from "./pages/OrderDetailPage";
-import { PaymentHistoryPage } from "./pages/PaymentHistoryPage";
-import { ProductDetailPage } from "./pages/ProductDetailPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { RegisterPage } from "./pages/RegisterPage";
-import { ResetPasswordPage } from "./pages/ResetPasswordPage";
-import { VerifyEmailPage } from "./pages/VerifyEmailPage";
+import { AppLayout } from "./layout/AppLayout";
+import { AuthProvider } from "./providers/AuthContext";
+import { CartProvider } from "./providers/CartContext";
+import { ProtectedRoute } from "./router/ProtectedRoute";
+import { AdminPage } from "./routes/AdminPage";
+import { CartPage } from "./routes/CartPage";
+import { CategoryPage } from "./routes/CategoryPage";
+import { CatalogPage } from "./routes/CatalogPage";
+import { CheckoutPage } from "./routes/CheckoutPage";
+import { ForgotPasswordPage } from "./routes/ForgotPasswordPage";
+import { HomePage } from "./routes/HomePage";
+import { LoginPage } from "./routes/LoginPage";
+import { OrderDetailPage } from "./routes/OrderDetailPage";
+import { PaymentHistoryPage } from "./routes/PaymentHistoryPage";
+import { ProductDetailPage } from "./routes/ProductDetailPage";
+import { ProfilePage } from "./routes/ProfilePage";
+import { RegisterPage } from "./routes/RegisterPage";
+import { ResetPasswordPage } from "./routes/ResetPasswordPage";
+import { VerifyEmailPage } from "./routes/VerifyEmailPage";
 
 export default function App() {
   return (

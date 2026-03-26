@@ -1,38 +1,49 @@
 # UI Reference
 
-Thư mục này chứa bộ giao diện tham chiếu xuất từ Stitch để áp dụng dần vào frontend hiện tại mà không phá vỡ logic React, auth flow hay API integration đang có sẵn.
+Thư mục này chứa bộ giao diện tham chiếu để áp dụng dần vào frontend hiện tại mà không phá vỡ logic React, auth flow hay API integration đang có sẵn.
 
 ## Cấu trúc
 
-- `stitch/home-editorial/`: template tham chiếu cho trang chủ
-- `stitch/catalog/`: template tham chiếu cho danh sách sản phẩm
-- `stitch/catalog-alt-editorial/`: biến thể thứ hai của catalog, hiện đang trùng mục tiêu với `catalog/`
-- `stitch/product-detail/`: template tham chiếu cho trang chi tiết sản phẩm
-- `stitch/cart/`: template tham chiếu cho giỏ hàng
-- `stitch/login/`: template tham chiếu cho đăng nhập
-- `stitch/register/`: template tham chiếu cho đăng ký
-- `stitch/forgot-password/`: template tham chiếu cho quên mật khẩu
-- `stitch/reset-password/`: template tham chiếu cho đặt lại mật khẩu
-- `stitch/admin-dashboard/`: template tham chiếu cho khu quản trị/admin
-- `stitch/design-system-forest-hearth/`: tài liệu design system và tone thị giác
-- `stitch/planning/`: tài liệu planning và brief thiết kế
+- `screens/`: mỗi màn hình được gom theo domain, trong cùng folder có thể chứa cả `page.html/page.png` và `stitch.html/stitch.png`
+- `docs/design-system/`: tài liệu hệ thống thiết kế
+- `docs/planning/`: brief, PRD, planning note
+
+## Nhóm Màn Hình
+
+- `screens/auth/login/`
+- `screens/auth/register/`
+- `screens/auth/forgot-password/`
+- `screens/auth/reset-password/`
+- `screens/storefront/home/`
+- `screens/storefront/catalog/`
+- `screens/storefront/catalog-alt/`
+- `screens/storefront/product-detail/`
+- `screens/storefront/cart/`
+- `screens/admin/dashboard/`
+
+## Quy Ước File
+
+- `page.html`, `page.png`: bản tham chiếu HTML/screenshot đã được team lưu lại thủ công
+- `stitch.html`, `stitch.png`: bản xuất trực tiếp từ Stitch
+- Không phải màn nào cũng có đủ cả hai nguồn. Thiếu file nghĩa là hiện chỉ có một nguồn tham chiếu cho màn đó.
 
 ## Mapping Với App Hiện Tại
 
-| Page hiện có trong app | Template Stitch |
+| Route hiện có trong app | Thư mục tham chiếu |
 | --- | --- |
-| `/` | `stitch/home-editorial/` |
-| `/products` | `stitch/catalog/` |
-| `/products/:productId` | `stitch/product-detail/` |
-| `/cart` | `stitch/cart/` |
-| `/login` | `stitch/login/` |
-| `/register` | `stitch/register/` |
-| `/reset-password` | `stitch/reset-password/` |
-| `/admin` | `stitch/admin-dashboard/` |
+| `/` | `screens/storefront/home/` |
+| `/products` | `screens/storefront/catalog/` |
+| `/products/:productId` | `screens/storefront/product-detail/` |
+| `/cart` | `screens/storefront/cart/` |
+| `/login` | `screens/auth/login/` |
+| `/register` | `screens/auth/register/` |
+| `/forgot-password` | `screens/auth/forgot-password/` |
+| `/reset-password` | `screens/auth/reset-password/` |
+| `/admin` | `screens/admin/dashboard/` |
 
 ## UI Còn Thiếu So Với Các Route Đang Có
 
-Các màn sau đang có trong app React nhưng chưa có template Stitch tương ứng:
+Các màn sau đang có trong app React nhưng hiện chưa có thư mục tham chiếu đầy đủ:
 
 - `/checkout`
 - `/categories/:categoryName`
@@ -41,15 +52,9 @@ Các màn sau đang có trong app React nhưng chưa có template Stitch tương
 - `/orders/:orderId`
 - `/payments`
 
-## UI Đang Thừa Hoặc Chỉ Nên Dùng Làm Tham Chiếu
+## Ghi Chú
 
-- `stitch/catalog-alt-editorial/`: trùng vai trò với `catalog/`, nên chỉ giữ như phương án visual phụ
-- `stitch/forgot-password/`: app hiện chưa có route riêng cho màn quên mật khẩu
-- `stitch/design-system-forest-hearth/`: là tài liệu hệ thống thiết kế, không phải source giao diện chạy trực tiếp
-- `stitch/planning/`: là brief/planning, không phải source giao diện chạy trực tiếp
-
-## Ghi Chú Tích Hợp
-
-- Không copy nguyên HTML Stitch vào app. App hiện dùng `React + Vite + TypeScript`, nên chỉ nên lấy layout, style direction, component shape và nội dung thị giác.
+- Không copy nguyên HTML vào app. Frontend hiện dùng `React + Vite + TypeScript`, nên chỉ nên lấy layout, style direction, component shape và nội dung thị giác.
 - Logic data fetching, auth, cart, payment, role-based access và admin actions vẫn phải giữ trong `frontend/src/`.
-- `stitch/admin-dashboard/` đã được dùng làm template để làm mới UI của `frontend/src/pages/AdminPage.tsx`.
+- `screens/storefront/catalog-alt/` là biến thể visual phụ của catalog, nên chỉ dùng như hướng art direction bổ sung.
+- Cấu trúc cũ `pages/` và `stitch/` đã được gộp lại theo feature để giảm việc phải nhớ màn nào nằm ở nguồn nào.

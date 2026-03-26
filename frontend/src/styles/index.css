@@ -27,5 +27,5 @@
 /* Page-specific styles */
 @import "./pages/_index.css";
 
-/* Unmigrated feature styles kept here so styles.css can be removed safely */
-@import "./legacy/_index.css";
+/* Shared global styles still used across routes/components */
+@import "./shared.css";
