@@ -40,13 +40,7 @@ func (r *postgresPaymentRepository) Create(ctx context.Context, payment *model.P
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
-	_, err := r.db.ExecContext(ctx, query,
-		payment.ID, payment.OrderID, payment.UserID, payment.OrderTotal, payment.Amount,
-		payment.Status, payment.TransactionType, nullableString(payment.ReferencePaymentID),
-		payment.PaymentMethod, payment.GatewayProvider, nullableString(payment.GatewayTransactionID),
-		nullableString(payment.GatewayOrderID), nullableString(payment.CheckoutURL),
-		payment.SignatureVerified, nullableString(payment.FailureReason), payment.CreatedAt, payment.UpdatedAt,
-	)
+	_, err := r.db.ExecContext(ctx, query, paymentCreateArgs(payment)...)
 	if err != nil {
 		return fmt.Errorf("failed to create payment: %w", err)
 	}
@@ -218,22 +212,7 @@ func (r *postgresPaymentRepository) Update(ctx context.Context, payment *model.P
 		    updated_at = $13
 		WHERE id = $14
 	`
-	_, err := r.db.ExecContext(ctx, query,
-		payment.OrderTotal,
-		payment.Amount,
-		payment.Status,
-		payment.TransactionType,
-		nullableString(payment.ReferencePaymentID),
-		payment.PaymentMethod,
-		payment.GatewayProvider,
-		nullableString(payment.GatewayTransactionID),
-		nullableString(payment.GatewayOrderID),
-		nullableString(payment.CheckoutURL),
-		payment.SignatureVerified,
-		nullableString(payment.FailureReason),
-		payment.UpdatedAt,
-		payment.ID,
-	)
+	_, err := r.db.ExecContext(ctx, query, paymentUpdateArgs(payment)...)
 	if err != nil {
 		return fmt.Errorf("failed to update payment: %w", err)
 	}
@@ -341,5 +320,50 @@ func nullableString(value string) any {
 	if value == "" {
 		return nil
 	}
+	return value
+}
+
+func paymentCreateArgs(payment *model.Payment) []any {
+	return []any{
+		payment.ID,
+		payment.OrderID,
+		payment.UserID,
+		payment.OrderTotal,
+		payment.Amount,
+		payment.Status,
+		payment.TransactionType,
+		nullableString(payment.ReferencePaymentID),
+		payment.PaymentMethod,
+		payment.GatewayProvider,
+		requiredString(payment.GatewayTransactionID),
+		requiredString(payment.GatewayOrderID),
+		requiredString(payment.CheckoutURL),
+		payment.SignatureVerified,
+		requiredString(payment.FailureReason),
+		payment.CreatedAt,
+		payment.UpdatedAt,
+	}
+}
+
+func paymentUpdateArgs(payment *model.Payment) []any {
+	return []any{
+		payment.OrderTotal,
+		payment.Amount,
+		payment.Status,
+		payment.TransactionType,
+		nullableString(payment.ReferencePaymentID),
+		payment.PaymentMethod,
+		payment.GatewayProvider,
+		requiredString(payment.GatewayTransactionID),
+		requiredString(payment.GatewayOrderID),
+		requiredString(payment.CheckoutURL),
+		payment.SignatureVerified,
+		requiredString(payment.FailureReason),
+		payment.UpdatedAt,
+		payment.ID,
+	}
+}
+
+func requiredString(value string) string {
 	return value
 }

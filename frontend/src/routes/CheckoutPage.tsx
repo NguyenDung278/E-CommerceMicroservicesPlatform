@@ -81,6 +81,11 @@ export function CheckoutPage() {
         name: item.name,
         price: item.price
       }));
+  const productLookupKey = draftItems
+    .map((item) => item.product_id)
+    .filter(Boolean)
+    .sort()
+    .join("|");
 
   useEffect(() => {
     let active = true;
@@ -170,7 +175,7 @@ export function CheckoutPage() {
     return () => {
       active = false;
     };
-  }, [draftItems]);
+  }, [productLookupKey]);
 
   const checkoutItems: CheckoutDisplayItem[] = draftItems.map((item) => {
     const product = productLookup[item.product_id];
