@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Serif } from "next/font/google";
+
+import { StorefrontProvider } from "@/store/storefront-provider";
+
 import "./globals.css";
 
 const inter = Inter({
@@ -14,8 +17,12 @@ const notoSerif = Noto_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "ND Shop Client",
-  description: "Next.js client application for the ND Shop e-commerce platform.",
+  title: {
+    default: "ND Shop",
+    template: "%s | ND Shop",
+  },
+  description:
+    "Editorial storefront demo for the ND Shop commerce platform, rebuilt from the referenced Stitch design with production-ready Next.js structure.",
 };
 
 export default function RootLayout({
@@ -25,7 +32,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`${inter.variable} ${notoSerif.variable}`}>
-      <body>{children}</body>
+      <body>
+        <StorefrontProvider>{children}</StorefrontProvider>
+      </body>
     </html>
   );
 }

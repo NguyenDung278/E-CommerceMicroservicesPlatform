@@ -97,6 +97,7 @@ flowchart LR
 
 - [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể.
 - [docs/learning/README.md](./docs/learning/README.md): lộ trình onboarding cho người mới.
+- [docs/learning/11-senior-source-code-review-guide.md](./docs/learning/11-senior-source-code-review-guide.md): review toàn repo theo góc nhìn senior engineer + technical mentor.
 - [docs/deep-dive/README.md](./docs/deep-dive/README.md): kiến trúc, stack, flow runtime.
 - [docs/annotated/README.md](./docs/annotated/README.md): đọc source theo block code quan trọng.
 

@@ -1,83 +1,163 @@
-# 🚀 Feature Tracker & Lộ Trình Lên Senior Backend
+# Feature Tracker — Roadmap nâng cấp project theo hướng Senior Backend Golang
 
-Tệp này theo dõi các tính năng hữu ích sẽ triển khai vào E-Commerce Platform. Thiết kế của các tính năng này không chỉ làm sản phẩm xịn hơn, mà mục tiêu TỐI THƯỢNG là **rèn luyện kỹ năng thực chiến của bạn** trên hành trình chinh phục mức lương và trình độ của một Senior Go Developer.
+Tệp này không phải wishlist tính năng. Đây là backlog cải tiến có chủ đích để:
 
-> **Triết lý thiết kế (Mệnh lệnh từ AGENTS.md):** 
-> *Ưu tiên giải pháp Robust đơn giản nhất.* Không tuỳ tiện thêm Microservice rác, không thêm Database mới nếu không thực sự 100% cần thiết. Hãy bóp nghẹt giới hạn của Go, PostgreSQL, Redis và RabbitMQ hiện có.
+- nâng chất lượng source code hiện tại
+- cải thiện performance và reliability theo số liệu
+- giúp người học rèn đúng năng lực của một Back-end Senior Golang
 
----
+Nguyên tắc chọn việc:
 
-## 🟢 Giai đoạn 1: Master Nền tảng (Trình độ Fresher -> Mid)
-*Mục tiêu: Đạt độ cứng cáp với CRUD nâng cao, Middleware và xử lý SQL mượt mà.*
+- ưu tiên thay đổi có tác động thật lên codebase hiện tại
+- ưu tiên thứ đang lệch giữa tài liệu và code
+- ưu tiên bottleneck có thể đo được
+- ưu tiên tính đúng đắn dữ liệu trước “độ ngầu” kiến trúc
 
-- [ ] **1. Phân trang tốc độ cao (Cursor-based Pagination) ở `product-service`**
-  - **Mô tả:** Viết lại API lấy danh sách sản phẩm. Chuyển từ kiểu phân trang `Offset / Limit` truyền thống (rất chậm ở các trang cuối với DB hàng triệu dòng) sang dùng `Cursor-based` (trả về id con trỏ cuối cùng).
-  - **Kỹ năng mở khoá:** Tối ưu hiệu năng SQL Query, Thiết kế API High-Performance.
-
-- [ ] **2. Middlewares - Rate Limiting & GZIP ở `api-gateway`**
-  - **Mô tả:** Tự tay viết một Middleware trong Echo để chặn các IP spam quá 60 requests / phút (dùng bộ đệm in-memory `golang.org/x/time/rate`). Viết thêm middleware nén body trả về bằng Gzip để tiết kiệm băng thông.
-  - **Kỹ năng mở khoá:** System Reliability (Chống DDoD cấp thấp), Am hiểu Golang HTTP Server middleware pattern.
-
-- [ ] **3. Phục hồi dữ liệu (Soft Delete) ở `user-service`**
-  - **Mô tả:** Thêm trường `deleted_at` vào bảng User. API Xoá tài khoản thực chất chỉ `UPDATE deleted_at`. Khi đăng nhập phải filter chặn người đã xoá. Viết cronjob / worker để hard delete hẳn khỏi DB sau 30 ngày.
-  - **Kỹ năng mở khoá:** Thao tác Migration/SQL phức tạp, Batch Job processing.
-
-- [ ] **4. Refactor: "Unit of Work" / Closure Pattern cho Transaction DB**
-  - **Mô tả:** Viết lại cách quản lý Transaction trong code Go. Xây dựng một Closure function `RunInTx(ctx, db, func(tx) error)` tại lớp `repository`. Dùng nó để bọc các API tạo Order (đòi hỏi Insert Order + Update Stock trong cùng 1 Transaction) mà không làm ô nhiễm Service layer bằng `*sql.DB`.
-  - **Kỹ năng mở khoá:** Clean Architecture nâng cao, làm chủ `database/sql` Transaction Rollback/Commit tự động, tránh code smell.
+Những việc đã được code làm tốt thì không đưa lại vào roadmap chỉ để đủ danh sách. Ví dụ: `product-service` đã có cursor pagination cho catalog; vì vậy roadmap không lặp lại mục đó nữa.
 
 ---
 
-## 🟡 Giai đoạn 2: Xử lý Đồng thời & Phân Tán (Trình độ Mid -> Strong Mid)
-*Mục tiêu: Giải quyết tận gốc nỗi đau "Over-selling" và "Duplicate Transaction" của ngành TMĐT.*
+## P0 — Việc nên làm sớm nhất
 
-- [ ] **4. Optimistic Concurrency Control (Cập nhật Tồn kho) ở `product-service`**
-  - **Mô tả:** Chống Race-condition khi hai người cùng mua món hàng cuối cùng. Không dùng khoá Redis đắt tiền. Hãy thêm cột `version` vào bảng Product. Khi update stock, bắt buộc dùng mệnh đề SQL: `UPDATE products SET stock = stock - q, version = version + 1 WHERE id = X AND version = Y`. Nếu affected rows = 0 thì báo lỗi kẹt hàng.
-  - **Kỹ năng mở khoá:** Xử lý Đồng thời (Concurrency) đa luồng mà không cần dùng gRPC Lock hay Redis Lock, tiết kiệm cost infra.
+### 1. [ ] Chuẩn hoá tài liệu phát triển tính năng theo đúng path và flow thật của repo
 
-- [ ] **5. Idempotent API (Chống trùng lặp thanh toán) ở `payment-service`**
-  - **Mô tả:** Xây dựng API Thanh toán chuẩn Ngân hàng: Yêu cầu Frontend gửi kèm Header `X-Idempotency-Key` (bản chất là chuỗi uuid frontend tự sinh mồi cho 1 lần click). Backend lưu tạm key xuống Redis. Nếu Client rớt mạng rồi bấm thanh toán lần 2 với cùng key đó, API sẽ bỏ qua và trả về kết quả thành công ảo của lần 1.
-  - **Kỹ năng mở khoá:** Tiêu chuẩn Vàng cho khối FinTech, làm chủ Redis caching mechanism.
+- **Vì sao cần làm:** Một phần tài liệu hiện vẫn nói theo path cũ như `internal/delivery/http` hoặc `api-gateway/main.go`, trong khi source code thực tế đang đi theo `internal/handler`, `internal/grpc`, `cmd/main.go`, `api-gateway/internal/proxy`.
+- **Kết quả mong muốn:** Người mới có thể thêm feature mà không phải đoán cấu trúc hoặc sửa sai nhiều lần.
+- **Giá trị học tập:** Senior không chỉ viết code; còn phải giữ tài liệu sống khớp với codebase.
 
-- [ ] **7. Xử lý "Bom nổ chậm" với Dead Letter Exchange ở `RabbitMQ` / `notification-service`**
-  - **Mô tả:** Cấu hình queue của Gửi Email sao cho: Nếu việc gửi Email sinh lỗi (API third party sập), từ chối message và nhét vào Dead Letter Queue. Sau đó thử gửi lại (Retry) tối đa 3 lần theo nguyên tắc Exponential Backoff (chờ 10s, 30s, 60s). 
-  - **Kỹ năng mở khoá:** Xử lý Hệ thống Hướng sự kiện (Event-driven) gãy đổ. Phỏng vấn vị trí Senior 90% sẽ hỏi câu này.
+### 2. [ ] Tạo transaction helper dùng lại được cho các write flow nhiều bước
 
-- [ ] **8. Outbox Pattern cho Reliable Messaging ở `order-service`**
-  - **Mô tả:** Chống lại thảm họa "Mất kết nối RabbitMQ sau khi lưu DB". Áp dụng Outbox Pattern: Bọc Transaction cho việc `INSERT order` và `INSERT event_outbox` vào chung 1 DB PostgreSQL. Sau đó viết 1 Background Goroutine (Cron) chạy ngầm để đọc bảng `event_outbox` và bắn lên RabbitMQ. Bắn xong mới xoá record trong DB.
-  - **Kỹ năng mở khoá:** System Design kinh điển giải quyết bài toán Data Consistency giữa Microservices với DB và Message Broker.
+- **Vì sao cần làm:** Hiện transaction xuất hiện trực tiếp ở repository write path, đặc biệt trong order flow. Khi số lượng case tăng, việc copy/paste `BeginTx/Commit/Rollback` sẽ làm code khó đọc và dễ thiếu rollback path.
+- **Kết quả mong muốn:** Có helper kiểu `RunInTx(ctx, db, fn)` hoặc abstraction tương đương, đủ đơn giản, dùng được cho order/payment/coupon/audit path mà không làm service layer bị dính `*sql.Tx` lung tung.
+- **Giá trị học tập:** Đây là bước nâng từ “biết transaction” sang “biết tổ chức transactional boundary sạch”.
 
----
+### 3. [ ] Thêm idempotency cho `payment-service`
 
+- **Vì sao cần làm:** Thanh toán là nơi client retry, timeout, refresh trình duyệt, webhook duplicate xảy ra thường xuyên. Không có idempotency thì rất dễ tạo duplicate payment hoặc trải nghiệm khó hiểu.
+- **Kết quả mong muốn:** Hỗ trợ `X-Idempotency-Key` cho payment initiation và chuẩn hoá xử lý duplicate webhook/event.
+- **Giá trị học tập:** Đây là kỹ năng thực chiến cốt lõi của backend xử lý money flow.
 
-## 🔴 Giai đoạn 3: Trưởng thành Cấu trúc - Enterprise (Trình độ Senior)
-*Mục tiêu: Đạt chuẩn Cloud-Native của hệ thống Lớn.*
+### 4. [ ] Áp dụng outbox pattern cho event publish quan trọng ở order/payment
 
-- [ ] **7. Distributed Tracing (Centralized Log) xuyên suốt toàn Hệ thống**
-  - **Mô tả:** Ta không thể debug dễ dàng nếu Gateway, Order, và Product mỗi nơi vứt log 1 kiểu. Hãy sinh ra một `X-Correlation-ID` ngay từ API Gateway. Đẩy ID này vào Golang `context.Context` xuyên suốt vòng đời Request, gửi nó qua Header chuẩn gRPC, và chèn vào mọi dòng log `zap` ở tất cả các Services.
-  - **Kỹ năng mở khoá:** `context.WithValue` chuyên sâu, Observability & Telemetry (Một skill cốt tử của System Designer).
+- **Vì sao cần làm:** Code hiện tại có các đoạn lưu DB xong rồi mới publish RabbitMQ; nếu broker lỗi đúng lúc đó thì dữ liệu và event có thể lệch nhau.
+- **Kết quả mong muốn:** Persist business data và outbox record trong cùng transaction; background publisher chịu trách nhiệm phát event và đánh dấu đã gửi.
+- **Giá trị học tập:** Học cách xử lý consistency thực dụng hơn nhiều so với nhảy ngay vào Saga.
 
-- [ ] **10. Saga Pattern - Cuộc vãn hồi (Compensating Transaction) ở `order-service`**
-  - **Mô tả:** Đây là trùm cuối. Nếu tạo Order xong, nhưng dịch vụ trừ điểm thưởng hoặc tạo Payment ngầm bị lỗi. Phải làm sao để rollback lại Order đó về "Huỷ" khi các dịch vụ khác nhau sở hữu Database khác nhau? Áp dụng Choreography Saga.
-  - **Kỹ năng mở khoá:** Distributed Transaction - Cảnh giới cao nhất của Microservices. Hiểu được cái này, System Architecture Design không còn là trở ngại.
+### 5. [ ] Bổ sung benchmark + pprof cho hot path chính
 
-- [ ] **11. Graceful Shutdown & Zero-Downtime Deploy (Cho All Services)**
-  - **Mô tả:** Đảm bảo khi tắt một cái Docker container hay K8s Pod, server Go không đứt rụp 1 phát giữa chừng. Phải viết đoạn code bắt tín hiệu `os/signal` SIGTERM. Ngừng nhận request mới, đợi mớ request đang chạy dở lưu DB xong rồi mới tự sát.
-  - **Kỹ năng mở khoá:** Master Goroutine Control (`sync.WaitGroup`, `select`), Cloud Native Readiness.
-
-- [ ] **12. Background Worker Pool với RabbitMQ (Xử lý Ảnh/Video)**
-  - **Mô tả:** Xây dựng hệ thống Resize/Upload ảnh Avatar & Product không đồng bộ. Khi có Request upload, API chỉ trả về `202 Accepted` và lưu Message vào RMQ. Viết Worker Pool với số lượng 10 Goroutines chạy xuyên suốt để tiêu thụ (consume) ảnh từ MQ, bóp dung lượng WebP và ném lên MinIO.
-  - **Kỹ năng mở khoá:** Master Goroutine Pool Pattern, RabbitMQ Message Acknowledgment, Throttling Server Resources.
-
-- [ ] **13. Bulk Insert & Data Pipeline (Import hàng chục ngàn Products)**
-  - **Mô tả:** Cung cấp API để Admin upload File Excel chứa 50,000 dòng sản phẩm. Code Go phải parse file qua Streaming (không nạp hết vào RAM), đẩy dữ liệu vào 1 Goroutine Channel. Worker ở đầu bên kia nhận batch (500 items/lần) và thực hiện Bulk Insert/`COPY FROM` siêu tốc vào PostgreSQL.
-  - **Kỹ năng mở khoá:** Memory Optimization (GC pressure), Tối ưu hoá Data Pipeline tốc độ cao trong Go.
+- **Vì sao cần làm:** Repo đã có log, metric, tracing, nhưng profiling và benchmark chưa thành thói quen. Không có số liệu thì rất dễ tối ưu sai chỗ.
+- **Kết quả mong muốn:** Có benchmark tối thiểu cho product listing, order listing/filtering, payment summary path; có hướng dẫn chạy `pprof` trong local.
+- **Giá trị học tập:** Senior tối ưu bằng evidence, không tối ưu theo trực giác.
 
 ---
 
-## Kế hoạch của bạn (How to start)
-Bạn thấy ngợp? Đừng ráng ôm đồm. 
-1. Mỗi tuần hãy đánh dấu `[x]` vào đúng **một gạch đầu dòng duy nhất** từ Giai đoạn 1. 
-2. Làm dựa trên cấu trúc các bước tại `docs/learning/09-how-to-add-new-feature.md`.
-3. Làm xong tự kiểm tra theo Checklist và bắt AI review code. 
-Hết tệp này, trình duyệt code của bạn sẽ cực kỳ bén nhọn.
+## P1 — Performance và hiệu quả dữ liệu
+
+### 6. [ ] Thay dần `COUNT(*) + OFFSET/LIMIT` ở các list endpoint lớn bằng chiến lược bền hơn
+
+- **Vì sao cần làm:** `product-service` đã đi trước với cursor pagination, nhưng `order-service` admin listing vẫn dùng `COUNT(*) + OFFSET/LIMIT`. Khi dữ liệu tăng, đây sẽ là chi phí thật.
+- **Kết quả mong muốn:** Xác định endpoint nào cần giữ offset cho backoffice, endpoint nào nên chuyển sang cursor hoặc seek pagination; cập nhật API contract có chủ đích, không làm đại trà.
+- **Giá trị học tập:** Học cách chọn pagination theo bối cảnh chứ không dùng một mẫu cho mọi nơi.
+
+### 7. [ ] Đưa các phép tổng hợp payment về SQL thay vì load nhiều record rồi tính trong Go
+
+- **Vì sao cần làm:** Payment flow hiện có xu hướng đọc danh sách payment của một order rồi tổng hợp trong memory. Với lịch sử giao dịch lớn hơn, cách này sẽ tăng latency và allocations không cần thiết.
+- **Kết quả mong muốn:** Thêm repository query dạng aggregate cho `net paid`, `refundable amount`, `latest charge/refund summary`, kèm index phù hợp.
+- **Giá trị học tập:** Tư duy “đưa việc nặng cho DB làm đúng chỗ” là kỹ năng quan trọng của backend senior.
+
+### 8. [ ] Audit index và query plan cho các endpoint nóng bằng `EXPLAIN ANALYZE`
+
+- **Vì sao cần làm:** Repo đã có một số migration thêm index đúng hướng, nhưng chưa có nhịp audit bài bản cho query mới/cũ.
+- **Kết quả mong muốn:** Lập danh sách top query theo volume hoặc độ chậm, kiểm tra execution plan, thêm composite index hoặc rewrite query khi có bằng chứng.
+- **Giá trị học tập:** Học cách đọc plan, cardinality, scan type, và trade-off index write/read.
+
+### 9. [ ] Xây dựng chiến lược cache có điều kiện cho dữ liệu đọc nhiều
+
+- **Vì sao cần làm:** Redis đã có trong hệ thống, nhưng cache chỉ nên thêm sau khi đã đo được read hotspot thật. Cache sai chỗ sẽ tạo complexity mà không tăng hiệu quả.
+- **Kết quả mong muốn:** Chọn 1–2 read path đáng giá nhất, định nghĩa TTL, invalidation rule, cache key, fallback khi Redis lỗi.
+- **Giá trị học tập:** Senior biết khi nào cache đáng tiền và khi nào chỉ là nợ vận hành.
+
+### 10. [ ] Tối ưu bulk import/catalog maintenance theo batch và streaming
+
+- **Vì sao cần làm:** Nếu project tiến tới quản trị catalog lớn, import/update số lượng lớn sẽ sớm thành bài toán thật. Làm sớm theo batch sẽ tránh phải rewrite muộn.
+- **Kết quả mong muốn:** Thiết kế flow import dùng streaming parse, batch insert/update, bounded worker, backpressure rõ ràng.
+- **Giá trị học tập:** Đây là bài tập rất tốt về memory profile, channel design, và throughput.
+
+---
+
+## P2 — Reliability, resilience, vận hành
+
+### 11. [ ] Thêm dead-letter và retry policy chuẩn cho `notification-service`
+
+- **Vì sao cần làm:** Notification hiện đã consume event và gửi email, nhưng retry/dead-letter cần rõ ràng hơn để tránh poison message hoặc retry vô hạn.
+- **Kết quả mong muốn:** Có retry count, delay policy, dead-letter queue, log/metric cho message fail cuối cùng.
+- **Giá trị học tập:** Học cách vận hành consumer thực chiến thay vì chỉ “consume được là xong”.
+
+### 12. [ ] Chuẩn hoá graceful shutdown cho mọi service và mọi worker
+
+- **Vì sao cần làm:** Nhiều service đã có shutdown logic, nhưng cần thống nhất handling cho HTTP, gRPC, worker, consumer, ticker, và signal như `SIGTERM`.
+- **Kết quả mong muốn:** Mọi service dừng có kiểm soát, không rơi request, không bỏ dở goroutine nền, không làm mất work dễ tránh.
+- **Giá trị học tập:** Đây là kỹ năng production readiness tối thiểu của backend senior.
+
+### 13. [ ] Chuẩn hoá timeout/retry/circuit breaker cho outbound call
+
+- **Vì sao cần làm:** Gateway đã có retry + circuit breaker cho một số flow, nhưng các outbound path khác cần cùng tiêu chuẩn về timeout, retry-safe method, logging, tracing field.
+- **Kết quả mong muốn:** Có rule dùng chung cho HTTP/gRPC client: timeout mặc định, retry policy, idempotency expectation, error mapping.
+- **Giá trị học tập:** Senior phải kiểm soát failure mode xuyên service, không chỉ code happy path.
+
+### 14. [ ] Nâng cấp observability cho background job và async flow
+
+- **Vì sao cần làm:** HTTP request thường đã có log/trace khá ổn, nhưng cron, queue consumer, sync job, low-stock monitor cần signal quan sát rõ hơn.
+- **Kết quả mong muốn:** Có metric cho throughput/failure/retry, trace hoặc correlation field hợp lý, dashboard tối thiểu cho async path.
+- **Giá trị học tập:** Năng lực debug distributed flow đến từ observability tốt, không đến từ đoán mò.
+
+---
+
+## P3 — Chất lượng code, security, CI/CD, tư duy thiết kế
+
+### 15. [ ] Mở rộng test coverage theo vùng rủi ro thay vì chạy theo phần trăm
+
+- **Vì sao cần làm:** Repo đã có khá nhiều unit/integration test, nhưng chưa đồng đều ở các flow dễ hỏng như webhook, transaction rollback, authz, duplicate side effect.
+- **Kết quả mong muốn:** Ưu tiên test vào payment, order status transition, repository query quan trọng, gateway proxy edge case, permission path.
+- **Giá trị học tập:** Senior biết nơi nào đáng test nhất để giảm rủi ro thực tế.
+
+### 16. [ ] Đưa `go test`, race test, lint, migration verification vào CI bắt buộc
+
+- **Vì sao cần làm:** Chất lượng không nên phụ thuộc vào việc reviewer nhớ chạy tay.
+- **Kết quả mong muốn:** Pipeline tối thiểu gồm unit test, integration test quan trọng, `-race` cho phần phù hợp, static checks, và verify migration/app startup cơ bản.
+- **Giá trị học tập:** Đây là bước biến codebase từ “project học tập” thành “repo có kỷ luật kỹ thuật”.
+
+### 17. [ ] Rà soát bảo mật theo checklist backend thực dụng
+
+- **Vì sao cần làm:** Project đã có auth, OAuth, webhook, upload, proxy, email flow. Bề mặt tấn công không còn nhỏ.
+- **Kết quả mong muốn:** Có checklist định kỳ cho secret/config, authz, validation, file upload, redirect handling, logging PII, signature verification, rate-limit.
+- **Giá trị học tập:** Senior backend phải nhìn thấy risk trước khi incident xảy ra.
+
+### 18. [ ] Viết design note ngắn cho các quyết định khó thay vì thêm abstraction vô tội vạ
+
+- **Vì sao cần làm:** Khi repo lớn dần, những chỗ như transaction boundary, outbox, cache policy, pagination strategy, event contract cần được giải thích bằng decision log ngắn gọn.
+- **Kết quả mong muốn:** Mỗi thay đổi kiến trúc đáng kể có 1 note ngắn: bối cảnh, lựa chọn, trade-off, failure mode, migration path.
+- **Giá trị học tập:** Đây là phần rất quan trọng để bước từ level “code tốt” sang “design tốt”.
+
+### 19. [ ] Chỉ xem Saga hoặc choreography là bước sau, không phải ưu tiên mặc định
+
+- **Vì sao cần làm:** Repo có RabbitMQ và microservices, nhưng điều đó không có nghĩa mọi bài toán consistency đều phải leo thẳng lên Saga. Outbox, idempotency, compensation cục bộ và transaction boundary tốt thường mang lại giá trị sớm hơn.
+- **Kết quả mong muốn:** Chỉ nghiên cứu/triển khai Saga sau khi đã làm xong những nền tảng reliability cơ bản ở trên và có use case thật chứng minh cần thiết.
+- **Giá trị học tập:** Senior biết phản kháng với độ phức tạp không cần thiết.
+
+---
+
+## Cách dùng roadmap này
+
+1. Luôn làm từ trên xuống theo ưu tiên, trừ khi có incident hoặc requirement gấp.
+2. Mỗi lần chỉ kéo 1 mục lớn hoặc 1 lát cắt nhỏ của mục lớn.
+3. Trước khi code, viết rõ:
+   - vấn đề hiện tại
+   - số liệu hoặc dấu hiệu đang có
+   - tiêu chí hoàn thành
+4. Sau khi xong, cập nhật:
+   - thay đổi chính
+   - benchmark/metric nếu có
+   - lesson learned
+
+Nếu hoàn thành tốt phần P0 và P1, bạn đã đi rất gần tới tư duy của một Backend Senior Go: ưu tiên tính đúng đắn dữ liệu, hiệu năng đo được, observability, và độ đơn giản có chủ đích.

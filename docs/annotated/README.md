@@ -12,6 +12,7 @@ Thư mục này dành cho việc đọc source code theo từng block quan trọ
 2. Mở source code thật song song trong IDE.
 3. Đi theo từng block line number hoặc từng function chính.
 4. Tự trace dữ liệu đi qua các layer: `handler -> service -> repository` hoặc `context -> hook -> page`.
+5. Nếu cần bức tranh lớn trước khi vào từng block, đọc thêm [../learning/11-senior-source-code-review-guide.md](../learning/11-senior-source-code-review-guide.md).
 
 ## Thứ tự đọc khuyến nghị
 
