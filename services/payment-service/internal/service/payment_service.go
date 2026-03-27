@@ -104,7 +104,10 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 		return nil, ErrInvalidPaymentAmount
 	}
 
-	method := normalizePaymentMethod(req.PaymentMethod)
+	method, err := normalizePaymentMethod(req.PaymentMethod)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	payment := &model.Payment{
 		ID:              uuid.New().String(),
@@ -489,12 +492,16 @@ func refundableAmountForCharge(paymentID string, amount float64, payments []*mod
 	return roundMoney(math.Max(amount-refunded, 0))
 }
 
-func normalizePaymentMethod(value string) string {
+func normalizePaymentMethod(value string) (string, error) {
 	method := strings.ToLower(strings.TrimSpace(value))
-	if method == "" {
-		return "credit_card"
+	switch method {
+	case "", "manual", "demo", "credit_card":
+		return "manual", nil
+	case "momo", "digital_wallet":
+		return "momo", nil
+	default:
+		return "", ErrUnsupportedPaymentMethod
 	}
-	return method
 }
 
 func resolveGatewayProvider(method string) string {

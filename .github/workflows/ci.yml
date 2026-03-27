@@ -9,8 +9,26 @@ on:
   pull_request:
 
 jobs:
+  repo-safety:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure local env files are not tracked
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo ".env must never be tracked"
+            exit 1
+          fi
+          if git ls-files --error-unmatch .env.local >/dev/null 2>&1; then
+            echo ".env.local must never be tracked"
+            exit 1
+          fi
+
   go-checks:
     runs-on: ubuntu-latest
+    needs: repo-safety
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +73,7 @@ jobs:
 
   frontend-checks:
     runs-on: ubuntu-latest
+    needs: repo-safety
     defaults:
       run:
         working-directory: frontend

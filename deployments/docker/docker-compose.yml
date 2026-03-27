@@ -147,7 +147,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://admin:password123@localhost:3000/api/health"]
+      test: ["CMD-SHELL", "wget -qO- --user=$${GF_SECURITY_ADMIN_USER:-admin} --password=$${GF_SECURITY_ADMIN_PASSWORD:-change-me-grafana-password} http://localhost:3000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -172,6 +172,8 @@ services:
     networks:
       - ecommerce-network
 
+  # Primary local UI path. The Next.js client remains experimental and is not
+  # part of the default Compose runtime yet.
   frontend:
     build:
       context: ../..

@@ -9,6 +9,9 @@ import (
 
 func FrontendCORS() echo.MiddlewareFunc {
 	return echomw.CORSWithConfig(echomw.CORSConfig{
+		// Keep CORS tight around the primary local UI path (`frontend/`) and the
+		// nginx edge entrypoint. The experimental Next.js client is intentionally
+		// not part of the default runtime until it is promoted to the main path.
 		AllowOrigins: []string{
 			"http://localhost",
 			"http://127.0.0.1",

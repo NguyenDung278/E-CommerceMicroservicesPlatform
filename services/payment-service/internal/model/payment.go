@@ -28,7 +28,7 @@ type Payment struct {
 	Status               PaymentStatus          `json:"status"`
 	TransactionType      PaymentTransactionType `json:"transaction_type"`
 	ReferencePaymentID   string                 `json:"reference_payment_id,omitempty"`
-	PaymentMethod        string                 `json:"payment_method"` // "credit_card", "paypal", "momo", etc.
+	PaymentMethod        string                 `json:"payment_method"` // "manual" or "momo"
 	GatewayProvider      string                 `json:"gateway_provider"`
 	GatewayTransactionID string                 `json:"gateway_transaction_id,omitempty"`
 	GatewayOrderID       string                 `json:"gateway_order_id,omitempty"`

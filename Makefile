@@ -4,11 +4,20 @@ MODULES := pkg api-gateway proto services/user-service services/product-service 
 DOCKER_BUILDKIT ?= 1
 COMPOSE_DOCKER_CLI_BUILD ?= 1
 COMPOSE_DIR := deployments/docker
-COMPOSE_ENV_FILE ?= $(CURDIR)/.env
+COMPOSE_ENV_FILE ?= $(if $(wildcard $(CURDIR)/.env.local),$(CURDIR)/.env.local,$(CURDIR)/.env.example)
 SERVICES ?=
 
-# Database connection details for migrations
-DB_URL ?= postgres://admin:change-me-db-password@localhost:5432/ecommerce?sslmode=disable
+# Database connection details for migrations.
+# Keep migration targets aligned with the per-service databases created by Docker Compose.
+POSTGRES_HOST ?= localhost
+POSTGRES_PORT ?= 5432
+POSTGRES_USER ?= admin
+POSTGRES_PASSWORD ?= change-me-db-password
+POSTGRES_SSLMODE ?= disable
+USER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_user?sslmode=$(POSTGRES_SSLMODE)
+PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_product?sslmode=$(POSTGRES_SSLMODE)
+ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
+PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
 .PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
 
@@ -73,21 +82,21 @@ k8s-delete:
 
 migrate-up:
 	@echo "==> Running migrations UP for all services"
-	migrate -path services/user-service/migrations -database "$(DB_URL)" up
-	migrate -path services/product-service/migrations -database "$(DB_URL)" up
-	migrate -path services/order-service/migrations -database "$(DB_URL)" up
-	migrate -path services/payment-service/migrations -database "$(DB_URL)" up
+	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" up
+	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" up
+	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" up
+	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" up
 
 migrate-down:
 	@echo "==> Running migrations DOWN for all services"
-	migrate -path services/payment-service/migrations -database "$(DB_URL)" down -all
-	migrate -path services/order-service/migrations -database "$(DB_URL)" down -all
-	migrate -path services/product-service/migrations -database "$(DB_URL)" down -all
-	migrate -path services/user-service/migrations -database "$(DB_URL)" down -all
+	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" down -all
+	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" down -all
+	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" down -all
+	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" down -all
 
 migrate-force:
 	@echo "==> Forcing migration versions to 1"
-	migrate -path services/user-service/migrations -database "$(DB_URL)" force 1
-	migrate -path services/product-service/migrations -database "$(DB_URL)" force 1
-	migrate -path services/order-service/migrations -database "$(DB_URL)" force 1
-	migrate -path services/payment-service/migrations -database "$(DB_URL)" force 1
+	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" force 1
+	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" force 1
+	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" force 1
+	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" force 1

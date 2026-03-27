@@ -1,5 +1,10 @@
 .git
 .gitignore
+.env
+.env.local
+.env.*
+!.env.example
+!.env.local.example
 .cache
 **/.cache
 **/.cache/**

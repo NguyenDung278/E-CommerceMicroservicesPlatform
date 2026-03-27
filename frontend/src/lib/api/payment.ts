@@ -13,7 +13,7 @@ import { normalizePayment, normalizePaymentList } from "../normalizers";
  */
 export interface ProcessPaymentData {
   order_id: string;
-  payment_method: string;
+  payment_method: "manual" | "momo";
   amount?: number;
 }
 

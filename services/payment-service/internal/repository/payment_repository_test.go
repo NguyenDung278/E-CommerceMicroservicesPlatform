@@ -17,7 +17,7 @@ func TestPaymentCreateArgsKeepRequiredStringsNonNil(t *testing.T) {
 		Amount:          49.99,
 		Status:          model.PaymentStatusCompleted,
 		TransactionType: model.PaymentTransactionTypeCharge,
-		PaymentMethod:   "credit_card",
+		PaymentMethod:   "manual",
 		GatewayProvider: "manual",
 		CreatedAt:       now,
 		UpdatedAt:       now,

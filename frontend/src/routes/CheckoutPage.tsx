@@ -18,7 +18,7 @@ type DirectProductState = {
   };
 };
 
-type PaymentChoice = "credit_card" | "digital_wallet";
+type PaymentChoice = "manual" | "momo";
 
 type CheckoutFormState = {
   fullName: string;
@@ -26,9 +26,6 @@ type CheckoutFormState = {
   city: string;
   postcode: string;
   phone: string;
-  cardNumber: string;
-  expiryDate: string;
-  cvv: string;
 };
 
 type CheckoutDisplayItem = {
@@ -45,10 +42,7 @@ const emptyCheckoutForm: CheckoutFormState = {
   street: "",
   city: "",
   postcode: "",
-  phone: "",
-  cardNumber: "",
-  expiryDate: "",
-  cvv: ""
+  phone: ""
 };
 
 export function CheckoutPage() {
@@ -59,7 +53,7 @@ export function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [form, setForm] = useState<CheckoutFormState>(emptyCheckoutForm);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("credit_card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("manual");
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
@@ -220,11 +214,6 @@ export function CheckoutPage() {
       return;
     }
 
-    if (paymentMethod === "credit_card" && (!sanitizeText(form.cardNumber) || !sanitizeText(form.expiryDate) || !sanitizeText(form.cvv))) {
-      setFeedback("Vui lòng hoàn tất thông tin thẻ trước khi đặt hàng.");
-      return;
-    }
-
     try {
       setIsSubmitting(true);
 
@@ -246,7 +235,7 @@ export function CheckoutPage() {
 
       const paymentResponse = await api.processPayment(token, {
         order_id: orderResponse.data.id,
-        payment_method: paymentMethod === "digital_wallet" ? "momo" : "credit_card"
+        payment_method: paymentMethod
       });
 
       if (!directProduct && cart.items.length > 0) {
@@ -360,18 +349,18 @@ export function CheckoutPage() {
                 </div>
 
                 <div className="checkout-payment-choice-list">
-                  <label className={paymentMethod === "credit_card" ? "checkout-payment-choice checkout-payment-choice-active" : "checkout-payment-choice"}>
+                  <label className={paymentMethod === "manual" ? "checkout-payment-choice checkout-payment-choice-active" : "checkout-payment-choice"}>
                     <div className="checkout-payment-choice-copy">
                       <input
-                        checked={paymentMethod === "credit_card"}
+                        checked={paymentMethod === "manual"}
                         name="payment-method"
                         type="radio"
-                        value="credit_card"
-                        onChange={() => setPaymentMethod("credit_card")}
+                        value="manual"
+                        onChange={() => setPaymentMethod("manual")}
                       />
                       <div>
-                        <strong>Credit Card</strong>
-                        <span>Visa, Mastercard, Amex</span>
+                        <strong>Instant Demo Payment</strong>
+                        <span>Marks the order as paid immediately for local testing.</span>
                       </div>
                     </div>
                     <span className="checkout-payment-icon" aria-hidden="true">
@@ -379,18 +368,18 @@ export function CheckoutPage() {
                     </span>
                   </label>
 
-                  <label className={paymentMethod === "digital_wallet" ? "checkout-payment-choice checkout-payment-choice-active" : "checkout-payment-choice"}>
+                  <label className={paymentMethod === "momo" ? "checkout-payment-choice checkout-payment-choice-active" : "checkout-payment-choice"}>
                     <div className="checkout-payment-choice-copy">
                       <input
-                        checked={paymentMethod === "digital_wallet"}
+                        checked={paymentMethod === "momo"}
                         name="payment-method"
                         type="radio"
-                        value="digital_wallet"
-                        onChange={() => setPaymentMethod("digital_wallet")}
+                        value="momo"
+                        onChange={() => setPaymentMethod("momo")}
                       />
                       <div>
-                        <strong>Digital Wallet</strong>
-                        <span>Apple Pay, Google Pay</span>
+                        <strong>MoMo Hosted Checkout</strong>
+                        <span>Creates a pending payment and returns an external checkout link.</span>
                       </div>
                     </div>
                     <span className="checkout-payment-icon" aria-hidden="true">
@@ -399,36 +388,11 @@ export function CheckoutPage() {
                   </label>
                 </div>
 
-                <div className="checkout-field-grid">
-                  <label className="checkout-field checkout-field-full">
-                    <span>Card Number</span>
-                    <input
-                      inputMode="numeric"
-                      placeholder="0000 0000 0000 0000"
-                      value={form.cardNumber}
-                      onChange={(event) => updateForm("cardNumber", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field">
-                    <span>Expiry Date</span>
-                    <input
-                      placeholder="MM/YY"
-                      value={form.expiryDate}
-                      onChange={(event) => updateForm("expiryDate", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field">
-                    <span>CVV</span>
-                    <input
-                      inputMode="numeric"
-                      placeholder="123"
-                      value={form.cvv}
-                      onChange={(event) => updateForm("cvv", event.target.value)}
-                    />
-                  </label>
-                </div>
+                <p className="checkout-section-note">
+                  {paymentMethod === "momo"
+                    ? "After the order is created, you will get a hosted payment link on the confirmation screen."
+                    : "Use this mode for local demos when you want the order to become paid immediately."}
+                </p>
               </section>
             </div>
 

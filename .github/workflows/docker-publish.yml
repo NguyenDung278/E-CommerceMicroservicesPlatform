@@ -40,6 +40,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure local env files are not tracked
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo ".env must never be tracked"
+            exit 1
+          fi
+          if git ls-files --error-unmatch .env.local >/dev/null 2>&1; then
+            echo ".env.local must never be tracked"
+            exit 1
+          fi
+
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3

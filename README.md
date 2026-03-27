@@ -1,12 +1,12 @@
 # E-Commerce Platform
 
-Repo này là một nền tảng e-commerce demo theo kiến trúc Go microservices, có thêm frontend React + Vite và bộ công cụ local runtime bằng Docker Compose. Mục tiêu chính là giúp developer mới hiểu cách một hệ thống commerce được tách thành nhiều service, cách các service giao tiếp với nhau, và cách đọc source có phương pháp.
+Repo này là một nền tảng e-commerce demo theo kiến trúc Go microservices, có frontend chính React + Vite và bộ công cụ local runtime bằng Docker Compose. Mục tiêu chính là giúp developer mới hiểu cách một hệ thống commerce được tách thành nhiều service, cách các service giao tiếp với nhau, và cách đọc source có phương pháp.
 
 ## Tổng quan nhanh
 
 - `api-gateway`: cửa vào HTTP chung cho frontend và client.
-- `client/`: Ứng dụng Next.js mới cho UI implementation (MCP/Stitch-driven).
-- `frontend/`: Ứng dụng React + Vite legacy để test flow end-to-end.
+- `frontend/`: Ứng dụng React + Vite là UI path chính cho local development và verification end-to-end.
+- `client/`: Prototype Next.js ở trạng thái experimental, chưa nằm trong runtime mặc định.
 - `services/user-service`: đăng ký, đăng nhập, JWT, profile, address.
 - `services/product-service`: catalog, media upload, search, gRPC product lookup.
 - `services/cart-service`: giỏ hàng trên Redis, đồng bộ giá/stock qua gRPC.
@@ -14,15 +14,14 @@ Repo này là một nền tảng e-commerce demo theo kiến trúc Go microservi
 - `services/payment-service`: payment lifecycle, webhook, refund, phát event.
 - `services/notification-service`: worker consume RabbitMQ và gửi email.
 - `pkg/`: config, database, middleware, validation, observability dùng chung.
-- `frontend/`: ứng dụng React để test flow end-to-end.
 - `deployments/docker/`: Docker Compose cho local development.
 
 ## Quick Start
 
-1. Tạo file môi trường:
+1. Tạo file môi trường local-only:
 
 ```bash
-cp .env.example .env
+cp .env.local.example .env.local
 ```
 
 2. Dựng toàn bộ stack backend + hạ tầng:
@@ -32,7 +31,7 @@ make docker-config
 make compose-up
 ```
 
-3. Chạy frontend ở chế độ dev nếu muốn:
+3. Chạy frontend chính ở chế độ dev nếu muốn:
 
 ```bash
 make frontend-install
@@ -67,8 +66,8 @@ Lưu ý:
 - Messaging: RabbitMQ
 - Catalog infra: MinIO, Elasticsearch
 - Observability: Prometheus, Grafana, Jaeger
-- Frontend (Legacy): React, Vite, TypeScript
-- Frontend (Next.js): Next.js 16.2.1, React 19, TypeScript
+- Frontend (Primary): React, Vite, TypeScript
+- Frontend (Experimental): Next.js 16.2.1, React 19, TypeScript
 
 ## Luồng chạy local
 

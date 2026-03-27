@@ -75,6 +75,9 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 		if errors.Is(err, service.ErrInvalidPaymentAmount) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "payment amount must be positive and not exceed the outstanding balance")
 		}
+		if errors.Is(err, service.ErrUnsupportedPaymentMethod) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "payment method is not supported")
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", "payment processing failed")
 	}
 	return response.Success(c, http.StatusCreated, "payment processed", payment)
