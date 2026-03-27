@@ -1,230 +1,356 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { ShieldCheck, Trash2, Truck, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { buttonStyles } from "@/lib/button-styles";
 import {
-  Badge,
-  Button,
   EmptyState,
+  InlineAlert,
+  LoadingScreen,
   ProductCard,
-  QuantityStepper,
+  ProductCardAction,
   SectionHeading,
+  SurfaceCard,
+  TextInput,
 } from "@/components/storefront-ui";
-import { formatCurrency, formatCurrencyPrecise } from "@/lib/utils";
-import { useStorefront } from "@/store/storefront-provider";
+import { useAuth } from "@/hooks/useAuth";
+import { useCart } from "@/hooks/useCart";
+import { useWishlist } from "@/hooks/useWishlist";
+import { orderApi, productApi } from "@/lib/api";
+import { buttonStyles } from "@/lib/button-styles";
+import { getErrorMessage } from "@/lib/errors/handler";
+import { cn } from "@/lib/utils";
+import type { OrderPreview, Product } from "@/types/api";
+import { formatCurrency } from "@/utils/format";
 
 export function CartPage() {
-  const {
-    cartLines,
-    subtotal,
-    shippingFee,
-    tax,
-    total,
-    removeFromCart,
-    updateQuantity,
-    wishlist,
-    wishlistProducts,
-    toggleWishlist,
-    addToCart,
-    resetDemo,
-  } = useStorefront();
+  const { token, isAuthenticated } = useAuth();
+  const { cart, clearCart, error, removeItem, updateItem, addItem, isLoading } = useCart();
+  const { wishlist, isSaved, toggleWishlist } = useWishlist();
+  const [couponCode, setCouponCode] = useState("");
+  const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
+  const [couponFeedback, setCouponFeedback] = useState("");
+  const [isPreviewingCoupon, setIsPreviewingCoupon] = useState(false);
+  const [productMap, setProductMap] = useState<Record<string, Product>>({});
+  const [savedProducts, setSavedProducts] = useState<Product[]>([]);
+  const [busyProductId, setBusyProductId] = useState("");
+
+  const previewItems = useMemo(
+    () => cart.items.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
+    [cart.items],
+  );
+  const totalUnits = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    setCouponPreview(null);
+  }, [cart.items]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (cart.items.length === 0) {
+      setProductMap({});
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.allSettled(
+      cart.items.map((item) =>
+        productApi.getProductById(item.product_id).then((response) => [item.product_id, response.data] as const),
+      ),
+    ).then((results) => {
+      if (!active) {
+        return;
+      }
+
+      const nextMap: Record<string, Product> = {};
+      results.forEach((result) => {
+        if (result.status === "fulfilled") {
+          const [productId, product] = result.value;
+          nextMap[productId] = product;
+        }
+      });
+      setProductMap(nextMap);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [cart.items]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (wishlist.length === 0) {
+      setSavedProducts([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.allSettled(
+      wishlist.slice(0, 4).map((productId) => productApi.getProductById(productId)),
+    ).then((results) => {
+      if (!active) {
+        return;
+      }
+
+      setSavedProducts(
+        results
+          .filter(
+            (
+              result,
+            ): result is PromiseFulfilledResult<Awaited<ReturnType<typeof productApi.getProductById>>> =>
+              result.status === "fulfilled",
+          )
+          .map((result) => result.value.data),
+      );
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [wishlist]);
+
+  async function handlePreviewCoupon() {
+    const normalizedCouponCode = couponCode.trim();
+
+    if (!token) {
+      setCouponFeedback("Bạn cần đăng nhập để xem trước mã giảm giá.");
+      return;
+    }
+
+    if (!normalizedCouponCode) {
+      setCouponFeedback("Nhập mã giảm giá trước khi áp dụng.");
+      return;
+    }
+
+    if (previewItems.length === 0) {
+      setCouponFeedback("Giỏ hàng đang trống nên chưa thể áp dụng voucher.");
+      return;
+    }
+
+    try {
+      setIsPreviewingCoupon(true);
+      const response = await orderApi.previewOrder(token, {
+        items: previewItems,
+        coupon_code: normalizedCouponCode,
+      });
+      setCouponPreview(response.data);
+      setCouponCode(response.data.coupon_code ?? normalizedCouponCode.toUpperCase());
+      setCouponFeedback(`Voucher ${response.data.coupon_code ?? normalizedCouponCode.toUpperCase()} đã được áp dụng.`);
+    } catch (reason) {
+      setCouponPreview(null);
+      setCouponFeedback(getErrorMessage(reason));
+    } finally {
+      setIsPreviewingCoupon(false);
+    }
+  }
+
+  async function handleAddSavedProduct(product: Product) {
+    try {
+      setBusyProductId(product.id);
+      await addItem({ product_id: product.id, quantity: 1 });
+    } catch (reason) {
+      setCouponFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyProductId("");
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <>
+        <SiteHeader />
+        <LoadingScreen label="Đang tải giỏ hàng..." />
+        <SiteFooter />
+      </>
+    );
+  }
 
   return (
     <>
       <SiteHeader />
-      <main className="shell section-spacing">
-        <div className="mb-10">
-          <h1 className="font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-6xl">
-            Shopping Bag
-          </h1>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-              ND editorial collection
-            </p>
-            <Badge>Dev note: cart microservice active</Badge>
-          </div>
-        </div>
+      <main className="shell section-spacing space-y-10">
+        <SectionHeading
+          eyebrow="Shopping bag"
+          title="Giỏ hàng đồng bộ với cart-service, giữ guest cart cục bộ cho đến khi người dùng đăng nhập."
+          description="Coupon preview gọi sang order-service để xem trước tổng tiền, còn checkout sẽ tạo order thật và chuyển sang payment-service."
+        />
 
-        {!cartLines.length ? (
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
+        {!isAuthenticated && cart.items.length > 0 ? (
+          <InlineAlert tone="info">
+            Đây là giỏ tạm trên thiết bị hiện tại. Khi bạn đăng nhập, hệ thống sẽ merge từng item vào cart-service của tài khoản.
+          </InlineAlert>
+        ) : null}
+
+        {cart.items.length === 0 ? (
           <EmptyState
-            title="Your bag is empty"
-            description="The empty state is ready for QA. Reset the seeded demo cart, browse the catalog again, or drag items into the bag from the archive page to repopulate it."
+            title="Giỏ hàng đang trống"
+            description="Hãy thêm sản phẩm từ catalog hoặc kéo thả trực tiếp từ màn listing vào dock giỏ hàng."
             action={
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Link href="/catalog" className={buttonStyles({ size: "lg" })}>
-                  Browse the archive
-                </Link>
-                <Button variant="secondary" size="lg" onClick={resetDemo}>
-                  Restore demo cart
-                </Button>
-              </div>
+              <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
+                Đi tới catalog
+              </Link>
             }
           />
         ) : (
-          <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-6">
-              {cartLines.map((line) => (
-                <article
-                  key={`${line.product.id}-${line.selectedColor}-${line.selectedSize}`}
-                  className="grid gap-5 rounded-[1.9rem] bg-white/45 p-5 shadow-[0_10px_40px_-28px_rgba(27,28,25,0.35)] md:grid-cols-[180px_minmax(0,1fr)] md:p-6"
-                >
-                  <div className="relative overflow-hidden rounded-[1.5rem] bg-surface-container-low">
-                    <div className="relative aspect-[0.8]">
-                      <Image
-                        src={line.product.image}
-                        alt={line.product.name}
-                        fill
-                        sizes="180px"
-                        className="object-cover"
-                      />
-                    </div>
-                  </div>
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <section className="space-y-4">
+              {cart.items.map((item) => {
+                const product = productMap[item.product_id];
+                const imageUrl = product?.image_urls[0] || product?.image_url || "";
 
-                  <div className="flex flex-col justify-between gap-6">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                          {line.product.category}
-                        </p>
-                        <h2 className="mt-3 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                          {line.product.name}
-                        </h2>
-                        <p className="mt-2 text-sm text-on-surface-variant">
-                          {line.selectedColor} / Size {line.selectedSize}
-                        </p>
+                return (
+                  <SurfaceCard key={item.product_id} className="p-5">
+                    <div className="grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
+                      <div className="overflow-hidden rounded-[1.5rem] bg-surface">
+                        {imageUrl ? (
+                          <img alt={item.name} src={imageUrl} className="aspect-[4/5] h-full w-full object-cover" />
+                        ) : (
+                          <div className="aspect-[4/5] bg-surface-container-high" />
+                        )}
                       </div>
-                      <p className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-                        {formatCurrency(line.product.price * line.quantity)}
-                      </p>
+
+                      <div className="space-y-5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
+                              {product?.category || "Catalog"}
+                            </p>
+                            <Link href={`/products/${item.product_id}`} className="mt-2 block font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                              {item.name}
+                            </Link>
+                            <p className="mt-3 text-sm text-on-surface-variant">{product?.brand || "Commerce Platform"}</p>
+                          </div>
+                          <strong className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                            {formatCurrency(item.price * item.quantity)}
+                          </strong>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-4">
+                          <div className="flex items-center gap-3 rounded-full bg-surface px-3 py-2">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-low text-primary"
+                              onClick={() => void updateItem(item.product_id, Math.max(1, item.quantity - 1))}
+                            >
+                              -
+                            </button>
+                            <span className="min-w-6 text-center text-sm font-semibold text-primary">{item.quantity}</span>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-low text-primary"
+                              onClick={() => void updateItem(item.product_id, item.quantity + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <button type="button" className={buttonStyles({ variant: "tertiary" })} onClick={() => void removeItem(item.product_id)}>
+                            Xóa
+                          </button>
+                        </div>
+                      </div>
                     </div>
+                  </SurfaceCard>
+                );
+              })}
+            </section>
 
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                      <QuantityStepper
-                        quantity={line.quantity}
-                        onDecrease={() =>
-                          updateQuantity(line.product.id, Math.max(1, line.quantity - 1))
-                        }
-                        onIncrease={() =>
-                          updateQuantity(line.product.id, Math.min(9, line.quantity + 1))
-                        }
-                      />
-
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-secondary transition hover:text-error"
-                        onClick={() => removeFromCart(line.product.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            <aside className="lg:sticky lg:top-28 lg:self-start">
-              <div className="rounded-[1.9rem] bg-surface-container-low p-6 md:p-8">
+            <aside className="space-y-5">
+              <SurfaceCard className="p-6">
                 <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                  Order Summary
+                  Tóm tắt đơn hàng
                 </h2>
 
-                <div className="mt-8 space-y-4 text-sm">
-                  <div className="flex items-center justify-between text-on-surface-variant">
-                    <span>Subtotal</span>
-                    <span className="text-primary">{formatCurrencyPrecise(subtotal)}</span>
+                <div className="mt-6 space-y-4 text-sm text-on-surface-variant">
+                  <div className="flex items-center justify-between">
+                    <span>Số lượng</span>
+                    <strong className="text-primary">{totalUnits}</strong>
                   </div>
-                  <div className="flex items-center justify-between text-on-surface-variant">
-                    <span>Shipping</span>
-                    <span className="text-primary">
-                      {shippingFee === 0 ? "Free" : formatCurrencyPrecise(shippingFee)}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <span>Tạm tính</span>
+                    <strong className="text-primary">{formatCurrency(cart.total)}</strong>
                   </div>
-                  <div className="flex items-center justify-between text-on-surface-variant">
-                    <span>Estimated tax</span>
-                    <span className="text-primary">{formatCurrencyPrecise(tax)}</span>
+                  <div className="flex items-center justify-between">
+                    <span>Giảm giá</span>
+                    <strong className="text-primary">
+                      {couponPreview ? `-${formatCurrency(couponPreview.discount_amount)}` : "Tính sau"}
+                    </strong>
                   </div>
-                </div>
-
-                <div className="mt-8 border-t border-outline-variant/25 pt-6">
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-                      Total
-                    </span>
-                    <span className="font-serif text-4xl font-semibold tracking-[-0.04em] text-primary">
-                      {formatCurrencyPrecise(total)}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <span>Phí giao hàng</span>
+                    <strong className="text-primary">{couponPreview ? formatCurrency(couponPreview.shipping_fee) : "Tính khi checkout"}</strong>
                   </div>
                 </div>
 
-                <Link
-                  href="/checkout"
-                  className={buttonStyles({ size: "lg", className: "mt-8 w-full" })}
-                >
-                  Proceed to checkout
-                </Link>
-
-                <div className="mt-8 space-y-4 text-sm text-on-surface-variant">
-                  <div className="flex items-center gap-3">
-                    <ShieldCheck className="h-4 w-4 text-primary" />
-                    Secure encrypted payment processing
+                <div className="mt-6 space-y-3">
+                  <TextInput placeholder="Nhập mã giảm giá" value={couponCode} onChange={(event) => setCouponCode(event.target.value)} />
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button type="button" className={cn(buttonStyles({ variant: "secondary" }), "w-full")} disabled={isPreviewingCoupon} onClick={() => void handlePreviewCoupon()}>
+                      {isPreviewingCoupon ? "Đang kiểm tra..." : "Xem trước voucher"}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(buttonStyles({ variant: "tertiary" }), "w-full justify-center")}
+                      onClick={() => {
+                        setCouponCode("");
+                        setCouponPreview(null);
+                        setCouponFeedback("");
+                      }}
+                    >
+                      Gỡ voucher
+                    </button>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Truck className="h-4 w-4 text-primary" />
-                    Complimentary shipping on orders above $1,000
-                  </div>
+                  {couponFeedback ? <InlineAlert tone="info">{couponFeedback}</InlineAlert> : null}
                 </div>
-              </div>
 
-              <div className="mt-5 rounded-[1.7rem] bg-white/55 p-6">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-                  Exclusive offer
-                </p>
-                <h3 className="mt-4 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-                  Join the inner circle
-                </h3>
-                <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                  Early access, higher-contrast order updates and launch previews for the next drop.
-                </p>
-                <button
-                  type="button"
-                  className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary underline decoration-tertiary underline-offset-8"
-                >
-                  <WandSparkles className="h-4 w-4" />
-                  Join now
-                </button>
-              </div>
+                <div className="mt-6 flex flex-col gap-3">
+                  <Link href="/checkout" className={cn(buttonStyles({ size: "lg" }), "w-full")}>
+                    Tiếp tục checkout
+                  </Link>
+                  <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")} onClick={() => void clearCart()}>
+                    Xóa toàn bộ giỏ
+                  </button>
+                </div>
+              </SurfaceCard>
+
+              {savedProducts.length > 0 ? (
+                <SurfaceCard className="p-6">
+                  <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                    Đã lưu để xem sau
+                  </h3>
+                  <div className="mt-5 grid gap-4">
+                    {savedProducts.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        saved={isSaved(product.id)}
+                        footerSlot={
+                          <button type="button" className="text-sm font-medium text-tertiary hover:text-tertiary-container" onClick={() => toggleWishlist(product.id)}>
+                            Bỏ lưu
+                          </button>
+                        }
+                        actionSlot={
+                          <ProductCardAction
+                            onClick={() => void handleAddSavedProduct(product)}
+                            disabled={product.stock <= 0}
+                            loading={busyProductId === product.id}
+                          />
+                        }
+                      />
+                    ))}
+                  </div>
+                </SurfaceCard>
+              ) : null}
             </aside>
           </div>
         )}
-
-        {wishlistProducts.length ? (
-          <section id="saved" className="mt-20">
-            <SectionHeading
-              eyebrow="Saved for later"
-              title="Wishlist items stay persistent across routes."
-              description="This section gives you a second stateful surface to test save/remove flows without adding a separate wishlist route."
-            />
-            <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {wishlistProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  wishlisted={wishlist.includes(product.id)}
-                  onToggleWishlist={toggleWishlist}
-                  onAddToCart={(selectedProduct) =>
-                    addToCart({ productId: selectedProduct.id })
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
       </main>
       <SiteFooter />
     </>

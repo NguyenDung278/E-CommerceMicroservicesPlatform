@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
@@ -49,6 +50,7 @@ type OrderEvent struct {
 	UserEmail  string  `json:"user_email"`
 	TotalPrice float64 `json:"total_price"`
 	Status     string  `json:"status"`
+	RequestID  string  `json:"request_id,omitempty"`
 }
 
 type OrderService struct {
@@ -111,8 +113,30 @@ func NewOrderService(repo repository.OrderRepository, amqpCh *amqp.Channel, log 
 //  4. Persist xuống Database qua repo.Create (sử dụng DB Transaction).
 //  5. Publish sự kiện "order.created" sang RabbitMQ cho Notification/Payment service.
 func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string, req dto.CreateOrderRequest) (*model.Order, error) {
+	startedAt := time.Now()
+	outcome := appobs.OutcomeSuccess
+	requestLog := appobs.LoggerWithContext(s.log, ctx, zap.String("user_id", userID))
+	defer func() {
+		appobs.ObserveOperation("order-service", "create_order", outcome, time.Since(startedAt))
+	}()
+
 	quote, err := s.quoteOrder(ctx, req)
 	if err != nil {
+		outcome = appobs.OutcomeFromError(
+			err,
+			ErrEmptyOrder,
+			ErrProductNotFound,
+			ErrProductUnavailable,
+			ErrInsufficientStock,
+			ErrInvalidShippingMethod,
+			ErrShippingAddressRequired,
+			ErrCouponNotFound,
+			ErrCouponInactive,
+			ErrCouponExpired,
+			ErrCouponMinimumNotMet,
+			ErrCouponUsageLimit,
+		)
+		requestLog.Warn("create order failed during quote", zap.String("outcome", outcome), zap.Error(err))
 		return nil, err
 	}
 
@@ -146,6 +170,26 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 	}
 
 	if err := s.repo.Create(ctx, order); err != nil {
+		outcome = appobs.OutcomeFromError(
+			err,
+			ErrCouponNotFound,
+			ErrCouponInactive,
+			ErrCouponExpired,
+			ErrCouponMinimumNotMet,
+			ErrCouponUsageLimit,
+		)
+		if outcome == appobs.OutcomeBusinessError {
+			requestLog.Warn("create order failed while persisting business state",
+				zap.String("order_id", order.ID),
+				zap.String("coupon_code", order.CouponCode),
+				zap.Error(err),
+			)
+		} else {
+			requestLog.Error("create order failed while persisting order",
+				zap.String("order_id", order.ID),
+				zap.Error(err),
+			)
+		}
 		if errors.Is(err, repository.ErrCouponNotFound) ||
 			errors.Is(err, repository.ErrCouponInactive) ||
 			errors.Is(err, repository.ErrCouponExpired) ||
@@ -156,7 +200,15 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		return nil, err
 	}
 
-	s.publishOrderEvent(order, userEmail)
+	requestLog.Info("order created",
+		zap.String("order_id", order.ID),
+		zap.Int("item_count", len(order.Items)),
+		zap.Float64("subtotal_price", order.SubtotalPrice),
+		zap.Float64("total_price", order.TotalPrice),
+		zap.String("shipping_method", order.ShippingMethod),
+	)
+
+	s.publishOrderEvent(ctx, order, userEmail)
 
 	return order, nil
 }
@@ -233,7 +285,28 @@ func (s *OrderService) UpdateStatus(ctx context.Context, orderID string, status 
 		return nil
 	}
 
-	return s.repo.UpdateStatus(ctx, orderID, status, actorID, actorRole, message)
+	if err := s.repo.UpdateStatus(ctx, orderID, status, actorID, actorRole, message); err != nil {
+		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(status), appobs.OutcomeSystemError)
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("order_id", orderID),
+			zap.String("actor_id", actorID),
+			zap.String("actor_role", actorRole),
+			zap.String("from_status", string(order.Status)),
+			zap.String("to_status", string(status)),
+		).Error("failed to update order status", zap.Error(err))
+		return err
+	}
+
+	appobs.RecordStateTransition("order-service", "order", string(order.Status), string(status), appobs.OutcomeSuccess)
+	appobs.LoggerWithContext(s.log, ctx,
+		zap.String("order_id", orderID),
+		zap.String("actor_id", actorID),
+		zap.String("actor_role", actorRole),
+		zap.String("from_status", string(order.Status)),
+		zap.String("to_status", string(status)),
+	).Info("order status updated")
+
+	return nil
 }
 
 // CancelOrder cancels a pending order and restores stock for all items.
@@ -287,30 +360,37 @@ func (s *OrderService) CancelOrderAsAdmin(ctx context.Context, orderID, actorID,
 }
 
 // publishCancelEvent publishes an order.cancelled event to RabbitMQ.
-func (s *OrderService) publishCancelEvent(order *model.Order) {
+func (s *OrderService) publishCancelEvent(ctx context.Context, order *model.Order) {
 	if s.amqpCh == nil {
 		s.log.Warn("RabbitMQ channel not available, skipping cancel event publish")
 		return
 	}
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("order_id", order.ID),
+		zap.String("routing_key", "order.cancelled"),
+	)
 
 	event := OrderEvent{
 		OrderID:    order.ID,
 		UserID:     order.UserID,
 		TotalPrice: order.TotalPrice,
 		Status:     string(model.OrderStatusCancelled),
+		RequestID:  appobs.RequestIDFromContext(ctx),
 	}
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		s.log.Error("failed to marshal cancel event", zap.Error(err))
+		appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to marshal cancel event", zap.Error(err))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(ctx,
+		err = s.amqpCh.PublishWithContext(publishCtx,
 			"events",          // exchange
 			"order.cancelled", // routing key
 			false, false,
@@ -321,16 +401,15 @@ func (s *OrderService) publishCancelEvent(order *model.Order) {
 			},
 		)
 		if err == nil {
-			s.log.Info("published order cancel event",
-				zap.String("order_id", order.ID),
-				zap.String("routing_key", "order.cancelled"),
-			)
+			appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSuccess, time.Since(startedAt))
+			requestLog.Info("published order cancel event")
 			return
 		}
 		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
 	}
 
-	s.log.Error("failed to publish order cancel event", zap.Error(err))
+	appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSystemError, time.Since(startedAt))
+	requestLog.Error("failed to publish order cancel event", zap.Error(err))
 }
 
 func (s *OrderService) CreateCoupon(ctx context.Context, req dto.CreateCouponRequest) (*model.Coupon, error) {
@@ -480,11 +559,16 @@ func (s *OrderService) validateCoupon(ctx context.Context, code string, subtotal
 }
 
 // publishOrderEvent publishes an order event to RabbitMQ.
-func (s *OrderService) publishOrderEvent(order *model.Order, userEmail string) {
+func (s *OrderService) publishOrderEvent(ctx context.Context, order *model.Order, userEmail string) {
 	if s.amqpCh == nil {
 		s.log.Warn("RabbitMQ channel not available, skipping event publish")
 		return
 	}
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("order_id", order.ID),
+		zap.String("routing_key", "order.created"),
+	)
 
 	event := OrderEvent{
 		OrderID:    order.ID,
@@ -492,19 +576,21 @@ func (s *OrderService) publishOrderEvent(order *model.Order, userEmail string) {
 		UserEmail:  userEmail,
 		TotalPrice: order.TotalPrice,
 		Status:     string(order.Status),
+		RequestID:  appobs.RequestIDFromContext(ctx),
 	}
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		s.log.Error("failed to marshal order event", zap.Error(err))
+		appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to marshal order event", zap.Error(err))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(ctx,
+		err = s.amqpCh.PublishWithContext(publishCtx,
 			"events",
 			"order.created",
 			false,
@@ -516,17 +602,16 @@ func (s *OrderService) publishOrderEvent(order *model.Order, userEmail string) {
 			},
 		)
 		if err == nil {
-			s.log.Info("published order event",
-				zap.String("order_id", order.ID),
-				zap.String("routing_key", "order.created"),
-			)
+			appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSuccess, time.Since(startedAt))
+			requestLog.Info("published order event")
 			return
 		}
 
 		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
 	}
 
-	s.log.Error("failed to publish order event", zap.Error(err))
+	appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSystemError, time.Since(startedAt))
+	requestLog.Error("failed to publish order event", zap.Error(err))
 }
 
 // SetupExchange declares the RabbitMQ exchange and queue for order events.
@@ -617,8 +702,17 @@ func roundCurrency(value float64) float64 {
 func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
 	previousStatus := order.Status
 	if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message); err != nil {
+		appobs.RecordStateTransition("order-service", "order", string(previousStatus), string(model.OrderStatusCancelled), appobs.OutcomeSystemError)
 		return err
 	}
+	appobs.RecordStateTransition("order-service", "order", string(previousStatus), string(model.OrderStatusCancelled), appobs.OutcomeSuccess)
+	appobs.LoggerWithContext(s.log, ctx,
+		zap.String("order_id", order.ID),
+		zap.String("actor_id", actorID),
+		zap.String("actor_role", actorRole),
+		zap.String("from_status", string(previousStatus)),
+		zap.String("to_status", string(model.OrderStatusCancelled)),
+	).Info("order cancelled")
 
 	s.recordAuditEntry(ctx, &model.AuditEntry{
 		ID:         uuid.New().String(),
@@ -638,16 +732,22 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 	})
 
 	for _, item := range order.Items {
+		stockRestoreStartedAt := time.Now()
 		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
+			appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSystemError, time.Since(stockRestoreStartedAt))
 			s.log.Error("failed to restore stock for product",
 				zap.String("product_id", item.ProductID),
+				zap.String("order_id", order.ID),
 				zap.Int("quantity", item.Quantity),
+				zap.String("user_id", order.UserID),
 				zap.Error(err),
 			)
+			continue
 		}
+		appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSuccess, time.Since(stockRestoreStartedAt))
 	}
 
-	s.publishCancelEvent(order)
+	s.publishCancelEvent(ctx, order)
 	return nil
 }
 

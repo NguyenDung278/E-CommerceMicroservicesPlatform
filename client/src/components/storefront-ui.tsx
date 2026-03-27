@@ -1,63 +1,25 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import {
-  AlertCircle,
-  ArrowRight,
-  GripVertical,
-  Heart,
-  Minus,
-  PackageSearch,
-  Plus,
-  RefreshCcw,
-  Sparkles,
-  Star,
-} from "lucide-react";
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import { LoaderCircle, ShoppingBag, Sparkles } from "lucide-react";
+import type { TextareaHTMLAttributes } from "react";
 
-import type { Product } from "@/lib/types";
 import { buttonStyles } from "@/lib/button-styles";
-import {
-  cn,
-  formatCurrency,
-  getAvailabilityLabel,
-  getAvailabilityTone,
-  getDiscountPercent,
-} from "@/lib/utils";
-
-type ButtonSize = "sm" | "md" | "lg";
-
-export function Button({
-  className,
-  variant,
-  size,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "tertiary" | "ghost";
-  size?: ButtonSize;
-}) {
-  return (
-    <button
-      className={buttonStyles({ variant, size, className })}
-      type="button"
-      {...props}
-    />
-  );
-}
+import { cn, fallbackImageForProduct, getProductImages, getStatusTone } from "@/lib/utils";
+import type { Product } from "@/types/api";
+import { formatCurrency } from "@/utils/format";
 
 export function Badge({
   children,
   className,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-secondary",
+        "inline-flex items-center rounded-full bg-secondary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-secondary",
         className,
       )}
     >
@@ -71,264 +33,57 @@ export function SectionHeading({
   title,
   description,
   action,
-  className,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
-  action?: ReactNode;
-  className?: string;
+  action?: React.ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-6 md:flex-row md:items-end md:justify-between",
-        className,
-      )}
-    >
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
       <div className="max-w-3xl">
-        {eyebrow ? <p className="eyebrow mb-4">{eyebrow}</p> : null}
-        <h2 className="headline-section text-primary text-balance">{title}</h2>
+        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+        <h2 className="headline-section mt-4 text-primary">{title}</h2>
         {description ? (
-          <p className="mt-4 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">
+          <p className="mt-5 max-w-2xl text-base leading-8 text-on-surface-variant md:text-lg">
             {description}
           </p>
         ) : null}
       </div>
-      {action}
+      {action ? <div>{action}</div> : null}
     </div>
   );
 }
 
-export function RatingStars({
-  rating,
+export function SurfaceCard({
+  children,
   className,
 }: {
-  rating: number;
+  children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-1 text-tertiary", className)}>
-      {Array.from({ length: 5 }).map((_, index) => {
-        const filled = index < Math.round(rating);
-
-        return (
-          <Star
-            key={`star-${index + 1}`}
-            className={cn("h-3.5 w-3.5", filled ? "fill-current" : "opacity-25")}
-          />
-        );
-      })}
-      <span className="ml-1 text-xs font-medium text-on-surface-variant">
-        {rating.toFixed(1)}
-      </span>
-    </div>
+    <div className={cn("rounded-[2rem] bg-surface-container-low", className)}>{children}</div>
   );
 }
 
-export function PriceLockup({
-  price,
-  compareAtPrice,
-  className,
+export function InlineAlert({
+  tone = "info",
+  children,
 }: {
-  price: number;
-  compareAtPrice?: number;
-  className?: string;
+  tone?: "info" | "error" | "success";
+  children: React.ReactNode;
 }) {
-  const discount = getDiscountPercent(price, compareAtPrice);
+  const toneClass =
+    tone === "error"
+      ? "bg-[#fde4e1] text-[#7c2417]"
+      : tone === "success"
+        ? "bg-[#e5efe8] text-[#1b4a2c]"
+        : "bg-surface-container-high text-on-surface";
 
   return (
-    <div className={cn("flex flex-col items-end gap-1 text-right", className)}>
-      <span className="text-base font-medium text-primary md:text-lg">
-        {formatCurrency(price)}
-      </span>
-      {compareAtPrice ? (
-        <span className="text-xs text-outline line-through">
-          {formatCurrency(compareAtPrice)}
-        </span>
-      ) : null}
-      {discount ? (
-        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-tertiary">
-          {discount}% off
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-export function QuantityStepper({
-  quantity,
-  onIncrease,
-  onDecrease,
-  className,
-}: {
-  quantity: number;
-  onIncrease: () => void;
-  onDecrease: () => void;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-3 rounded-full bg-surface-container-low px-3 py-2 text-primary",
-        className,
-      )}
-    >
-      <button
-        type="button"
-        aria-label="Decrease quantity"
-        className="rounded-full p-1 text-outline transition hover:text-primary"
-        onClick={onDecrease}
-      >
-        <Minus className="h-4 w-4" />
-      </button>
-      <span className="min-w-4 text-center text-sm font-medium">{quantity}</span>
-      <button
-        type="button"
-        aria-label="Increase quantity"
-        className="rounded-full p-1 text-outline transition hover:text-primary"
-        onClick={onIncrease}
-      >
-        <Plus className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
-export function ProductCard({
-  product,
-  className,
-  wishlisted = false,
-  onAddToCart,
-  onToggleWishlist,
-  priority = false,
-  dragHandle,
-  isDragging = false,
-}: {
-  product: Product;
-  className?: string;
-  wishlisted?: boolean;
-  onAddToCart?: (product: Product) => void;
-  onToggleWishlist?: (productId: string) => void;
-  priority?: boolean;
-  dragHandle?: HTMLAttributes<HTMLButtonElement>;
-  isDragging?: boolean;
-}) {
-  return (
-    <motion.article
-      layout
-      className={cn(
-        "group flex h-full flex-col rounded-[1.65rem] p-3 transition-colors duration-500 hover:bg-surface-container-low/70",
-        isDragging && "scale-[0.99] opacity-70",
-        className,
-      )}
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 240, damping: 24 }}
-    >
-      <div className="relative overflow-hidden rounded-[1.4rem] bg-surface-container-low">
-        <Link
-          href={`/product/${product.slug}`}
-          className="relative block aspect-[0.78] overflow-hidden"
-        >
-          <Image
-            src={product.image}
-            alt={product.name}
-            fill
-            priority={priority}
-            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-            className="object-cover transition duration-700 group-hover:scale-[1.045]"
-          />
-        </Link>
-
-        <div className="absolute left-4 top-4 flex flex-wrap gap-2">
-          {product.badges[0] ? <Badge>{product.badges[0]}</Badge> : null}
-        </div>
-
-        <div className="absolute right-4 top-4 flex flex-col gap-2">
-          {dragHandle ? (
-            <button
-              aria-label={`Drag ${product.name}`}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-primary shadow-sm backdrop-blur-md transition hover:bg-background"
-              type="button"
-              {...dragHandle}
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
-          ) : null}
-          {onToggleWishlist ? (
-            <button
-              type="button"
-              aria-label={
-                wishlisted ? `Remove ${product.name} from wishlist` : `Save ${product.name}`
-              }
-              className={cn(
-                "inline-flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-primary shadow-sm backdrop-blur-md transition hover:bg-background",
-                wishlisted && "bg-primary text-on-primary",
-              )}
-              onClick={() => onToggleWishlist(product.id)}
-            >
-              <Heart className={cn("h-4 w-4", wishlisted && "fill-current")} />
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-1 flex-col gap-3 px-1 pb-1">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-outline">
-              {product.category}
-            </p>
-            <Link
-              href={`/product/${product.slug}`}
-              className="font-serif text-xl font-semibold tracking-[-0.03em] text-primary transition hover:text-tertiary-container"
-            >
-              {product.name}
-            </Link>
-          </div>
-          <PriceLockup price={product.price} compareAtPrice={product.compareAtPrice} />
-        </div>
-
-        <p className="text-sm leading-6 text-on-surface-variant">{product.subtitle}</p>
-
-        <div className="mt-auto flex items-center justify-between gap-4">
-          <div>
-            <RatingStars rating={product.rating} />
-            <p
-              className={cn(
-                "mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]",
-                getAvailabilityTone(product.availability),
-              )}
-            >
-              {getAvailabilityLabel(product)}
-            </p>
-          </div>
-          {onAddToCart ? (
-            <Button size="sm" className="shrink-0" onClick={() => onAddToCart(product)}>
-              Add to cart
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </motion.article>
-  );
-}
-
-export function ProductCardSkeleton({ className }: { className?: string }) {
-  return (
-    <div className={cn("animate-pulse rounded-[1.65rem] p-3", className)}>
-      <div className="aspect-[0.78] rounded-[1.4rem] bg-surface-container-low" />
-      <div className="mt-5 space-y-3 px-1">
-        <div className="h-3 w-20 rounded-full bg-surface-container-high" />
-        <div className="h-5 w-3/4 rounded-full bg-surface-container-high" />
-        <div className="h-3 w-full rounded-full bg-surface-container-high" />
-        <div className="h-3 w-5/6 rounded-full bg-surface-container-high" />
-        <div className="flex items-center justify-between pt-3">
-          <div className="h-8 w-28 rounded-full bg-surface-container-high" />
-          <div className="h-8 w-24 rounded-full bg-surface-container-high" />
-        </div>
-      </div>
+    <div className={cn("rounded-[1.5rem] px-5 py-4 text-sm leading-7", toneClass)}>
+      {children}
     </div>
   );
 }
@@ -337,93 +92,257 @@ export function EmptyState({
   title,
   description,
   action,
-  className,
 }: {
   title: string;
   description: string;
-  action?: ReactNode;
-  className?: string;
+  action?: React.ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "editorial-card flex flex-col items-center justify-center rounded-[2rem] px-6 py-16 text-center",
-        className,
-      )}
-    >
-      <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-high">
-        <PackageSearch className="h-7 w-7 text-primary" />
+    <SurfaceCard className="p-8 text-center md:p-12">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-surface text-primary">
+        <Sparkles className="h-5 w-5" />
       </div>
-      <h3 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+      <h3 className="mt-5 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
         {title}
       </h3>
-      <p className="mt-4 max-w-lg text-sm leading-7 text-on-surface-variant md:text-base">
+      <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-on-surface-variant">
         {description}
       </p>
-      {action ? <div className="mt-8">{action}</div> : null}
+      {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
+    </SurfaceCard>
+  );
+}
+
+export function LoadingScreen({ label }: { label: string }) {
+  return (
+    <div className="shell flex min-h-[60vh] items-center justify-center">
+      <div className="flex items-center gap-3 rounded-full bg-surface-container-low px-6 py-4 text-sm font-medium text-primary">
+        <LoaderCircle className="h-4 w-4 animate-spin" />
+        <span>{label}</span>
+      </div>
     </div>
   );
 }
 
-export function ErrorState({
-  title,
-  description,
-  onRetry,
-  className,
+export function StatusPill({ status }: { status: string }) {
+  const tone = getStatusTone(status);
+  const className =
+    tone === "emerald"
+      ? "bg-[#ddebe1] text-[#254f34]"
+      : tone === "amber"
+        ? "bg-[#f8edd2] text-[#865d19]"
+        : tone === "red"
+          ? "bg-[#fde4e1] text-[#8c2619]"
+          : "bg-surface-container-high text-on-surface";
+
+  return (
+    <span className={cn("inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em]", className)}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+export function ProductCardSkeleton() {
+  return (
+    <div className="animate-pulse rounded-[2rem] bg-surface-container-low p-4">
+      <div className="aspect-[4/5] rounded-[1.5rem] bg-surface-container-high" />
+      <div className="mt-4 h-3 w-24 rounded-full bg-surface-container-high" />
+      <div className="mt-3 h-7 w-3/4 rounded-full bg-surface-container-high" />
+      <div className="mt-3 h-4 w-1/2 rounded-full bg-surface-container-high" />
+      <div className="mt-5 h-11 rounded-full bg-surface-container-high" />
+    </div>
+  );
+}
+
+export function ProductCard({
+  product,
+  saved,
+  actionSlot,
+  footerSlot,
 }: {
-  title: string;
-  description: string;
-  onRetry?: () => void;
-  className?: string;
+  product: Product;
+  saved?: boolean;
+  actionSlot?: React.ReactNode;
+  footerSlot?: React.ReactNode;
+}) {
+  const images = getProductImages(product.image_url, product.image_urls);
+  const previewImage = images[0] || fallbackImageForProduct(product.name);
+  const soldOut = product.stock <= 0;
+  const lowStock = product.stock > 0 && product.stock <= 5;
+
+  return (
+    <article className="group rounded-[2rem] bg-surface transition hover:bg-surface-container-low">
+      <Link href={`/products/${product.id}`} className="block overflow-hidden rounded-[2rem]">
+        <div className="relative aspect-[4/5] overflow-hidden rounded-[2rem] bg-surface-container-low">
+          <img
+            alt={product.name}
+            src={previewImage}
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.05]"
+          />
+          <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between gap-3">
+            <Badge className="bg-background/90 text-primary">{product.category || "Catalog"}</Badge>
+            {saved ? <Badge className="bg-tertiary text-white">Saved</Badge> : null}
+          </div>
+        </div>
+      </Link>
+
+      <div className="px-2 pb-2 pt-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
+              {product.brand || "Commerce Platform"}
+            </p>
+            <Link href={`/products/${product.id}`} className="mt-2 block font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+              {product.name}
+            </Link>
+          </div>
+          <div className="text-right">
+            <strong className="block text-base font-semibold text-primary">{formatCurrency(product.price)}</strong>
+            <span className="mt-1 block text-xs text-on-surface-variant">
+              {soldOut ? "Hết hàng" : lowStock ? `Còn ${product.stock}` : "Còn hàng"}
+            </span>
+          </div>
+        </div>
+
+        <p className="mt-3 line-clamp-2 text-sm leading-7 text-on-surface-variant">
+          {product.description}
+        </p>
+
+        {footerSlot ? <div className="mt-4">{footerSlot}</div> : null}
+
+        {actionSlot ? (
+          <div className="mt-5">{actionSlot}</div>
+        ) : (
+          <Link href={`/products/${product.id}`} className={cn(buttonStyles({ variant: "secondary" }), "w-full")}>
+            Xem chi tiết
+          </Link>
+        )}
+      </div>
+    </article>
+  );
+}
+
+export function ProductCardAction({
+  onClick,
+  disabled,
+  loading,
+  label = "Thêm vào giỏ",
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  label?: string;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      className={cn(buttonStyles({ size: "md" }), "w-full")}
+      disabled={disabled || loading}
+      onClick={onClick}
+    >
+      {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
+      <span>{loading ? "Đang thêm..." : label}</span>
+    </button>
+  );
+}
+
+export function Field({
+  label,
+  htmlFor,
+  required,
+  error,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  required?: boolean;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block space-y-3" htmlFor={htmlFor}>
+      <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+        {label} {required ? <span className="text-tertiary">*</span> : null}
+      </span>
+      {children}
+      {error ? <span className="block text-sm text-error">{error}</span> : null}
+    </label>
+  );
+}
+
+export function TextInput({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
       className={cn(
-        "editorial-card rounded-[2rem] border border-error/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.52),rgba(255,255,255,0.12))] px-6 py-14",
+        "minimal-input rounded-none border-b border-outline-variant px-0 py-3 text-sm text-on-surface placeholder:text-outline focus:border-primary",
+        className,
+      )}
+    />
+  );
+}
+
+export function TextArea({
+  className,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={cn(
+        "min-h-28 w-full rounded-[1.5rem] bg-surface px-4 py-4 text-sm text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-primary/15",
+        className,
+      )}
+    />
+  );
+}
+
+export function Select({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={cn(
+        "w-full rounded-[1.25rem] bg-surface px-4 py-3 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15",
         className,
       )}
     >
-      <div className="mx-auto flex max-w-xl flex-col items-center text-center">
-        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-error/8">
-          <AlertCircle className="h-7 w-7 text-error" />
-        </div>
-        <h3 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-          {title}
-        </h3>
-        <p className="mt-4 text-sm leading-7 text-on-surface-variant md:text-base">
-          {description}
-        </p>
-        {onRetry ? (
-          <Button className="mt-8" onClick={onRetry}>
-            <RefreshCcw className="h-4 w-4" />
-            Retry
-          </Button>
-        ) : null}
-      </div>
-    </div>
+      {children}
+    </select>
   );
 }
 
-export function MicroHighlight({
-  icon,
+export function PageLinkCard({
+  href,
   title,
   copy,
-  className,
+  badge,
 }: {
-  icon?: ReactNode;
+  href: string;
   title: string;
   copy: string;
-  className?: string;
+  badge?: string;
 }) {
   return (
-    <div className={cn("editorial-card rounded-[1.5rem] p-6", className)}>
-      <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/80 text-primary shadow-sm">
-        {icon ?? <Sparkles className="h-5 w-5" />}
-      </div>
-      <h3 className="font-serif text-xl font-semibold tracking-[-0.03em] text-primary">
+    <Link
+      href={href}
+      className="group rounded-[2rem] bg-surface-container-low p-6 transition hover:-translate-y-1 hover:bg-surface-container-high"
+    >
+      {badge ? <Badge>{badge}</Badge> : null}
+      <h3 className="mt-4 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
         {title}
       </h3>
       <p className="mt-3 text-sm leading-7 text-on-surface-variant">{copy}</p>
-    </div>
+      <span className="mt-5 inline-flex text-sm font-medium text-primary transition group-hover:translate-x-1">
+        Mở trang →
+      </span>
+    </Link>
   );
 }
+

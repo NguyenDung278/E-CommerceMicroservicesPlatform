@@ -122,6 +122,7 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
+	e.Use(appobs.RequestIDMiddleware())
 	e.Use(appobs.EchoMiddleware("user-service"))
 	e.Use(appmw.NewRedisBackedRateLimiter("user-service", cfg.Redis, log, 40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

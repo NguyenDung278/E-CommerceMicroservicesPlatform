@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Serif } from "next/font/google";
 
-import { StorefrontProvider } from "@/store/storefront-provider";
+import { AppProviders } from "@/providers/app-providers";
 
 import "./globals.css";
 
@@ -18,11 +18,11 @@ const notoSerif = Noto_Serif({
 
 export const metadata: Metadata = {
   title: {
-    default: "ND Shop",
-    template: "%s | ND Shop",
+    default: "Commerce Platform",
+    template: "%s | Commerce Platform",
   },
   description:
-    "Editorial storefront demo for the ND Shop commerce platform, rebuilt from the referenced Stitch design with production-ready Next.js structure.",
+    "Storefront thương mại điện tử kết nối trực tiếp với backend Go microservices hiện có trong repo.",
 };
 
 export default function RootLayout({
@@ -33,7 +33,7 @@ export default function RootLayout({
   return (
     <html lang="vi" className={`${inter.variable} ${notoSerif.variable}`}>
       <body>
-        <StorefrontProvider>{children}</StorefrontProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

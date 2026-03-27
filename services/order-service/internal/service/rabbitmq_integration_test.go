@@ -79,7 +79,7 @@ func TestPublishOrderEventWithRabbitMQContainer(t *testing.T) {
 		log:    zap.NewNop(),
 	}
 
-	svc.publishOrderEvent(&model.Order{
+	svc.publishOrderEvent(context.Background(), &model.Order{
 		ID:         "order-1",
 		UserID:     "user-1",
 		Status:     model.OrderStatusPending,

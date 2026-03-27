@@ -1,361 +1,526 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  Check,
-  Heart,
-  Package,
-  Shield,
-  TimerReset,
-  Truck,
-} from "lucide-react";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Heart, LoaderCircle, Minus, Plus, ShoppingBag, Star } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 
-import { getProductBySlug, reviewHighlights } from "@/data/storefront";
-import type { Product } from "@/lib/types";
-import { cn, formatCurrency, getAvailabilityLabel } from "@/lib/utils";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
-  Badge,
-  Button,
+  EmptyState,
+  Field,
+  InlineAlert,
+  LoadingScreen,
   ProductCard,
-  QuantityStepper,
-  RatingStars,
+  ProductCardAction,
   SectionHeading,
+  Select,
+  SurfaceCard,
+  TextArea,
 } from "@/components/storefront-ui";
-import { useStorefront } from "@/store/storefront-provider";
+import { useAuth } from "@/hooks/useAuth";
+import { useCart } from "@/hooks/useCart";
+import { useWishlist } from "@/hooks/useWishlist";
+import { productApi } from "@/lib/api/product";
+import { buttonStyles } from "@/lib/button-styles";
+import { getErrorMessage, isHttpError } from "@/lib/errors/handler";
+import { cn, fallbackImageForProduct, getProductImages } from "@/lib/utils";
+import type {
+  Product,
+  ProductReview,
+  ProductReviewList,
+  ProductReviewSummary,
+  ProductVariant,
+} from "@/types/api";
+import { formatCurrency, formatLongDate } from "@/utils/format";
 
-const architectureCards = [
-  {
-    icon: <Shield className="h-5 w-5" />,
-    title: "Privacy-safe checkout",
-    copy: "Clear focus states and stronger affordances make the buy box easier to trust without drifting off-brand.",
-  },
-  {
-    icon: <Package className="h-5 w-5" />,
-    title: "Live inventory",
-    copy: "Stock and low-quantity language are visible early, matching the platform direction in the repo guidelines.",
-  },
-  {
-    icon: <Truck className="h-5 w-5" />,
-    title: "Shipping clarity",
-    copy: "Delivery notes and post-purchase cues are surfaced before the user commits, reducing uncertainty.",
-  },
-];
+type ReviewFormState = {
+  rating: number;
+  comment: string;
+};
 
-export function ProductPage({ product }: { product: Product }) {
-  const [selectedImage, setSelectedImage] = useState(product.gallery[0] ?? product.image);
-  const [selectedColor, setSelectedColor] = useState(product.colors[0]?.name ?? "Default");
-  const [selectedSize, setSelectedSize] = useState(
-    product.sizes.find((size) => size.inStock)?.label ?? product.sizes[0]?.label ?? "One Size",
-  );
+const emptyReviewSummary: ProductReviewSummary = {
+  average_rating: 0,
+  review_count: 0,
+  rating_breakdown: { one: 0, two: 0, three: 0, four: 0, five: 0 },
+};
+
+const emptyReviewList: ProductReviewList = {
+  summary: emptyReviewSummary,
+  items: [],
+};
+
+export function ProductPage({ productId }: { productId: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { token, isAuthenticated } = useAuth();
+  const { addItem } = useCart();
+  const { isSaved, toggleWishlist } = useWishlist();
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [reviewList, setReviewList] = useState<ProductReviewList>(emptyReviewList);
+  const [myReview, setMyReview] = useState<ProductReview | null>(null);
+  const [reviewForm, setReviewForm] = useState<ReviewFormState>({ rating: 0, comment: "" });
+  const [selectedVariantSku, setSelectedVariantSku] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const { addToCart, toggleWishlist, wishlist } = useStorefront();
+  const [activeImage, setActiveImage] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [reviewFeedback, setReviewFeedback] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isReviewLoading, setIsReviewLoading] = useState(true);
+  const [busy, setBusy] = useState("");
 
-  const relatedProducts = product.relatedSlugs
-    .map((slug) => getProductBySlug(slug))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  useEffect(() => {
+    let active = true;
 
-  const isWishlisted = wishlist.includes(product.id);
+    const productRequest = productApi.getProductById(productId);
+    const reviewRequest = productApi.listProductReviews(productId, { page: 1, limit: 8 });
+    const myReviewRequest =
+      isAuthenticated && token
+        ? productApi
+            .getMyProductReview(token, productId)
+            .then((response) => response.data)
+            .catch((reason) => {
+              if (isHttpError(reason) && reason.status === 404) {
+                return null;
+              }
+              throw reason;
+            })
+        : Promise.resolve(null);
+
+    setIsLoading(true);
+    setIsReviewLoading(true);
+    void Promise.allSettled([productRequest, reviewRequest, myReviewRequest]).then(([productResult, reviewResult, myReviewResult]) => {
+      if (!active) {
+        return;
+      }
+
+      if (productResult.status === "fulfilled") {
+        const nextProduct = productResult.value.data;
+        setProduct(nextProduct);
+        const images = getProductImages(nextProduct.image_url, nextProduct.image_urls);
+        setActiveImage(images[0] || fallbackImageForProduct(nextProduct.name));
+        const defaultVariant = nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
+        setSelectedVariantSku(defaultVariant?.sku ?? "");
+      } else {
+        setFeedback(getErrorMessage(productResult.reason));
+      }
+
+      if (reviewResult.status === "fulfilled") {
+        setReviewList(reviewResult.value.data);
+      } else {
+        setReviewFeedback(getErrorMessage(reviewResult.reason));
+      }
+
+      if (myReviewResult.status === "fulfilled") {
+        setMyReview(myReviewResult.value);
+        setReviewForm(
+          myReviewResult.value
+            ? { rating: myReviewResult.value.rating, comment: myReviewResult.value.comment }
+            : { rating: 0, comment: "" },
+        );
+      } else {
+        setReviewFeedback(getErrorMessage(myReviewResult.reason));
+      }
+
+      setIsLoading(false);
+      setIsReviewLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, productId, token]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!product?.category) {
+      setRelatedProducts([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void productApi
+      .listProducts({ category: product.category, status: "active", limit: 8 })
+      .then((response) => {
+        if (active) {
+          setRelatedProducts(response.data.filter((item) => item.id !== product.id).slice(0, 4));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setRelatedProducts([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [product]);
+
+  const images = product ? getProductImages(product.image_url, product.image_urls) : [];
+  const selectedVariant: ProductVariant | null =
+    product?.variants.find((variant) => variant.sku === selectedVariantSku) ??
+    product?.variants.find((variant) => variant.stock > 0) ??
+    product?.variants[0] ??
+    null;
+  const effectivePrice = selectedVariant?.price ?? product?.price ?? 0;
+  const effectiveStock = selectedVariant?.stock ?? product?.stock ?? 0;
+
+  function requireAuth() {
+    router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+  }
+
+  async function handleAddToCart() {
+    if (!product) {
+      return;
+    }
+
+    try {
+      setBusy("cart");
+      await addItem({ product_id: product.id, quantity });
+      setFeedback("Đã thêm sản phẩm vào giỏ hàng.");
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function refreshReviews(message = "") {
+    if (!product) {
+      return;
+    }
+
+    setIsReviewLoading(true);
+    try {
+      const [reviewResponse, nextMyReview] = await Promise.all([
+        productApi.listProductReviews(product.id, { page: 1, limit: 8 }),
+        isAuthenticated && token
+          ? productApi
+              .getMyProductReview(token, product.id)
+              .then((response) => response.data)
+              .catch((reason) => {
+                if (isHttpError(reason) && reason.status === 404) {
+                  return null;
+                }
+                throw reason;
+              })
+          : Promise.resolve(null),
+      ]);
+
+      setReviewList(reviewResponse.data);
+      setMyReview(nextMyReview);
+      setReviewFeedback(message);
+      setReviewForm(nextMyReview ? { rating: nextMyReview.rating, comment: nextMyReview.comment } : { rating: 0, comment: "" });
+    } catch (reason) {
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setIsReviewLoading(false);
+    }
+  }
+
+  async function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!product) {
+      return;
+    }
+
+    if (!isAuthenticated || !token) {
+      requireAuth();
+      return;
+    }
+
+    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
+      setReviewFeedback("Hãy chọn số sao từ 1 đến 5.");
+      return;
+    }
+
+    try {
+      setBusy("review");
+      if (myReview) {
+        await productApi.updateMyProductReview(token, product.id, reviewForm);
+        await refreshReviews("Đánh giá của bạn đã được cập nhật.");
+      } else {
+        await productApi.createProductReview(token, product.id, reviewForm);
+        await refreshReviews("Cảm ơn bạn đã gửi đánh giá.");
+      }
+    } catch (reason) {
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleDeleteReview() {
+    if (!product || !token) {
+      return;
+    }
+
+    try {
+      setBusy("delete-review");
+      await productApi.deleteMyProductReview(token, product.id);
+      await refreshReviews("Đánh giá của bạn đã được xóa.");
+    } catch (reason) {
+      setReviewFeedback(getErrorMessage(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <>
+        <SiteHeader />
+        <LoadingScreen label="Đang tải chi tiết sản phẩm..." />
+        <SiteFooter />
+      </>
+    );
+  }
+
+  if (!product) {
+    return (
+      <>
+        <SiteHeader />
+        <main className="shell section-spacing">
+          <EmptyState
+            title="Không tìm thấy sản phẩm"
+            description="ID sản phẩm có thể không tồn tại hoặc không còn khả dụng trong catalog active."
+            action={
+              <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
+                Quay lại catalog
+              </Link>
+            }
+          />
+        </main>
+        <SiteFooter />
+      </>
+    );
+  }
 
   return (
     <>
       <SiteHeader />
-      <main className="shell section-spacing">
-        <nav className="mb-8 flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-          <Link href="/">Home</Link>
-          <span>/</span>
-          <Link href={`/catalog?department=${product.department}`}>{product.department}</Link>
-          <span>/</span>
-          <span className="text-primary">{product.name}</span>
-        </nav>
+      <main className="shell section-spacing space-y-16">
+        {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
 
-        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+        <section className="grid gap-8 lg:grid-cols-[1.1fr_minmax(0,0.9fr)]">
           <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-[2rem] bg-surface-container-low">
-              <div className="relative aspect-[1.02]">
-                <Image
-                  src={selectedImage}
+            <SurfaceCard className="overflow-hidden p-3">
+              <div className="aspect-[4/5] overflow-hidden rounded-[1.75rem] bg-surface">
+                <img
                   alt={product.name}
-                  fill
-                  priority
-                  sizes="(max-width: 1024px) 100vw, 55vw"
-                  className="object-cover"
+                  src={activeImage || images[0] || fallbackImageForProduct(product.name)}
+                  className="h-full w-full object-cover"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              {product.gallery.map((image) => (
+            </SurfaceCard>
+            <div className="grid grid-cols-4 gap-3">
+              {(images.length ? images : [fallbackImageForProduct(product.name)]).slice(0, 4).map((image) => (
                 <button
                   key={image}
                   type="button"
-                  className={cn(
-                    "relative overflow-hidden rounded-[1.4rem] border transition",
-                    selectedImage === image
-                      ? "border-primary shadow-editorial"
-                      : "border-outline-variant/30 bg-surface-container-low",
-                  )}
-                  onClick={() => setSelectedImage(image)}
+                  className={cn("overflow-hidden rounded-[1.25rem] bg-surface-container-low", activeImage === image && "ring-2 ring-primary/20")}
+                  onClick={() => setActiveImage(image)}
                 >
-                  <div className="relative aspect-[0.95]">
-                    <Image
-                      src={image}
-                      alt={`${product.name} gallery image`}
-                      fill
-                      sizes="(max-width: 768px) 33vw, 18vw"
-                      className="object-cover"
-                    />
-                  </div>
+                  <img alt={product.name} src={image} className="aspect-square h-full w-full object-cover" />
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="lg:sticky lg:top-28 lg:self-start">
-            <p className="eyebrow">{product.collection}</p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {product.badges.map((badge) => (
-                <Badge key={badge}>{badge}</Badge>
-              ))}
-            </div>
-            <h1 className="mt-6 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-6xl">
-              {product.shortName ?? product.name}
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-on-surface-variant md:text-lg">
-              {product.subtitle}
-            </p>
+          <div className="space-y-6">
+            <div className="rounded-[2rem] bg-surface-container-low px-6 py-8 md:px-8">
+              <p className="eyebrow">{product.category || "Catalog"}</p>
+              <h1 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
+                {product.name}
+              </h1>
+              <p className="mt-5 text-base leading-8 text-on-surface-variant">{product.description}</p>
 
-            <div className="mt-6 flex items-center gap-4">
-              <RatingStars rating={product.rating} className="text-tertiary" />
-              <span className="text-sm text-on-surface-variant">
-                {product.reviewCount} verified reviews
-              </span>
-            </div>
-
-            <div className="mt-8 flex items-end gap-4">
-              <p className="font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
-                {formatCurrency(product.price)}
-              </p>
-              {product.compareAtPrice ? (
-                <p className="pb-1 text-sm text-outline line-through">
-                  {formatCurrency(product.compareAtPrice)}
-                </p>
-              ) : null}
+              <div className="mt-7 flex items-center justify-between gap-4">
+                <div>
+                  <strong className="block font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
+                    {formatCurrency(effectivePrice)}
+                  </strong>
+                  <span className="mt-2 block text-sm text-on-surface-variant">
+                    {effectiveStock <= 0 ? "Hết hàng" : effectiveStock <= 5 ? `Còn ${effectiveStock} sản phẩm` : "Còn hàng"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={cn(buttonStyles({ variant: "secondary" }), "shrink-0")}
+                  onClick={() => toggleWishlist(product.id)}
+                >
+                  <Heart className="h-4 w-4" />
+                  {isSaved(product.id) ? "Đã lưu" : "Yêu thích"}
+                </button>
+              </div>
             </div>
 
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-secondary">
-              {getAvailabilityLabel(product)}
-            </p>
+            <SurfaceCard className="p-6">
+              <div className="grid gap-5">
+                {product.variants.length > 0 ? (
+                  <Field htmlFor="variant-select" label="Biến thể">
+                    <Select id="variant-select" value={selectedVariantSku} onChange={(event) => setSelectedVariantSku(event.target.value)}>
+                      {product.variants.map((variant) => (
+                        <option key={variant.sku} value={variant.sku}>
+                          {variant.label}
+                          {variant.color ? ` - ${variant.color}` : ""}
+                          {variant.size ? ` - ${variant.size}` : ""}
+                          {variant.stock <= 0 ? " (Hết hàng)" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                ) : null}
 
-            <div className="mt-10 rounded-[1.8rem] bg-surface-container-low p-6">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-                  Color
-                </p>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  {product.colors.map((color) => (
-                    <button
-                      key={color.name}
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
-                        selectedColor === color.name
-                          ? "border-primary bg-primary text-on-primary"
-                          : "border-outline-variant bg-background text-primary hover:border-primary/40",
-                      )}
-                      onClick={() => setSelectedColor(color.name)}
-                    >
-                      <span
-                        className="h-4 w-4 rounded-full border border-white/20"
-                        style={{ backgroundColor: color.swatch }}
-                      />
-                      {color.name}
+                <div className="flex items-center gap-4">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    Số lượng
+                  </span>
+                  <div className="flex items-center gap-3 rounded-full bg-surface px-3 py-2">
+                    <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-low text-primary" onClick={() => setQuantity((current) => Math.max(1, current - 1))}>
+                      <Minus className="h-4 w-4" />
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-                  Size
-                </p>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {product.sizes.map((size) => (
-                    <button
-                      key={size.label}
-                      type="button"
-                      disabled={!size.inStock}
-                      className={cn(
-                        "rounded-2xl border px-3 py-3 text-sm transition",
-                        selectedSize === size.label
-                          ? "border-primary bg-primary text-on-primary"
-                          : "border-outline-variant bg-background text-primary hover:border-primary/40",
-                        !size.inStock && "cursor-not-allowed opacity-35",
-                      )}
-                      onClick={() => setSelectedSize(size.label)}
-                    >
-                      {size.label}
+                    <span className="min-w-6 text-center text-sm font-semibold text-primary">{quantity}</span>
+                    <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-low text-primary" onClick={() => setQuantity((current) => Math.min(Math.max(effectiveStock, 1), current + 1))}>
+                      <Plus className="h-4 w-4" />
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <QuantityStepper
-                  quantity={quantity}
-                  onDecrease={() => setQuantity((value) => Math.max(1, value - 1))}
-                  onIncrease={() => setQuantity((value) => Math.min(9, value + 1))}
-                />
-                <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-                  <Button
-                    className="flex-1"
-                    size="lg"
-                    onClick={() =>
-                      addToCart({
-                        productId: product.id,
-                        quantity,
-                        selectedColor,
-                        selectedSize,
-                      })
-                    }
-                  >
-                    Add to cart
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    className="sm:px-5"
-                    onClick={() => toggleWishlist(product.id)}
-                  >
-                    <Heart className={cn("h-4 w-4", isWishlisted && "fill-current")} />
-                    {isWishlisted ? "Saved" : "Save"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-8 space-y-3 text-sm text-on-surface-variant">
-                <div className="flex items-center gap-3">
-                  <Check className="h-4 w-4 text-primary" />
-                  Complimentary shipping on orders above $1,000
-                </div>
-                <div className="flex items-center gap-3">
-                  <TimerReset className="h-4 w-4 text-primary" />
-                  Free size exchange within 14 days
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-6">
-              <div>
-                <h2 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-                  The Wearer&apos;s Note
-                </h2>
-                <p className="mt-3 text-base leading-8 text-on-surface-variant">
-                  {product.story}
-                </p>
-              </div>
-              <div className="grid gap-4 rounded-[1.8rem] bg-surface-container-low p-6 sm:grid-cols-2">
-                {product.specs.map((spec) => (
-                  <div key={spec.label}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-outline">
-                      {spec.label}
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-primary">{spec.value}</p>
                   </div>
-                ))}
+                </div>
+
+                <div className="flex flex-col gap-3 md:flex-row">
+                  <button type="button" className={cn(buttonStyles({ size: "lg" }), "w-full md:flex-1")} disabled={effectiveStock <= 0 || busy === "cart"} onClick={() => void handleAddToCart()}>
+                    {busy === "cart" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
+                    <span>{busy === "cart" ? "Đang thêm..." : "Thêm vào giỏ"}</span>
+                  </button>
+                  <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full md:flex-1")} disabled={effectiveStock <= 0} onClick={() => router.push(`/checkout?buy_now=${encodeURIComponent(product.id)}&qty=${quantity}`)}>
+                    Mua ngay
+                  </button>
+                </div>
               </div>
+            </SurfaceCard>
+
+            <SurfaceCard className="p-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">SKU</p>
+                  <p className="mt-2 text-sm text-primary">{selectedVariant?.sku || product.sku || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">Brand</p>
+                  <p className="mt-2 text-sm text-primary">{product.brand || "Commerce Platform"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">Cập nhật</p>
+                  <p className="mt-2 text-sm text-primary">{formatLongDate(product.updated_at)}</p>
+                </div>
+              </div>
+            </SurfaceCard>
+          </div>
+        </section>
+
+        <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div>
+            <SectionHeading
+              eyebrow="Reviews"
+              title="Đánh giá thật từ product-service."
+              description="Luồng review dùng đúng contract hiện có: xem danh sách, xem đánh giá của tôi, tạo, sửa và xóa."
+            />
+            {reviewFeedback ? <div className="mt-6"><InlineAlert tone="info">{reviewFeedback}</InlineAlert></div> : null}
+            <div className="mt-8 grid gap-4">
+              {isReviewLoading ? (
+                <LoadingScreen label="Đang tải đánh giá..." />
+              ) : reviewList.items.length === 0 ? (
+                <SurfaceCard className="p-6">
+                  <p className="text-sm text-on-surface-variant">Chưa có đánh giá nào cho sản phẩm này.</p>
+                </SurfaceCard>
+              ) : (
+                reviewList.items.map((review) => (
+                  <SurfaceCard key={review.id} className="p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-primary">{review.author_label || "Người mua hàng"}</p>
+                        <p className="mt-2 flex items-center gap-1 text-tertiary">
+                          {Array.from({ length: 5 }).map((_, index) => (
+                            <Star key={index} className={cn("h-4 w-4", index < review.rating && "fill-current")} />
+                          ))}
+                        </p>
+                      </div>
+                      <span className="text-sm text-on-surface-variant">{formatLongDate(review.created_at)}</span>
+                    </div>
+                    <p className="mt-4 text-sm leading-7 text-on-surface-variant">{review.comment || "Không có nhận xét chi tiết."}</p>
+                  </SurfaceCard>
+                ))
+              )}
             </div>
           </div>
-        </section>
 
-        <section className="mt-20">
-          <SectionHeading
-            eyebrow="System architecture"
-            title="Product detail now explains why the experience feels reliable, not just why the product looks good."
-            description="These cards translate the UX improvements into trust signals. They stay within the Stitch visual language but add more explicit reassurance for real buyers."
-          />
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            {architectureCards.map((card, index) => (
-              <motion.div
-                key={card.title}
-                whileHover={{ y: -4 }}
-                className={cn(
-                  "rounded-[1.7rem] p-6",
-                  index === 1
-                    ? "bg-primary text-on-primary shadow-editorial"
-                    : "bg-surface-container-low text-primary",
-                )}
-              >
-                <div
-                  className={cn(
-                    "inline-flex h-12 w-12 items-center justify-center rounded-full",
-                    index === 1 ? "bg-white/12" : "bg-background",
-                  )}
-                >
-                  {card.icon}
+          <SurfaceCard className="h-fit p-6">
+            <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+              {myReview ? "Cập nhật đánh giá của bạn" : "Viết đánh giá"}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+              {isAuthenticated ? "Hãy đánh giá trải nghiệm thực tế của bạn với sản phẩm này." : "Bạn cần đăng nhập để gửi đánh giá."}
+            </p>
+
+            <form className="mt-6 space-y-5" onSubmit={handleReviewSubmit}>
+              <Field htmlFor="review-rating" label="Số sao" required>
+                <div id="review-rating" className="flex items-center gap-2">
+                  {Array.from({ length: 5 }).map((_, index) => {
+                    const rating = index + 1;
+                    return (
+                      <button
+                        key={rating}
+                        type="button"
+                        className={cn("inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface text-outline transition hover:text-tertiary", reviewForm.rating >= rating && "text-tertiary")}
+                        onClick={() => setReviewForm((current) => ({ ...current, rating }))}
+                      >
+                        <Star className={cn("h-5 w-5", reviewForm.rating >= rating && "fill-current")} />
+                      </button>
+                    );
+                  })}
                 </div>
-                <h3 className="mt-5 font-serif text-2xl font-semibold tracking-[-0.03em]">
-                  {card.title}
-                </h3>
-                <p
-                  className={cn(
-                    "mt-3 text-sm leading-7",
-                    index === 1 ? "text-on-primary/78" : "text-on-surface-variant",
-                  )}
-                >
-                  {card.copy}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
+              </Field>
 
-        <section className="mt-20">
-          <SectionHeading
-            eyebrow="The wearer’s voice"
-            title="Reviews are still editorial, but easier to scan."
-            description="Shorter cards, more contrast and a simpler hierarchy make social proof feel trustworthy without cluttering the premium layout."
-          />
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            {reviewHighlights.map((review) => (
-              <div key={review.id} className="rounded-[1.6rem] bg-surface-container-low p-6">
-                <RatingStars rating={review.rating} />
-                <p className="mt-5 text-sm leading-7 text-on-surface-variant">
-                  “{review.quote}”
-                </p>
-                <div className="mt-6 border-t border-outline-variant/25 pt-4">
-                  <p className="font-medium text-primary">{review.author}</p>
-                  <p className="text-sm text-on-surface-variant">
-                    {review.role} · {review.createdAt}
-                  </p>
+              <Field htmlFor="review-comment" label="Nhận xét">
+                <TextArea id="review-comment" placeholder="Điểm nổi bật, chất lượng, kích cỡ, thời gian giao hàng..." value={reviewForm.comment} onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))} />
+              </Field>
+
+              {!isAuthenticated ? (
+                <button type="button" className={cn(buttonStyles({ size: "lg" }), "w-full")} onClick={requireAuth}>
+                  Đăng nhập để đánh giá
+                </button>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy === "review"}>
+                    {busy === "review" ? "Đang gửi..." : myReview ? "Cập nhật đánh giá" : "Gửi đánh giá"}
+                  </button>
+                  {myReview ? (
+                    <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")} disabled={busy === "delete-review"} onClick={() => void handleDeleteReview()}>
+                      {busy === "delete-review" ? "Đang xóa..." : "Xóa đánh giá"}
+                    </button>
+                  ) : null}
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </form>
+          </SurfaceCard>
         </section>
 
-        <section className="mt-20">
-          <SectionHeading
-            eyebrow="Complete the look"
-            title="Related pieces"
-            description="These are wired to the shared product dataset, so this rail is reusable across future PDPs."
-          />
-          <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {relatedProducts.map((relatedProduct) => (
+        <section>
+          <SectionHeading eyebrow="Liên quan" title="Sản phẩm cùng category" description="Dùng tiếp dữ liệu thật từ catalog để giúp người dùng khám phá thêm." />
+          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {relatedProducts.map((item) => (
               <ProductCard
-                key={relatedProduct.id}
-                product={relatedProduct}
-                wishlisted={wishlist.includes(relatedProduct.id)}
-                onToggleWishlist={toggleWishlist}
-                onAddToCart={(selectedProduct) =>
-                  addToCart({ productId: selectedProduct.id })
-                }
+                key={item.id}
+                product={item}
+                saved={isSaved(item.id)}
+                actionSlot={<ProductCardAction onClick={() => router.push(`/products/${item.id}`)} label="Xem sản phẩm" />}
               />
             ))}
           </div>

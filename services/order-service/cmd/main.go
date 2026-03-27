@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// Setup gRPC client for Product Service
-	productClient, err := grpc_client.NewProductClient(cfg.Services.ProductServiceGRPC)
+	productClient, err := grpc_client.NewProductClient(cfg.Services.ProductServiceGRPC, log)
 	if err != nil {
 		log.Fatal("failed to connect to product service via gRPC", zap.Error(err))
 	}
@@ -110,6 +110,7 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
+	e.Use(appobs.RequestIDMiddleware())
 	e.Use(appobs.EchoMiddleware("order-service"))
 	e.Use(appmw.NewRedisBackedRateLimiter("order-service", cfg.Redis, log, 40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

@@ -17,6 +17,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
@@ -38,6 +39,7 @@ type PaymentEvent struct {
 	FullyRefunded      bool    `json:"fully_refunded"`
 	GatewayProvider    string  `json:"gateway_provider"`
 	GatewayTransaction string  `json:"gateway_transaction_id,omitempty"`
+	RequestID          string  `json:"request_id,omitempty"`
 }
 
 type PaymentService struct {
@@ -71,28 +73,48 @@ func NewPaymentService(
 // Non-MoMo methods are completed immediately, while MoMo stays pending until
 // the webhook confirms the outcome.
 func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, authHeader string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
+	startedAt := time.Now()
+	outcome := appobs.OutcomeSuccess
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("user_id", userID),
+		zap.String("order_id", req.OrderID),
+	)
+	defer func() {
+		appobs.ObserveOperation("payment-service", "process_payment", outcome, time.Since(startedAt))
+	}()
+
 	order, err := s.orderClient.GetOrder(ctx, authHeader, req.OrderID)
 	if err != nil {
+		outcome = appobs.OutcomeFromError(err, client.ErrOrderNotFound)
+		requestLog.Warn("payment processing failed during order lookup", zap.String("outcome", outcome), zap.Error(err))
 		if errors.Is(err, client.ErrOrderNotFound) {
 			return nil, ErrOrderNotFound
 		}
 		return nil, err
 	}
 	if order.UserID != userID {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing rejected because order does not belong to user")
 		return nil, ErrOrderNotFound
 	}
 	if !isPayableOrderStatus(order.Status) {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing rejected because order is not payable", zap.String("order_status", order.Status))
 		return nil, ErrOrderNotPayable
 	}
 
 	payments, err := s.repo.ListByOrderID(ctx, req.OrderID)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment processing failed while loading payment history", zap.Error(err))
 		return nil, err
 	}
 
 	netPaid := summarizeNetPaid(payments)
 	outstanding := roundMoney(order.TotalPrice - netPaid)
 	if outstanding <= 0 {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing skipped because order is already settled", zap.Float64("net_paid", netPaid))
 		return nil, ErrPaymentAlreadySettled
 	}
 
@@ -101,11 +123,19 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 		amount = outstanding
 	}
 	if amount <= 0 || amount > outstanding {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing rejected due to invalid amount",
+			zap.Float64("requested_amount", req.Amount),
+			zap.Float64("normalized_amount", amount),
+			zap.Float64("outstanding_amount", outstanding),
+		)
 		return nil, ErrInvalidPaymentAmount
 	}
 
 	method, err := normalizePaymentMethod(req.PaymentMethod)
 	if err != nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing rejected due to unsupported method", zap.Error(err))
 		return nil, err
 	}
 	now := time.Now()
@@ -130,9 +160,19 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 	}
 
 	if err := s.repo.Create(ctx, payment); err != nil {
+		outcome = appobs.OutcomeSystemError
 		if isUniqueViolation(err) {
+			outcome = appobs.OutcomeBusinessError
+			requestLog.Warn("payment processing rejected due to duplicate payment record",
+				zap.String("payment_id", payment.ID),
+				zap.Error(err),
+			)
 			return nil, ErrDuplicatePayment
 		}
+		requestLog.Error("payment processing failed while persisting payment",
+			zap.String("payment_id", payment.ID),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
@@ -140,8 +180,17 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 	enriched := enrichPayment(payment, updatedPayments)
 
 	if payment.Status == model.PaymentStatusCompleted {
-		s.publishPaymentEvent(enriched, userEmail)
+		s.publishPaymentEvent(ctx, enriched, userEmail)
 	}
+
+	requestLog.Info("payment processed",
+		zap.String("payment_id", payment.ID),
+		zap.String("payment_status", string(payment.Status)),
+		zap.String("payment_method", payment.PaymentMethod),
+		zap.String("gateway_provider", payment.GatewayProvider),
+		zap.Float64("amount", payment.Amount),
+		zap.Float64("outstanding_amount", enriched.OutstandingAmount),
+	)
 
 	return enriched, nil
 }
@@ -208,24 +257,48 @@ func (s *PaymentService) ListPaymentHistory(ctx context.Context, userID string) 
 }
 
 func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, actorRole, userEmail string, req dto.RefundPaymentRequest) (*model.Payment, error) {
+	startedAt := time.Now()
+	outcome := appobs.OutcomeSuccess
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("payment_id", paymentID),
+		zap.String("actor_id", actorID),
+		zap.String("actor_role", actorRole),
+	)
+	defer func() {
+		appobs.ObserveOperation("payment-service", "refund_payment", outcome, time.Since(startedAt))
+	}()
+
 	target, err := s.repo.GetByID(ctx, paymentID)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("refund failed while loading target payment", zap.Error(err))
 		return nil, err
 	}
 	if target == nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("refund rejected because payment was not found")
 		return nil, ErrPaymentNotFound
 	}
 	if target.TransactionType != model.PaymentTransactionTypeCharge || target.Status != model.PaymentStatusCompleted {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("refund rejected because payment is not refundable",
+			zap.String("transaction_type", string(target.TransactionType)),
+			zap.String("payment_status", string(target.Status)),
+		)
 		return nil, ErrRefundNotAllowed
 	}
 
 	payments, err := s.repo.ListByOrderID(ctx, target.OrderID)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("refund failed while loading sibling payments", zap.Error(err))
 		return nil, err
 	}
 
 	refundable := refundableAmountForCharge(target.ID, target.Amount, payments)
 	if refundable <= 0 {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("refund rejected because refundable amount is zero")
 		return nil, ErrRefundNotAllowed
 	}
 
@@ -234,6 +307,12 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		amount = refundable
 	}
 	if amount <= 0 || amount > refundable {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("refund rejected because requested amount exceeds refundable balance",
+			zap.Float64("requested_amount", req.Amount),
+			zap.Float64("normalized_amount", amount),
+			zap.Float64("refundable_amount", refundable),
+		)
 		return nil, ErrRefundAmountExceeded
 	}
 
@@ -257,8 +336,12 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 
 	if err := s.repo.Create(ctx, refund); err != nil {
 		if isUniqueViolation(err) {
+			outcome = appobs.OutcomeBusinessError
+			requestLog.Warn("refund rejected due to duplicate payment record", zap.Error(err))
 			return nil, ErrDuplicatePayment
 		}
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("refund failed while persisting refund record", zap.Error(err))
 		return nil, err
 	}
 
@@ -281,33 +364,69 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		},
 		CreatedAt: time.Now(),
 	})
-	s.publishPaymentEvent(enriched, userEmail)
+	s.publishPaymentEvent(ctx, enriched, userEmail)
+	requestLog.Info("refund processed",
+		zap.String("refund_id", refund.ID),
+		zap.String("order_id", refund.OrderID),
+		zap.Float64("amount", refund.Amount),
+	)
 
 	return enriched, nil
 }
 
 func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebhookRequest) (*model.Payment, error) {
+	startedAt := time.Now()
+	outcome := appobs.OutcomeSuccess
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("payment_id", strings.TrimSpace(req.PaymentID)),
+		zap.String("gateway_order_id", strings.TrimSpace(req.GatewayOrderID)),
+		zap.Int("result_code", req.ResultCode),
+	)
+	defer func() {
+		appobs.ObserveOperation("payment-service", "momo_webhook", outcome, time.Since(startedAt))
+	}()
+
 	payment, err := s.findWebhookPayment(ctx, req)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment webhook failed while resolving target payment", zap.Error(err))
 		return nil, err
 	}
 	if payment == nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment webhook rejected because payment was not found")
 		return nil, ErrPaymentNotFound
 	}
 	if payment.GatewayProvider != "momo" {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment webhook rejected because gateway provider does not match payment",
+			zap.String("gateway_provider", payment.GatewayProvider),
+		)
 		return nil, ErrPaymentNotFound
 	}
 	if !verifyMomoWebhookSignature(s.webhookSecret, req) {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment webhook rejected due to invalid signature")
 		return nil, ErrInvalidWebhookSignature
 	}
 	if payment.Status != model.PaymentStatusPending {
 		payments, listErr := s.repo.ListByOrderID(ctx, payment.OrderID)
 		if listErr != nil {
+			outcome = appobs.OutcomeSystemError
+			requestLog.Error("payment webhook failed while reloading payment history", zap.Error(listErr))
 			return nil, listErr
 		}
+		requestLog.Info("payment webhook treated as idempotent replay",
+			zap.String("current_status", string(payment.Status)),
+		)
 		return enrichPayment(payment, payments), nil
 	}
 	if roundMoney(req.Amount) != roundMoney(payment.Amount) {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment webhook rejected due to amount mismatch",
+			zap.Float64("webhook_amount", req.Amount),
+			zap.Float64("expected_amount", payment.Amount),
+		)
 		return nil, ErrPaymentAmountMismatch
 	}
 
@@ -323,25 +442,41 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 	}
 
 	if err := s.repo.Update(ctx, payment); err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment webhook failed while updating payment state",
+			zap.String("next_status", string(payment.Status)),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 
 	payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment webhook failed while loading enriched payments", zap.Error(err))
 		return nil, err
 	}
 	enriched := enrichPayment(payment, payments)
-	s.publishPaymentEvent(enriched, "")
+	s.publishPaymentEvent(ctx, enriched, "")
+	requestLog.Info("payment webhook processed",
+		zap.String("payment_status", string(payment.Status)),
+		zap.String("gateway_transaction_id", payment.GatewayTransactionID),
+	)
 
 	return enriched, nil
 }
 
 // publishPaymentEvent sends payment lifecycle updates so other services can keep
 // order state and notifications in sync.
-func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail string) {
+func (s *PaymentService) publishPaymentEvent(ctx context.Context, payment *model.Payment, userEmail string) {
 	if s.amqpCh == nil {
 		return
 	}
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("payment_id", payment.ID),
+		zap.String("order_id", payment.OrderID),
+	)
 
 	event := PaymentEvent{
 		PaymentID:          payment.ID,
@@ -357,21 +492,23 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail s
 		FullyRefunded:      payment.NetPaidAmount <= 0 && payment.TransactionType == model.PaymentTransactionTypeRefund && payment.Status == model.PaymentStatusRefunded,
 		GatewayProvider:    payment.GatewayProvider,
 		GatewayTransaction: payment.GatewayTransactionID,
+		RequestID:          appobs.RequestIDFromContext(ctx),
 	}
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		s.log.Error("failed to marshal payment event", zap.Error(err))
+		appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to marshal payment event", zap.Error(err))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	routingKey := paymentEventRoutingKey(payment)
 
 	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(ctx,
+		err = s.amqpCh.PublishWithContext(publishCtx,
 			"events",
 			routingKey,
 			false,
@@ -383,9 +520,10 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail s
 			},
 		)
 		if err == nil {
-			s.log.Info("published payment event",
-				zap.String("payment_id", payment.ID),
+			appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSuccess, time.Since(startedAt))
+			requestLog.Info("published payment event",
 				zap.String("routing_key", routingKey),
+				zap.String("payment_status", string(payment.Status)),
 			)
 			return
 		}
@@ -393,7 +531,8 @@ func (s *PaymentService) publishPaymentEvent(payment *model.Payment, userEmail s
 		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
 	}
 
-	s.log.Error("failed to publish payment event", zap.Error(err))
+	appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSystemError, time.Since(startedAt))
+	requestLog.Error("failed to publish payment event", zap.Error(err))
 }
 
 func paymentEventRoutingKey(payment *model.Payment) string {

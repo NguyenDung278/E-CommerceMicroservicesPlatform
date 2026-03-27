@@ -77,7 +77,7 @@ func main() {
 		}
 	}
 
-	orderClient := client.NewOrderClient(cfg.Services.OrderService)
+	orderClient := client.NewOrderClient(cfg.Services.OrderService, log)
 	paymentRepo := repository.NewPaymentRepository(db)
 	paymentService := service.NewPaymentService(
 		paymentRepo,
@@ -95,6 +95,7 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
+	e.Use(appobs.RequestIDMiddleware())
 	e.Use(appobs.EchoMiddleware("payment-service"))
 	e.Use(appmw.NewRedisBackedRateLimiter("payment-service", cfg.Redis, log, 40, 80, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))

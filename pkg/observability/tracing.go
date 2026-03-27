@@ -70,6 +70,9 @@ func EchoMiddleware(serviceName string) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			req := c.Request()
 			ctx := otel.GetTextMapPropagator().Extract(req.Context(), propagation.HeaderCarrier(req.Header))
+			if requestID := RequestIDFromRequest(req); requestID != "" {
+				ctx = WithRequestID(ctx, requestID)
+			}
 
 			route := c.Path()
 			if route == "" {
@@ -85,6 +88,9 @@ func EchoMiddleware(serviceName string) echo.MiddlewareFunc {
 				attribute.String("http.target", req.URL.RequestURI()),
 				attribute.String("http.client_ip", c.RealIP()),
 			)
+			if requestID := RequestIDFromContext(ctx); requestID != "" {
+				span.SetAttributes(attribute.String("request.id", requestID))
+			}
 
 			c.SetRequest(req.WithContext(ctx))
 			err := next(c)
@@ -116,7 +122,20 @@ func WrapHTTPTransport(base http.RoundTripper) http.RoundTripper {
 		base = http.DefaultTransport
 	}
 
-	return otelhttp.NewTransport(base)
+	return &requestContextTransport{base: otelhttp.NewTransport(base)}
+}
+
+type requestContextTransport struct {
+	base http.RoundTripper
+}
+
+func (t *requestContextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	cloned := req.Clone(req.Context())
+	if requestID := RequestIDFromContext(req.Context()); requestID != "" && strings.TrimSpace(cloned.Header.Get(HeaderRequestID)) == "" {
+		cloned.Header.Set(HeaderRequestID, requestID)
+	}
+
+	return t.base.RoundTrip(cloned)
 }
 
 func newTraceExporter(ctx context.Context, cfg config.TracingConfig) (sdktrace.SpanExporter, error) {

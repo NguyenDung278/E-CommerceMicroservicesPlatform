@@ -10,6 +10,7 @@ import (
 	"time"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
+	"go.uber.org/zap"
 )
 
 var ErrOrderNotFound = errors.New("order not found")
@@ -31,20 +32,42 @@ type orderEnvelope struct {
 type OrderClient struct {
 	baseURL string
 	client  *http.Client
+	log     *zap.Logger
 }
 
-func NewOrderClient(baseURL string) *OrderClient {
+func NewOrderClient(baseURL string, log *zap.Logger) *OrderClient {
+	if log == nil {
+		log = zap.NewNop()
+	}
+
 	return &OrderClient{
 		baseURL: normalizeBaseURL(baseURL),
 		client: &http.Client{
 			Timeout:   10 * time.Second,
 			Transport: appobs.WrapHTTPTransport(http.DefaultTransport),
 		},
+		log: log,
 	}
 }
 
 func (c *OrderClient) GetOrder(ctx context.Context, authHeader, orderID string) (*Order, error) {
-	if c == nil || c.baseURL == "" {
+	if c == nil {
+		return nil, fmt.Errorf("order client is not configured")
+	}
+
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(c.log, ctx,
+		zap.String("order_id", orderID),
+		zap.String("downstream_service", "order-service"),
+		zap.String("method", http.MethodGet),
+	)
+	outcome := appobs.OutcomeSuccess
+	defer func() {
+		appobs.ObserveOperation("payment-service", "http_get_order", outcome, time.Since(startedAt))
+	}()
+
+	if c.baseURL == "" {
+		outcome = appobs.OutcomeSystemError
 		return nil, fmt.Errorf("order client is not configured")
 	}
 
@@ -60,25 +83,46 @@ func (c *OrderClient) GetOrder(ctx context.Context, authHeader, orderID string) 
 
 	resp, err := c.client.Do(req)
 	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("failed to call order-service", zap.Error(err))
 		return nil, fmt.Errorf("failed to fetch order: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("order lookup returned non-accessible order", zap.Int("status", resp.StatusCode))
 		return nil, ErrOrderNotFound
 	}
 
 	var envelope orderEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("failed to decode order-service response", zap.Int("status", resp.StatusCode), zap.Error(err))
 		return nil, fmt.Errorf("failed to decode order response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK || !envelope.Success {
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			outcome = appobs.OutcomeBusinessError
+		} else {
+			outcome = appobs.OutcomeSystemError
+		}
+		requestLog.Warn("order-service returned unexpected response",
+			zap.Int("status", resp.StatusCode),
+			zap.Bool("success", envelope.Success),
+			zap.String("error", envelope.Error),
+		)
 		if envelope.Error != "" {
 			return nil, fmt.Errorf("failed to fetch order: %s", envelope.Error)
 		}
 		return nil, fmt.Errorf("failed to fetch order: status %d", resp.StatusCode)
 	}
+
+	requestLog.Info("order lookup completed",
+		zap.Int("status", resp.StatusCode),
+		zap.Int64("latency_ms", time.Since(startedAt).Milliseconds()),
+	)
 
 	return &envelope.Data, nil
 }

@@ -2,9 +2,12 @@ package grpc
 
 import (
 	"context"
+	"time"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"go.uber.org/zap"
 
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
@@ -15,10 +18,15 @@ import (
 type ProductGRPCServer struct {
 	pb.UnimplementedProductServiceServer
 	productService *service.ProductService
+	log            *zap.Logger
 }
 
-func NewProductGRPCServer(productService *service.ProductService) *ProductGRPCServer {
-	return &ProductGRPCServer{productService: productService}
+func NewProductGRPCServer(productService *service.ProductService, log *zap.Logger) *ProductGRPCServer {
+	if log == nil {
+		log = zap.NewNop()
+	}
+
+	return &ProductGRPCServer{productService: productService, log: log}
 }
 
 // GetProductByID cung cấp thông tin sản phẩm qua gRPC.
@@ -48,9 +56,26 @@ func (s *ProductGRPCServer) GetProductByID(ctx context.Context, req *pb.GetProdu
 // Trọng tâm nghiệp vụ: Order Service có thể dùng hàm này như một mẹo (Hack/Reuse) để Restore lại Stock
 // kho hàng khi 1 Đơn bị hủy (CancelOrder), tránh việc phải viết thêm RPC `RestoreStock` trong Protobuf.
 func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdateProductRequest) (*pb.UpdateProductResponse, error) {
+	startedAt := time.Now()
 	productID := req.GetProductId()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("rpc.method", "UpdateProduct"),
+		zap.String("product_id", productID),
+		zap.Int("requested_stock", int(req.GetStockQuantity())),
+	)
+
+	defer func() {
+		appobs.ObserveOperation("product-service", "grpc_update_product", appobs.OutcomeSuccess, time.Since(startedAt))
+	}()
+
 	if productID == "" {
+		appobs.ObserveOperation("product-service", "grpc_update_product", appobs.OutcomeBusinessError, time.Since(startedAt))
 		return nil, status.Error(codes.InvalidArgument, "product_id is required")
+	}
+
+	existing, existingErr := s.productService.GetByID(ctx, productID)
+	if existingErr != nil && existingErr != service.ErrProductNotFound {
+		requestLog.Warn("failed to load existing product snapshot for observability", zap.Error(existingErr))
 	}
 
 	name := req.GetName()
@@ -69,13 +94,29 @@ func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdatePro
 		ImageURL:    &imageURL,
 	})
 	if err != nil {
+		outcome := appobs.OutcomeFromError(err, service.ErrProductNotFound, service.ErrInvalidStatus)
+		appobs.ObserveOperation("product-service", "grpc_update_product", outcome, time.Since(startedAt))
 		if err == service.ErrProductNotFound {
+			requestLog.Warn("grpc product update failed: product not found", zap.Error(err))
 			return nil, status.Error(codes.NotFound, "product not found")
 		}
 		if err == service.ErrInvalidStatus {
+			requestLog.Warn("grpc product update failed: invalid status", zap.Error(err))
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
+		requestLog.Error("grpc product update failed", zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if existing != nil && existing.Stock != product.Stock {
+		appobs.IncEvent("product-service", "stock_update_attempt", appobs.OutcomeSuccess)
+		requestLog.Info("product stock updated via gRPC",
+			zap.Int("previous_stock", existing.Stock),
+			zap.Int("current_stock", product.Stock),
+			zap.Int("stock_delta", product.Stock-existing.Stock),
+		)
+	} else {
+		requestLog.Info("product updated via gRPC", zap.Float64("price", product.Price))
 	}
 
 	return &pb.UpdateProductResponse{

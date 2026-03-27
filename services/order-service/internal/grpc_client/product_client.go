@@ -3,8 +3,10 @@ package grpc_client
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -14,9 +16,14 @@ import (
 type ProductClient struct {
 	client pb.ProductServiceClient
 	conn   *grpc.ClientConn
+	log    *zap.Logger
 }
 
-func NewProductClient(target string) (*ProductClient, error) {
+func NewProductClient(target string, log *zap.Logger) (*ProductClient, error) {
+	if log == nil {
+		log = zap.NewNop()
+	}
+
 	conn, err := grpc.Dial(
 		target,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -31,6 +38,7 @@ func NewProductClient(target string) (*ProductClient, error) {
 	return &ProductClient{
 		client: client,
 		conn:   conn,
+		log:    log,
 	}, nil
 }
 
@@ -57,8 +65,19 @@ func (c *ProductClient) GetProduct(ctx context.Context, productID string) (*pb.P
 // We intentionally reuse the existing proto contract here instead of adding a
 // dedicated RestoreStock RPC to keep service coordination simple.
 func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quantity int) error {
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(c.log, ctx,
+		zap.String("product_id", productID),
+		zap.Int("quantity", quantity),
+	)
+	defer func() {
+		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
+	}()
+
 	product, err := c.GetProduct(ctx, productID)
 	if err != nil {
+		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to fetch product snapshot before stock restore", zap.Error(err))
 		return fmt.Errorf("failed to get product for stock restore: %w", err)
 	}
 
@@ -73,8 +92,19 @@ func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quan
 		ImageUrl:      product.ImageUrl,
 	})
 	if err != nil {
+		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to restore stock via product-service gRPC",
+			zap.Int32("previous_stock", product.StockQuantity),
+			zap.Int32("new_stock", newStock),
+			zap.Error(err),
+		)
 		return fmt.Errorf("failed to restore stock for product %s: %w", productID, err)
 	}
+
+	requestLog.Info("restored stock via product-service gRPC",
+		zap.Int32("previous_stock", product.StockQuantity),
+		zap.Int32("new_stock", newStock),
+	)
 
 	return nil
 }

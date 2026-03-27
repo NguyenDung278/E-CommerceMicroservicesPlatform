@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,6 +25,9 @@ func GRPCUnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor 
 		}
 
 		ctx = otel.GetTextMapPropagator().Extract(ctx, metadataCarrier(md))
+		if requestID := firstMetadataValue(md, strings.ToLower(HeaderRequestID)); requestID != "" {
+			ctx = WithRequestID(ctx, requestID)
+		}
 		ctx, span := tracer.Start(ctx, info.FullMethod, trace.WithSpanKind(trace.SpanKindServer))
 		defer span.End()
 
@@ -31,6 +35,9 @@ func GRPCUnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor 
 			attribute.String("rpc.system", "grpc"),
 			attribute.String("rpc.method", info.FullMethod),
 		)
+		if requestID := RequestIDFromContext(ctx); requestID != "" {
+			span.SetAttributes(attribute.String("request.id", requestID))
+		}
 
 		resp, err := handler(ctx, req)
 		recordGRPCStatus(span, err)
@@ -55,6 +62,10 @@ func GRPCUnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor 
 			md = metadata.New(nil)
 		} else {
 			md = md.Copy()
+		}
+		if requestID := RequestIDFromContext(ctx); requestID != "" {
+			md.Set(strings.ToLower(HeaderRequestID), requestID)
+			span.SetAttributes(attribute.String("request.id", requestID))
 		}
 		otel.GetTextMapPropagator().Inject(ctx, metadataCarrier(md))
 		ctx = metadata.NewOutgoingContext(ctx, md)
@@ -88,6 +99,15 @@ func (c metadataCarrier) Keys() []string {
 }
 
 var _ propagation.TextMapCarrier = metadataCarrier{}
+
+func firstMetadataValue(md metadata.MD, key string) string {
+	values := md.Get(key)
+	if len(values) == 0 {
+		return ""
+	}
+
+	return strings.TrimSpace(values[0])
+}
 
 func recordGRPCStatus(span trace.Span, err error) {
 	code := codes.OK

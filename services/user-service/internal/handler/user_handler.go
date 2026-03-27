@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/labstack/echo/v4"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
@@ -130,6 +131,7 @@ func (h *UserHandler) Login(c echo.Context) error {
 
 	attemptKeys := loginAttemptKeys(req, c.RealIP())
 	if retryAfter, blocked := h.loginProtector.Check(attemptKeys...); blocked {
+		appobs.IncEvent("user-service", "login_protection", appobs.OutcomeBusinessError)
 		retryAfterSeconds := int(retryAfter.Seconds())
 		c.Response().Header().Set(echo.HeaderRetryAfter, strconv.Itoa(retryAfterSeconds))
 		return response.Error(c, http.StatusTooManyRequests, "login temporarily locked", fmt.Sprintf("too many failed login attempts, try again in %d seconds", retryAfterSeconds))
@@ -139,6 +141,7 @@ func (h *UserHandler) Login(c echo.Context) error {
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
 			if retryAfter, blocked := h.loginProtector.RecordFailure(attemptKeys...); blocked {
+				appobs.IncEvent("user-service", "login_protection", appobs.OutcomeBusinessError)
 				retryAfterSeconds := int(retryAfter.Seconds())
 				c.Response().Header().Set(echo.HeaderRetryAfter, strconv.Itoa(retryAfterSeconds))
 				return response.Error(c, http.StatusTooManyRequests, "login temporarily locked", fmt.Sprintf("too many failed login attempts, try again in %d seconds", retryAfterSeconds))

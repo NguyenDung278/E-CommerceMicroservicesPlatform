@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"net/http"
 	"time"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -28,16 +30,37 @@ func RequestLogger(log *zap.Logger) echo.MiddlewareFunc {
 			err := next(c)
 
 			latency := time.Since(start)
+			status := c.Response().Status
+			if status == 0 {
+				if err != nil {
+					status = http.StatusInternalServerError
+				} else {
+					status = http.StatusOK
+				}
+			}
+
+			route := c.Path()
+			if route == "" {
+				route = c.Request().URL.Path
+			}
 
 			// Log at different levels based on status code.
 			fields := []zap.Field{
 				zap.String("method", c.Request().Method),
 				zap.String("path", c.Request().URL.Path),
-				zap.Int("status", c.Response().Status),
+				zap.String("route", route),
+				zap.Int("status", status),
 				zap.Duration("latency", latency),
 				zap.Int64("latency_ms", latency.Milliseconds()),
 				zap.String("client_ip", c.RealIP()),
 				zap.String("user_agent", c.Request().UserAgent()),
+				zap.Int64("response_bytes", c.Response().Size),
+			}
+			if requestID := appobs.RequestIDFromRequest(c.Request()); requestID != "" {
+				fields = append(fields, zap.String("request_id", requestID))
+			}
+			if claims := GetUserClaims(c); claims != nil && claims.UserID != "" {
+				fields = append(fields, zap.String("user_id", claims.UserID))
 			}
 			if spanContext := trace.SpanContextFromContext(c.Request().Context()); spanContext.IsValid() {
 				fields = append(fields,
@@ -45,8 +68,10 @@ func RequestLogger(log *zap.Logger) echo.MiddlewareFunc {
 					zap.String("span_id", spanContext.SpanID().String()),
 				)
 			}
+			if err != nil {
+				fields = append(fields, zap.Error(err))
+			}
 
-			status := c.Response().Status
 			switch {
 			case status >= 500:
 				log.Error("server error", fields...)

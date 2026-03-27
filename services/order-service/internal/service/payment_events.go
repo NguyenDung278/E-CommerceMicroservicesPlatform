@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
+	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
@@ -24,6 +26,7 @@ type PaymentLifecycleEvent struct {
 	FullyPaid         bool    `json:"fully_paid"`
 	FullyRefunded     bool    `json:"fully_refunded"`
 	GatewayProvider   string  `json:"gateway_provider"`
+	RequestID         string  `json:"request_id,omitempty"`
 }
 
 func StartPaymentEventConsumer(ch *amqp.Channel, log *zap.Logger, service *OrderService) error {
@@ -73,31 +76,79 @@ func StartPaymentEventConsumer(ch *amqp.Channel, log *zap.Logger, service *Order
 }
 
 func (s *OrderService) handlePaymentEventMessage(msg amqp.Delivery) error {
+	startedAt := time.Now()
 	var event PaymentLifecycleEvent
 	if err := json.Unmarshal(msg.Body, &event); err != nil {
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
 		return fmt.Errorf("failed to decode payment event: %w", err)
 	}
 
-	order, err := s.repo.GetByID(context.Background(), event.OrderID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if event.RequestID != "" {
+		ctx = appobs.WithRequestID(ctx, event.RequestID)
+	}
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("routing_key", msg.RoutingKey),
+		zap.String("order_id", event.OrderID),
+		zap.String("payment_id", event.PaymentID),
+		zap.String("payment_status", event.Status),
+	)
+
+	order, err := s.repo.GetByID(ctx, event.OrderID)
 	if err != nil {
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to load order while handling payment event", zap.Error(err))
 		return err
 	}
 	if order == nil {
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+		requestLog.Warn("payment event ignored because order no longer exists")
 		return nil
 	}
 
 	switch msg.RoutingKey {
 	case "payment.completed":
 		if !event.FullyPaid || order.Status != model.OrderStatusPending {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Info("payment completed event did not trigger status transition",
+				zap.Bool("fully_paid", event.FullyPaid),
+				zap.String("current_order_status", string(order.Status)),
+			)
 			return nil
 		}
-		return s.repo.UpdateStatus(context.Background(), order.ID, model.OrderStatusPaid, "payment-service", "system", paymentEventMessage("paid", event))
+		if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusPaid, "payment-service", "system", paymentEventMessage("paid", event)); err != nil {
+			appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusPaid), appobs.OutcomeSystemError)
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
+			requestLog.Error("failed to transition order to paid from payment event", zap.Error(err))
+			return err
+		}
+		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusPaid), appobs.OutcomeSuccess)
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
+		requestLog.Info("order transitioned to paid from payment event")
+		return nil
 	case "payment.refunded":
 		if !event.FullyRefunded || order.Status == model.OrderStatusRefunded {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Info("payment refunded event did not trigger status transition",
+				zap.Bool("fully_refunded", event.FullyRefunded),
+				zap.String("current_order_status", string(order.Status)),
+			)
 			return nil
 		}
-		return s.repo.UpdateStatus(context.Background(), order.ID, model.OrderStatusRefunded, "payment-service", "system", paymentEventMessage("refunded", event))
+		if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusRefunded, "payment-service", "system", paymentEventMessage("refunded", event)); err != nil {
+			appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusRefunded), appobs.OutcomeSystemError)
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
+			requestLog.Error("failed to transition order to refunded from payment event", zap.Error(err))
+			return err
+		}
+		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusRefunded), appobs.OutcomeSuccess)
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
+		requestLog.Info("order transitioned to refunded from payment event")
+		return nil
 	default:
+		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+		requestLog.Info("payment event ignored because routing key is not handled")
 		return nil
 	}
 }

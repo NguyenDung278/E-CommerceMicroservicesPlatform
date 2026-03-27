@@ -1,5 +1,5 @@
-import { ConfirmationPage } from "@/components/confirmation-page";
+import { redirect } from "next/navigation";
 
-export default function OrderConfirmationRoute() {
-  return <ConfirmationPage />;
+export default function Page() {
+  redirect("/myorders");
 }

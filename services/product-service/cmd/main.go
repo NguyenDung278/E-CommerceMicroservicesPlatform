@@ -111,6 +111,7 @@ func main() {
 	e.Use(echomw.Recover())
 	e.Use(appmw.FrontendCORS())
 	e.Use(echomw.Secure())
+	e.Use(appobs.RequestIDMiddleware())
 	e.Use(appobs.EchoMiddleware("product-service"))
 	e.Use(appmw.NewRedisBackedRateLimiter("product-service", cfg.Redis, log, 80, 160, 2*time.Minute))
 	e.Use(appmw.RequestLogger(log))
@@ -128,7 +129,7 @@ func main() {
 
 	// Set up gRPC server.
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("product-service")))
-	pb.RegisterProductServiceServer(grpcServer, grpc_handler.NewProductGRPCServer(productService))
+	pb.RegisterProductServiceServer(grpcServer, grpc_handler.NewProductGRPCServer(productService, log))
 
 	go func() {
 		// Start HTTP server
