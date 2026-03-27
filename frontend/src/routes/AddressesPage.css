@@ -1,7 +1,7 @@
 .addresses-route {
   display: grid;
-  gap: 30px;
-  padding-top: 8px;
+  gap: 38px;
+  padding-top: 4px;
 }
 
 .addresses-route-head {
@@ -23,7 +23,8 @@
 .addresses-route-head p {
   max-width: 56ch;
   margin: 14px 0 0;
-  color: #575d79;
+  color: #2f342f;
+  font-size: 1.06rem;
   line-height: 1.7;
 }
 
@@ -31,9 +32,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 54px;
-  padding: 0 24px;
-  border-radius: 18px;
+  min-height: 60px;
+  padding: 0 28px;
+  border-radius: 999px;
   background: linear-gradient(135deg, #061b0e, #1b3022);
   color: #ffffff;
   font-weight: 700;
@@ -49,12 +50,11 @@
 .addresses-route-card,
 .addresses-route-placeholder {
   display: grid;
-  gap: 20px;
+  gap: 22px;
   min-height: 360px;
-  padding: 30px;
-  border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 24px 48px -28px rgba(27, 28, 25, 0.12);
+  padding: 34px;
+  border-radius: 28px;
+  background: #f5f3ee;
 }
 
 .addresses-route-card-head {
@@ -75,12 +75,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 56px;
+  height: 56px;
   border-radius: 999px;
-  background: #f0eee9;
+  background: #ece8dc;
   color: #061b0e;
+  font-size: 0.92rem;
   font-weight: 800;
+  letter-spacing: 0.16em;
 }
 
 .addresses-route-card h3,
@@ -88,7 +90,7 @@
   margin: 0;
   color: #061b0e;
   font-family: "Noto Serif", Georgia, serif;
-  font-size: 2rem;
+  font-size: clamp(2rem, 3vw, 2.7rem);
   line-height: 1.02;
   letter-spacing: -0.05em;
 }
@@ -113,10 +115,10 @@
 }
 
 .addresses-route-block span {
-  color: #737973;
-  font-size: 0.72rem;
+  color: #5b617d;
+  font-size: 0.74rem;
   font-weight: 800;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
@@ -132,14 +134,13 @@
   gap: 22px;
   align-items: center;
   margin-top: auto;
-  padding-top: 22px;
-  border-top: 1px solid rgba(115, 121, 115, 0.12);
+  padding-top: 26px;
 }
 
 .addresses-route-action {
   color: #061b0e;
-  font-size: 0.94rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .addresses-route-action-danger {
@@ -149,8 +150,7 @@
 .addresses-route-placeholder {
   align-content: center;
   justify-items: center;
-  border: 2px dashed rgba(115, 121, 115, 0.22);
-  background: rgba(245, 243, 238, 0.46);
+  background: rgba(240, 238, 233, 0.8);
   color: #575d79;
   text-align: center;
 }

@@ -25,6 +25,8 @@ type NotificationFeedItem = {
   actionLabel?: string;
 };
 
+type NotificationPreferenceKey = keyof NotificationPreferences;
+
 export function NotificationsPage() {
   const { token, user } = useAuth();
   const { orders, paymentsByOrder } = useOrderPayments(token);
@@ -34,6 +36,37 @@ export function NotificationsPage() {
     orderUpdates: true,
     securityAlerts: true
   });
+  const preferenceCards: Array<{
+    key: NotificationPreferenceKey;
+    icon: string;
+    title: string;
+    description: string;
+  }> = [
+    {
+      key: "emailAlerts",
+      icon: "EA",
+      title: "Email Alerts",
+      description: "Receive detailed order summaries and monthly lookbooks directly in your inbox."
+    },
+    {
+      key: "smsNotifications",
+      icon: "SM",
+      title: "SMS Notifications",
+      description: "Get instant shipping updates and important account alerts on your mobile device."
+    },
+    {
+      key: "orderUpdates",
+      icon: "OU",
+      title: "Order Updates",
+      description: "Be notified whenever an order changes stage, from confirmation to delivery."
+    },
+    {
+      key: "securityAlerts",
+      icon: "SA",
+      title: "Security Alerts",
+      description: "Receive recovery notices, login warnings and verification reminders when needed."
+    }
+  ];
 
   const latestPayment = useMemo(
     () =>
@@ -76,7 +109,7 @@ export function NotificationsPage() {
         : "Verify your email to strengthen recovery and important security notices.",
       meta: user?.email_verified ? "Today" : "Needs action",
       unread: !user?.email_verified,
-      actionHref: "/profile/security",
+        actionHref: "/security",
       actionLabel: "Review Security"
     });
 
@@ -99,37 +132,23 @@ export function NotificationsPage() {
         </header>
 
         <div className="notifications-route-prefs">
-          <article className="notifications-route-pref">
-            <div className="notifications-route-pref-head">
-              <span className="notifications-route-pref-icon">EA</span>
-              <button
-                aria-pressed={prefs.emailAlerts}
-                className={prefs.emailAlerts ? "notifications-route-toggle notifications-route-toggle-active" : "notifications-route-toggle"}
-                type="button"
-                onClick={() => setPrefs((current) => ({ ...current, emailAlerts: !current.emailAlerts }))}
-              >
-                <span />
-              </button>
-            </div>
-            <h3>Email Alerts</h3>
-            <p>Receive detailed order summaries and monthly lookbooks directly in your inbox.</p>
-          </article>
-
-          <article className="notifications-route-pref">
-            <div className="notifications-route-pref-head">
-              <span className="notifications-route-pref-icon">SM</span>
-              <button
-                aria-pressed={prefs.smsNotifications}
-                className={prefs.smsNotifications ? "notifications-route-toggle notifications-route-toggle-active" : "notifications-route-toggle"}
-                type="button"
-                onClick={() => setPrefs((current) => ({ ...current, smsNotifications: !current.smsNotifications }))}
-              >
-                <span />
-              </button>
-            </div>
-            <h3>SMS Notifications</h3>
-            <p>Get instant shipping updates and important account alerts on your mobile device.</p>
-          </article>
+          {preferenceCards.map((item) => (
+            <article className="notifications-route-pref" key={item.key}>
+              <div className="notifications-route-pref-head">
+                <span className="notifications-route-pref-icon">{item.icon}</span>
+                <button
+                  aria-pressed={prefs[item.key]}
+                  className={prefs[item.key] ? "notifications-route-toggle notifications-route-toggle-active" : "notifications-route-toggle"}
+                  type="button"
+                  onClick={() => setPrefs((current) => ({ ...current, [item.key]: !current[item.key] }))}
+                >
+                  <span />
+                </button>
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+            </article>
+          ))}
         </div>
 
         <section className="notifications-route-feed">

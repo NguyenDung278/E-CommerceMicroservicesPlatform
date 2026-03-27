@@ -1,11 +1,11 @@
 .account-page {
-  gap: 24px;
+  gap: 0;
 }
 
 .account-shell {
-  width: min(100%, 1536px);
+  width: min(100%, 1480px);
   margin: 0 auto;
-  padding: 22px 40px 0;
+  padding: 40px 40px 72px;
 }
 
 .account-content {
@@ -14,12 +14,12 @@
 
 @media (max-width: 1180px) {
   .account-shell {
-    padding-inline: 24px;
+    padding: 28px 24px 56px;
   }
 }
 
 @media (max-width: 720px) {
   .account-shell {
-    padding-inline: 18px;
+    padding: 22px 18px 44px;
   }
 }

@@ -10,7 +10,9 @@ export function AppLayout() {
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
   const isTransactionalSurface = location.pathname === "/checkout" || location.pathname.startsWith("/orders/");
-  const isAccountSurface = location.pathname.startsWith("/profile");
+  const isAccountSurface = ["/profile", "/myorders", "/addresses", "/payments", "/security", "/notifications"].some(
+    (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
+  );
   const categoryNavigation = [
     { label: "Men", category: "Shop Men" },
     { label: "Women", category: "Shop Women" },

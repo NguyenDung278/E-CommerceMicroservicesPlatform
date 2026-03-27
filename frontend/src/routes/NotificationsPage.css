@@ -1,7 +1,7 @@
 .notifications-route {
   display: grid;
-  gap: 28px;
-  padding-top: 8px;
+  gap: 34px;
+  padding-top: 4px;
 }
 
 .notifications-route-head {
@@ -26,27 +26,27 @@
 .notifications-route-head p {
   max-width: 58ch;
   margin: 0;
-  color: #575d79;
+  color: #2f342f;
+  font-size: 1.05rem;
   line-height: 1.7;
 }
 
 .notifications-route-prefs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 22px;
 }
 
 .notifications-route-pref,
 .notifications-route-item {
-  border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 24px 48px -28px rgba(27, 28, 25, 0.12);
+  border-radius: 28px;
+  background: #f5f3ee;
 }
 
 .notifications-route-pref {
   display: grid;
   gap: 14px;
-  padding: 28px;
+  padding: 30px;
 }
 
 .notifications-route-pref-head {
@@ -63,8 +63,8 @@
   min-width: 52px;
   height: 52px;
   padding: 0 12px;
-  border-radius: 16px;
-  background: #f0eee9;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
   color: #061b0e;
   font-size: 0.82rem;
   font-weight: 800;
@@ -146,7 +146,7 @@
   position: relative;
   display: grid;
   gap: 12px;
-  padding: 26px 28px;
+  padding: 30px;
 }
 
 .notifications-route-item-unread::before {

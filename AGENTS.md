@@ -1,89 +1,89 @@
 # AGENTS.md
 
-## Purpose
+## Mục đích (Purpose)
 
-This repository is an e-commerce platform currently organized as a Go microservices system with a React + Vite frontend and Docker-based local orchestration.
+Repository này là một nền tảng thương mại điện tử hiện đang được tổ chức theo hệ thống Go microservices với frontend React + Vite và môi trường local chạy bằng Docker.
 
-When you work in this repo, optimize for simplicity, operational clarity, and production robustness. Do not add complexity just because the current architecture can support it.
+Khi bạn (AI Agent) làm việc trong repo này, hãy tối ưu hoá cho sự đơn giản, sự rõ ràng trong vận hành (operational clarity), và sự ổn định trên môi trường production. **Không được** thêm sự phức tạp chỉ vì kiến trúc hiện tại có khả năng hỗ trợ nó.
 
-## Core Rule
+## Quy tắc cốt lõi (Core Rule)
 
-If you are asked to propose, revise, or extend the architecture or stack, you must actively challenge the default impulse toward more services, more infrastructure, more frameworks, and more moving parts.
+Nếu bạn được yêu cầu đề xuất, sửa đổi, hoặc mở rộng kiến trúc hoặc công nghệ (stack), bạn phải chủ động bác bỏ/thách thức những ý tưởng mặc định hướng tới việc thêm service mới, thêm hạ tầng mới, thêm framework, và thêm nhiều thành phần chuyển động phức tạp.
 
-Your job is to propose the simplest stack that is still robust for the stated requirements.
+Nhiệm vụ của bạn là đề xuất một stack **đơn giản nhất** nhưng vẫn đảm bảo sự ổn định (robust) cho các yêu cầu được đưa ra.
 
-That means:
+Điều đó có nghĩa là:
 
-- prefer fewer deployables
-- prefer fewer databases
-- prefer fewer runtime dependencies
-- prefer boring, well-supported tools
-- prefer patterns the team can operate with low cognitive load
-- prefer solutions that are easy to test locally with the existing `Makefile` and Docker workflow
+- Ưu tiên ít các thành phần cần deploy (deployables) hơn
+- Ưu tiên ít database hơn
+- Ưu tiên ít các dependency lúc runtime hơn
+- Ưu tiên các công cụ có phần "nhàm chán" nhưng được hỗ trợ tốt (boring, well-supported tools)
+- Ưu tiên các pattern mà team có thể vận hành với ít tải trọng nhận thức (low cognitive load)
+- Ưu tiên các giải pháp dễ dàng test ở local với workflow `Makefile` và Docker hiện có
 
-## Default Architectural Bias
+## Khuynh hướng Kiến trúc Mặc định (Default Architectural Bias)
 
-Unless requirements clearly demand otherwise, prefer:
+Trừ khi yêu cầu đòi hỏi rõ ràng điều ngược lại, hãy ưu tiên:
 
-- a modular monolith over additional microservices
-- synchronous HTTP within a single deployable over internal network hops
-- PostgreSQL as the primary source of truth
-- Redis only when there is a concrete caching, session, rate-limit, or queue need
-- RabbitMQ or async messaging only when there is a real reliability or decoupling requirement
-- one frontend application instead of multiple frontends
-- one deployment path for local development and one for production, with minimal drift
+- Cấu trúc Modular monolith thay cho việc đẻ thêm microservices
+- Giao tiếp HTTP đồng bộ (synchronous) trong một khối deployable duy nhất thay cho việc phải nhảy qua mạng nội bộ (network hops)
+- Dùng PostgreSQL làm nguồn dữ liệu thật sinh duy nhất (primary source of truth)
+- Chỉ dùng Redis khi có nhu cầu thực tế và cụ thể về caching, session, rate-limit, hoặc queue
+- Chỉ dùng RabbitMQ hoặc message bất đồng bộ (async messaging) khi có yêu cầu thực tế về tính tin cậy (reliability) hoặc cần tách rời (decoupling)
+- Chỉ dùng một ứng dụng frontend thay vì thiết kế nhiều frontend
+- Một chu trình (path) deploy duy nhất cho cả môi trường local và production, với độ sai lệch (drift) tối thiểu
 
-Do not recommend Kubernetes, service meshes, event-driven choreography, CQRS, or extra infrastructure by default. These should be justified explicitly, not assumed.
+**Không tự động đề xuất** Kubernetes, service meshes, event-driven choreography, CQRS, hoặc các hạ tầng bổ sung theo mặc định. Những thứ này phải được lý giải sự cần thiết một cách rõ ràng, tuyệt đối không được tự giả định.
 
-## How To Evaluate A Proposed Stack
+## Cách Đánh giá Một Stack Được Đề xuất
 
-For any meaningful stack recommendation, evaluate options in this order:
+Đối với bất kỳ đề xuất stack nào có ý nghĩa, hãy đánh giá các lựa chọn theo thứ tự sau:
 
-1. What is the simplest architecture that satisfies the stated scale, reliability, security, and team constraints?
-2. What can be removed without weakening the outcome?
-3. What operational burden does each added component create?
-4. What failure modes are introduced by this extra component?
-5. Can the same goal be achieved inside the existing Go + PostgreSQL + React foundation?
+1. Kiến trúc nào là đơn giản nhất thoả mãn được các ràng buộc về quy mô, độ tin cậy, bảo mật và nguồn lực team?
+2. Có thể loại bỏ đi thành phần nào mà không làm yếu đi kết quả chung hay không?
+3. Gánh nặng vận hành (operational burden) mà mỗi thành phần thêm vào sẽ tạo ra là gì?
+4. Những kiểu lỗi (failure modes) nào sẽ bị tạo ra bởi thành phần bổ sung này?
+5. Mục tiêu này có thể đạt được chỉ bằng việc sử dụng cái nền tảng Go + PostgreSQL + React hiện tại hay không?
 
-If a simpler option is rejected, explain why.
+Nếu bác bỏ một giải pháp hiển nhiên đơn giản hơn, hãy giải thích lý do tại sao.
 
-## Recommendation Standard
+## Tiêu chuẩn Đề xuất (Recommendation Standard)
 
-When making a stack recommendation, include:
+Khi đi đến việc đề xuất một stack, bắt buộc phải bao gồm:
 
-- the proposed stack
-- why it is the simplest robust option
-- what alternatives were considered but rejected
-- the specific requirement that justifies each non-trivial component
-- the migration path from the current repo if the recommendation differs from the current architecture
+- Stack dự tính đề xuất
+- Tại sao đây là lựa chọn đơn giản và ổn định nhất
+- Các lựa chọn thay thế nào đã được xem xét nhưng bị bác bỏ
+- Yêu cầu cụ thể nào đã biện minh cho sự xuất hiện của từng thành phần phức tạp đó
+- Lộ trình di chuyển (migration path) từ repo hiện tại, trong trường hợp đề xuất của bạn khác với kiến trúc hiện thời
 
-## When To Push Back
+## Khi Nào Cần Phản Kháng (When To Push Back)
 
-Push back clearly when requests introduce complexity without demonstrated need, especially:
+Hãy phản kháng rõ ràng khi các yêu cầu mang lại sự phức tạp mà không chứng minh được nhu cầu thực tế, đặc biệt là:
 
-- splitting more services out of the monorepo
-- adding new databases for isolated features
-- introducing message brokers for flows that can be handled transactionally
-- adding Kubernetes for small-team or early-stage operation
-- adding multiple backend frameworks or mixed-language services without a strong reason
+- Bóc tách thêm các service mới ra khỏi monorepo
+- Thêm database mới chỉ để phục vụ một vài tính năng bị cô lập (isolated features)
+- Đưa vào message broker cho những luồng (flows) có thể giải quyết dứt điểm bằng transaction (xử lý giao dịch đồng bộ)
+- Thêm Kubernetes cho một team quy mô nhỏ hoặc đang ở môi trường phát triển giai đoạn đầu
+- Thêm nhiều framework backend hoặc các service dùng ngôn ngữ lập trình khác nhau trộn lẫn mà không có lý do thực sự mạnh mẽ
 
-## Repo-Aware Guidance
+## Hướng dẫn Nhận Thức Repo (Repo-Aware Guidance)
 
-This repo already includes:
+Repo này đã bao gồm sẵn:
 
 - Go services
 - React + Vite frontend (legacy)
 - Next.js 16.2.1 frontend (new)
-- Docker Compose local environment
+- Môi trường chạy local bằng Docker Compose
 - PostgreSQL
 - Redis
 - RabbitMQ
-- Prometheus, Grafana, and Jaeger
+- Prometheus, Grafana, và Jaeger
 
-Treat these as existing constraints, not mandatory endorsements for future design. If asked what should be built next or how to simplify, you may recommend consolidating around fewer components when justified.
+Hãy coi những món này như các ràng buộc đã có sẵn, chứ không phải là sự ủng hộ bắt buộc (mandatory endorsements) cho các thiết kế tính năng trong tương lai. Nếu được hỏi nên xây dựng cái gì tiếp theo hoặc làm thế nào để đơn giản hóa, bạn có thể đề xuất hợp nhất và gom gọn lại thành ít thành phần hơn nếu lý do đủ thuyết phục.
 
-## Execution Guidance
+## Hướng dẫn Thực thi (Execution Guidance)
 
-When requirements are ambiguous and the ambiguity materially affects architecture, ask concise clarifying questions before recommending a stack.
+Khi các yêu cầu còn mơ hồ và sự mơ hồ đó có ảnh hưởng vật lý đến kiến trúc, hãy đặt các câu hỏi làm rõ thật súc tích trước khi đưa ra đề xuất stack.
 
-When requirements are clear enough, proceed and make the recommendation directly. Favor decisive, well-reasoned guidance over broad option lists.
+Khi các yêu cầu đã đủ rõ ràng, hãy xắn tay thực hiện và đưa ra luôn lời khuyên trực tiếp. Ưu tiên những hướng dẫn mang tính quyết đoán, lập luận tốt thay vì ném cho người dùng một danh sách tùy chọn dài dằng dặc.

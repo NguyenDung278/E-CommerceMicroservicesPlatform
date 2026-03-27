@@ -9,7 +9,7 @@ import { AccountPageFrame } from "../ui/account/AccountPageFrame";
 import { formatShortDate, formatShortOrderId } from "../ui/account/accountConfig";
 import { formatCurrency, formatStatusLabel } from "../utils/format";
 import { sanitizeText } from "../utils/sanitize";
-import { getUserDisplayName } from "../utils/devAccounts";
+import { getUserDisplayName, isDevelopmentAccount } from "../utils/devAccounts";
 import { validateProfile } from "../utils/validation";
 import "./ProfilePage.css";
 
@@ -44,6 +44,11 @@ export function ProfilePage() {
   const initials = buildInitials(displayName);
   const recentOrders = useMemo(() => orders.slice(0, 3), [orders]);
   const defaultAddress = useMemo(() => addresses.find((item) => item.is_default) ?? addresses[0] ?? null, [addresses]);
+  const memberSince = useMemo(() => buildMemberSinceLabel(user?.created_at), [user?.created_at]);
+  const locationLabel = defaultAddress
+    ? [defaultAddress.city, defaultAddress.district].filter(Boolean).join(", ")
+    : "No saved address yet";
+  const showDevBadge = isDevelopmentAccount(user);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,90 +100,101 @@ export function ProfilePage() {
           </div>
         ) : null}
 
-        <section className="profile-route-section">
-          <div className="profile-route-head">
-            <div>
-              <h1>Personal Information</h1>
-              <p>Manage your profile details and preferences.</p>
-            </div>
-
-            <button
-              className="primary-button profile-route-edit-trigger"
-              type="button"
-              onClick={() => setIsEditingProfile((current) => !current)}
-            >
-              {isEditingProfile ? "Close Editor" : "Edit Profile"}
-            </button>
-          </div>
-
+        <section className="profile-route-section profile-route-profile-shell">
           <div className="profile-route-hero">
             <div className="profile-route-avatar-column">
               <div className="profile-route-avatar-shell">
-                <div className="profile-route-avatar">{initials}</div>
-                <button className="profile-route-avatar-action" type="button">
-                  <span className="profile-route-avatar-camera" aria-hidden="true" />
+                <div className="profile-route-avatar">
+                  <span>{initials}</span>
+                </div>
+                <button
+                  className="profile-route-avatar-action"
+                  type="button"
+                  onClick={() => setIsEditingProfile((current) => !current)}
+                >
+                  <span className="profile-route-avatar-pencil" aria-hidden="true" />
                 </button>
               </div>
             </div>
 
-            <div className="profile-route-fields">
-              <div className="profile-route-field">
-                <label>Full Name</label>
-                <p>{displayName}</p>
+            <div className="profile-route-hero-copy">
+              <div className="profile-route-identity-row">
+                <div className="profile-route-identity">
+                  <h1>{displayName}</h1>
+                  <p className="profile-route-membership">
+                    <span className="profile-route-membership-icon" aria-hidden="true" />
+                    <span>{memberSince}</span>
+                  </p>
+                </div>
+
+                {showDevBadge ? <span className="profile-route-dev-badge">Dev Only: Profile_v2</span> : null}
               </div>
-              <div className="profile-route-field">
-                <label>Email Address</label>
-                <p>{user?.email || "Not available"}</p>
-              </div>
-              <div className="profile-route-field">
-                <label>Phone Number</label>
-                <p>{user?.phone || "Not set yet"}</p>
-              </div>
-              <div className="profile-route-field">
-                <label>Location</label>
-                <p>
-                  {defaultAddress
-                    ? [defaultAddress.city, defaultAddress.district].filter(Boolean).join(", ")
-                    : "No saved address yet"}
-                </p>
+
+              <div className="profile-route-divider" />
+
+              <div className="profile-route-fields">
+                <div className="profile-route-field">
+                  <label>Email Address</label>
+                  <p>{user?.email || "Not available"}</p>
+                </div>
+
+                <div className="profile-route-field">
+                  <label>Phone Number</label>
+                  <p>{user?.phone || "Not set yet"}</p>
+                </div>
+
+                <div className="profile-route-field">
+                  <label>Location</label>
+                  <p>{locationLabel}</p>
+                </div>
               </div>
             </div>
           </div>
 
           {isEditingProfile ? (
             <form className="profile-route-form" onSubmit={handleSubmit}>
-              <label className="profile-route-form-field">
-                <span>First Name</span>
-                <input
-                  value={profileForm.firstName}
-                  onChange={(event) =>
-                    setProfileForm((current) => ({
-                      ...current,
-                      firstName: event.target.value
-                    }))
-                  }
-                />
-              </label>
+              <div className="profile-route-form-head">
+                <div>
+                  <h2>Edit Profile</h2>
+                  <p>Update the personal information shown in your account summary.</p>
+                </div>
 
-              <label className="profile-route-form-field">
-                <span>Last Name</span>
-                <input
-                  value={profileForm.lastName}
-                  onChange={(event) =>
-                    setProfileForm((current) => ({
-                      ...current,
-                      lastName: event.target.value
-                    }))
-                  }
-                />
-              </label>
+                <button className="ghost-button" type="button" onClick={() => setIsEditingProfile(false)}>
+                  Close
+                </button>
+              </div>
+
+              <div className="profile-route-form-grid">
+                <label className="profile-route-form-field">
+                  <span>First Name</span>
+                  <input
+                    value={profileForm.firstName}
+                    onChange={(event) =>
+                      setProfileForm((current) => ({
+                        ...current,
+                        firstName: event.target.value
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="profile-route-form-field">
+                  <span>Last Name</span>
+                  <input
+                    value={profileForm.lastName}
+                    onChange={(event) =>
+                      setProfileForm((current) => ({
+                        ...current,
+                        lastName: event.target.value
+                      }))
+                    }
+                  />
+                </label>
+              </div>
 
               <div className="profile-route-form-actions">
                 <button className="primary-button" disabled={isSaving} type="submit">
                   {isSaving ? "Saving..." : "Save Changes"}
-                </button>
-                <button className="ghost-button" type="button" onClick={() => setIsEditingProfile(false)}>
-                  Cancel
                 </button>
               </div>
             </form>
@@ -188,8 +204,8 @@ export function ProfilePage() {
         <section className="profile-route-section profile-route-section-compact">
           <div className="profile-route-subhead">
             <h2>Recent Orders</h2>
-            <Link className="profile-route-text-link" to="/profile/orders">
-              View All Orders
+            <Link className="profile-route-text-link" to="/myorders">
+              View all history <span aria-hidden="true">→</span>
             </Link>
           </div>
 
@@ -209,22 +225,20 @@ export function ProfilePage() {
                     <th>Date</th>
                     <th>Total</th>
                     <th>Status</th>
-                    <th aria-label="actions" />
                   </tr>
                 </thead>
                 <tbody>
                   {recentOrders.map((order) => (
                     <tr key={order.id}>
-                      <td>{formatShortOrderId(order.id)}</td>
+                      <td>
+                        <Link className="profile-route-order-link" to={`/orders/${order.id}`}>
+                          {formatShortOrderId(order.id)}
+                        </Link>
+                      </td>
                       <td>{formatShortDate(order.created_at)}</td>
                       <td>{formatCurrency(order.total_price)}</td>
                       <td>
                         <span className={getOrderStatusClassName(order.status)}>{formatStatusLabel(order.status)}</span>
-                      </td>
-                      <td>
-                        <Link className="profile-route-arrow-link" to={`/orders/${order.id}`}>
-                          <span aria-hidden="true">›</span>
-                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -237,24 +251,35 @@ export function ProfilePage() {
         <section className="profile-route-cards">
           <article className="profile-route-card">
             <span className="profile-route-card-icon" aria-hidden="true" />
-            <h3>Two-Factor Auth</h3>
-            <p>Protect your account with an extra layer of security. We recommend using an authenticator app.</p>
-            <Link className="profile-route-card-link" to="/profile/security">
-              Enable Security
+            <div className="profile-route-card-copy">
+              <h3>Two-Factor Auth</h3>
+              <p>Enhance your account security by adding an extra layer of verification for all logins.</p>
+            </div>
+            <Link className="profile-route-card-link" to="/security">
+              Setup Now <span aria-hidden="true">—</span>
             </Link>
           </article>
 
           <article className="profile-route-card profile-route-card-accent">
             <span className="profile-route-card-icon profile-route-card-icon-accent" aria-hidden="true" />
-            <h3>Email Verification</h3>
-            <p>
-              {user?.email_verified
-                ? "Your account email is verified and ready for recovery, receipts and order alerts."
-                : "Verify your email to strengthen account recovery and receive important order notifications."}
-            </p>
-            <button className="profile-route-card-link" type="button" onClick={() => void handleResendVerification()}>
-              {isResendingVerification ? "Sending..." : user?.email_verified ? "Verification Complete" : "Send Verification"}
-            </button>
+            <div className="profile-route-card-copy">
+              <h3>ND Membership</h3>
+              <p>
+                {user?.email_verified
+                  ? `Member since ${extractYear(user?.created_at)}. You have ${orders.length} orders and ${addresses.length} saved addresses in your account.`
+                  : "Verify your email to strengthen account recovery and unlock a more complete membership profile."}
+              </p>
+            </div>
+
+            {user?.email_verified ? (
+              <Link className="profile-route-card-link" to="/myorders">
+                View Rewards <span aria-hidden="true">—</span>
+              </Link>
+            ) : (
+              <button className="profile-route-card-link" type="button" onClick={() => void handleResendVerification()}>
+                {isResendingVerification ? "Sending..." : "Verify Email"} <span aria-hidden="true">—</span>
+              </button>
+            )}
           </article>
         </section>
       </div>
@@ -276,6 +301,22 @@ function buildInitials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function buildMemberSinceLabel(value?: string) {
+  const year = extractYear(value);
+
+  return `Member since ${year}`;
+}
+
+function extractYear(value?: string) {
+  const parsed = value ? new Date(value) : null;
+
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return "this year";
+  }
+
+  return String(parsed.getFullYear());
 }
 
 function getOrderStatusClassName(status: string) {

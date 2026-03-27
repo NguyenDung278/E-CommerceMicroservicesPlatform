@@ -28,8 +28,8 @@ type AccountSidebarProps = {
 export function AccountSidebar({
   items,
   onLogout,
-  title = "Account",
-  subtitle
+  title = "My Account",
+  subtitle = "Manage your preferences"
 }: AccountSidebarProps) {
   return (
     <aside className="account-sidebar">

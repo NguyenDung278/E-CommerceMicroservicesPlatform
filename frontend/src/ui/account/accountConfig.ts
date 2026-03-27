@@ -2,11 +2,11 @@ import type { AccountSidebarItem } from "./AccountSidebar";
 
 export const ACCOUNT_NAV_ITEMS: AccountSidebarItem[] = [
   { id: "personal-info", label: "Personal Info", to: "/profile", icon: "person", end: true },
-  { id: "orders", label: "My Orders", to: "/profile/orders", icon: "orders" },
-  { id: "addresses", label: "Addresses", to: "/profile/addresses", icon: "pin" },
-  { id: "payments", label: "Payments", to: "/profile/payments", icon: "payments" },
-  { id: "security", label: "Security", to: "/profile/security", icon: "security" },
-  { id: "notifications", label: "Notifications", to: "/profile/notifications", icon: "notifications" }
+  { id: "orders", label: "My Orders", to: "/myorders", icon: "orders" },
+  { id: "addresses", label: "Addresses", to: "/addresses", icon: "pin" },
+  { id: "payments", label: "Payments", to: "/payments", icon: "payments" },
+  { id: "security", label: "Security", to: "/security", icon: "security" },
+  { id: "notifications", label: "Notifications", to: "/notifications", icon: "notifications" }
 ];
 
 export function formatShortOrderId(orderId: string) {

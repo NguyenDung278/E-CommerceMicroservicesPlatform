@@ -22,6 +22,10 @@ Tệp này theo dõi các tính năng hữu ích sẽ triển khai vào E-Commer
   - **Mô tả:** Thêm trường `deleted_at` vào bảng User. API Xoá tài khoản thực chất chỉ `UPDATE deleted_at`. Khi đăng nhập phải filter chặn người đã xoá. Viết cronjob / worker để hard delete hẳn khỏi DB sau 30 ngày.
   - **Kỹ năng mở khoá:** Thao tác Migration/SQL phức tạp, Batch Job processing.
 
+- [ ] **4. Refactor: "Unit of Work" / Closure Pattern cho Transaction DB**
+  - **Mô tả:** Viết lại cách quản lý Transaction trong code Go. Xây dựng một Closure function `RunInTx(ctx, db, func(tx) error)` tại lớp `repository`. Dùng nó để bọc các API tạo Order (đòi hỏi Insert Order + Update Stock trong cùng 1 Transaction) mà không làm ô nhiễm Service layer bằng `*sql.DB`.
+  - **Kỹ năng mở khoá:** Clean Architecture nâng cao, làm chủ `database/sql` Transaction Rollback/Commit tự động, tránh code smell.
+
 ---
 
 ## 🟡 Giai đoạn 2: Xử lý Đồng thời & Phân Tán (Trình độ Mid -> Strong Mid)
@@ -35,11 +39,16 @@ Tệp này theo dõi các tính năng hữu ích sẽ triển khai vào E-Commer
   - **Mô tả:** Xây dựng API Thanh toán chuẩn Ngân hàng: Yêu cầu Frontend gửi kèm Header `X-Idempotency-Key` (bản chất là chuỗi uuid frontend tự sinh mồi cho 1 lần click). Backend lưu tạm key xuống Redis. Nếu Client rớt mạng rồi bấm thanh toán lần 2 với cùng key đó, API sẽ bỏ qua và trả về kết quả thành công ảo của lần 1.
   - **Kỹ năng mở khoá:** Tiêu chuẩn Vàng cho khối FinTech, làm chủ Redis caching mechanism.
 
-- [ ] **6. Xử lý "Bom nổ chậm" với Dead Letter Exchange ở `RabbitMQ` / `notification-service`**
+- [ ] **7. Xử lý "Bom nổ chậm" với Dead Letter Exchange ở `RabbitMQ` / `notification-service`**
   - **Mô tả:** Cấu hình queue của Gửi Email sao cho: Nếu việc gửi Email sinh lỗi (API third party sập), từ chối message và nhét vào Dead Letter Queue. Sau đó thử gửi lại (Retry) tối đa 3 lần theo nguyên tắc Exponential Backoff (chờ 10s, 30s, 60s). 
   - **Kỹ năng mở khoá:** Xử lý Hệ thống Hướng sự kiện (Event-driven) gãy đổ. Phỏng vấn vị trí Senior 90% sẽ hỏi câu này.
 
+- [ ] **8. Outbox Pattern cho Reliable Messaging ở `order-service`**
+  - **Mô tả:** Chống lại thảm họa "Mất kết nối RabbitMQ sau khi lưu DB". Áp dụng Outbox Pattern: Bọc Transaction cho việc `INSERT order` và `INSERT event_outbox` vào chung 1 DB PostgreSQL. Sau đó viết 1 Background Goroutine (Cron) chạy ngầm để đọc bảng `event_outbox` và bắn lên RabbitMQ. Bắn xong mới xoá record trong DB.
+  - **Kỹ năng mở khoá:** System Design kinh điển giải quyết bài toán Data Consistency giữa Microservices với DB và Message Broker.
+
 ---
+
 
 ## 🔴 Giai đoạn 3: Trưởng thành Cấu trúc - Enterprise (Trình độ Senior)
 *Mục tiêu: Đạt chuẩn Cloud-Native của hệ thống Lớn.*
@@ -48,13 +57,21 @@ Tệp này theo dõi các tính năng hữu ích sẽ triển khai vào E-Commer
   - **Mô tả:** Ta không thể debug dễ dàng nếu Gateway, Order, và Product mỗi nơi vứt log 1 kiểu. Hãy sinh ra một `X-Correlation-ID` ngay từ API Gateway. Đẩy ID này vào Golang `context.Context` xuyên suốt vòng đời Request, gửi nó qua Header chuẩn gRPC, và chèn vào mọi dòng log `zap` ở tất cả các Services.
   - **Kỹ năng mở khoá:** `context.WithValue` chuyên sâu, Observability & Telemetry (Một skill cốt tử của System Designer).
 
-- [ ] **8. Saga Pattern - Cuộc vãn hồi (Compensating Transaction) ở `order-service`**
-  - **Mô tả:** Đây là trùm cuối. Nếu tạo Order xong, nhưng dịch vụ trừ điểm thưởng hoặc tạo Payment ngầm bị lỗi (Mất kết nối MQ). Phải làm sao để rollback lại Order đó về "Huỷ" khi các dịch vụ khác nhau sở hữu Database khác nhau? Áp dụng Choreography Saga.
+- [ ] **10. Saga Pattern - Cuộc vãn hồi (Compensating Transaction) ở `order-service`**
+  - **Mô tả:** Đây là trùm cuối. Nếu tạo Order xong, nhưng dịch vụ trừ điểm thưởng hoặc tạo Payment ngầm bị lỗi. Phải làm sao để rollback lại Order đó về "Huỷ" khi các dịch vụ khác nhau sở hữu Database khác nhau? Áp dụng Choreography Saga.
   - **Kỹ năng mở khoá:** Distributed Transaction - Cảnh giới cao nhất của Microservices. Hiểu được cái này, System Architecture Design không còn là trở ngại.
 
-- [ ] **9. Graceful Shutdown & Zero-Downtime Deploy (Cho All Services)**
+- [ ] **11. Graceful Shutdown & Zero-Downtime Deploy (Cho All Services)**
   - **Mô tả:** Đảm bảo khi tắt một cái Docker container hay K8s Pod, server Go không đứt rụp 1 phát giữa chừng. Phải viết đoạn code bắt tín hiệu `os/signal` SIGTERM. Ngừng nhận request mới, đợi mớ request đang chạy dở lưu DB xong rồi mới tự sát.
   - **Kỹ năng mở khoá:** Master Goroutine Control (`sync.WaitGroup`, `select`), Cloud Native Readiness.
+
+- [ ] **12. Background Worker Pool với RabbitMQ (Xử lý Ảnh/Video)**
+  - **Mô tả:** Xây dựng hệ thống Resize/Upload ảnh Avatar & Product không đồng bộ. Khi có Request upload, API chỉ trả về `202 Accepted` và lưu Message vào RMQ. Viết Worker Pool với số lượng 10 Goroutines chạy xuyên suốt để tiêu thụ (consume) ảnh từ MQ, bóp dung lượng WebP và ném lên MinIO.
+  - **Kỹ năng mở khoá:** Master Goroutine Pool Pattern, RabbitMQ Message Acknowledgment, Throttling Server Resources.
+
+- [ ] **13. Bulk Insert & Data Pipeline (Import hàng chục ngàn Products)**
+  - **Mô tả:** Cung cấp API để Admin upload File Excel chứa 50,000 dòng sản phẩm. Code Go phải parse file qua Streaming (không nạp hết vào RAM), đẩy dữ liệu vào 1 Goroutine Channel. Worker ở đầu bên kia nhận batch (500 items/lần) và thực hiện Bulk Insert/`COPY FROM` siêu tốc vào PostgreSQL.
+  - **Kỹ năng mở khoá:** Memory Optimization (GC pressure), Tối ưu hoá Data Pipeline tốc độ cao trong Go.
 
 ---
 

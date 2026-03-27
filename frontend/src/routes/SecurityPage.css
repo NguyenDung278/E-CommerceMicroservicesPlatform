@@ -1,7 +1,7 @@
 .security-route {
   display: grid;
-  gap: 28px;
-  padding-top: 8px;
+  gap: 34px;
+  padding-top: 4px;
 }
 
 .security-route-head {
@@ -27,7 +27,8 @@
 .security-route-activity-head p {
   max-width: 60ch;
   margin: 0;
-  color: #575d79;
+  color: #2f342f;
+  font-size: 1.05rem;
   line-height: 1.7;
 }
 
@@ -41,15 +42,14 @@
 .security-route-card,
 .security-route-trust,
 .security-route-activity-row {
-  border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 24px 48px -28px rgba(27, 28, 25, 0.12);
+  border-radius: 28px;
+  background: #f5f3ee;
 }
 
 .security-route-panel,
 .security-route-card,
 .security-route-trust {
-  padding: 30px;
+  padding: 32px;
 }
 
 .security-route-panel {
@@ -66,7 +66,7 @@
 .security-route-panel-icon {
   width: 42px;
   height: 42px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: linear-gradient(135deg, #1b3022, #314a3c);
 }
 
@@ -109,7 +109,7 @@
 
 .security-route-field input {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   padding: 0 0 10px;
   border: 0;
   border-bottom: 1px solid rgba(115, 121, 115, 0.24);
@@ -122,9 +122,9 @@
   align-items: center;
   justify-content: center;
   width: fit-content;
-  min-height: 50px;
-  padding: 0 22px;
-  border-radius: 16px;
+  min-height: 56px;
+  padding: 0 24px;
+  border-radius: 999px;
   font-weight: 700;
 }
 
@@ -154,9 +154,9 @@
 }
 
 .security-route-inline-card {
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: rgba(228, 226, 221, 0.38);
+  padding: 20px 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.55);
 }
 
 .security-route-link {
@@ -226,7 +226,7 @@
   justify-content: space-between;
   gap: 18px;
   align-items: center;
-  padding: 24px 28px;
+  padding: 28px 30px;
 }
 
 .security-route-activity-meta span {

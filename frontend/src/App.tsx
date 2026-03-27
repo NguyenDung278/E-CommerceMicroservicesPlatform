@@ -4,6 +4,7 @@ import { AppLayout } from "./layout/AppLayout";
 import { AuthProvider } from "./providers/AuthContext";
 import { CartProvider } from "./providers/CartContext";
 import { ProtectedRoute } from "./router/ProtectedRoute";
+import { ScrollToTop } from "./router/ScrollToTop";
 import { AdminPage } from "./routes/AdminPage";
 import { AddressesPage } from "./routes/AddressesPage";
 import { AuthCallbackPage } from "./routes/AuthCallbackPage";
@@ -30,6 +31,7 @@ export default function App() {
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route element={<LoginPage />} path="/login" />
             <Route element={<RegisterPage />} path="/register" />
@@ -59,7 +61,7 @@ export default function App() {
                     <OrdersPage />
                   </ProtectedRoute>
                 }
-                path="profile/orders"
+                path="myorders"
               />
               <Route
                 element={
@@ -67,7 +69,7 @@ export default function App() {
                     <AddressesPage />
                   </ProtectedRoute>
                 }
-                path="profile/addresses"
+                path="addresses"
               />
               <Route
                 element={
@@ -83,7 +85,7 @@ export default function App() {
                     <PaymentHistoryPage />
                   </ProtectedRoute>
                 }
-                path="profile/payments"
+                path="payments"
               />
               <Route
                 element={
@@ -91,7 +93,7 @@ export default function App() {
                     <SecurityPage />
                   </ProtectedRoute>
                 }
-                path="profile/security"
+                path="security"
               />
               <Route
                 element={
@@ -99,11 +101,16 @@ export default function App() {
                     <NotificationsPage />
                   </ProtectedRoute>
                 }
-                path="profile/notifications"
+                path="notifications"
               />
+              <Route element={<Navigate replace to="/myorders" />} path="profile/orders" />
+              <Route element={<Navigate replace to="/addresses" />} path="profile/addresses" />
+              <Route element={<Navigate replace to="/payments" />} path="profile/payments" />
+              <Route element={<Navigate replace to="/security" />} path="profile/security" />
+              <Route element={<Navigate replace to="/notifications" />} path="profile/notifications" />
               <Route
-                element={<Navigate replace to="/profile/payments" />}
-                path="payments"
+                element={<Navigate replace to="/myorders" />}
+                path="orders"
               />
               <Route
                 element={
