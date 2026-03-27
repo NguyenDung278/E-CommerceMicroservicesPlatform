@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -48,8 +49,39 @@ func (r *fakeProductRepo) GetByID(_ context.Context, id string) (*model.Product,
 
 func (r *fakeProductRepo) Update(_ context.Context, product *model.Product) error { return nil }
 func (r *fakeProductRepo) Delete(_ context.Context, id string) error              { return nil }
-func (r *fakeProductRepo) List(_ context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sort string) ([]*model.Product, int64, error) {
-	return []*model.Product{}, 0, nil
+func (r *fakeProductRepo) List(_ context.Context, params repository.ListProductsParams) ([]*model.Product, string, bool, error) {
+	products := make([]*model.Product, len(r.created))
+	copy(products, r.created)
+
+	sort.Slice(products, func(left, right int) bool {
+		if products[left].CreatedAt.Equal(products[right].CreatedAt) {
+			return products[left].ID > products[right].ID
+		}
+		return products[left].CreatedAt.After(products[right].CreatedAt)
+	})
+
+	start := 0
+	if params.Cursor != "" {
+		for idx, product := range products {
+			if product.ID == params.Cursor {
+				start = idx + 1
+				break
+			}
+		}
+	}
+
+	end := int(math.Min(float64(start+params.Limit), float64(len(products))))
+	if start > len(products) {
+		return []*model.Product{}, "", false, nil
+	}
+
+	nextCursor := ""
+	hasNext := end < len(products)
+	if hasNext {
+		nextCursor = products[end-1].ID
+	}
+
+	return products[start:end], nextCursor, hasNext, nil
 }
 func (r *fakeProductRepo) ListByIDs(_ context.Context, ids []string) ([]*model.Product, error) {
 	return []*model.Product{}, nil
@@ -262,6 +294,59 @@ func TestCreateAllowsStaffRole(t *testing.T) {
 	}
 	if len(repo.created) != 1 {
 		t.Fatalf("expected product to be created, got %d", len(repo.created))
+	}
+}
+
+func TestListReturnsCursorMetadata(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	repo := &fakeProductRepo{created: []*model.Product{
+		{ID: "p1", Name: "One", CreatedAt: time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC)},
+		{ID: "p2", Name: "Two", CreatedAt: time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC)},
+		{ID: "p3", Name: "Three", CreatedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
+	}}
+	productService := service.NewProductService(repo)
+	handler := NewProductHandler(productService)
+	handler.RegisterRoutes(e, "unused-secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products?limit=2", nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Success bool `json:"success"`
+		Meta    struct {
+			Limit      int    `json:"limit"`
+			NextCursor string `json:"next_cursor"`
+			HasNext    bool   `json:"has_next"`
+		} `json:"meta"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(payload.Data) != 2 {
+		t.Fatalf("expected 2 products, got %d", len(payload.Data))
+	}
+	if payload.Meta.Limit != 2 {
+		t.Fatalf("expected limit=2, got %d", payload.Meta.Limit)
+	}
+	if !payload.Meta.HasNext {
+		t.Fatalf("expected has_next=true")
+	}
+	if payload.Meta.NextCursor != "p2" {
+		t.Fatalf("expected next cursor p2, got %q", payload.Meta.NextCursor)
+	}
+	if payload.Data[0].ID != "p1" || payload.Data[1].ID != "p2" {
+		t.Fatalf("unexpected product order: %+v", payload.Data)
 	}
 }
 

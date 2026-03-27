@@ -3,13 +3,34 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/lib/pq"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 )
+
+var ErrInvalidCursor = errors.New("invalid cursor")
+
+type ListProductsParams struct {
+	Limit    int
+	Cursor   string
+	Category string
+	Brand    string
+	Tag      string
+	Status   string
+	Search   string
+	MinPrice float64
+	MaxPrice float64
+	Size     string
+	Color    string
+	Sort     string
+}
 
 // ProductRepository defines the interface for product data access.
 type ProductRepository interface {
@@ -17,7 +38,7 @@ type ProductRepository interface {
 	GetByID(ctx context.Context, id string) (*model.Product, error)
 	Update(ctx context.Context, product *model.Product) error
 	Delete(ctx context.Context, id string) error
-	List(ctx context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sort string) ([]*model.Product, int64, error)
+	List(ctx context.Context, params ListProductsParams) ([]*model.Product, string, bool, error)
 	ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error)
 	ListForSearchIndex(ctx context.Context) ([]*model.Product, error)
 	UpdateStock(ctx context.Context, id string, quantity int) error
@@ -131,102 +152,93 @@ func (r *postgresProductRepository) Delete(ctx context.Context, id string) error
 // Do điều kiện lọc (Filters) từ người dùng có thể rỗng hoặc có, SQL Builder
 // sẽ linh động build vế `WHERE` theo từng chuỗi, và gán tham số `$1`, `$2`
 // vào array `args` để DB bind vào, ngăn chặn hoàn toàn lỗi SQL Injection.
-func (r *postgresProductRepository) List(
-	ctx context.Context,
-	offset, limit int,
-	category, brand, tag, status, search string,
-	minPrice, maxPrice float64,
-	size, color, sort string,
-) ([]*model.Product, int64, error) {
+func (r *postgresProductRepository) List(ctx context.Context, params ListProductsParams) ([]*model.Product, string, bool, error) {
 	baseQuery := `FROM products WHERE 1=1`
 	args := []interface{}{}
 	argIdx := 1
 
-	if category != "" {
+	if params.Category != "" {
 		baseQuery += fmt.Sprintf(` AND category = $%d`, argIdx)
-		args = append(args, category)
+		args = append(args, params.Category)
 		argIdx++
 	}
-	if brand != "" {
+	if params.Brand != "" {
 		baseQuery += fmt.Sprintf(` AND brand = $%d`, argIdx)
-		args = append(args, brand)
+		args = append(args, params.Brand)
 		argIdx++
 	}
-	if tag != "" {
+	if params.Tag != "" {
 		baseQuery += fmt.Sprintf(` AND tags @> $%d::jsonb`, argIdx)
-		args = append(args, mustJSON([]string{tag}))
+		args = append(args, mustJSON([]string{params.Tag}))
 		argIdx++
 	}
-	if status != "" {
+	if params.Status != "" {
 		baseQuery += fmt.Sprintf(` AND status = $%d`, argIdx)
-		args = append(args, status)
+		args = append(args, params.Status)
 		argIdx++
 	}
-	if search != "" {
+	if params.Search != "" {
 		baseQuery += fmt.Sprintf(` AND (name ILIKE $%d OR description ILIKE $%d OR category ILIKE $%d OR brand ILIKE $%d OR sku ILIKE $%d)`,
 			argIdx, argIdx, argIdx, argIdx, argIdx,
 		)
-		args = append(args, "%"+search+"%")
+		args = append(args, "%"+params.Search+"%")
 		argIdx++
 	}
-	if minPrice > 0 {
+	if params.MinPrice > 0 {
 		baseQuery += fmt.Sprintf(` AND price >= $%d`, argIdx)
-		args = append(args, minPrice)
+		args = append(args, params.MinPrice)
 		argIdx++
 	}
-	if maxPrice > 0 {
+	if params.MaxPrice > 0 {
 		baseQuery += fmt.Sprintf(` AND price <= $%d`, argIdx)
-		args = append(args, maxPrice)
+		args = append(args, params.MaxPrice)
 		argIdx++
 	}
-	if size != "" {
+	if params.Size != "" {
 		baseQuery += fmt.Sprintf(` AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(variants) AS variant
 			WHERE lower(COALESCE(variant->>'size', '')) = lower($%d)
 		)`, argIdx)
-		args = append(args, size)
+		args = append(args, params.Size)
 		argIdx++
 	}
-	if color != "" {
+	if params.Color != "" {
 		baseQuery += fmt.Sprintf(` AND EXISTS (
 			SELECT 1
 			FROM jsonb_array_elements(variants) AS variant
 			WHERE lower(COALESCE(variant->>'color', '')) = lower($%d)
 		)`, argIdx)
-		args = append(args, color)
+		args = append(args, params.Color)
 		argIdx++
 	}
 
-	var total int64
-	countQuery := `SELECT COUNT(*) ` + baseQuery
-	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("failed to count products: %w", err)
+	sort := normalizeListSort(params.Sort)
+	cursor, err := decodeProductListCursor(params.Cursor)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if cursor != nil {
+		if cursor.Sort != sort {
+			return nil, "", false, fmt.Errorf("%w: cursor does not match sort order", ErrInvalidCursor)
+		}
+
+		baseQuery, args, argIdx = appendCursorClause(baseQuery, args, argIdx, sort, cursor)
 	}
 
-	orderByClause := "created_at DESC"
-	switch sort {
-	case "price_asc":
-		orderByClause = "price ASC, created_at DESC"
-	case "price_desc":
-		orderByClause = "price DESC, created_at DESC"
-	case "popular":
-		// Until we add cross-service sales signals, keep "popular" deterministic
-		// by ranking high-stock active products first, then newest arrivals.
-		orderByClause = "stock DESC, created_at DESC"
-	}
+	orderByClause := orderByClauseForSort(sort)
 
 	selectQuery := fmt.Sprintf(`
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		%s
 		ORDER BY %s
-		LIMIT $%d OFFSET $%d
-	`, baseQuery, orderByClause, argIdx, argIdx+1)
-	args = append(args, limit, offset)
+		LIMIT $%d
+	`, baseQuery, orderByClause, argIdx)
+	args = append(args, params.Limit+1)
 
 	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list products: %w", err)
+		return nil, "", false, fmt.Errorf("failed to list products: %w", err)
 	}
 	defer rows.Close()
 
@@ -234,12 +246,26 @@ func (r *postgresProductRepository) List(
 	for rows.Next() {
 		product, err := r.scanProductRows(rows)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed to scan product: %w", err)
+			return nil, "", false, fmt.Errorf("failed to scan product: %w", err)
 		}
 		products = append(products, product)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, "", false, fmt.Errorf("failed to iterate product rows: %w", err)
+	}
 
-	return products, total, nil
+	hasNext := len(products) > params.Limit
+	if !hasNext {
+		return products, "", false, nil
+	}
+
+	products = products[:params.Limit]
+	nextCursor, err := encodeProductListCursor(products[len(products)-1], sort)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("failed to encode next cursor: %w", err)
+	}
+
+	return products, nextCursor, true, nil
 }
 
 func (r *postgresProductRepository) ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error) {
@@ -422,4 +448,111 @@ func mustJSON(value any) string {
 		return "[]"
 	}
 	return string(body)
+}
+
+type productListCursor struct {
+	Sort      string    `json:"sort"`
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	Price     float64   `json:"price,omitempty"`
+	Stock     int       `json:"stock,omitempty"`
+}
+
+func decodeProductListCursor(encoded string) (*productListCursor, error) {
+	encoded = strings.TrimSpace(encoded)
+	if encoded == "" {
+		return nil, nil
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("%w: malformed base64 payload", ErrInvalidCursor)
+	}
+
+	var cursor productListCursor
+	if err := json.Unmarshal(payload, &cursor); err != nil {
+		return nil, fmt.Errorf("%w: malformed cursor payload", ErrInvalidCursor)
+	}
+	if cursor.ID == "" || cursor.CreatedAt.IsZero() {
+		return nil, fmt.Errorf("%w: missing cursor fields", ErrInvalidCursor)
+	}
+
+	return &cursor, nil
+}
+
+func encodeProductListCursor(product *model.Product, sort string) (string, error) {
+	cursor := productListCursor{
+		Sort:      sort,
+		ID:        product.ID,
+		CreatedAt: product.CreatedAt.UTC(),
+		Price:     product.Price,
+		Stock:     product.Stock,
+	}
+
+	payload, err := json.Marshal(cursor)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(payload), nil
+}
+
+func appendCursorClause(baseQuery string, args []interface{}, argIdx int, sort string, cursor *productListCursor) (string, []interface{}, int) {
+	switch sort {
+	case "price_asc":
+		baseQuery += fmt.Sprintf(` AND (
+			price > $%d
+			OR (price = $%d AND created_at < $%d)
+			OR (price = $%d AND created_at = $%d AND id < $%d)
+		)`, argIdx, argIdx, argIdx+1, argIdx, argIdx+1, argIdx+2)
+		args = append(args, cursor.Price, cursor.CreatedAt, cursor.ID)
+		argIdx += 3
+	case "price_desc":
+		baseQuery += fmt.Sprintf(` AND (
+			price < $%d
+			OR (price = $%d AND created_at < $%d)
+			OR (price = $%d AND created_at = $%d AND id < $%d)
+		)`, argIdx, argIdx, argIdx+1, argIdx, argIdx+1, argIdx+2)
+		args = append(args, cursor.Price, cursor.CreatedAt, cursor.ID)
+		argIdx += 3
+	case "popular":
+		baseQuery += fmt.Sprintf(` AND (
+			stock < $%d
+			OR (stock = $%d AND created_at < $%d)
+			OR (stock = $%d AND created_at = $%d AND id < $%d)
+		)`, argIdx, argIdx, argIdx+1, argIdx, argIdx+1, argIdx+2)
+		args = append(args, cursor.Stock, cursor.CreatedAt, cursor.ID)
+		argIdx += 3
+	default:
+		baseQuery += fmt.Sprintf(` AND (
+			created_at < $%d
+			OR (created_at = $%d AND id < $%d)
+		)`, argIdx, argIdx, argIdx+1)
+		args = append(args, cursor.CreatedAt, cursor.ID)
+		argIdx += 2
+	}
+
+	return baseQuery, args, argIdx
+}
+
+func orderByClauseForSort(sort string) string {
+	switch sort {
+	case "price_asc":
+		return "price ASC, created_at DESC, id DESC"
+	case "price_desc":
+		return "price DESC, created_at DESC, id DESC"
+	case "popular":
+		return "stock DESC, created_at DESC, id DESC"
+	default:
+		return "created_at DESC, id DESC"
+	}
+}
+
+func normalizeListSort(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "price_asc", "price_desc", "popular":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "latest"
+	}
 }

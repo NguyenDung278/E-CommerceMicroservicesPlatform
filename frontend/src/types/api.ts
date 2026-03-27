@@ -1,7 +1,9 @@
 export type ApiMeta = {
-  page: number;
-  limit: number;
-  total: number;
+  page?: number;
+  limit?: number;
+  total?: number;
+  next_cursor?: string;
+  has_next?: boolean;
 };
 
 export type ApiEnvelope<T> = {

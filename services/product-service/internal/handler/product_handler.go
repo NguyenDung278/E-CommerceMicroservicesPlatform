@@ -134,7 +134,6 @@ func (h *ProductHandler) Delete(c echo.Context) error {
 // Input: Các query parameter như `page`, `limit`, `category`, `search` để phân trang và bọ lọc.
 // Output: Trả về HTTP 200 kèm danh sách Products và Meta data phân trang (`total` items).
 func (h *ProductHandler) List(c echo.Context) error {
-	page, _ := strconv.Atoi(c.QueryParam("page"))
 	limit, _ := strconv.Atoi(c.QueryParam("limit"))
 	minPrice, _ := strconv.ParseFloat(c.QueryParam("min_price"), 64)
 	maxPrice, _ := strconv.ParseFloat(c.QueryParam("max_price"), 64)
@@ -147,8 +146,8 @@ func (h *ProductHandler) List(c echo.Context) error {
 	}
 
 	query := dto.ListProductsQuery{
-		Page:     page,
 		Limit:    limit,
+		Cursor:   c.QueryParam("cursor"),
 		Category: c.QueryParam("category"),
 		Brand:    c.QueryParam("brand"),
 		Tag:      c.QueryParam("tag"),
@@ -161,24 +160,25 @@ func (h *ProductHandler) List(c echo.Context) error {
 		Sort:     c.QueryParam("sort"),
 	}
 
-	products, total, err := h.productService.List(c.Request().Context(), query)
+	products, pageInfo, err := h.productService.List(c.Request().Context(), query)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidCursor) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid cursor")
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	if products == nil {
 		products = []*model.Product{}
 	}
 
-	if query.Page < 1 {
-		query.Page = 1
-	}
 	if query.Limit < 1 {
 		query.Limit = 20
 	}
+	hasNext := pageInfo != nil && pageInfo.HasNext
 
 	return response.SuccessWithMeta(c, http.StatusOK, "products retrieved", products, &response.Meta{
-		Page:  query.Page,
-		Limit: query.Limit,
-		Total: total,
+		Limit:      query.Limit,
+		NextCursor: pageInfo.NextCursor,
+		HasNext:    &hasNext,
 	})
 }

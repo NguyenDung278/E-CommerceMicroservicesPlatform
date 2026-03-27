@@ -36,6 +36,7 @@ export interface ProductListOptions {
   color?: string;
   sort?: "latest" | "price_asc" | "price_desc" | "popular";
   limit?: number;
+  cursor?: string;
 }
 
 export interface ProductReviewListOptions {
@@ -131,6 +132,9 @@ export const productApi = {
     }
     if (options?.sort) {
       params.set("sort", options.sort);
+    }
+    if (options?.cursor) {
+      params.set("cursor", options.cursor);
     }
 
     const query = `?${params.toString()}`;

@@ -17,8 +17,14 @@ import (
 var (
 	ErrProductNotFound         = errors.New("product not found")
 	ErrInvalidStatus           = errors.New("invalid product status")
+	ErrInvalidCursor           = errors.New("invalid cursor")
 	ErrImageStorageUnavailable = errors.New("image storage unavailable")
 )
+
+type ProductListPageInfo struct {
+	NextCursor string
+	HasNext    bool
+}
 
 // ProductService contains business logic for product operations.
 type ProductService struct {
@@ -208,47 +214,53 @@ func (s *ProductService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// List returns paginated products with optional catalog metadata filters.
-func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) ([]*model.Product, int64, error) {
-	if query.Page < 1 {
-		query.Page = 1
-	}
+// List returns products using cursor pagination for PostgreSQL-backed catalog browsing.
+func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) ([]*model.Product, *ProductListPageInfo, error) {
 	if query.Limit < 1 || query.Limit > 100 {
 		query.Limit = 20
 	}
-	offset := (query.Page - 1) * query.Limit
+	query.Cursor = strings.TrimSpace(query.Cursor)
 
-	if s.search != nil && shouldUseSearchBackend(query) {
+	if s.search != nil && shouldUseSearchBackend(query) && query.Cursor == "" {
 		ids, total, err := s.search.Search(ctx, query)
 		if err != nil {
 			s.log.Warn("search backend failed, falling back to PostgreSQL", zap.String("search", strings.TrimSpace(query.Search)), zap.Error(err))
 		} else {
 			if len(ids) == 0 {
-				return []*model.Product{}, total, nil
+				return []*model.Product{}, &ProductListPageInfo{}, nil
 			}
 			products, listErr := s.repo.ListByIDs(ctx, ids)
 			if listErr != nil {
-				return nil, 0, listErr
+				return nil, nil, listErr
 			}
-			return products, total, nil
+
+			hasNext := int64(query.Limit) < total
+			return products, &ProductListPageInfo{HasNext: hasNext}, nil
 		}
 	}
 
-	return s.repo.List(
-		ctx,
-		offset,
-		query.Limit,
-		strings.TrimSpace(query.Category),
-		strings.TrimSpace(query.Brand),
-		strings.TrimSpace(query.Tag),
-		strings.TrimSpace(query.Status),
-		strings.TrimSpace(query.Search),
-		query.MinPrice,
-		query.MaxPrice,
-		strings.TrimSpace(query.Size),
-		strings.TrimSpace(query.Color),
-		normalizeSort(query.Sort),
-	)
+	products, nextCursor, hasNext, err := s.repo.List(ctx, repository.ListProductsParams{
+		Limit:    query.Limit,
+		Cursor:   query.Cursor,
+		Category: strings.TrimSpace(query.Category),
+		Brand:    strings.TrimSpace(query.Brand),
+		Tag:      strings.TrimSpace(query.Tag),
+		Status:   strings.TrimSpace(query.Status),
+		Search:   strings.TrimSpace(query.Search),
+		MinPrice: query.MinPrice,
+		MaxPrice: query.MaxPrice,
+		Size:     strings.TrimSpace(query.Size),
+		Color:    strings.TrimSpace(query.Color),
+		Sort:     normalizeSort(query.Sort),
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, nil, ErrInvalidCursor
+		}
+		return nil, nil, err
+	}
+
+	return products, &ProductListPageInfo{NextCursor: nextCursor, HasNext: hasNext}, nil
 }
 
 func (s *ProductService) SyncSearchIndex(ctx context.Context) error {

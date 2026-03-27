@@ -49,6 +49,7 @@ type UploadProductImagesResponse struct {
 type ListProductsQuery struct {
 	Page     int     `query:"page"`
 	Limit    int     `query:"limit"`
+	Cursor   string  `query:"cursor"`
 	Category string  `query:"category"`
 	Brand    string  `query:"brand"`
 	Tag      string  `query:"tag"`

@@ -9,6 +9,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
 )
 
 func TestCreateReviewPreventsDuplicates(t *testing.T) {
@@ -176,8 +177,8 @@ func (r *fakeReviewServiceRepo) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-func (r *fakeReviewServiceRepo) List(_ context.Context, offset, limit int, category, brand, tag, status, search string, minPrice, maxPrice float64, size, color, sortBy string) ([]*model.Product, int64, error) {
-	return []*model.Product{}, 0, nil
+func (r *fakeReviewServiceRepo) List(_ context.Context, _ repository.ListProductsParams) ([]*model.Product, string, bool, error) {
+	return []*model.Product{}, "", false, nil
 }
 
 func (r *fakeReviewServiceRepo) ListByIDs(_ context.Context, ids []string) ([]*model.Product, error) {

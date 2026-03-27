@@ -28,9 +28,11 @@ type Response struct {
 
 // Meta holds pagination metadata.
 type Meta struct {
-	Page  int   `json:"page"`
-	Limit int   `json:"limit"`
-	Total int64 `json:"total"`
+	Page       int    `json:"page,omitempty"`
+	Limit      int    `json:"limit,omitempty"`
+	Total      int64  `json:"total,omitempty"`
+	NextCursor string `json:"next_cursor,omitempty"`
+	HasNext    *bool  `json:"has_next,omitempty"`
 }
 
 // Success sends a successful JSON response.
