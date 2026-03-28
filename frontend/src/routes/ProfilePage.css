@@ -311,6 +311,29 @@
   background: transparent;
 }
 
+.profile-route-phone-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.profile-route-phone-action {
+  min-width: 168px;
+}
+
+.profile-route-phone-action.profile-route-phone-action-disabled {
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(46, 125, 50, 0.22) 0%, rgba(102, 187, 106, 0.34) 100%);
+  color: rgba(19, 77, 31, 0.72);
+  box-shadow: none;
+}
+
+.profile-route-form-hint {
+  color: #6a706a;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 .profile-route-form-actions {
   display: flex;
   gap: 12px;
@@ -559,5 +582,14 @@
   .profile-route-form,
   .profile-route-card {
     padding: 24px;
+  }
+
+  .profile-route-phone-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .profile-route-phone-action {
+    width: 100%;
   }
 }

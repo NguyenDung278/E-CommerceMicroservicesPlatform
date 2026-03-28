@@ -18,11 +18,20 @@ type LoginRequest struct {
 
 // UpdateProfileRequest is the request body for updating user profile.
 type UpdateProfileRequest struct {
-	FirstName           string               `json:"first_name" validate:"required,min=1,max=100"`
-	LastName            string               `json:"last_name" validate:"required,min=1,max=100"`
-	Phone               string               `json:"phone" validate:"omitempty,min=10,max=20"`
-	PhoneVerificationID string               `json:"phone_verification_id" validate:"omitempty,uuid4"`
-	DefaultAddress      *ProfileAddressInput `json:"default_address" validate:"omitempty"`
+	FirstName           *string                    `json:"first_name" validate:"omitempty,min=1,max=100"`
+	LastName            *string                    `json:"last_name" validate:"omitempty,min=1,max=100"`
+	Phone               *string                    `json:"phone" validate:"omitempty,min=10,max=20"`
+	PhoneVerificationID string                     `json:"phone_verification_id" validate:"omitempty,uuid4"`
+	DefaultAddress      *UpdateProfileAddressInput `json:"default_address" validate:"omitempty"`
+}
+
+type UpdateProfileAddressInput struct {
+	RecipientName *string `json:"recipient_name" validate:"omitempty,min=2,max=100"`
+	Phone         *string `json:"phone" validate:"omitempty,min=10,max=20"`
+	Street        *string `json:"street" validate:"omitempty,min=5,max=255"`
+	Ward          *string `json:"ward" validate:"omitempty,max=100"`
+	District      *string `json:"district" validate:"omitempty,min=2,max=100"`
+	City          *string `json:"city" validate:"omitempty,min=2,max=100"`
 }
 
 type ProfileAddressInput struct {
@@ -35,8 +44,7 @@ type ProfileAddressInput struct {
 }
 
 type SendPhoneOTPRequest struct {
-	Phone          string `json:"phone" validate:"required,min=10,max=20"`
-	TelegramChatID string `json:"telegram_chat_id" validate:"required,min=3,max=64"`
+	Phone string `json:"phone" validate:"required,min=10,max=20"`
 }
 
 type VerifyPhoneOTPRequest struct {

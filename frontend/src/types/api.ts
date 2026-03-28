@@ -37,6 +37,15 @@ export type ProfileAddressInput = {
   city: string;
 };
 
+export type ProfileAddressPatch = {
+  recipient_name?: string;
+  phone?: string;
+  street?: string;
+  ward?: string;
+  district?: string;
+  city?: string;
+};
+
 export type PhoneVerificationChallenge = {
   verification_id: string;
   phone: string;

@@ -2,9 +2,12 @@ package telegram
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,8 +16,11 @@ import (
 )
 
 type Sender interface {
+	ResolveChatID(ctx context.Context) (string, error)
 	SendOTP(chatID string, phone string, otpCode string, ttl time.Duration) error
 }
+
+var ErrChatNotFound = errors.New("telegram private chat not found")
 
 func NewSender(cfg config.TelegramConfig, log *zap.Logger) Sender {
 	if !cfg.Enabled || strings.TrimSpace(cfg.BotToken) == "" {
@@ -46,6 +52,68 @@ type botSender struct {
 
 type logSender struct {
 	log *zap.Logger
+}
+
+func (s *botSender) ResolveChatID(ctx context.Context) (string, error) {
+	endpoint := fmt.Sprintf("%s/bot%s/getUpdates?limit=100", s.apiBaseURL, s.botToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to build telegram getUpdates request: %w", err)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch telegram updates: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("telegram getUpdates returned status %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+		Result      []struct {
+			UpdateID      int                    `json:"update_id"`
+			Message       *telegramMessage       `json:"message"`
+			EditedMessage *telegramMessage       `json:"edited_message"`
+			CallbackQuery *telegramCallbackQuery `json:"callback_query"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("failed to decode telegram updates: %w", err)
+	}
+	if !payload.OK {
+		return "", fmt.Errorf("telegram getUpdates failed: %s", strings.TrimSpace(payload.Description))
+	}
+
+	var (
+		latestUpdateID = -1
+		latestChatID   int64
+	)
+	for _, update := range payload.Result {
+		for _, message := range []*telegramMessage{update.Message, update.EditedMessage} {
+			if message == nil || message.Chat.Type != "private" {
+				continue
+			}
+			if update.UpdateID > latestUpdateID {
+				latestUpdateID = update.UpdateID
+				latestChatID = message.Chat.ID
+			}
+		}
+
+		if update.CallbackQuery != nil && update.CallbackQuery.Message != nil && update.CallbackQuery.Message.Chat.Type == "private" && update.UpdateID > latestUpdateID {
+			latestUpdateID = update.UpdateID
+			latestChatID = update.CallbackQuery.Message.Chat.ID
+		}
+	}
+
+	if latestChatID == 0 {
+		return "", ErrChatNotFound
+	}
+
+	return strconv.FormatInt(latestChatID, 10), nil
 }
 
 func (s *botSender) SendOTP(chatID string, phone string, otpCode string, ttl time.Duration) error {
@@ -83,7 +151,6 @@ func (s *botSender) SendOTP(chatID string, phone string, otpCode string, ttl tim
 
 	if s.log != nil {
 		s.log.Info("telegram otp sent",
-			zap.String("chat_id", chatID),
 			zap.String("phone_suffix", phoneSuffix(phone)),
 		)
 	}
@@ -91,10 +158,13 @@ func (s *botSender) SendOTP(chatID string, phone string, otpCode string, ttl tim
 	return nil
 }
 
+func (s *logSender) ResolveChatID(_ context.Context) (string, error) {
+	return "", ErrChatNotFound
+}
+
 func (s *logSender) SendOTP(chatID string, phone string, otpCode string, ttl time.Duration) error {
 	if s.log != nil {
 		s.log.Info("telegram otp send simulated",
-			zap.String("chat_id", chatID),
 			zap.String("phone", maskPhone(phone)),
 			zap.String("phone_suffix", phoneSuffix(phone)),
 			zap.Duration("ttl", ttl),
@@ -123,4 +193,17 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+type telegramMessage struct {
+	Chat telegramChat `json:"chat"`
+}
+
+type telegramCallbackQuery struct {
+	Message *telegramMessage `json:"message"`
+}
+
+type telegramChat struct {
+	ID   int64  `json:"id"`
+	Type string `json:"type"`
 }

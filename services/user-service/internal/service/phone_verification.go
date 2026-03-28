@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
+	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 )
 
 type PhoneVerificationError struct {
@@ -56,10 +58,6 @@ func (s *UserService) StartPhoneVerification(ctx context.Context, userID string,
 	if !isValidVNPhone(phone) {
 		return nil, ErrInvalidPhoneNumber
 	}
-	chatID := normalizeTelegramChatID(req.TelegramChatID)
-	if chatID == "" {
-		return nil, ErrInvalidTelegramChatID
-	}
 
 	if existing, err := s.repo.GetByPhone(ctx, phone); err != nil {
 		return nil, err
@@ -80,6 +78,10 @@ func (s *UserService) StartPhoneVerification(ctx context.Context, userID string,
 
 	_ = s.phoneVerificationRepo.DeleteExpired(ctx)
 	challenge, err := s.phoneVerificationRepo.GetLatestActiveByUserID(ctx, userID, model.PhoneVerificationPurposeProfileUpdate)
+	if err != nil {
+		return nil, err
+	}
+	chatID, err := s.resolveTelegramChatID(ctx, challenge)
 	if err != nil {
 		return nil, err
 	}
@@ -141,10 +143,11 @@ func (s *UserService) StartPhoneVerification(ctx context.Context, userID string,
 		}
 	}
 
-	if s.telegramSender != nil {
-		if err := s.telegramSender.SendOTP(chatID, phone, otpCode, s.telegramOTPConfigTTL()); err != nil {
-			return nil, fmt.Errorf("failed to dispatch telegram otp: %w", err)
-		}
+	if s.telegramSender == nil {
+		return nil, fmt.Errorf("telegram sender is not configured")
+	}
+	if err := s.telegramSender.SendOTP(chatID, phone, otpCode, s.telegramOTPConfigTTL()); err != nil {
+		return nil, fmt.Errorf("failed to dispatch telegram otp: %w", err)
 	}
 
 	return buildPhoneVerificationStatusResponse(challenge, now), nil
@@ -240,6 +243,10 @@ func (s *UserService) ResendPhoneOTP(ctx context.Context, userID string, ipAddre
 	if !s.allowOTPEvent("otp:ip:"+strings.TrimSpace(ipAddress), s.telegramCfg.OTPHourlyLimitPerIP, time.Hour, now) {
 		return nil, ErrPhoneVerificationRateLimited
 	}
+	chatID, err := s.resolveTelegramChatID(ctx, challenge)
+	if err != nil {
+		return nil, err
+	}
 
 	otpCode, err := generateOTPCode()
 	if err != nil {
@@ -257,10 +264,11 @@ func (s *UserService) ResendPhoneOTP(ctx context.Context, userID string, ipAddre
 		return nil, err
 	}
 
-	if s.telegramSender != nil {
-		if err := s.telegramSender.SendOTP(challenge.TelegramChatID, challenge.PhoneCandidate, otpCode, s.telegramOTPConfigTTL()); err != nil {
-			return nil, fmt.Errorf("failed to resend telegram otp: %w", err)
-		}
+	if s.telegramSender == nil {
+		return nil, fmt.Errorf("telegram sender is not configured")
+	}
+	if err := s.telegramSender.SendOTP(chatID, challenge.PhoneCandidate, otpCode, s.telegramOTPConfigTTL()); err != nil {
+		return nil, fmt.Errorf("failed to resend telegram otp: %w", err)
 	}
 
 	return buildPhoneVerificationStatusResponse(challenge, now), nil
@@ -332,6 +340,32 @@ func generateOTPCode() (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%06d", number.Int64()), nil
+}
+
+func (s *UserService) resolveTelegramChatID(ctx context.Context, challenge *model.PhoneVerificationChallenge) (string, error) {
+	if challenge != nil {
+		if chatID := normalizeTelegramChatID(challenge.TelegramChatID); chatID != "" {
+			return chatID, nil
+		}
+	}
+	if s.telegramSender == nil {
+		return "", ErrTelegramChatNotLinked
+	}
+
+	chatID, err := s.telegramSender.ResolveChatID(ctx)
+	if err != nil {
+		if errors.Is(err, telegramsender.ErrChatNotFound) {
+			return "", ErrTelegramChatNotLinked
+		}
+		return "", fmt.Errorf("failed to resolve telegram chat id: %w", err)
+	}
+
+	chatID = normalizeTelegramChatID(chatID)
+	if chatID == "" {
+		return "", ErrTelegramChatNotLinked
+	}
+
+	return chatID, nil
 }
 
 func secondsUntil(target time.Time, now time.Time) int64 {

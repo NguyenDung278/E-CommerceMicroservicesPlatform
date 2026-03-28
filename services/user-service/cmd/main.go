@@ -66,6 +66,11 @@ func main() {
 		zap.String("port", cfg.Server.Port),
 		zap.String("db_host", cfg.Database.Host),
 	)
+	log.Info("telegram otp configuration",
+		zap.Bool("enabled", cfg.Telegram.Enabled),
+		zap.Bool("bot_token_configured", cfg.Telegram.BotToken != ""),
+		zap.String("api_base_url", cfg.Telegram.APIBaseURL),
+	)
 
 	// 3. Connect to PostgreSQL.
 	db, err := database.NewPostgresDB(cfg.Database)

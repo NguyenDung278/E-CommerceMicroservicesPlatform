@@ -145,8 +145,8 @@ func (s *UserGRPCServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfil
 
 	// Convert protobuf request to DTO
 	updateReq := dto.UpdateProfileRequest{
-		FirstName: req.GetFirstName(),
-		LastName:  req.GetLastName(),
+		FirstName: optionalStringPointer(req.GetFirstName()),
+		LastName:  optionalStringPointer(req.GetLastName()),
 	}
 
 	// Call service layer
@@ -172,6 +172,13 @@ func (s *UserGRPCServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfil
 			UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		},
 	}, nil
+}
+
+func optionalStringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // GetUserByID handles getting user by ID via gRPC

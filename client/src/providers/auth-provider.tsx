@@ -16,7 +16,7 @@ import { getErrorMessage, isHttpError } from "@/lib/errors/handler";
 import type {
   ApiEnvelope,
   PhoneVerificationChallenge,
-  ProfileAddressInput,
+  ProfileAddressPatch,
   UserProfile,
 } from "@/types/api";
 import {
@@ -39,11 +39,11 @@ type LoginInput = {
 };
 
 type UpdateProfileInput = {
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
   phone_verification_id?: string;
-  default_address?: ProfileAddressInput;
+  default_address?: ProfileAddressPatch;
 };
 
 type ChangePasswordInput = {
@@ -69,7 +69,7 @@ type AuthContextValue = {
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
   getPhoneVerificationStatus: () => Promise<PhoneVerificationChallenge | null>;
-  sendPhoneOtp: (phone: string, telegramChatId: string) => Promise<PhoneVerificationChallenge>;
+  sendPhoneOtp: (phone: string) => Promise<PhoneVerificationChallenge>;
   verifyPhoneOtp: (verificationId: string, otpCode: string) => Promise<PhoneVerificationChallenge>;
   resendPhoneOtp: (verificationId: string) => Promise<PhoneVerificationChallenge>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
@@ -251,12 +251,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.data;
   }
 
-  async function sendPhoneOtp(phone: string, telegramChatId: string) {
+  async function sendPhoneOtp(phone: string) {
     setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.sendPhoneOtp(activeToken, {
         phone,
-        telegram_chat_id: telegramChatId,
       }),
     );
     return response.data;

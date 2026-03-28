@@ -21,6 +21,7 @@ type fakeAddressRepo struct {
 
 type fakeTelegramSender struct {
 	lastOTPByPhone map[string]string
+	resolvedChatID string
 }
 
 func newFakePhoneVerificationRepo() *fakePhoneVerificationRepo {
@@ -32,7 +33,10 @@ func newFakeAddressRepo() *fakeAddressRepo {
 }
 
 func newFakeTelegramSender() *fakeTelegramSender {
-	return &fakeTelegramSender{lastOTPByPhone: map[string]string{}}
+	return &fakeTelegramSender{
+		lastOTPByPhone: map[string]string{},
+		resolvedChatID: "123456789",
+	}
 }
 
 func (r *fakePhoneVerificationRepo) Create(_ context.Context, challenge *model.PhoneVerificationChallenge) error {
@@ -122,6 +126,10 @@ func (r *fakeAddressRepo) CountByUserID(_ context.Context, userID string) (int, 
 	return count, nil
 }
 
+func (s *fakeTelegramSender) ResolveChatID(_ context.Context) (string, error) {
+	return s.resolvedChatID, nil
+}
+
 func (s *fakeTelegramSender) SendOTP(_ string, phone string, otpCode string, _ time.Duration) error {
 	s.lastOTPByPhone[phone] = otpCode
 	return nil
@@ -170,15 +178,15 @@ func TestStartPhoneVerificationAndVerifyOTP(t *testing.T) {
 	}
 	seedUser(userRepo, user)
 
-	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{
-		Phone:          "0987654321",
-		TelegramChatID: "123456789",
-	})
+	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654321"})
 	if err != nil {
 		t.Fatalf("StartPhoneVerification returned error: %v", err)
 	}
 	if result == nil || result.VerificationID == "" || result.Status != model.PhoneVerificationStatusPending {
 		t.Fatalf("expected pending challenge response, got %#v", result)
+	}
+	if phoneRepo.challenges[result.VerificationID].TelegramChatID != sender.resolvedChatID {
+		t.Fatalf("expected resolved telegram chat id to be persisted, got %#v", phoneRepo.challenges[result.VerificationID])
 	}
 
 	otpCode := sender.lastOTPByPhone["0987654321"]
@@ -217,10 +225,7 @@ func TestVerifyPhoneOTPWrongCodeDecrementsAttempts(t *testing.T) {
 	}
 	seedUser(userRepo, user)
 
-	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{
-		Phone:          "0987654322",
-		TelegramChatID: "123456789",
-	})
+	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654322"})
 	if err != nil {
 		t.Fatalf("StartPhoneVerification returned error: %v", err)
 	}
@@ -258,10 +263,7 @@ func TestResendPhoneOTPRespectsCooldownAndRotatesCode(t *testing.T) {
 	}
 	seedUser(userRepo, user)
 
-	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{
-		Phone:          "0987654323",
-		TelegramChatID: "123456789",
-	})
+	result, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654323"})
 	if err != nil {
 		t.Fatalf("StartPhoneVerification returned error: %v", err)
 	}
@@ -308,18 +310,9 @@ func TestUpdateProfileRequiresVerifiedChallengeForPhoneChange(t *testing.T) {
 	}
 	seedUser(userRepo, user)
 
+	phone := "0987654324"
 	_, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
-		FirstName: "Updated",
-		LastName:  "User",
-		Phone:     "0987654324",
-		DefaultAddress: &dto.ProfileAddressInput{
-			RecipientName: "Updated User",
-			Phone:         "0987654324",
-			Street:        "123 Nguyen Trai",
-			Ward:          "Phuong 1",
-			District:      "Quan 5",
-			City:          "TP HCM",
-		},
+		Phone: &phone,
 	})
 	if !errors.Is(err, ErrPhoneVerificationRequired) {
 		t.Fatalf("expected ErrPhoneVerificationRequired, got %v", err)
@@ -343,10 +336,7 @@ func TestUpdateProfileConsumesVerifiedChallengeAndUpsertsDefaultAddress(t *testi
 	}
 	seedUser(userRepo, user)
 
-	startResult, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{
-		Phone:          "0987654325",
-		TelegramChatID: "123456789",
-	})
+	startResult, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654325"})
 	if err != nil {
 		t.Fatalf("StartPhoneVerification returned error: %v", err)
 	}
@@ -359,18 +349,21 @@ func TestUpdateProfileConsumesVerifiedChallengeAndUpsertsDefaultAddress(t *testi
 		t.Fatalf("VerifyPhoneOTP returned error: %v", err)
 	}
 
+	firstName := "  After "
+	lastName := "  Update "
+	phone := "0987654325"
 	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
-		FirstName:           "  After ",
-		LastName:            "  Update ",
-		Phone:               "0987654325",
+		FirstName:           &firstName,
+		LastName:            &lastName,
+		Phone:               &phone,
 		PhoneVerificationID: startResult.VerificationID,
-		DefaultAddress: &dto.ProfileAddressInput{
-			RecipientName: "After Update",
-			Phone:         "0901122334",
-			Street:        "123 Nguyen Trai",
-			Ward:          "Phuong 1",
-			District:      "Quan 5",
-			City:          "TP HCM",
+		DefaultAddress: &dto.UpdateProfileAddressInput{
+			RecipientName: stringPtr("After Update"),
+			Phone:         stringPtr("0901122334"),
+			Street:        stringPtr("123 Nguyen Trai"),
+			Ward:          stringPtr("Phuong 1"),
+			District:      stringPtr("Quan 5"),
+			City:          stringPtr("TP HCM"),
 		},
 	})
 	if err != nil {
@@ -401,4 +394,116 @@ func TestUpdateProfileConsumesVerifiedChallengeAndUpsertsDefaultAddress(t *testi
 	if !addresses[0].IsDefault || addresses[0].RecipientName != "After Update" || addresses[0].Phone != "0901122334" {
 		t.Fatalf("expected upserted default address, got %#v", addresses[0])
 	}
+}
+
+func TestUpdateProfileAllowsPhoneOnlyChange(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	phoneRepo := newFakePhoneVerificationRepo()
+	addressRepo := newFakeAddressRepo()
+	sender := newFakeTelegramSender()
+	svc := newPhoneVerificationTestService(userRepo, phoneRepo, addressRepo, sender)
+
+	user := &model.User{
+		ID:            "user-6",
+		Email:         "phone-only@example.com",
+		Phone:         "0912345678",
+		PhoneVerified: true,
+		FirstName:     "Phone",
+		LastName:      "Only",
+	}
+	seedUser(userRepo, user)
+
+	startResult, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654326"})
+	if err != nil {
+		t.Fatalf("StartPhoneVerification returned error: %v", err)
+	}
+
+	if _, err := svc.VerifyPhoneOTP(context.Background(), user.ID, dto.VerifyPhoneOTPRequest{
+		VerificationID: startResult.VerificationID,
+		OTPCode:        sender.lastOTPByPhone["0987654326"],
+	}); err != nil {
+		t.Fatalf("VerifyPhoneOTP returned error: %v", err)
+	}
+
+	phone := "0987654326"
+	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+		Phone:               &phone,
+		PhoneVerificationID: startResult.VerificationID,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+
+	if updatedUser.Phone != "0987654326" || updatedUser.FirstName != "Phone" || updatedUser.LastName != "Only" {
+		t.Fatalf("expected phone-only update to preserve identity fields, got %#v", updatedUser)
+	}
+	if addresses, err := addressRepo.GetByUserID(context.Background(), user.ID); err != nil {
+		t.Fatalf("GetByUserID returned error: %v", err)
+	} else if len(addresses) != 0 {
+		t.Fatalf("expected phone-only update to leave addresses untouched, got %#v", addresses)
+	}
+}
+
+func TestUpdateProfileAllowsAddressOnlyChangeWithoutMutatingPhone(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	phoneRepo := newFakePhoneVerificationRepo()
+	addressRepo := newFakeAddressRepo()
+	sender := newFakeTelegramSender()
+	svc := newPhoneVerificationTestService(userRepo, phoneRepo, addressRepo, sender)
+
+	user := &model.User{
+		ID:            "user-7",
+		Email:         "address-only@example.com",
+		Phone:         "0912345678",
+		PhoneVerified: true,
+		FirstName:     "Address",
+		LastName:      "Only",
+	}
+	seedUser(userRepo, user)
+
+	addressRepo.addresses["addr-1"] = &model.Address{
+		ID:            "addr-1",
+		UserID:        user.ID,
+		RecipientName: "Old Recipient",
+		Phone:         "0901122334",
+		Street:        "12 Old Street",
+		Ward:          "Phuong Cu",
+		District:      "Quan 1",
+		City:          "TP HCM",
+		IsDefault:     true,
+		CreatedAt:     time.Now().Add(-time.Hour),
+		UpdatedAt:     time.Now().Add(-time.Hour),
+	}
+
+	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+		DefaultAddress: &dto.UpdateProfileAddressInput{
+			RecipientName: stringPtr("New Recipient"),
+			Street:        stringPtr("34 New Street"),
+			City:          stringPtr("Da Nang"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if updatedUser.Phone != "0912345678" || updatedUser.FirstName != "Address" || updatedUser.LastName != "Only" {
+		t.Fatalf("expected address-only update to preserve profile fields, got %#v", updatedUser)
+	}
+
+	addresses, err := addressRepo.GetByUserID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetByUserID returned error: %v", err)
+	}
+	if len(addresses) != 1 {
+		t.Fatalf("expected one address after address-only update, got %d", len(addresses))
+	}
+	if addresses[0].Phone != "0901122334" || addresses[0].District != "Quan 1" || addresses[0].Ward != "Phuong Cu" {
+		t.Fatalf("expected omitted address fields to be preserved, got %#v", addresses[0])
+	}
+	if addresses[0].RecipientName != "New Recipient" || addresses[0].Street != "34 New Street" || addresses[0].City != "Da Nang" {
+		t.Fatalf("expected requested address fields to be updated, got %#v", addresses[0])
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }

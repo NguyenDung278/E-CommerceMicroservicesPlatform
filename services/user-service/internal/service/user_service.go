@@ -37,7 +37,7 @@ var (
 	ErrInvalidOAuthTicket             = errors.New("invalid oauth ticket")
 	ErrOAuthAccountConflict           = errors.New("oauth account conflict")
 	ErrInvalidPhoneNumber             = errors.New("invalid phone number")
-	ErrInvalidTelegramChatID          = errors.New("invalid telegram chat id")
+	ErrTelegramChatNotLinked          = errors.New("telegram chat not linked")
 	ErrPhoneVerificationRequired      = errors.New("phone verification required")
 	ErrPhoneVerificationNotFound      = errors.New("phone verification not found")
 	ErrPhoneVerificationExpired       = errors.New("phone verification expired")
@@ -468,28 +468,24 @@ func (s *UserService) updateProfileWithDependencies(
 	if user == nil {
 		return nil, ErrUserNotFound
 	}
+	profilePhoneForAddress := user.Phone
 
-	firstName := normalizeHumanName(req.FirstName)
-	lastName := normalizeHumanName(req.LastName)
-	if !isValidHumanName(firstName, 100) || !isValidHumanName(lastName, 100) {
-		return nil, ErrInvalidProfileName
+	userChanged := false
+	if firstName, changed, err := resolveOptionalHumanNameUpdate(user.FirstName, req.FirstName, 100); err != nil {
+		return nil, err
+	} else if changed {
+		user.FirstName = firstName
+		userChanged = true
 	}
-
-	var normalizedAddress *dto.ProfileAddressInput
-	if req.DefaultAddress != nil {
-		addressCopy := normalizeProfileAddressInput(*req.DefaultAddress)
-		if !isValidProfileAddressInput(addressCopy) {
-			return nil, ErrInvalidProfileAddress
-		}
-		normalizedAddress = &addressCopy
+	if lastName, changed, err := resolveOptionalHumanNameUpdate(user.LastName, req.LastName, 100); err != nil {
+		return nil, err
+	} else if changed {
+		user.LastName = lastName
+		userChanged = true
 	}
-
-	user.FirstName = firstName
-	user.LastName = lastName
-
 	currentPhone := normalizePhone(user.Phone)
-	requestedPhone := normalizePhone(req.Phone)
-	phoneChanged := requestedPhone != "" && requestedPhone != currentPhone
+	requestedPhone, phoneProvided := resolveOptionalPhone(req.Phone)
+	phoneChanged := phoneProvided && requestedPhone != currentPhone
 	var verifiedChallenge *model.PhoneVerificationChallenge
 
 	if phoneChanged {
@@ -530,6 +526,31 @@ func (s *UserService) updateProfileWithDependencies(
 		user.PhoneVerified = true
 		user.PhoneVerifiedAt = &now
 		user.PhoneLastChangedAt = &now
+		userChanged = true
+	}
+
+	var (
+		normalizedAddress *dto.ProfileAddressInput
+		addressChanged    bool
+	)
+	if req.DefaultAddress != nil && addressService != nil {
+		defaultAddress, err := addressService.GetDefaultAddress(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+
+		addressCopy, changed := mergeProfileAddressInput(defaultAddress, profilePhoneForAddress, *req.DefaultAddress)
+		if changed {
+			if !isValidProfileAddressInput(addressCopy) {
+				return nil, ErrInvalidProfileAddress
+			}
+			normalizedAddress = &addressCopy
+			addressChanged = true
+		}
+	}
+
+	if !userChanged && !addressChanged {
+		return user, nil
 	}
 
 	if normalizedAddress != nil && addressService != nil {
@@ -538,9 +559,11 @@ func (s *UserService) updateProfileWithDependencies(
 		}
 	}
 
-	user.UpdatedAt = time.Now()
-	if err := userRepo.Update(ctx, user); err != nil {
-		return nil, mapUserRepositoryError(err)
+	if userChanged {
+		user.UpdatedAt = time.Now()
+		if err := userRepo.Update(ctx, user); err != nil {
+			return nil, mapUserRepositoryError(err)
+		}
 	}
 
 	if verifiedChallenge != nil {
@@ -554,6 +577,120 @@ func (s *UserService) updateProfileWithDependencies(
 	}
 
 	return user, nil
+}
+
+func resolveOptionalHumanNameUpdate(current string, input *string, maxLength int) (string, bool, error) {
+	if input == nil {
+		return current, false, nil
+	}
+
+	normalized := normalizeHumanName(*input)
+	if normalized == "" {
+		return current, false, nil
+	}
+	if !isValidHumanName(normalized, maxLength) {
+		return current, false, ErrInvalidProfileName
+	}
+	if normalized == current {
+		return current, false, nil
+	}
+
+	return normalized, true, nil
+}
+
+func resolveOptionalPhone(input *string) (string, bool) {
+	if input == nil {
+		return "", false
+	}
+
+	normalized := normalizePhone(*input)
+	if normalized == "" {
+		return "", false
+	}
+
+	return normalized, true
+}
+
+func resolveOptionalHumanName(input *string) (string, bool) {
+	if input == nil {
+		return "", false
+	}
+
+	normalized := normalizeHumanName(*input)
+	if normalized == "" {
+		return "", false
+	}
+
+	return normalized, true
+}
+
+func resolveOptionalTrimmedText(input *string) (string, bool) {
+	if input == nil {
+		return "", false
+	}
+
+	trimmed := strings.TrimSpace(*input)
+	if trimmed == "" {
+		return "", false
+	}
+
+	return trimmed, true
+}
+
+func mergeProfileAddressInput(current *model.Address, fallbackPhone string, input dto.UpdateProfileAddressInput) (dto.ProfileAddressInput, bool) {
+	merged := dto.ProfileAddressInput{}
+	if current != nil {
+		merged.RecipientName = current.RecipientName
+		merged.Phone = current.Phone
+		merged.Street = current.Street
+		merged.Ward = current.Ward
+		merged.District = current.District
+		merged.City = current.City
+	} else {
+		merged.Phone = normalizePhone(fallbackPhone)
+	}
+
+	hasPatch := false
+	if recipientName, ok := resolveOptionalHumanName(input.RecipientName); ok {
+		merged.RecipientName = recipientName
+		hasPatch = true
+	}
+	if phone, ok := resolveOptionalPhone(input.Phone); ok {
+		merged.Phone = phone
+		hasPatch = true
+	}
+	if street, ok := resolveOptionalTrimmedText(input.Street); ok {
+		merged.Street = street
+		hasPatch = true
+	}
+	if ward, ok := resolveOptionalTrimmedText(input.Ward); ok {
+		merged.Ward = ward
+		hasPatch = true
+	}
+	if district, ok := resolveOptionalTrimmedText(input.District); ok {
+		merged.District = district
+		hasPatch = true
+	}
+	if city, ok := resolveOptionalTrimmedText(input.City); ok {
+		merged.City = city
+		hasPatch = true
+	}
+
+	if !hasPatch {
+		return merged, false
+	}
+	if current == nil {
+		return merged, true
+	}
+
+	changed := merged.RecipientName != current.RecipientName ||
+		merged.Phone != current.Phone ||
+		merged.Street != current.Street ||
+		merged.Ward != current.Ward ||
+		merged.District != current.District ||
+		merged.City != current.City
+
+	return merged, changed
 }
 
 func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddressInput {

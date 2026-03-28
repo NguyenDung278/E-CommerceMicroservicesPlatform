@@ -34,7 +34,15 @@ import { orderApi, paymentApi, productApi, userApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
 import { cn, fallbackImageForProduct } from "@/lib/utils";
-import type { Address, Order, OrderEvent, Payment, PhoneVerificationChallenge, Product } from "@/types/api";
+import type {
+  Address,
+  Order,
+  OrderEvent,
+  Payment,
+  PhoneVerificationChallenge,
+  Product,
+  ProfileAddressPatch,
+} from "@/types/api";
 import {
   formatCurrency,
   formatDateTime,
@@ -71,9 +79,7 @@ type ProfileFieldErrors = Partial<
     | "firstName"
     | "lastName"
     | "phone"
-    | "telegramChatId"
     | "recipientName"
-    | "addressPhone"
     | "street"
     | "district"
     | "city"
@@ -101,6 +107,10 @@ function normalizePhoneDigits(value: string) {
 }
 
 function isValidVietnamesePhone(value: string) {
+  return /^0\d{9}$/.test(value);
+}
+
+function isValidStoredPhone(value: string) {
   return /^0\d{9,10}$/.test(value);
 }
 
@@ -213,9 +223,7 @@ export function ProfileDashboard() {
   const [firstName, setFirstName] = useState(user?.first_name || "");
   const [lastName, setLastName] = useState(user?.last_name || "");
   const [phone, setPhone] = useState(user?.phone || "");
-  const [telegramChatId, setTelegramChatId] = useState("");
   const [recipientName, setRecipientName] = useState("");
-  const [addressPhone, setAddressPhone] = useState("");
   const [street, setStreet] = useState("");
   const [ward, setWard] = useState("");
   const [district, setDistrict] = useState("");
@@ -248,7 +256,6 @@ export function ProfileDashboard() {
 
   useEffect(() => {
     setRecipientName(defaultAddress?.recipient_name || displayName);
-    setAddressPhone(defaultAddress?.phone || user?.phone || "");
     setStreet(defaultAddress?.street || "");
     setWard(defaultAddress?.ward || "");
     setDistrict(defaultAddress?.district || "");
@@ -256,12 +263,10 @@ export function ProfileDashboard() {
   }, [
     defaultAddress?.city,
     defaultAddress?.district,
-    defaultAddress?.phone,
     defaultAddress?.recipient_name,
     defaultAddress?.street,
     defaultAddress?.ward,
     displayName,
-    user?.phone,
   ]);
 
   useEffect(() => {
@@ -319,9 +324,10 @@ export function ProfileDashboard() {
 
   const normalizedCurrentPhone = normalizePhoneDigits(user?.phone || "");
   const normalizedDraftPhone = normalizePhoneDigits(phone);
-  const normalizedAddressPhone = normalizePhoneDigits(addressPhone);
   const verificationPhone = normalizePhoneDigits(phoneVerification?.phone || "");
+  const normalizedCurrentAddressPhone = normalizePhoneDigits(defaultAddress?.phone || user?.phone || "");
   const phoneChanged = normalizedDraftPhone !== normalizedCurrentPhone;
+  const hasValidPhoneDraft = phoneChanged && isValidVietnamesePhone(normalizedDraftPhone);
   const verificationMatchesDraft = verificationPhone !== "" && verificationPhone === normalizedDraftPhone;
   const phoneIsVerifiedForDraft =
     !phoneChanged || (phoneVerification?.status === "verified" && verificationMatchesDraft);
@@ -347,35 +353,59 @@ export function ProfileDashboard() {
   const wardValue = ward.trim();
   const districtValue = district.trim();
   const cityValue = city.trim();
+  const currentFirstNameValue = normalizeInputText(user?.first_name || "");
+  const currentLastNameValue = normalizeInputText(user?.last_name || "");
+  const fallbackRecipientName = defaultAddress?.recipient_name || displayName;
+  const currentStreetValue = defaultAddress?.street || "";
+  const currentWardValue = defaultAddress?.ward || "";
+  const currentDistrictValue = defaultAddress?.district || "";
+  const currentCityValue = defaultAddress?.city || "";
+  const hasAddressFieldInput =
+    streetValue !== "" ||
+    wardValue !== "" ||
+    districtValue !== "" ||
+    cityValue !== "" ||
+    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName);
+  const nameChanged =
+    (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) ||
+    (lastNameValue !== "" && lastNameValue !== currentLastNameValue);
+  const addressChanged =
+    (!defaultAddress && hasAddressFieldInput) ||
+    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) ||
+    (streetValue !== "" && streetValue !== currentStreetValue) ||
+    (wardValue !== "" && wardValue !== currentWardValue) ||
+    (districtValue !== "" && districtValue !== currentDistrictValue) ||
+    (cityValue !== "" && cityValue !== currentCityValue);
+  const mergedAddressCandidate = {
+    recipientName: recipientNameValue || fallbackRecipientName,
+    phone: normalizedCurrentAddressPhone,
+    street: streetValue || currentStreetValue,
+    ward: wardValue || currentWardValue,
+    district: districtValue || currentDistrictValue,
+    city: cityValue || currentCityValue,
+  };
+  const canRequestPhoneVerification = hasValidPhoneDraft && !otpBusy;
+  const hasProfileChanges = nameChanged || phoneChanged || addressChanged;
 
-  function buildFormErrors(options?: { requireTelegramChatID?: boolean; requireOtp?: boolean }) {
+  function buildFormErrors(options?: { requireOtp?: boolean }) {
     const errors: ProfileFieldErrors = {};
 
-    if (!firstNameValue) {
-      errors.firstName = "Tên không được để trống.";
+    if (phoneChanged && !isValidVietnamesePhone(normalizedDraftPhone)) {
+      errors.phone = "Số điện thoại hồ sơ phải đúng 10 chữ số và bắt đầu bằng số 0.";
     }
-    if (!lastNameValue) {
-      errors.lastName = "Họ không được để trống.";
-    }
-    if (normalizedDraftPhone && !isValidVietnamesePhone(normalizedDraftPhone)) {
-      errors.phone = "Số điện thoại hồ sơ phải là số Việt Nam hợp lệ.";
-    }
-    if (options?.requireTelegramChatID && !telegramChatId.trim()) {
-      errors.telegramChatId = "Cần nhập Telegram chat ID để nhận OTP.";
-    }
-    if (!recipientNameValue) {
+    if (addressChanged && !mergedAddressCandidate.recipientName) {
       errors.recipientName = "Tên người nhận không được để trống.";
     }
-    if (!isValidVietnamesePhone(normalizedAddressPhone)) {
-      errors.addressPhone = "Số điện thoại nhận hàng phải là số Việt Nam hợp lệ.";
+    if (addressChanged && !isValidStoredPhone(mergedAddressCandidate.phone)) {
+      errors.street = "Hãy cập nhật số điện thoại hồ sơ hợp lệ trước khi lưu địa chỉ mặc định.";
     }
-    if (streetValue.length < 5) {
+    if (addressChanged && mergedAddressCandidate.street.length < 5) {
       errors.street = "Địa chỉ cần ít nhất 5 ký tự.";
     }
-    if (districtValue.length < 2) {
+    if (addressChanged && mergedAddressCandidate.district.length < 2) {
       errors.district = "Quận/Huyện không được để trống.";
     }
-    if (cityValue.length < 2) {
+    if (addressChanged && mergedAddressCandidate.city.length < 2) {
       errors.city = "Tỉnh/Thành phố không được để trống.";
     }
     if (options?.requireOtp && otpCode.trim().length !== 6) {
@@ -388,6 +418,7 @@ export function ProfileDashboard() {
   const canSaveProfile =
     !busy &&
     !otpBusy &&
+    hasProfileChanges &&
     Object.keys(buildFormErrors()).length === 0 &&
     (!phoneChanged || phoneIsVerifiedForDraft);
 
@@ -399,10 +430,11 @@ export function ProfileDashboard() {
   }
 
   function handlePhoneChange(nextValue: string) {
-    setPhone(nextValue);
-    setFormErrors((current) => ({ ...current, phone: undefined, otpCode: undefined, telegramChatId: undefined }));
+    const sanitizedPhone = nextValue.replace(/\D/g, "").slice(0, 10);
+    setPhone(sanitizedPhone);
+    setFormErrors((current) => ({ ...current, phone: undefined, otpCode: undefined }));
 
-    if (normalizePhoneDigits(phoneVerification?.phone || "") !== normalizePhoneDigits(nextValue)) {
+    if (normalizePhoneDigits(phoneVerification?.phone || "") !== normalizePhoneDigits(sanitizedPhone)) {
       resetVerificationState();
     }
   }
@@ -422,30 +454,66 @@ export function ProfileDashboard() {
       });
       return;
     }
+    if (!hasProfileChanges) {
+      setFeedback({
+        tone: "info",
+        message: "Chưa có thay đổi nào để lưu.",
+      });
+      return;
+    }
+
+    const profilePatch: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      phone_verification_id?: string;
+      default_address?: ProfileAddressPatch;
+    } = {};
+
+    if (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) {
+      profilePatch.first_name = firstNameValue;
+    }
+    if (lastNameValue !== "" && lastNameValue !== currentLastNameValue) {
+      profilePatch.last_name = lastNameValue;
+    }
+    if (phoneChanged) {
+      profilePatch.phone = normalizedDraftPhone;
+      profilePatch.phone_verification_id = phoneVerification?.verification_id;
+    }
+    if (addressChanged) {
+      const nextAddressPatch: ProfileAddressPatch = {};
+
+      if (!defaultAddress && recipientNameValue !== "") {
+        nextAddressPatch.recipient_name = recipientNameValue;
+      } else if (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) {
+        nextAddressPatch.recipient_name = recipientNameValue;
+      }
+      if (streetValue !== "" && streetValue !== currentStreetValue) {
+        nextAddressPatch.street = streetValue;
+      }
+      if (wardValue !== "" && wardValue !== currentWardValue) {
+        nextAddressPatch.ward = wardValue;
+      }
+      if (districtValue !== "" && districtValue !== currentDistrictValue) {
+        nextAddressPatch.district = districtValue;
+      }
+      if (cityValue !== "" && cityValue !== currentCityValue) {
+        nextAddressPatch.city = cityValue;
+      }
+      if (Object.keys(nextAddressPatch).length > 0) {
+        profilePatch.default_address = nextAddressPatch;
+      }
+    }
 
     try {
       setBusy(true);
-      await updateProfile({
-        first_name: firstNameValue,
-        last_name: lastNameValue,
-        phone: normalizedDraftPhone || undefined,
-        phone_verification_id: phoneChanged ? phoneVerification?.verification_id : undefined,
-        default_address: {
-          recipient_name: recipientNameValue,
-          phone: normalizedAddressPhone,
-          street: streetValue,
-          ward: wardValue || undefined,
-          district: districtValue,
-          city: cityValue,
-        },
-      });
+      await updateProfile(profilePatch);
       await Promise.all([refreshProfile(), refreshAddresses()]);
       resetVerificationState();
-      setTelegramChatId("");
       setFormErrors({});
       setFeedback({
         tone: "success",
-        message: "Thông tin hồ sơ và địa chỉ mặc định đã được cập nhật.",
+        message: "Các thay đổi trên hồ sơ đã được cập nhật.",
       });
     } catch (reason) {
       setFeedback({
@@ -458,19 +526,26 @@ export function ProfileDashboard() {
   }
 
   async function handleSendPhoneOtp() {
-    const nextErrors = buildFormErrors({ requireTelegramChatID: true });
+    const nextErrors = buildFormErrors();
     setFormErrors(nextErrors);
-    if (nextErrors.phone || nextErrors.telegramChatId) {
+    if (nextErrors.phone) {
       setFeedback({
         tone: "error",
-        message: nextErrors.phone || nextErrors.telegramChatId || "Không thể gửi OTP cho số điện thoại hiện tại.",
+        message: nextErrors.phone || "Không thể gửi OTP cho số điện thoại hiện tại.",
+      });
+      return;
+    }
+    if (!phoneChanged) {
+      setFeedback({
+        tone: "info",
+        message: "Hãy nhập số điện thoại mới trước khi yêu cầu xác minh.",
       });
       return;
     }
 
     try {
       setOtpBusy(true);
-      const result = await sendPhoneOtp(normalizedDraftPhone, telegramChatId.trim());
+      const result = await sendPhoneOtp(normalizedDraftPhone);
       setPhoneVerification(result);
       setOtpExpiresIn(result.expires_in_seconds);
       setOtpResendIn(result.resend_in_seconds);
@@ -478,7 +553,7 @@ export function ProfileDashboard() {
       setFormErrors((current) => ({ ...current, otpCode: undefined }));
       setFeedback({
         tone: "info",
-        message: "OTP đã được gửi qua Telegram. Hãy nhập mã 6 chữ số để tiếp tục.",
+        message: "OTP đã được gửi tới cuộc trò chuyện Telegram đã liên kết. Hãy nhập mã 6 chữ số để tiếp tục.",
       });
     } catch (reason) {
       setFeedback({
@@ -800,10 +875,9 @@ export function ProfileDashboard() {
           </div>
 
           <form className="mt-8 grid gap-5 md:grid-cols-2" onSubmit={handleSubmit}>
-            <Field htmlFor="profile-first-name" label="Tên" required error={formErrors.firstName}>
+            <Field htmlFor="profile-first-name" label="Tên" error={formErrors.firstName}>
               <TextInput
                 id="profile-first-name"
-                required
                 maxLength={100}
                 value={firstName}
                 onChange={(event) => {
@@ -812,10 +886,9 @@ export function ProfileDashboard() {
                 }}
               />
             </Field>
-            <Field htmlFor="profile-last-name" label="Họ" required error={formErrors.lastName}>
+            <Field htmlFor="profile-last-name" label="Họ" error={formErrors.lastName}>
               <TextInput
                 id="profile-last-name"
-                required
                 maxLength={100}
                 value={lastName}
                 onChange={(event) => {
@@ -825,35 +898,35 @@ export function ProfileDashboard() {
               />
             </Field>
             <Field htmlFor="profile-phone" label="Số điện thoại hồ sơ" error={formErrors.phone}>
-              <TextInput
-                id="profile-phone"
-                inputMode="numeric"
-                value={phone}
-                onChange={(event) => handlePhoneChange(event.target.value)}
-                placeholder="Ví dụ 0912345678"
-              />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <TextInput
+                  id="profile-phone"
+                  className="flex-1"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={(event) => handlePhoneChange(event.target.value)}
+                  placeholder="Ví dụ 0912345678"
+                />
+                <button
+                  type="button"
+                  className={cn(
+                    buttonStyles({ size: "lg" }),
+                    "w-full sm:w-auto",
+                    !hasValidPhoneDraft && "bg-primary/20 text-primary/55 shadow-none hover:translate-y-0 hover:bg-primary/20",
+                  )}
+                  disabled={!canRequestPhoneVerification}
+                  onClick={() => void handleSendPhoneOtp()}
+                >
+                  {otpBusy ? "Đang gửi OTP..." : "Verification"}
+                </button>
+              </div>
+              <p className="mt-2 text-xs leading-6 text-on-surface-variant">
+                Nhập số điện thoại mới gồm đúng 10 chữ số để bật xác minh Telegram.
+              </p>
             </Field>
-            <Field
-              htmlFor="profile-telegram-chat-id"
-              label="Telegram chat ID"
-              required={otpPanelVisible}
-              error={formErrors.telegramChatId}
-            >
-              <TextInput
-                id="profile-telegram-chat-id"
-                inputMode="numeric"
-                value={telegramChatId}
-                onChange={(event) => {
-                  setTelegramChatId(event.target.value);
-                  setFormErrors((current) => ({ ...current, telegramChatId: undefined }));
-                }}
-                placeholder="Nhập chat ID Telegram để nhận OTP"
-              />
-            </Field>
-            <Field htmlFor="profile-recipient-name" label="Tên người nhận" required error={formErrors.recipientName}>
+            <Field htmlFor="profile-recipient-name" label="Tên người nhận" error={formErrors.recipientName}>
               <TextInput
                 id="profile-recipient-name"
-                required
                 maxLength={100}
                 value={recipientName}
                 onChange={(event) => {
@@ -862,23 +935,9 @@ export function ProfileDashboard() {
                 }}
               />
             </Field>
-            <Field htmlFor="profile-address-phone" label="Số điện thoại nhận hàng" required error={formErrors.addressPhone}>
-              <TextInput
-                id="profile-address-phone"
-                required
-                inputMode="numeric"
-                value={addressPhone}
-                onChange={(event) => {
-                  setAddressPhone(event.target.value);
-                  setFormErrors((current) => ({ ...current, addressPhone: undefined }));
-                }}
-                placeholder="Ví dụ 0901122334"
-              />
-            </Field>
-            <Field htmlFor="profile-street" label="Địa chỉ" required error={formErrors.street}>
+            <Field htmlFor="profile-street" label="Địa chỉ" error={formErrors.street}>
               <TextInput
                 id="profile-street"
-                required
                 value={street}
                 onChange={(event) => {
                   setStreet(event.target.value);
@@ -889,10 +948,9 @@ export function ProfileDashboard() {
             <Field htmlFor="profile-ward" label="Phường/Xã">
               <TextInput id="profile-ward" value={ward} onChange={(event) => setWard(event.target.value)} />
             </Field>
-            <Field htmlFor="profile-district" label="Quận/Huyện" required error={formErrors.district}>
+            <Field htmlFor="profile-district" label="Quận/Huyện" error={formErrors.district}>
               <TextInput
                 id="profile-district"
-                required
                 value={district}
                 onChange={(event) => {
                   setDistrict(event.target.value);
@@ -900,10 +958,9 @@ export function ProfileDashboard() {
                 }}
               />
             </Field>
-            <Field htmlFor="profile-city" label="Tỉnh/Thành phố" required error={formErrors.city}>
+            <Field htmlFor="profile-city" label="Tỉnh/Thành phố" error={formErrors.city}>
               <TextInput
                 id="profile-city"
-                required
                 value={city}
                 onChange={(event) => {
                   setCity(event.target.value);
@@ -927,16 +984,6 @@ export function ProfileDashboard() {
                           : "Bạn cần gửi OTP và xác thực số điện thoại mới trước khi lưu."}
                   </p>
                 </div>
-                {otpPanelVisible ? (
-                  <button
-                    type="button"
-                    className={cn(buttonStyles({ variant: "secondary" }), "w-full md:w-auto")}
-                    disabled={otpBusy || !normalizedDraftPhone || !telegramChatId.trim()}
-                    onClick={() => void handleSendPhoneOtp()}
-                  >
-                    {otpBusy ? "Đang gửi OTP..." : "Gửi OTP qua Telegram"}
-                  </button>
-                ) : null}
               </div>
 
               {otpPanelVisible ? (
@@ -944,7 +991,6 @@ export function ProfileDashboard() {
                   <Field htmlFor="profile-otp-code" label="OTP 6 chữ số" required error={formErrors.otpCode}>
                     <TextInput
                       id="profile-otp-code"
-                      required
                       inputMode="numeric"
                       value={otpCode}
                       onChange={(event) => {
@@ -956,7 +1002,7 @@ export function ProfileDashboard() {
                   </Field>
                   <button
                     type="button"
-                    className={cn(buttonStyles({ size: "lg" }), "w-full md:w-auto")}
+                    className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full md:w-auto")}
                     disabled={otpBusy || !phoneVerification?.verification_id || otpCode.trim().length !== 6}
                     onClick={() => void handleVerifyOtp()}
                   >

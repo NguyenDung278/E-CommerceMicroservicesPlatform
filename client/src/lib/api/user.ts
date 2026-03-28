@@ -10,7 +10,7 @@ import type {
   Address,
   ApiEnvelope,
   PhoneVerificationChallenge,
-  ProfileAddressInput,
+  ProfileAddressPatch,
   UserProfile,
 } from "@/types/api";
 
@@ -39,16 +39,15 @@ export interface UpdateUserRoleData {
 }
 
 export interface UpdateProfileData {
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
   phone_verification_id?: string;
-  default_address?: ProfileAddressInput;
+  default_address?: ProfileAddressPatch;
 }
 
 export interface SendPhoneOTPData {
   phone: string;
-  telegram_chat_id: string;
 }
 
 export interface VerifyPhoneOTPData {

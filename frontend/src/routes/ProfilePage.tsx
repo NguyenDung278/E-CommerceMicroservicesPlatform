@@ -5,7 +5,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useOrderPayments } from "../hooks/useOrderPayments";
 import { useSavedAddresses } from "../hooks/useSavedAddresses";
 import { getErrorMessage } from "../lib/api";
-import type { PhoneVerificationChallenge } from "../types/api";
+import type { PhoneVerificationChallenge, ProfileAddressPatch } from "../types/api";
 import { AccountPageFrame } from "../ui/account/AccountPageFrame";
 import { formatShortDate, formatShortOrderId } from "../ui/account/accountConfig";
 import { formatCurrency, formatStatusLabel } from "../utils/format";
@@ -16,9 +16,7 @@ type ProfileFormState = {
   firstName: string;
   lastName: string;
   phone: string;
-  telegramChatId: string;
   recipientName: string;
-  addressPhone: string;
   street: string;
   ward: string;
   district: string;
@@ -30,9 +28,7 @@ const emptyForm: ProfileFormState = {
   firstName: "",
   lastName: "",
   phone: "",
-  telegramChatId: "",
   recipientName: "",
-  addressPhone: "",
   street: "",
   ward: "",
   district: "",
@@ -45,9 +41,7 @@ type ProfileFieldErrors = Partial<
     | "firstName"
     | "lastName"
     | "phone"
-    | "telegramChatId"
     | "recipientName"
-    | "addressPhone"
     | "street"
     | "ward"
     | "district"
@@ -70,6 +64,10 @@ function normalizePhoneDigits(value: string) {
 }
 
 function isValidVietnamesePhone(value: string) {
+  return /^0\d{9}$/.test(value);
+}
+
+function isValidStoredPhone(value: string) {
   return /^0\d{9,10}$/.test(value);
 }
 
@@ -120,9 +118,7 @@ export function ProfilePage() {
       firstName: user?.first_name || "",
       lastName: user?.last_name || "",
       phone: user?.phone || "",
-      telegramChatId: "",
       recipientName: defaultAddress?.recipient_name || getUserDisplayName(user),
-      addressPhone: defaultAddress?.phone || user?.phone || "",
       street: defaultAddress?.street || "",
       ward: defaultAddress?.ward || "",
       district: defaultAddress?.district || "",
@@ -199,15 +195,55 @@ export function ProfilePage() {
   const showDevBadge = isDevelopmentAccount(user);
   const normalizedCurrentPhone = normalizePhoneDigits(user?.phone || "");
   const normalizedDraftPhone = normalizePhoneDigits(profileForm.phone);
-  const normalizedAddressPhone = normalizePhoneDigits(profileForm.addressPhone);
   const verificationPhone = normalizePhoneDigits(phoneVerification?.phone || "");
+  const normalizedCurrentAddressPhone = normalizePhoneDigits(defaultAddress?.phone || user?.phone || "");
   const phoneChanged = normalizedDraftPhone !== normalizedCurrentPhone;
+  const hasValidPhoneDraft = phoneChanged && isValidVietnamesePhone(normalizedDraftPhone);
   const verificationMatchesDraft = verificationPhone !== "" && verificationPhone === normalizedDraftPhone;
   const phoneIsVerifiedForDraft =
     !phoneChanged || (phoneVerification?.status === "verified" && verificationMatchesDraft);
   const verificationPendingForDraft =
     phoneChanged && phoneVerification?.status === "pending" && verificationMatchesDraft;
   const otpPanelVisible = phoneChanged && !phoneIsVerifiedForDraft;
+  const firstNameValue = normalizeText(profileForm.firstName);
+  const lastNameValue = normalizeText(profileForm.lastName);
+  const recipientNameValue = normalizeText(profileForm.recipientName);
+  const streetValue = profileForm.street.trim();
+  const wardValue = profileForm.ward.trim();
+  const districtValue = profileForm.district.trim();
+  const cityValue = profileForm.city.trim();
+  const currentFirstNameValue = normalizeText(user?.first_name || "");
+  const currentLastNameValue = normalizeText(user?.last_name || "");
+  const fallbackRecipientName = defaultAddress?.recipient_name || displayName;
+  const currentStreetValue = defaultAddress?.street || "";
+  const currentWardValue = defaultAddress?.ward || "";
+  const currentDistrictValue = defaultAddress?.district || "";
+  const currentCityValue = defaultAddress?.city || "";
+  const hasAddressFieldInput =
+    streetValue !== "" ||
+    wardValue !== "" ||
+    districtValue !== "" ||
+    cityValue !== "" ||
+    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName);
+  const nameChanged =
+    (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) ||
+    (lastNameValue !== "" && lastNameValue !== currentLastNameValue);
+  const addressChanged =
+    (!defaultAddress && hasAddressFieldInput) ||
+    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) ||
+    (streetValue !== "" && streetValue !== currentStreetValue) ||
+    (wardValue !== "" && wardValue !== currentWardValue) ||
+    (districtValue !== "" && districtValue !== currentDistrictValue) ||
+    (cityValue !== "" && cityValue !== currentCityValue);
+  const mergedAddressCandidate = {
+    recipientName: recipientNameValue || fallbackRecipientName,
+    phone: normalizedCurrentAddressPhone,
+    street: streetValue || currentStreetValue,
+    ward: wardValue || currentWardValue,
+    district: districtValue || currentDistrictValue,
+    city: cityValue || currentCityValue
+  };
+  const hasProfileChanges = nameChanged || phoneChanged || addressChanged;
 
   function setField<K extends keyof ProfileFormState>(field: K, value: ProfileFormState[K]) {
     setProfileForm((current) => ({
@@ -231,40 +267,32 @@ export function ProfilePage() {
   }
 
   function handlePhoneChange(value: string) {
-    setField("phone", value);
-    if (normalizePhoneDigits(phoneVerification?.phone || "") !== normalizePhoneDigits(value)) {
+    const sanitizedPhone = value.replace(/\D/g, "").slice(0, 10);
+    setField("phone", sanitizedPhone);
+    if (normalizePhoneDigits(phoneVerification?.phone || "") !== normalizePhoneDigits(sanitizedPhone)) {
       resetVerificationState();
     }
   }
 
-  function buildErrors(options?: { requireTelegramChatId?: boolean; requireOtp?: boolean }) {
+  function buildErrors(options?: { requireOtp?: boolean }) {
     const errors: ProfileFieldErrors = {};
 
-    if (!normalizeText(profileForm.firstName)) {
-      errors.firstName = "First name is required.";
+    if (phoneChanged && !isValidVietnamesePhone(normalizedDraftPhone)) {
+      errors.phone = "Phone number must contain exactly 10 digits and start with 0.";
     }
-    if (!normalizeText(profileForm.lastName)) {
-      errors.lastName = "Last name is required.";
-    }
-    if (normalizedDraftPhone && !isValidVietnamesePhone(normalizedDraftPhone)) {
-      errors.phone = "Phone number must be a valid Vietnamese number.";
-    }
-    if (options?.requireTelegramChatId && !profileForm.telegramChatId.trim()) {
-      errors.telegramChatId = "Telegram chat ID is required to receive OTP.";
-    }
-    if (!normalizeText(profileForm.recipientName)) {
+    if (addressChanged && !mergedAddressCandidate.recipientName) {
       errors.recipientName = "Recipient name is required.";
     }
-    if (!isValidVietnamesePhone(normalizedAddressPhone)) {
-      errors.addressPhone = "Delivery phone must be a valid Vietnamese number.";
+    if (addressChanged && !isValidStoredPhone(mergedAddressCandidate.phone)) {
+      errors.street = "Add a valid profile phone before saving the default address.";
     }
-    if (profileForm.street.trim().length < 5) {
+    if (addressChanged && mergedAddressCandidate.street.length < 5) {
       errors.street = "Street address must be at least 5 characters.";
     }
-    if (profileForm.district.trim().length < 2) {
+    if (addressChanged && mergedAddressCandidate.district.length < 2) {
       errors.district = "District is required.";
     }
-    if (profileForm.city.trim().length < 2) {
+    if (addressChanged && mergedAddressCandidate.city.length < 2) {
       errors.city = "City is required.";
     }
     if (options?.requireOtp && profileForm.otpCode.trim().length !== 6) {
@@ -286,27 +314,61 @@ export function ProfilePage() {
       setFeedback("Please review the profile form before saving.");
       return;
     }
+    if (!hasProfileChanges) {
+      setFeedback("No profile changes to save yet.");
+      return;
+    }
+
+    const profilePatch: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      phone_verification_id?: string;
+      default_address?: ProfileAddressPatch;
+    } = {};
+
+    if (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) {
+      profilePatch.first_name = firstNameValue;
+    }
+    if (lastNameValue !== "" && lastNameValue !== currentLastNameValue) {
+      profilePatch.last_name = lastNameValue;
+    }
+    if (phoneChanged) {
+      profilePatch.phone = normalizedDraftPhone;
+      profilePatch.phone_verification_id = phoneVerification?.verification_id;
+    }
+    if (addressChanged) {
+      const nextAddressPatch: ProfileAddressPatch = {};
+
+      if (!defaultAddress && recipientNameValue !== "") {
+        nextAddressPatch.recipient_name = recipientNameValue;
+      } else if (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) {
+        nextAddressPatch.recipient_name = recipientNameValue;
+      }
+      if (streetValue !== "" && streetValue !== currentStreetValue) {
+        nextAddressPatch.street = streetValue;
+      }
+      if (wardValue !== "" && wardValue !== currentWardValue) {
+        nextAddressPatch.ward = wardValue;
+      }
+      if (districtValue !== "" && districtValue !== currentDistrictValue) {
+        nextAddressPatch.district = districtValue;
+      }
+      if (cityValue !== "" && cityValue !== currentCityValue) {
+        nextAddressPatch.city = cityValue;
+      }
+      if (Object.keys(nextAddressPatch).length > 0) {
+        profilePatch.default_address = nextAddressPatch;
+      }
+    }
 
     try {
       setIsSaving(true);
-      await updateProfile({
-        first_name: normalizeText(profileForm.firstName),
-        last_name: normalizeText(profileForm.lastName),
-        phone: normalizedDraftPhone || undefined,
-        phone_verification_id: phoneChanged ? phoneVerification?.verification_id : undefined,
-        default_address: {
-          recipient_name: normalizeText(profileForm.recipientName),
-          phone: normalizedAddressPhone,
-          street: profileForm.street.trim(),
-          ward: profileForm.ward.trim() || undefined,
-          district: profileForm.district.trim(),
-          city: profileForm.city.trim()
-        }
-      });
+      await updateProfile(profilePatch);
       await Promise.all([refreshProfile(), refreshAddresses()]);
       resetVerificationState();
       setFormErrors({});
-      setFeedback("Your profile, delivery address, and phone status were updated successfully.");
+      setFeedback("Your profile changes were saved successfully.");
       setIsEditingProfile(false);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
@@ -316,21 +378,25 @@ export function ProfilePage() {
   }
 
   async function handleSendPhoneOtp() {
-    const errors = buildErrors({ requireTelegramChatId: true });
+    const errors = buildErrors();
     setFormErrors(errors);
-    if (errors.phone || errors.telegramChatId) {
-      setFeedback(errors.phone || errors.telegramChatId || "Unable to send OTP for this phone number.");
+    if (errors.phone) {
+      setFeedback(errors.phone || "Unable to send OTP for this phone number.");
+      return;
+    }
+    if (!phoneChanged) {
+      setFeedback("Enter a new 10-digit phone number before requesting verification.");
       return;
     }
 
     try {
       setIsOtpBusy(true);
-      const result = await sendPhoneOtp(normalizedDraftPhone, profileForm.telegramChatId.trim());
+      const result = await sendPhoneOtp(normalizedDraftPhone);
       setPhoneVerification(result ?? null);
       setOtpExpiresIn(result?.expires_in_seconds ?? 0);
       setOtpResendIn(result?.resend_in_seconds ?? 0);
       setField("otpCode", "");
-      setFeedback("OTP has been sent to Telegram. Enter the 6-digit code to continue.");
+      setFeedback("OTP has been sent to your linked Telegram chat. Enter the 6-digit code to continue.");
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -491,24 +557,24 @@ export function ProfilePage() {
 
                 <label className="profile-route-form-field">
                   <span>Profile Phone</span>
-                  <input
-                    inputMode="numeric"
-                    value={profileForm.phone}
-                    onChange={(event) => handlePhoneChange(event.target.value)}
-                    placeholder="0912345678"
-                  />
+                  <div className="profile-route-phone-row">
+                    <input
+                      inputMode="numeric"
+                      value={profileForm.phone}
+                      onChange={(event) => handlePhoneChange(event.target.value)}
+                      placeholder="0912345678"
+                    />
+                    <button
+                      className={`primary-button profile-route-phone-action${!hasValidPhoneDraft ? " profile-route-phone-action-disabled" : ""}`}
+                      disabled={!hasValidPhoneDraft || isOtpBusy}
+                      type="button"
+                      onClick={() => void handleSendPhoneOtp()}
+                    >
+                      {isOtpBusy ? "Sending..." : "Verification"}
+                    </button>
+                  </div>
+                  <small className="profile-route-form-hint">Enter a new 10-digit phone number to enable verification.</small>
                   {formErrors.phone ? <small className="profile-route-form-error">{formErrors.phone}</small> : null}
-                </label>
-
-                <label className="profile-route-form-field">
-                  <span>Telegram Chat ID</span>
-                  <input
-                    inputMode="numeric"
-                    value={profileForm.telegramChatId}
-                    onChange={(event) => setField("telegramChatId", event.target.value)}
-                    placeholder="Required only when sending OTP"
-                  />
-                  {formErrors.telegramChatId ? <small className="profile-route-form-error">{formErrors.telegramChatId}</small> : null}
                 </label>
 
                 <label className="profile-route-form-field">
@@ -518,17 +584,6 @@ export function ProfilePage() {
                     onChange={(event) => setField("recipientName", event.target.value)}
                   />
                   {formErrors.recipientName ? <small className="profile-route-form-error">{formErrors.recipientName}</small> : null}
-                </label>
-
-                <label className="profile-route-form-field">
-                  <span>Delivery Phone</span>
-                  <input
-                    inputMode="numeric"
-                    value={profileForm.addressPhone}
-                    onChange={(event) => setField("addressPhone", event.target.value)}
-                    placeholder="0901122334"
-                  />
-                  {formErrors.addressPhone ? <small className="profile-route-form-error">{formErrors.addressPhone}</small> : null}
                 </label>
 
                 <label className="profile-route-form-field profile-route-form-field-full">
@@ -571,17 +626,6 @@ export function ProfilePage() {
                             : "Changing the profile phone requires Telegram OTP verification first."}
                     </p>
                   </div>
-
-                  {otpPanelVisible ? (
-                    <button
-                      className="secondary-button"
-                      disabled={isOtpBusy || !normalizedDraftPhone || !profileForm.telegramChatId.trim()}
-                      type="button"
-                      onClick={() => void handleSendPhoneOtp()}
-                    >
-                      {isOtpBusy ? "Sending..." : "Send OTP"}
-                    </button>
-                  ) : null}
                 </div>
 
                 {otpPanelVisible ? (
@@ -599,7 +643,7 @@ export function ProfilePage() {
 
                     <div className="profile-route-form-actions profile-route-form-actions-stacked">
                       <button
-                        className="primary-button"
+                        className="secondary-button"
                         disabled={isOtpBusy || !phoneVerification?.verification_id || profileForm.otpCode.trim().length !== 6}
                         type="button"
                         onClick={() => void handleVerifyPhoneOtp()}
@@ -630,7 +674,7 @@ export function ProfilePage() {
               </div>
 
               <div className="profile-route-form-actions">
-                <button className="primary-button" disabled={isSaving || isOtpBusy || !phoneIsVerifiedForDraft || Object.keys(buildErrors()).length > 0} type="submit">
+                <button className="primary-button" disabled={isSaving || isOtpBusy || !phoneIsVerifiedForDraft || !hasProfileChanges || Object.keys(buildErrors()).length > 0} type="submit">
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>
               </div>

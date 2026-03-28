@@ -97,8 +97,8 @@ function getUserFriendlyMessage(error: HttpError) {
       return "Phiên xác minh số điện thoại không còn hợp lệ. Hãy gửi OTP lại.";
     }
 
-    if (detail.includes("invalid telegram chat id")) {
-      return "Telegram chat ID không hợp lệ.";
+    if (detail.includes("telegram chat not linked")) {
+      return "Bot Telegram chưa thấy cuộc trò chuyện riêng tư nào. Hãy mở bot và gửi /start rồi thử lại.";
     }
 
     if (detail.includes("invalid phone number")) {

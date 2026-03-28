@@ -394,8 +394,8 @@ func handlePhoneOTPError(c echo.Context, err error) error {
 	if errors.Is(err, service.ErrInvalidPhoneNumber) {
 		return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
 	}
-	if errors.Is(err, service.ErrInvalidTelegramChatID) {
-		return response.Error(c, http.StatusBadRequest, "validation failed", "invalid telegram chat id")
+	if errors.Is(err, service.ErrTelegramChatNotLinked) {
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", "telegram chat not linked, open the bot and send /start before requesting otp")
 	}
 	if errors.Is(err, service.ErrPhoneAlreadyExists) {
 		return response.Error(c, http.StatusConflict, "phone verification failed", "phone already exists")

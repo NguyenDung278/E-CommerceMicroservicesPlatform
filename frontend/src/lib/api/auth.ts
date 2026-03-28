@@ -9,7 +9,7 @@ import type {
   ApiEnvelope,
   AuthPayload,
   PhoneVerificationChallenge,
-  ProfileAddressInput,
+  ProfileAddressPatch,
   UserProfile
 } from "../../types/api";
 import { normalizePhoneVerificationChallenge, normalizeUserProfile } from "../normalizers";
@@ -66,11 +66,11 @@ export interface ResetPasswordData {
  * Update profile data
  */
 export interface UpdateProfileData {
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
   phone_verification_id?: string;
-  default_address?: ProfileAddressInput;
+  default_address?: ProfileAddressPatch;
 }
 
 export interface OAuthExchangeData {
@@ -79,7 +79,6 @@ export interface OAuthExchangeData {
 
 export interface SendPhoneOtpData {
   phone: string;
-  telegram_chat_id: string;
 }
 
 export interface VerifyPhoneOtpData {
