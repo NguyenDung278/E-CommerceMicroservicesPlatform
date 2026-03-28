@@ -142,6 +142,19 @@ function getUserFriendlyMessage(error: HttpError): string {
     return "Bạn không có quyền thực hiện thao tác này.";
   }
 
+  if (status === 429) {
+    if (detail.includes("before resending otp")) {
+      return "Bạn vừa yêu cầu OTP. Hãy chờ thêm một chút rồi thử gửi lại.";
+    }
+    if (detail.includes("invalid otp attempts") || detail.includes("challenge has been locked")) {
+      return "Bạn đã nhập sai OTP quá nhiều lần. Hãy gửi OTP mới để tiếp tục.";
+    }
+    if (detail.includes("otp rate limit exceeded")) {
+      return "Bạn đã vượt quá giới hạn gửi OTP tạm thời. Hãy thử lại sau.";
+    }
+    return detail || "Thao tác đang bị giới hạn tạm thời.";
+  }
+
   if (status === 404) {
     return "Không tìm thấy tài nguyên yêu cầu.";
   }
@@ -150,8 +163,23 @@ function getUserFriendlyMessage(error: HttpError): string {
     return detail || "Dữ liệu không hợp lệ.";
   }
 
-  if (status === 400 && detail.includes("oauth")) {
-    return detail;
+  if (status === 400) {
+    if (detail.includes("oauth")) {
+      return detail;
+    }
+    if (detail.includes("phone verification required")) {
+      return "Số điện thoại mới cần được xác minh OTP trước khi lưu hồ sơ.";
+    }
+    if (detail.includes("phone verification is invalid or already used")) {
+      return "Phiên xác minh số điện thoại không còn hợp lệ. Hãy gửi OTP lại.";
+    }
+    if (detail.includes("invalid telegram chat id")) {
+      return "Telegram chat ID không hợp lệ.";
+    }
+    if (detail.includes("invalid phone number")) {
+      return "Số điện thoại chưa đúng định dạng Việt Nam.";
+    }
+    return detail || "Dữ liệu không hợp lệ.";
   }
 
   // Generic message with details

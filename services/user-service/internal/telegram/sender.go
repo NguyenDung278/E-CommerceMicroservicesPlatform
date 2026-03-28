@@ -33,7 +33,7 @@ func NewSender(cfg config.TelegramConfig, log *zap.Logger) Sender {
 		log:        log,
 		botToken:   cfg.BotToken,
 		apiBaseURL: apiBaseURL,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client:     &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -96,8 +96,9 @@ func (s *logSender) SendOTP(chatID string, phone string, otpCode string, ttl tim
 		s.log.Info("telegram otp send simulated",
 			zap.String("chat_id", chatID),
 			zap.String("phone", maskPhone(phone)),
-			zap.String("otp_code", otpCode),
+			zap.String("phone_suffix", phoneSuffix(phone)),
 			zap.Duration("ttl", ttl),
+			zap.Int("otp_digits", len(strings.TrimSpace(otpCode))),
 		)
 	}
 	return nil

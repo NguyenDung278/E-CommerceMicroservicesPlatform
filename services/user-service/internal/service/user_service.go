@@ -22,28 +22,30 @@ import (
 )
 
 var (
-	ErrUserNotFound                    = errors.New("user not found")
-	ErrEmailAlreadyExists              = errors.New("email already exists")
-	ErrPhoneAlreadyExists              = errors.New("phone already exists")
-	ErrInvalidCredentials              = errors.New("invalid email or password")
-	ErrInvalidToken                    = errors.New("invalid or expired token")
-	ErrInvalidRole                     = errors.New("invalid user role")
-	ErrInvalidOAuthProvider            = errors.New("invalid oauth provider")
-	ErrOAuthProviderNotConfigured      = errors.New("oauth provider not configured")
-	ErrInvalidOAuthState               = errors.New("invalid oauth state")
-	ErrOAuthEmailRequired              = errors.New("oauth email required")
-	ErrInvalidOAuthTicket              = errors.New("invalid oauth ticket")
-	ErrOAuthAccountConflict            = errors.New("oauth account conflict")
-	ErrInvalidPhoneNumber              = errors.New("invalid phone number")
-	ErrInvalidTelegramChatID           = errors.New("invalid telegram chat id")
-	ErrPhoneVerificationRequired       = errors.New("phone verification required")
-	ErrPhoneVerificationNotFound       = errors.New("phone verification not found")
-	ErrPhoneVerificationExpired        = errors.New("phone verification expired")
-	ErrPhoneVerificationLocked         = errors.New("phone verification locked")
-	ErrPhoneVerificationResendTooSoon  = errors.New("phone verification resend too soon")
-	ErrPhoneVerificationRateLimited    = errors.New("phone verification rate limited")
-	ErrPhoneVerificationInvalidOTP     = errors.New("invalid otp code")
-	ErrPhoneVerificationAlreadyUsed    = errors.New("phone verification already used")
+	ErrUserNotFound                   = errors.New("user not found")
+	ErrEmailAlreadyExists             = errors.New("email already exists")
+	ErrPhoneAlreadyExists             = errors.New("phone already exists")
+	ErrInvalidProfileName             = errors.New("invalid profile name")
+	ErrInvalidProfileAddress          = errors.New("invalid profile address")
+	ErrInvalidCredentials             = errors.New("invalid email or password")
+	ErrInvalidToken                   = errors.New("invalid or expired token")
+	ErrInvalidRole                    = errors.New("invalid user role")
+	ErrInvalidOAuthProvider           = errors.New("invalid oauth provider")
+	ErrOAuthProviderNotConfigured     = errors.New("oauth provider not configured")
+	ErrInvalidOAuthState              = errors.New("invalid oauth state")
+	ErrOAuthEmailRequired             = errors.New("oauth email required")
+	ErrInvalidOAuthTicket             = errors.New("invalid oauth ticket")
+	ErrOAuthAccountConflict           = errors.New("oauth account conflict")
+	ErrInvalidPhoneNumber             = errors.New("invalid phone number")
+	ErrInvalidTelegramChatID          = errors.New("invalid telegram chat id")
+	ErrPhoneVerificationRequired      = errors.New("phone verification required")
+	ErrPhoneVerificationNotFound      = errors.New("phone verification not found")
+	ErrPhoneVerificationExpired       = errors.New("phone verification expired")
+	ErrPhoneVerificationLocked        = errors.New("phone verification locked")
+	ErrPhoneVerificationResendTooSoon = errors.New("phone verification resend too soon")
+	ErrPhoneVerificationRateLimited   = errors.New("phone verification rate limited")
+	ErrPhoneVerificationInvalidOTP    = errors.New("invalid otp code")
+	ErrPhoneVerificationAlreadyUsed   = errors.New("phone verification already used")
 )
 
 var vnPhoneRegex = regexp.MustCompile(`^0\d{9,10}$`)
@@ -52,6 +54,7 @@ type UserService struct {
 	repo                  repository.UserRepository
 	oauthRepo             repository.OAuthAccountRepository
 	phoneVerificationRepo repository.PhoneVerificationRepository
+	profileTxManager      repository.ProfileTxManager
 	addressService        *AddressService
 	jwtSecret             string
 	jwtExpiry             int
@@ -93,6 +96,12 @@ func WithFrontendBaseURL(baseURL string) UserServiceOption {
 func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneVerificationRepo = repo
+	}
+}
+
+func WithProfileTxManager(txManager repository.ProfileTxManager) UserServiceOption {
+	return func(s *UserService) {
+		s.profileTxManager = txManager
 	}
 }
 
@@ -192,7 +201,7 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	user.EmailVerificationExpiresAt = &verificationTokenExpiry
 
 	if err := s.repo.Create(ctx, user); err != nil {
-		return nil, err
+		return nil, mapUserRepositoryError(err)
 	}
 
 	_ = s.sendVerificationEmail(user, verificationToken)
@@ -258,82 +267,30 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*model.User, error) {
-	user, err := s.repo.GetByID(ctx, userID)
+	if s.profileTxManager == nil {
+		return s.updateProfileWithDependencies(ctx, userID, req, s.repo, s.phoneVerificationRepo, s.addressService)
+	}
+
+	var updatedUser *model.User
+	err := s.profileTxManager.RunInTx(ctx, func(repos repository.ProfileTxRepositories) error {
+		addressService := s.addressService
+		if repos.Addresses != nil {
+			addressService = NewAddressService(repos.Addresses)
+		}
+
+		user, err := s.updateProfileWithDependencies(ctx, userID, req, repos.Users, repos.PhoneVerifications, addressService)
+		if err != nil {
+			return err
+		}
+
+		updatedUser = user
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
 
-	firstName := normalizeHumanName(req.FirstName)
-	lastName := normalizeHumanName(req.LastName)
-	if firstName != "" {
-		user.FirstName = firstName
-	}
-	if lastName != "" {
-		user.LastName = lastName
-	}
-
-	currentPhone := normalizePhone(user.Phone)
-	requestedPhone := normalizePhone(req.Phone)
-	phoneChanged := requestedPhone != "" && requestedPhone != currentPhone
-	var verifiedChallenge *model.PhoneVerificationChallenge
-
-	if phoneChanged {
-		if !isValidVNPhone(requestedPhone) {
-			return nil, ErrInvalidPhoneNumber
-		}
-		if strings.TrimSpace(req.PhoneVerificationID) == "" || s.phoneVerificationRepo == nil {
-			return nil, ErrPhoneVerificationRequired
-		}
-
-		verifiedChallenge, err = s.phoneVerificationRepo.GetByID(ctx, strings.TrimSpace(req.PhoneVerificationID))
-		if err != nil {
-			return nil, err
-		}
-		if verifiedChallenge == nil || verifiedChallenge.UserID != userID {
-			return nil, ErrPhoneVerificationNotFound
-		}
-		if verifiedChallenge.Status == model.PhoneVerificationStatusConsumed || verifiedChallenge.ConsumedAt != nil {
-			return nil, ErrPhoneVerificationAlreadyUsed
-		}
-		if verifiedChallenge.Status != model.PhoneVerificationStatusVerified || verifiedChallenge.VerifiedAt == nil {
-			return nil, ErrPhoneVerificationRequired
-		}
-		if normalizePhone(verifiedChallenge.PhoneCandidate) != requestedPhone {
-			return nil, ErrPhoneVerificationRequired
-		}
-
-		now := time.Now()
-		user.Phone = requestedPhone
-		user.PhoneVerified = true
-		user.PhoneVerifiedAt = &now
-		user.PhoneLastChangedAt = &now
-	}
-
-	user.UpdatedAt = time.Now()
-	if err := s.repo.Update(ctx, user); err != nil {
-		return nil, err
-	}
-
-	if req.DefaultAddress != nil && s.addressService != nil {
-		if _, err := s.addressService.UpsertDefaultAddress(ctx, userID, *req.DefaultAddress); err != nil {
-			return nil, err
-		}
-	}
-
-	if verifiedChallenge != nil {
-		now := time.Now()
-		verifiedChallenge.Status = model.PhoneVerificationStatusConsumed
-		verifiedChallenge.ConsumedAt = &now
-		verifiedChallenge.UpdatedAt = now
-		if err := s.phoneVerificationRepo.Update(ctx, verifiedChallenge); err != nil {
-			return nil, err
-		}
-	}
-
-	return user, nil
+	return updatedUser, nil
 }
 
 func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) error {
@@ -447,6 +404,11 @@ func normalizeHumanName(value string) string {
 	return strings.Join(parts, " ")
 }
 
+func isValidHumanName(value string, maxLength int) bool {
+	normalized := normalizeHumanName(value)
+	return normalized != "" && len(normalized) <= maxLength
+}
+
 func normalizePhone(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -489,6 +451,154 @@ func normalizeTelegramChatID(value string) string {
 	}
 
 	return digits.String()
+}
+
+func (s *UserService) updateProfileWithDependencies(
+	ctx context.Context,
+	userID string,
+	req dto.UpdateProfileRequest,
+	userRepo repository.UserRepository,
+	phoneRepo repository.PhoneVerificationRepository,
+	addressService *AddressService,
+) (*model.User, error) {
+	user, err := userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+
+	firstName := normalizeHumanName(req.FirstName)
+	lastName := normalizeHumanName(req.LastName)
+	if !isValidHumanName(firstName, 100) || !isValidHumanName(lastName, 100) {
+		return nil, ErrInvalidProfileName
+	}
+
+	var normalizedAddress *dto.ProfileAddressInput
+	if req.DefaultAddress != nil {
+		addressCopy := normalizeProfileAddressInput(*req.DefaultAddress)
+		if !isValidProfileAddressInput(addressCopy) {
+			return nil, ErrInvalidProfileAddress
+		}
+		normalizedAddress = &addressCopy
+	}
+
+	user.FirstName = firstName
+	user.LastName = lastName
+
+	currentPhone := normalizePhone(user.Phone)
+	requestedPhone := normalizePhone(req.Phone)
+	phoneChanged := requestedPhone != "" && requestedPhone != currentPhone
+	var verifiedChallenge *model.PhoneVerificationChallenge
+
+	if phoneChanged {
+		if !isValidVNPhone(requestedPhone) {
+			return nil, ErrInvalidPhoneNumber
+		}
+		if strings.TrimSpace(req.PhoneVerificationID) == "" || phoneRepo == nil {
+			return nil, ErrPhoneVerificationRequired
+		}
+
+		existingUser, err := userRepo.GetByPhone(ctx, requestedPhone)
+		if err != nil {
+			return nil, err
+		}
+		if existingUser != nil && existingUser.ID != userID {
+			return nil, ErrPhoneAlreadyExists
+		}
+
+		verifiedChallenge, err = phoneRepo.GetByID(ctx, strings.TrimSpace(req.PhoneVerificationID))
+		if err != nil {
+			return nil, err
+		}
+		if verifiedChallenge == nil || verifiedChallenge.UserID != userID {
+			return nil, ErrPhoneVerificationNotFound
+		}
+		if verifiedChallenge.Status == model.PhoneVerificationStatusConsumed || verifiedChallenge.ConsumedAt != nil {
+			return nil, ErrPhoneVerificationAlreadyUsed
+		}
+		if verifiedChallenge.Status != model.PhoneVerificationStatusVerified || verifiedChallenge.VerifiedAt == nil {
+			return nil, ErrPhoneVerificationRequired
+		}
+		if normalizePhone(verifiedChallenge.PhoneCandidate) != requestedPhone {
+			return nil, ErrPhoneVerificationRequired
+		}
+
+		now := time.Now()
+		user.Phone = requestedPhone
+		user.PhoneVerified = true
+		user.PhoneVerifiedAt = &now
+		user.PhoneLastChangedAt = &now
+	}
+
+	if normalizedAddress != nil && addressService != nil {
+		if _, err := addressService.UpsertDefaultAddress(ctx, userID, *normalizedAddress); err != nil {
+			return nil, err
+		}
+	}
+
+	user.UpdatedAt = time.Now()
+	if err := userRepo.Update(ctx, user); err != nil {
+		return nil, mapUserRepositoryError(err)
+	}
+
+	if verifiedChallenge != nil {
+		now := time.Now()
+		verifiedChallenge.Status = model.PhoneVerificationStatusConsumed
+		verifiedChallenge.ConsumedAt = &now
+		verifiedChallenge.UpdatedAt = now
+		if err := phoneRepo.Update(ctx, verifiedChallenge); err != nil {
+			return nil, err
+		}
+	}
+
+	return user, nil
+}
+
+func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddressInput {
+	return dto.ProfileAddressInput{
+		RecipientName: normalizeHumanName(input.RecipientName),
+		Phone:         normalizePhone(input.Phone),
+		Street:        strings.TrimSpace(input.Street),
+		Ward:          strings.TrimSpace(input.Ward),
+		District:      strings.TrimSpace(input.District),
+		City:          strings.TrimSpace(input.City),
+	}
+}
+
+func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
+	if !isValidHumanName(input.RecipientName, 100) {
+		return false
+	}
+	if !isValidVNPhone(input.Phone) {
+		return false
+	}
+	if len(input.Street) < 5 || len(input.Street) > 255 {
+		return false
+	}
+	if len(input.Ward) > 100 {
+		return false
+	}
+	if len(input.District) < 2 || len(input.District) > 100 {
+		return false
+	}
+	if len(input.City) < 2 || len(input.City) > 100 {
+		return false
+	}
+
+	return true
+}
+
+func mapUserRepositoryError(err error) error {
+	switch {
+	case errors.Is(err, repository.ErrUserEmailAlreadyExists):
+		return ErrEmailAlreadyExists
+	case errors.Is(err, repository.ErrUserPhoneAlreadyExists):
+		return ErrPhoneAlreadyExists
+	default:
+		return err
+	}
 }
 
 func (s *UserService) telegramOTPConfigTTL() time.Duration {

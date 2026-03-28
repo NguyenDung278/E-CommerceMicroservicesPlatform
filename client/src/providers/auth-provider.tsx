@@ -226,6 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshProfile() {
+    setError("");
     const response = await withFreshToken((activeToken) => userApi.getProfile(activeToken));
     startTransition(() => {
       setUser(response.data);
@@ -235,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function updateProfile(input: UpdateProfileInput) {
+    setError("");
     const response = await withFreshToken((activeToken) => userApi.updateProfile(activeToken, input));
     startTransition(() => {
       setUser(response.data);
@@ -244,11 +246,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function getPhoneVerificationStatus() {
+    setError("");
     const response = await withFreshToken((activeToken) => userApi.getPhoneVerificationStatus(activeToken));
     return response.data;
   }
 
   async function sendPhoneOtp(phone: string, telegramChatId: string) {
+    setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.sendPhoneOtp(activeToken, {
         phone,
@@ -259,6 +263,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function verifyPhoneOtp(verificationId: string, otpCode: string) {
+    setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.verifyPhoneOtp(activeToken, {
         verification_id: verificationId,
@@ -269,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function resendPhoneOtp(verificationId: string) {
+    setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.resendPhoneOtp(activeToken, {
         verification_id: verificationId,
@@ -278,10 +284,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function changePassword(input: ChangePasswordInput) {
+    setError("");
     await withFreshToken((activeToken) => authApi.changePassword(activeToken, input));
   }
 
   async function resendVerificationEmail() {
+    setError("");
     await withFreshToken((activeToken) => authApi.resendVerificationEmail(activeToken));
   }
 

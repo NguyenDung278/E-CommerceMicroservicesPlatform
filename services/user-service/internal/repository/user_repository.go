@@ -3,7 +3,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/lib/pq"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 )
@@ -22,14 +26,23 @@ type UserRepository interface {
 	Update(ctx context.Context, user *model.User) error
 }
 
+var (
+	ErrUserEmailAlreadyExists = errors.New("user email already exists")
+	ErrUserPhoneAlreadyExists = errors.New("user phone already exists")
+)
+
 // postgresUserRepository implements UserRepository using PostgreSQL.
 type postgresUserRepository struct {
-	db *sql.DB
+	executor sqlExecutor
 }
 
 // NewUserRepository creates a new PostgreSQL-backed user repository.
 func NewUserRepository(db *sql.DB) UserRepository {
-	return &postgresUserRepository{db: db}
+	return newUserRepositoryWithExecutor(db)
+}
+
+func newUserRepositoryWithExecutor(executor sqlExecutor) UserRepository {
+	return &postgresUserRepository{executor: executor}
 }
 
 // Create inserts a new user into the database.
@@ -44,7 +57,7 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		user.ID,
 		user.Email,
 		toNullableString(user.Phone),
@@ -64,6 +77,12 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 		user.UpdatedAt,
 	)
 	if err != nil {
+		if isUserRepositoryUniqueViolation(err, "email") {
+			return ErrUserEmailAlreadyExists
+		}
+		if isUserRepositoryUniqueViolation(err, "phone") {
+			return ErrUserPhoneAlreadyExists
+		}
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 	return nil
@@ -84,7 +103,7 @@ func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model
 		WHERE id = $1
 	`
 
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, id))
+	user, err := scanUser(r.executor.QueryRowContext(ctx, query, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -109,7 +128,7 @@ func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (
 		WHERE email = $1
 	`
 
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, email))
+	user, err := scanUser(r.executor.QueryRowContext(ctx, query, email))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -133,7 +152,7 @@ func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 		WHERE phone = $1
 	`
 
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, phone))
+	user, err := scanUser(r.executor.QueryRowContext(ctx, query, phone))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -156,7 +175,7 @@ func (r *postgresUserRepository) GetByEmailVerificationTokenHash(ctx context.Con
 		WHERE email_verification_token_hash = $1
 	`
 
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, tokenHash))
+	user, err := scanUser(r.executor.QueryRowContext(ctx, query, tokenHash))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -180,7 +199,7 @@ func (r *postgresUserRepository) GetByPasswordResetTokenHash(ctx context.Context
 		WHERE password_reset_token_hash = $1
 	`
 
-	user, err := scanUser(r.db.QueryRowContext(ctx, query, tokenHash))
+	user, err := scanUser(r.executor.QueryRowContext(ctx, query, tokenHash))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -204,7 +223,7 @@ func (r *postgresUserRepository) List(ctx context.Context) ([]*model.User, error
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.executor.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -246,7 +265,7 @@ func (r *postgresUserRepository) Update(ctx context.Context, user *model.User) e
 		    updated_at = $15
 		WHERE id = $16
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		user.Email,
 		toNullableString(user.Phone),
 		user.PhoneVerified,
@@ -265,9 +284,27 @@ func (r *postgresUserRepository) Update(ctx context.Context, user *model.User) e
 		user.ID,
 	)
 	if err != nil {
+		if isUserRepositoryUniqueViolation(err, "email") {
+			return ErrUserEmailAlreadyExists
+		}
+		if isUserRepositoryUniqueViolation(err, "phone") {
+			return ErrUserPhoneAlreadyExists
+		}
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil
+}
+
+func isUserRepositoryUniqueViolation(err error, field string) bool {
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) || pqErr.Code != "23505" {
+		return false
+	}
+
+	field = strings.ToLower(field)
+	constraint := strings.ToLower(string(pqErr.Constraint))
+	detail := strings.ToLower(pqErr.Detail)
+	return strings.Contains(constraint, field) || strings.Contains(detail, field)
 }
 
 type userScanner interface {

@@ -17,6 +17,28 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 )
 
+type PhoneVerificationError struct {
+	cause             error
+	RemainingAttempts int
+	ResendInSeconds   int64
+}
+
+func (e *PhoneVerificationError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *PhoneVerificationError) Unwrap() error {
+	return e.cause
+}
+
+func newPhoneVerificationError(cause error, remainingAttempts int, resendInSeconds int64) error {
+	return &PhoneVerificationError{
+		cause:             cause,
+		RemainingAttempts: remainingAttempts,
+		ResendInSeconds:   resendInSeconds,
+	}
+}
+
 func (s *UserService) StartPhoneVerification(ctx context.Context, userID string, ipAddress string, req dto.SendPhoneOTPRequest) (*dto.PhoneVerificationStatusResponse, error) {
 	if s.phoneVerificationRepo == nil {
 		return nil, ErrPhoneVerificationRequired
@@ -47,6 +69,9 @@ func (s *UserService) StartPhoneVerification(ctx context.Context, userID string,
 
 	now := time.Now()
 	if !s.allowOTPEvent("otp:user:"+userID, s.telegramCfg.OTPDailyLimitPerUser, 24*time.Hour, now) {
+		return nil, ErrPhoneVerificationRateLimited
+	}
+	if !s.allowOTPEvent("otp:phone:"+phone, s.telegramCfg.OTPDailyLimitPerUser, 24*time.Hour, now) {
 		return nil, ErrPhoneVerificationRateLimited
 	}
 	if !s.allowOTPEvent("otp:ip:"+strings.TrimSpace(ipAddress), s.telegramCfg.OTPHourlyLimitPerIP, time.Hour, now) {
@@ -143,7 +168,7 @@ func (s *UserService) VerifyPhoneOTP(ctx context.Context, userID string, req dto
 		return nil, ErrPhoneVerificationAlreadyUsed
 	}
 	if challenge.Status == model.PhoneVerificationStatusLocked {
-		return nil, ErrPhoneVerificationLocked
+		return nil, newPhoneVerificationError(ErrPhoneVerificationLocked, 0, 0)
 	}
 	if now.After(challenge.ExpiresAt) {
 		challenge.Status = model.PhoneVerificationStatusExpired
@@ -163,9 +188,13 @@ func (s *UserService) VerifyPhoneOTP(ctx context.Context, userID string, req dto
 			return nil, err
 		}
 		if challenge.Status == model.PhoneVerificationStatusLocked {
-			return nil, ErrPhoneVerificationLocked
+			return nil, newPhoneVerificationError(ErrPhoneVerificationLocked, 0, 0)
 		}
-		return nil, ErrPhoneVerificationInvalidOTP
+		return nil, newPhoneVerificationError(
+			ErrPhoneVerificationInvalidOTP,
+			maxInt(challenge.MaxAttempts-challenge.AttemptCount, 0),
+			0,
+		)
 	}
 
 	challenge.Status = model.PhoneVerificationStatusVerified
@@ -197,12 +226,15 @@ func (s *UserService) ResendPhoneOTP(ctx context.Context, userID string, ipAddre
 
 	now := time.Now()
 	if challenge.Status == model.PhoneVerificationStatusLocked {
-		return nil, ErrPhoneVerificationLocked
+		return nil, newPhoneVerificationError(ErrPhoneVerificationLocked, 0, 0)
 	}
 	if now.Before(challenge.ResendAvailableAt) {
-		return nil, ErrPhoneVerificationResendTooSoon
+		return nil, newPhoneVerificationError(ErrPhoneVerificationResendTooSoon, 0, secondsUntil(challenge.ResendAvailableAt, now))
 	}
 	if !s.allowOTPEvent("otp:user:"+userID, s.telegramCfg.OTPDailyLimitPerUser, 24*time.Hour, now) {
+		return nil, ErrPhoneVerificationRateLimited
+	}
+	if !s.allowOTPEvent("otp:phone:"+challenge.PhoneCandidate, s.telegramCfg.OTPDailyLimitPerUser, 24*time.Hour, now) {
 		return nil, ErrPhoneVerificationRateLimited
 	}
 	if !s.allowOTPEvent("otp:ip:"+strings.TrimSpace(ipAddress), s.telegramCfg.OTPHourlyLimitPerIP, time.Hour, now) {

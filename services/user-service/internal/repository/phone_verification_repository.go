@@ -17,11 +17,15 @@ type PhoneVerificationRepository interface {
 }
 
 type postgresPhoneVerificationRepository struct {
-	db *sql.DB
+	executor sqlExecutor
 }
 
 func NewPhoneVerificationRepository(db *sql.DB) PhoneVerificationRepository {
-	return &postgresPhoneVerificationRepository{db: db}
+	return newPhoneVerificationRepositoryWithExecutor(db)
+}
+
+func newPhoneVerificationRepositoryWithExecutor(executor sqlExecutor) PhoneVerificationRepository {
+	return &postgresPhoneVerificationRepository{executor: executor}
 }
 
 func (r *postgresPhoneVerificationRepository) Create(ctx context.Context, challenge *model.PhoneVerificationChallenge) error {
@@ -34,7 +38,7 @@ func (r *postgresPhoneVerificationRepository) Create(ctx context.Context, challe
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		challenge.ID,
 		challenge.UserID,
 		challenge.Purpose,
@@ -68,7 +72,7 @@ func (r *postgresPhoneVerificationRepository) GetByID(ctx context.Context, id st
 		WHERE id = $1
 	`
 
-	challenge, err := scanPhoneVerificationChallenge(r.db.QueryRowContext(ctx, query, id))
+	challenge, err := scanPhoneVerificationChallenge(r.executor.QueryRowContext(ctx, query, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -92,7 +96,7 @@ func (r *postgresPhoneVerificationRepository) GetLatestActiveByUserID(ctx contex
 		LIMIT 1
 	`
 
-	challenge, err := scanPhoneVerificationChallenge(r.db.QueryRowContext(ctx, query, userID, purpose))
+	challenge, err := scanPhoneVerificationChallenge(r.executor.QueryRowContext(ctx, query, userID, purpose))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -121,7 +125,7 @@ func (r *postgresPhoneVerificationRepository) Update(ctx context.Context, challe
 		WHERE id = $13
 	`
 
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		challenge.PhoneCandidate,
 		challenge.OTPHash,
 		challenge.ExpiresAt,
@@ -144,7 +148,7 @@ func (r *postgresPhoneVerificationRepository) Update(ctx context.Context, challe
 }
 
 func (r *postgresPhoneVerificationRepository) DeleteExpired(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM user_phone_verification_challenges WHERE expires_at < NOW() AND status IN ('expired', 'locked', 'consumed')`)
+	_, err := r.executor.ExecContext(ctx, `DELETE FROM user_phone_verification_challenges WHERE expires_at < NOW() AND status IN ('expired', 'locked', 'consumed')`)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired phone verification challenges: %w", err)
 	}

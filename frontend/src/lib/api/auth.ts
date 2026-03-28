@@ -5,8 +5,14 @@
  */
 
 import { API_BASE_URL, request } from "../http/client";
-import type { ApiEnvelope, AuthPayload, UserProfile } from "../../types/api";
-import { normalizeUserProfile } from "../normalizers";
+import type {
+  ApiEnvelope,
+  AuthPayload,
+  PhoneVerificationChallenge,
+  ProfileAddressInput,
+  UserProfile
+} from "../../types/api";
+import { normalizePhoneVerificationChallenge, normalizeUserProfile } from "../normalizers";
 
 export type OAuthProvider = "google";
 
@@ -62,10 +68,27 @@ export interface ResetPasswordData {
 export interface UpdateProfileData {
   first_name: string;
   last_name: string;
+  phone?: string;
+  phone_verification_id?: string;
+  default_address?: ProfileAddressInput;
 }
 
 export interface OAuthExchangeData {
   ticket: string;
+}
+
+export interface SendPhoneOtpData {
+  phone: string;
+  telegram_chat_id: string;
+}
+
+export interface VerifyPhoneOtpData {
+  verification_id: string;
+  otp_code: string;
+}
+
+export interface ResendPhoneOtpData {
+  verification_id: string;
 }
 
 /**
@@ -160,6 +183,46 @@ export const authApi = {
     }).then((response) => ({
       ...response,
       data: normalizeUserProfile(response.data),
+    }));
+  },
+
+  getPhoneVerificationStatus(token: string): Promise<ApiEnvelope<PhoneVerificationChallenge | null>> {
+    return request<unknown>("/api/v1/users/profile/phone-verification", { token }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data),
+    }));
+  },
+
+  sendPhoneOtp(token: string, body: SendPhoneOtpData): Promise<ApiEnvelope<PhoneVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/profile/phone-verification/send-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
+  },
+
+  verifyPhoneOtp(token: string, body: VerifyPhoneOtpData): Promise<ApiEnvelope<PhoneVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/profile/phone-verification/verify-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
+  },
+
+  resendPhoneOtp(token: string, body: ResendPhoneOtpData): Promise<ApiEnvelope<PhoneVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/profile/phone-verification/resend-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
     }));
   },
 

@@ -284,6 +284,12 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 		if errors.Is(err, service.ErrInvalidPhoneNumber) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
 		}
+		if errors.Is(err, service.ErrInvalidProfileName) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid first name or last name")
+		}
+		if errors.Is(err, service.ErrInvalidProfileAddress) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid default address")
+		}
 		if errors.Is(err, service.ErrPhoneAlreadyExists) {
 			return response.Error(c, http.StatusConflict, "profile update failed", "phone already exists")
 		}
@@ -379,6 +385,9 @@ func (h *UserHandler) ResendPhoneOTP(c echo.Context) error {
 }
 
 func handlePhoneOTPError(c echo.Context, err error) error {
+	var phoneVerificationErr *service.PhoneVerificationError
+	hasPhoneVerificationError := errors.As(err, &phoneVerificationErr)
+
 	if errors.Is(err, service.ErrUserNotFound) {
 		return response.Error(c, http.StatusNotFound, "not found", "user not found")
 	}
@@ -398,13 +407,22 @@ func handlePhoneOTPError(c echo.Context, err error) error {
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", "otp has expired")
 	}
 	if errors.Is(err, service.ErrPhoneVerificationInvalidOTP) {
-		return response.Error(c, http.StatusBadRequest, "phone verification failed", "invalid otp code")
+		detail := "invalid otp code"
+		if hasPhoneVerificationError && phoneVerificationErr.RemainingAttempts > 0 {
+			detail = fmt.Sprintf("invalid otp code, %d attempts remaining", phoneVerificationErr.RemainingAttempts)
+		}
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", detail)
 	}
 	if errors.Is(err, service.ErrPhoneVerificationLocked) {
-		return response.Error(c, http.StatusTooManyRequests, "phone verification locked", "too many invalid otp attempts")
+		return response.Error(c, http.StatusTooManyRequests, "phone verification locked", "too many invalid otp attempts, challenge has been locked")
 	}
 	if errors.Is(err, service.ErrPhoneVerificationResendTooSoon) {
-		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", "please wait before resending otp")
+		detail := "please wait before resending otp"
+		if hasPhoneVerificationError && phoneVerificationErr.ResendInSeconds > 0 {
+			c.Response().Header().Set(echo.HeaderRetryAfter, strconv.FormatInt(phoneVerificationErr.ResendInSeconds, 10))
+			detail = fmt.Sprintf("please wait %d seconds before resending otp", phoneVerificationErr.ResendInSeconds)
+		}
+		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", detail)
 	}
 	if errors.Is(err, service.ErrPhoneVerificationRateLimited) {
 		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", "otp rate limit exceeded")

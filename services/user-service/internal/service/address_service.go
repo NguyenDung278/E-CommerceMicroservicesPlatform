@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -91,6 +90,11 @@ func (s *AddressService) GetDefaultAddress(ctx context.Context, userID string) (
 }
 
 func (s *AddressService) UpsertDefaultAddress(ctx context.Context, userID string, input dto.ProfileAddressInput) (*model.Address, error) {
+	input = normalizeProfileAddressInput(input)
+	if !isValidProfileAddressInput(input) {
+		return nil, ErrInvalidProfileAddress
+	}
+
 	defaultAddress, err := s.GetDefaultAddress(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -98,22 +102,22 @@ func (s *AddressService) UpsertDefaultAddress(ctx context.Context, userID string
 
 	if defaultAddress == nil {
 		return s.CreateAddress(ctx, userID, dto.CreateAddressRequest{
-			RecipientName: normalizeHumanName(input.RecipientName),
-			Phone:         normalizePhone(input.Phone),
-			Street:        strings.TrimSpace(input.Street),
-			Ward:          strings.TrimSpace(input.Ward),
-			District:      strings.TrimSpace(input.District),
-			City:          strings.TrimSpace(input.City),
+			RecipientName: input.RecipientName,
+			Phone:         input.Phone,
+			Street:        input.Street,
+			Ward:          input.Ward,
+			District:      input.District,
+			City:          input.City,
 			IsDefault:     true,
 		})
 	}
 
-	defaultAddress.RecipientName = normalizeHumanName(input.RecipientName)
-	defaultAddress.Phone = normalizePhone(input.Phone)
-	defaultAddress.Street = strings.TrimSpace(input.Street)
-	defaultAddress.Ward = strings.TrimSpace(input.Ward)
-	defaultAddress.District = strings.TrimSpace(input.District)
-	defaultAddress.City = strings.TrimSpace(input.City)
+	defaultAddress.RecipientName = input.RecipientName
+	defaultAddress.Phone = input.Phone
+	defaultAddress.Street = input.Street
+	defaultAddress.Ward = input.Ward
+	defaultAddress.District = input.District
+	defaultAddress.City = input.City
 	defaultAddress.IsDefault = true
 	defaultAddress.UpdatedAt = time.Now()
 	if err := s.repo.ClearDefault(ctx, userID); err != nil {

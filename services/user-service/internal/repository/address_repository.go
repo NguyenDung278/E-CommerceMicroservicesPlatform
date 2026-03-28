@@ -20,12 +20,16 @@ type AddressRepository interface {
 }
 
 type postgresAddressRepository struct {
-	db *sql.DB
+	executor sqlExecutor
 }
 
 // NewAddressRepository creates a new PostgreSQL-backed address repository.
 func NewAddressRepository(db *sql.DB) AddressRepository {
-	return &postgresAddressRepository{db: db}
+	return newAddressRepositoryWithExecutor(db)
+}
+
+func newAddressRepositoryWithExecutor(executor sqlExecutor) AddressRepository {
+	return &postgresAddressRepository{executor: executor}
 }
 
 func (r *postgresAddressRepository) Create(ctx context.Context, addr *model.Address) error {
@@ -33,7 +37,7 @@ func (r *postgresAddressRepository) Create(ctx context.Context, addr *model.Addr
 		INSERT INTO addresses (id, user_id, recipient_name, phone, street, ward, district, city, is_default, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		addr.ID, addr.UserID, addr.RecipientName, addr.Phone,
 		addr.Street, addr.Ward, addr.District, addr.City,
 		addr.IsDefault, addr.CreatedAt, addr.UpdatedAt,
@@ -50,7 +54,7 @@ func (r *postgresAddressRepository) GetByID(ctx context.Context, id string) (*mo
 		FROM addresses WHERE id = $1
 	`
 	addr := &model.Address{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	err := r.executor.QueryRowContext(ctx, query, id).Scan(
 		&addr.ID, &addr.UserID, &addr.RecipientName, &addr.Phone,
 		&addr.Street, &addr.Ward, &addr.District, &addr.City,
 		&addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt,
@@ -69,7 +73,7 @@ func (r *postgresAddressRepository) GetByUserID(ctx context.Context, userID stri
 		SELECT id, user_id, recipient_name, phone, street, ward, district, city, is_default, created_at, updated_at
 		FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC
 	`
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := r.executor.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list addresses: %w", err)
 	}
@@ -97,7 +101,7 @@ func (r *postgresAddressRepository) Update(ctx context.Context, addr *model.Addr
 		    district = $5, city = $6, is_default = $7, updated_at = $8
 		WHERE id = $9
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.executor.ExecContext(ctx, query,
 		addr.RecipientName, addr.Phone, addr.Street, addr.Ward,
 		addr.District, addr.City, addr.IsDefault, addr.UpdatedAt,
 		addr.ID,
@@ -109,7 +113,7 @@ func (r *postgresAddressRepository) Update(ctx context.Context, addr *model.Addr
 }
 
 func (r *postgresAddressRepository) Delete(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM addresses WHERE id = $1`, id)
+	_, err := r.executor.ExecContext(ctx, `DELETE FROM addresses WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete address: %w", err)
 	}
@@ -119,7 +123,7 @@ func (r *postgresAddressRepository) Delete(ctx context.Context, id string) error
 // ClearDefault removes the default flag from all addresses of a user.
 // Called before setting a new default address.
 func (r *postgresAddressRepository) ClearDefault(ctx context.Context, userID string) error {
-	_, err := r.db.ExecContext(ctx,
+	_, err := r.executor.ExecContext(ctx,
 		`UPDATE addresses SET is_default = false, updated_at = NOW() WHERE user_id = $1 AND is_default = true`,
 		userID,
 	)
@@ -131,7 +135,7 @@ func (r *postgresAddressRepository) ClearDefault(ctx context.Context, userID str
 
 func (r *postgresAddressRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
 	var count int
-	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM addresses WHERE user_id = $1`, userID).Scan(&count)
+	err := r.executor.QueryRowContext(ctx, `SELECT COUNT(*) FROM addresses WHERE user_id = $1`, userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count addresses: %w", err)
 	}

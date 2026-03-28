@@ -100,6 +100,11 @@ func (r *fakeUserRepo) List(_ context.Context) ([]*model.User, error) {
 }
 
 func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
+	for phone, existing := range r.usersByPhone {
+		if existing.ID == user.ID && phone != user.Phone {
+			delete(r.usersByPhone, phone)
+		}
+	}
 	r.usersByEmail[user.Email] = user
 	if user.Phone != "" {
 		r.usersByPhone[user.Phone] = user

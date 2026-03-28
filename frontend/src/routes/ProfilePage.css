@@ -317,6 +317,45 @@
   align-items: center;
 }
 
+.profile-route-form-actions-stacked {
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.profile-route-form-head-inline {
+  margin-bottom: 18px;
+}
+
+.profile-route-form-field-full {
+  grid-column: 1 / -1;
+}
+
+.profile-route-form-error {
+  color: #a23122;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.profile-route-verification-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 28px;
+  background: #f5f3ee;
+}
+
+.profile-route-verification-meta {
+  display: grid;
+  gap: 8px;
+  color: #575d79;
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+
+.profile-route-verification-meta p {
+  margin: 0;
+}
+
 .profile-route-subhead {
   display: flex;
   justify-content: space-between;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import type { Address } from "../types/api";
@@ -14,6 +14,41 @@ export function useSavedAddresses(token: string) {
     isLoading: Boolean(token)
   });
 
+  const refreshAddresses = useCallback(async () => {
+    if (!token) {
+      startTransition(() => {
+        setState({
+          addresses: [],
+          isLoading: false
+        });
+      });
+      return [];
+    }
+
+    startTransition(() => {
+      setState((current) => ({ ...current, isLoading: true }));
+    });
+
+    try {
+      const response = await api.listAddresses(token);
+      startTransition(() => {
+        setState({
+          addresses: response.data,
+          isLoading: false
+        });
+      });
+      return response.data;
+    } catch {
+      startTransition(() => {
+        setState({
+          addresses: [],
+          isLoading: false
+        });
+      });
+      return [];
+    }
+  }, [token]);
+
   useEffect(() => {
     let active = true;
 
@@ -27,35 +62,22 @@ export function useSavedAddresses(token: string) {
       };
     }
 
-    setState((current) => ({ ...current, isLoading: true }));
-
-    void api
-      .listAddresses(token)
-      .then((response) => {
+    void refreshAddresses()
+      .then((addresses) => {
         if (!active) {
           return;
         }
 
         setState({
-          addresses: response.data,
+          addresses,
           isLoading: false
         });
       })
-      .catch(() => {
-        if (!active) {
-          return;
-        }
-
-        setState({
-          addresses: [],
-          isLoading: false
-        });
-      });
 
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [refreshAddresses, token]);
 
-  return state;
+  return token ? { ...state, refreshAddresses } : { addresses: [], isLoading: false, refreshAddresses };
 }
