@@ -3,47 +3,65 @@ package service
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
+	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 )
 
-// Common business errors.
 var (
-	ErrUserNotFound               = errors.New("user not found")
-	ErrEmailAlreadyExists         = errors.New("email already exists")
-	ErrPhoneAlreadyExists         = errors.New("phone already exists")
-	ErrInvalidCredentials         = errors.New("invalid email or password")
-	ErrInvalidToken               = errors.New("invalid or expired token")
-	ErrInvalidRole                = errors.New("invalid user role")
-	ErrInvalidOAuthProvider       = errors.New("invalid oauth provider")
-	ErrOAuthProviderNotConfigured = errors.New("oauth provider not configured")
-	ErrInvalidOAuthState          = errors.New("invalid oauth state")
-	ErrOAuthEmailRequired         = errors.New("oauth email required")
-	ErrInvalidOAuthTicket         = errors.New("invalid oauth ticket")
-	ErrOAuthAccountConflict       = errors.New("oauth account conflict")
+	ErrUserNotFound                    = errors.New("user not found")
+	ErrEmailAlreadyExists              = errors.New("email already exists")
+	ErrPhoneAlreadyExists              = errors.New("phone already exists")
+	ErrInvalidCredentials              = errors.New("invalid email or password")
+	ErrInvalidToken                    = errors.New("invalid or expired token")
+	ErrInvalidRole                     = errors.New("invalid user role")
+	ErrInvalidOAuthProvider            = errors.New("invalid oauth provider")
+	ErrOAuthProviderNotConfigured      = errors.New("oauth provider not configured")
+	ErrInvalidOAuthState               = errors.New("invalid oauth state")
+	ErrOAuthEmailRequired              = errors.New("oauth email required")
+	ErrInvalidOAuthTicket              = errors.New("invalid oauth ticket")
+	ErrOAuthAccountConflict            = errors.New("oauth account conflict")
+	ErrInvalidPhoneNumber              = errors.New("invalid phone number")
+	ErrInvalidTelegramChatID           = errors.New("invalid telegram chat id")
+	ErrPhoneVerificationRequired       = errors.New("phone verification required")
+	ErrPhoneVerificationNotFound       = errors.New("phone verification not found")
+	ErrPhoneVerificationExpired        = errors.New("phone verification expired")
+	ErrPhoneVerificationLocked         = errors.New("phone verification locked")
+	ErrPhoneVerificationResendTooSoon  = errors.New("phone verification resend too soon")
+	ErrPhoneVerificationRateLimited    = errors.New("phone verification rate limited")
+	ErrPhoneVerificationInvalidOTP     = errors.New("invalid otp code")
+	ErrPhoneVerificationAlreadyUsed    = errors.New("phone verification already used")
 )
 
-// UserService contains business logic for user operations.
-// WHY THIS LAYER: Separating business logic from handlers and repositories
-// makes the code testable and prevents mixing HTTP concerns with domain logic.
+var vnPhoneRegex = regexp.MustCompile(`^0\d{9,10}$`)
+
 type UserService struct {
-	repo            repository.UserRepository
-	oauthRepo       repository.OAuthAccountRepository
-	jwtSecret       string
-	jwtExpiry       int // hours — for access tokens
-	emailSender     email.Sender
-	oauthClient     OAuthProviderClient
-	frontendBaseURL string
+	repo                  repository.UserRepository
+	oauthRepo             repository.OAuthAccountRepository
+	phoneVerificationRepo repository.PhoneVerificationRepository
+	addressService        *AddressService
+	jwtSecret             string
+	jwtExpiry             int
+	emailSender           email.Sender
+	telegramSender        telegramsender.Sender
+	oauthClient           OAuthProviderClient
+	frontendBaseURL       string
+	telegramCfg           config.TelegramConfig
+	otpLimiterMu          sync.Mutex
+	otpLimiterState       map[string][]time.Time
 }
 
 type UserServiceOption func(*UserService)
@@ -72,13 +90,46 @@ func WithFrontendBaseURL(baseURL string) UserServiceOption {
 	}
 }
 
-// NewUserService creates a new user service.
+func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.phoneVerificationRepo = repo
+	}
+}
+
+func WithAddressService(addressService *AddressService) UserServiceOption {
+	return func(s *UserService) {
+		s.addressService = addressService
+	}
+}
+
+func WithTelegramSender(sender telegramsender.Sender) UserServiceOption {
+	return func(s *UserService) {
+		s.telegramSender = sender
+	}
+}
+
+func WithTelegramConfig(cfg config.TelegramConfig) UserServiceOption {
+	return func(s *UserService) {
+		s.telegramCfg = cfg
+	}
+}
+
 func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry int, options ...UserServiceOption) *UserService {
 	service := &UserService{
 		repo:            repo,
 		jwtSecret:       jwtSecret,
 		jwtExpiry:       jwtExpiry,
 		frontendBaseURL: "http://localhost:4173",
+		telegramCfg: config.TelegramConfig{
+			APIBaseURL:               "https://api.telegram.org",
+			OTPMessageTTLSeconds:     300,
+			OTPResendCooldownSeconds: 60,
+			OTPMaxAttempts:           5,
+			OTPDailyLimitPerUser:     5,
+			OTPHourlyLimitPerIP:      10,
+			SecretPepper:             "change-me",
+		},
+		otpLimiterState: map[string][]time.Time{},
 	}
 	for _, option := range options {
 		option(service)
@@ -87,22 +138,12 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 	return service
 }
 
-// Register creates a new user account.
-//
-// FLOW:
-//  1. Check if email already exists (prevent duplicates)
-//  2. Hash the password with bcrypt (cost=12 for security/performance balance)
-//  3. Generate a UUID for the new user
-//  4. Insert into database
-//  5. Generate a JWT token pair for immediate login after registration
-//
-// SECURITY: bcrypt cost of 12 means ~250ms per hash on modern hardware,
-// which is slow enough to resist brute force but fast enough for users.
 func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.AuthResponse, error) {
 	req.Email = normalizeEmail(req.Email)
 	req.Phone = normalizePhone(req.Phone)
+	req.FirstName = normalizeHumanName(req.FirstName)
+	req.LastName = normalizeHumanName(req.LastName)
 
-	// Check for duplicate email.
 	existing, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {
 		return nil, err
@@ -111,6 +152,9 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		return nil, ErrEmailAlreadyExists
 	}
 	if req.Phone != "" {
+		if !isValidVNPhone(req.Phone) {
+			return nil, ErrInvalidPhoneNumber
+		}
 		existingByPhone, err := s.repo.GetByPhone(ctx, req.Phone)
 		if err != nil {
 			return nil, err
@@ -120,8 +164,6 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		}
 	}
 
-	// Hash the password.
-	// PITFALL: Never store plaintext passwords. bcrypt includes salt automatically.
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
 	if err != nil {
 		return nil, err
@@ -132,6 +174,7 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		ID:            uuid.New().String(),
 		Email:         req.Email,
 		Phone:         req.Phone,
+		PhoneVerified: false,
 		Password:      string(hashedPassword),
 		FirstName:     req.FirstName,
 		LastName:      req.LastName,
@@ -152,12 +195,8 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		return nil, err
 	}
 
-	// Account creation should not fail just because the verification email provider
-	// is temporarily unavailable. The user can request another verification email
-	// later from their profile.
 	_ = s.sendVerificationEmail(user, verificationToken)
 
-	// Generate JWT token pair so the user is immediately logged in.
 	accessToken, refreshToken, err := s.generateTokenPair(user)
 	if err != nil {
 		return nil, err
@@ -170,12 +209,6 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	}, nil
 }
 
-// Login authenticates a user and returns a JWT token pair.
-//
-// SECURITY NOTES:
-//   - We use the same error message for "user not found" and "wrong password"
-//     to prevent email enumeration attacks.
-//   - bcrypt.CompareHashAndPassword is constant-time, preventing timing attacks.
 func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error) {
 	identifier := normalizeIdentifier(req)
 	if identifier == "" {
@@ -193,10 +226,9 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 		return nil, err
 	}
 	if user == nil {
-		return nil, ErrInvalidCredentials // Don't reveal that the email doesn't exist
+		return nil, ErrInvalidCredentials
 	}
 
-	// Compare the provided password with the stored hash.
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -213,11 +245,6 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 	}, nil
 }
 
-// GetProfile retrieves a user's profile by ID.
-//
-// Mục đích: Trích xuất thông tin người dùng từ Database dựa trên `userID`.
-// Input: `userID` (chuỗi UUID được bóc tách từ JWT token).
-// Output: Trả về pointer `*model.User` chứa toàn bộ thông tin tài khoản, hoặc lỗi `ErrUserNotFound` nếu record đã bị xóa.
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -226,10 +253,10 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 	if user == nil {
 		return nil, ErrUserNotFound
 	}
+
 	return user, nil
 }
 
-// UpdateProfile updates a user's profile information.
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*model.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -239,26 +266,76 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.
 		return nil, ErrUserNotFound
 	}
 
-	if req.FirstName != "" {
-		user.FirstName = req.FirstName
+	firstName := normalizeHumanName(req.FirstName)
+	lastName := normalizeHumanName(req.LastName)
+	if firstName != "" {
+		user.FirstName = firstName
 	}
-	if req.LastName != "" {
-		user.LastName = req.LastName
+	if lastName != "" {
+		user.LastName = lastName
 	}
-	user.UpdatedAt = time.Now()
 
+	currentPhone := normalizePhone(user.Phone)
+	requestedPhone := normalizePhone(req.Phone)
+	phoneChanged := requestedPhone != "" && requestedPhone != currentPhone
+	var verifiedChallenge *model.PhoneVerificationChallenge
+
+	if phoneChanged {
+		if !isValidVNPhone(requestedPhone) {
+			return nil, ErrInvalidPhoneNumber
+		}
+		if strings.TrimSpace(req.PhoneVerificationID) == "" || s.phoneVerificationRepo == nil {
+			return nil, ErrPhoneVerificationRequired
+		}
+
+		verifiedChallenge, err = s.phoneVerificationRepo.GetByID(ctx, strings.TrimSpace(req.PhoneVerificationID))
+		if err != nil {
+			return nil, err
+		}
+		if verifiedChallenge == nil || verifiedChallenge.UserID != userID {
+			return nil, ErrPhoneVerificationNotFound
+		}
+		if verifiedChallenge.Status == model.PhoneVerificationStatusConsumed || verifiedChallenge.ConsumedAt != nil {
+			return nil, ErrPhoneVerificationAlreadyUsed
+		}
+		if verifiedChallenge.Status != model.PhoneVerificationStatusVerified || verifiedChallenge.VerifiedAt == nil {
+			return nil, ErrPhoneVerificationRequired
+		}
+		if normalizePhone(verifiedChallenge.PhoneCandidate) != requestedPhone {
+			return nil, ErrPhoneVerificationRequired
+		}
+
+		now := time.Now()
+		user.Phone = requestedPhone
+		user.PhoneVerified = true
+		user.PhoneVerifiedAt = &now
+		user.PhoneLastChangedAt = &now
+	}
+
+	user.UpdatedAt = time.Now()
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
+	}
+
+	if req.DefaultAddress != nil && s.addressService != nil {
+		if _, err := s.addressService.UpsertDefaultAddress(ctx, userID, *req.DefaultAddress); err != nil {
+			return nil, err
+		}
+	}
+
+	if verifiedChallenge != nil {
+		now := time.Now()
+		verifiedChallenge.Status = model.PhoneVerificationStatusConsumed
+		verifiedChallenge.ConsumedAt = &now
+		verifiedChallenge.UpdatedAt = now
+		if err := s.phoneVerificationRepo.Update(ctx, verifiedChallenge); err != nil {
+			return nil, err
+		}
 	}
 
 	return user, nil
 }
 
-// ChangePassword validates the current password and updates to a new one.
-//
-// SECURITY:
-//   - The old password must match before we allow any change.
-//   - The new password is hashed with the same bcrypt cost as registration.
 func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) error {
 	user, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
@@ -268,12 +345,10 @@ func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto
 		return ErrUserNotFound
 	}
 
-	// Verify the current password.
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
 		return ErrInvalidCredentials
 	}
 
-	// Hash the new password.
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
 	if err != nil {
 		return err
@@ -285,15 +360,6 @@ func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto
 	return s.repo.Update(ctx, user)
 }
 
-// RefreshToken validates a refresh token and issues a new access + refresh pair.
-//
-// FLOW:
-//  1. Parse the refresh token and validate its signature + expiry
-//  2. Look up the user by the embedded UserID
-//  3. Issue a fresh token pair
-//
-// WHY ROTATE: Issuing a new refresh token on each refresh limits the window
-// of exposure if a refresh token is leaked (refresh token rotation).
 func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString string) (*dto.AuthResponse, error) {
 	claims := &middleware.JWTClaims{}
 	token, err := jwt.ParseWithClaims(refreshTokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -302,12 +368,10 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString strin
 		}
 		return []byte(s.jwtSecret), nil
 	})
-
 	if err != nil || !token.Valid {
 		return nil, ErrInvalidToken
 	}
 
-	// Ensure the user still exists.
 	user, err := s.repo.GetByID(ctx, claims.UserID)
 	if err != nil {
 		return nil, err
@@ -316,7 +380,6 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, ErrUserNotFound
 	}
 
-	// Issue a fresh token pair.
 	accessToken, newRefreshToken, err := s.generateTokenPair(user)
 	if err != nil {
 		return nil, err
@@ -329,9 +392,7 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString strin
 	}, nil
 }
 
-// generateTokenPair creates both an access token (short-lived) and a refresh token (long-lived).
-func (s *UserService) generateTokenPair(user *model.User) (accessToken string, refreshToken string, err error) {
-	// Access token — short-lived (uses configured expiry, typically 1-24h).
+func (s *UserService) generateTokenPair(user *model.User) (string, string, error) {
 	accessClaims := middleware.JWTClaims{
 		UserID: user.ID,
 		Email:  user.Email,
@@ -342,12 +403,11 @@ func (s *UserService) generateTokenPair(user *model.User) (accessToken string, r
 		},
 	}
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessToken, err = at.SignedString([]byte(s.jwtSecret))
+	accessToken, err := at.SignedString([]byte(s.jwtSecret))
 	if err != nil {
 		return "", "", err
 	}
 
-	// Refresh token — long-lived (7 days).
 	refreshClaims := middleware.JWTClaims{
 		UserID: user.ID,
 		Email:  user.Email,
@@ -358,7 +418,7 @@ func (s *UserService) generateTokenPair(user *model.User) (accessToken string, r
 		},
 	}
 	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshToken, err = rt.SignedString([]byte(s.jwtSecret))
+	refreshToken, err := rt.SignedString([]byte(s.jwtSecret))
 	if err != nil {
 		return "", "", err
 	}
@@ -382,27 +442,100 @@ func normalizeEmail(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
+func normalizeHumanName(value string) string {
+	parts := strings.Fields(strings.TrimSpace(value))
+	return strings.Join(parts, " ")
+}
+
 func normalizePhone(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return ""
 	}
 
-	var builder strings.Builder
-	for index, r := range trimmed {
+	var digits strings.Builder
+	for _, r := range trimmed {
 		if r >= '0' && r <= '9' {
-			builder.WriteRune(r)
-			continue
-		}
-		if r == '+' && index == 0 {
-			builder.WriteRune(r)
+			digits.WriteRune(r)
 		}
 	}
 
-	normalized := builder.String()
-	if strings.HasPrefix(normalized, "+") {
-		return "+" + strings.ReplaceAll(normalized[1:], "+", "")
+	normalized := digits.String()
+	if strings.HasPrefix(normalized, "84") && len(normalized) >= 11 {
+		normalized = "0" + normalized[2:]
+	}
+	if len(normalized) == 9 {
+		normalized = "0" + normalized
 	}
 
-	return strings.ReplaceAll(normalized, "+", "")
+	return normalized
+}
+
+func isValidVNPhone(value string) bool {
+	return vnPhoneRegex.MatchString(normalizePhone(value))
+}
+
+func normalizeTelegramChatID(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+
+	var digits strings.Builder
+	for _, r := range trimmed {
+		if r >= '0' && r <= '9' {
+			digits.WriteRune(r)
+		}
+	}
+
+	return digits.String()
+}
+
+func (s *UserService) telegramOTPConfigTTL() time.Duration {
+	seconds := s.telegramCfg.OTPMessageTTLSeconds
+	if seconds <= 0 {
+		seconds = 300
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *UserService) telegramOTPCooldown() time.Duration {
+	seconds := s.telegramCfg.OTPResendCooldownSeconds
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *UserService) telegramOTPMaxAttempts() int {
+	if s.telegramCfg.OTPMaxAttempts <= 0 {
+		return 5
+	}
+	return s.telegramCfg.OTPMaxAttempts
+}
+
+func (s *UserService) allowOTPEvent(key string, limit int, window time.Duration, now time.Time) bool {
+	if limit <= 0 {
+		return true
+	}
+
+	s.otpLimiterMu.Lock()
+	defer s.otpLimiterMu.Unlock()
+
+	entries := s.otpLimiterState[key]
+	cutoff := now.Add(-window)
+	filtered := entries[:0]
+	for _, ts := range entries {
+		if ts.After(cutoff) {
+			filtered = append(filtered, ts)
+		}
+	}
+	if len(filtered) >= limit {
+		s.otpLimiterState[key] = filtered
+		return false
+	}
+
+	filtered = append(filtered, now)
+	s.otpLimiterState[key] = filtered
+	return true
 }

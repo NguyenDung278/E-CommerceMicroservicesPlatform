@@ -37,17 +37,20 @@ func NewUserRepository(db *sql.DB) UserRepository {
 func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) error {
 	query := `
 		INSERT INTO users (
-			id, email, phone, password, first_name, last_name, role,
+			id, email, phone, phone_verified, phone_verified_at, phone_last_changed_at, password, first_name, last_name, role,
 			email_verified, email_verification_token_hash, email_verification_expires_at,
 			password_reset_token_hash, password_reset_expires_at,
 			created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		user.ID,
 		user.Email,
 		toNullableString(user.Phone),
+		user.PhoneVerified,
+		user.PhoneVerifiedAt,
+		user.PhoneLastChangedAt,
 		user.Password,
 		user.FirstName,
 		user.LastName,
@@ -71,7 +74,8 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -95,7 +99,8 @@ func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model
 func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -118,7 +123,8 @@ func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (
 func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -140,7 +146,8 @@ func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 func (r *postgresUserRepository) GetByEmailVerificationTokenHash(ctx context.Context, tokenHash string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -163,7 +170,8 @@ func (r *postgresUserRepository) GetByEmailVerificationTokenHash(ctx context.Con
 func (r *postgresUserRepository) GetByPasswordResetTokenHash(ctx context.Context, tokenHash string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -186,7 +194,8 @@ func (r *postgresUserRepository) GetByPasswordResetTokenHash(ctx context.Context
 func (r *postgresUserRepository) List(ctx context.Context) ([]*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), password, first_name, last_name, role,
+			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
 			COALESCE(password_reset_token_hash, ''), password_reset_expires_at,
@@ -222,21 +231,27 @@ func (r *postgresUserRepository) Update(ctx context.Context, user *model.User) e
 		UPDATE users
 		SET email = $1,
 		    phone = $2,
-		    password = $3,
-		    first_name = $4,
-		    last_name = $5,
-		    role = $6,
-		    email_verified = $7,
-		    email_verification_token_hash = $8,
-		    email_verification_expires_at = $9,
-		    password_reset_token_hash = $10,
-		    password_reset_expires_at = $11,
-		    updated_at = $12
-		WHERE id = $13
+		    phone_verified = $3,
+		    phone_verified_at = $4,
+		    phone_last_changed_at = $5,
+		    password = $6,
+		    first_name = $7,
+		    last_name = $8,
+		    role = $9,
+		    email_verified = $10,
+		    email_verification_token_hash = $11,
+		    email_verification_expires_at = $12,
+		    password_reset_token_hash = $13,
+		    password_reset_expires_at = $14,
+		    updated_at = $15
+		WHERE id = $16
 	`
 	_, err := r.db.ExecContext(ctx, query,
 		user.Email,
 		toNullableString(user.Phone),
+		user.PhoneVerified,
+		user.PhoneVerifiedAt,
+		user.PhoneLastChangedAt,
 		user.Password,
 		user.FirstName,
 		user.LastName,
@@ -261,6 +276,8 @@ type userScanner interface {
 
 func scanUser(scanner userScanner) (*model.User, error) {
 	user := &model.User{}
+	var phoneVerifiedAt sql.NullTime
+	var phoneLastChangedAt sql.NullTime
 	var emailVerificationExpiresAt sql.NullTime
 	var passwordResetExpiresAt sql.NullTime
 
@@ -268,6 +285,9 @@ func scanUser(scanner userScanner) (*model.User, error) {
 		&user.ID,
 		&user.Email,
 		&user.Phone,
+		&user.PhoneVerified,
+		&phoneVerifiedAt,
+		&phoneLastChangedAt,
 		&user.Password,
 		&user.FirstName,
 		&user.LastName,
@@ -287,6 +307,14 @@ func scanUser(scanner userScanner) (*model.User, error) {
 	if emailVerificationExpiresAt.Valid {
 		value := emailVerificationExpiresAt.Time
 		user.EmailVerificationExpiresAt = &value
+	}
+	if phoneVerifiedAt.Valid {
+		value := phoneVerifiedAt.Time
+		user.PhoneVerifiedAt = &value
+	}
+	if phoneLastChangedAt.Valid {
+		value := phoneLastChangedAt.Time
+		user.PhoneLastChangedAt = &value
 	}
 	if passwordResetExpiresAt.Valid {
 		value := passwordResetExpiresAt.Time

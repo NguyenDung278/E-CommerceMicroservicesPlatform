@@ -11,8 +11,14 @@ import {
 
 import { useSessionToken } from "@/hooks/useSessionToken";
 import { authApi, type OAuthProvider } from "@/lib/api/auth";
+import { userApi } from "@/lib/api/user";
 import { getErrorMessage, isHttpError } from "@/lib/errors/handler";
-import type { ApiEnvelope, UserProfile } from "@/types/api";
+import type {
+  ApiEnvelope,
+  PhoneVerificationChallenge,
+  ProfileAddressInput,
+  UserProfile,
+} from "@/types/api";
 import {
   clearPendingOAuthRemember,
   savePendingOAuthRemember,
@@ -35,6 +41,9 @@ type LoginInput = {
 type UpdateProfileInput = {
   first_name: string;
   last_name: string;
+  phone?: string;
+  phone_verification_id?: string;
+  default_address?: ProfileAddressInput;
 };
 
 type ChangePasswordInput = {
@@ -59,6 +68,10 @@ type AuthContextValue = {
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
+  getPhoneVerificationStatus: () => Promise<PhoneVerificationChallenge | null>;
+  sendPhoneOtp: (phone: string, telegramChatId: string) => Promise<PhoneVerificationChallenge>;
+  verifyPhoneOtp: (verificationId: string, otpCode: string) => Promise<PhoneVerificationChallenge>;
+  resendPhoneOtp: (verificationId: string) => Promise<PhoneVerificationChallenge>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
   resendVerificationEmail: () => Promise<void>;
   clearError: () => void;
@@ -142,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const bootstrap = async () => {
       try {
-        const profile = await withFreshToken((activeToken) => authApi.getProfile(activeToken));
+        const profile = await withFreshToken((activeToken) => userApi.getProfile(activeToken));
         if (!active) {
           return;
         }
@@ -213,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshProfile() {
-    const response = await withFreshToken((activeToken) => authApi.getProfile(activeToken));
+    const response = await withFreshToken((activeToken) => userApi.getProfile(activeToken));
     startTransition(() => {
       setUser(response.data);
       setError("");
@@ -222,11 +235,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function updateProfile(input: UpdateProfileInput) {
-    const response = await withFreshToken((activeToken) => authApi.updateProfile(activeToken, input));
+    const response = await withFreshToken((activeToken) => userApi.updateProfile(activeToken, input));
     startTransition(() => {
       setUser(response.data);
       setError("");
     });
+    return response.data;
+  }
+
+  async function getPhoneVerificationStatus() {
+    const response = await withFreshToken((activeToken) => userApi.getPhoneVerificationStatus(activeToken));
+    return response.data;
+  }
+
+  async function sendPhoneOtp(phone: string, telegramChatId: string) {
+    const response = await withFreshToken((activeToken) =>
+      userApi.sendPhoneOtp(activeToken, {
+        phone,
+        telegram_chat_id: telegramChatId,
+      }),
+    );
+    return response.data;
+  }
+
+  async function verifyPhoneOtp(verificationId: string, otpCode: string) {
+    const response = await withFreshToken((activeToken) =>
+      userApi.verifyPhoneOtp(activeToken, {
+        verification_id: verificationId,
+        otp_code: otpCode,
+      }),
+    );
+    return response.data;
+  }
+
+  async function resendPhoneOtp(verificationId: string) {
+    const response = await withFreshToken((activeToken) =>
+      userApi.resendPhoneOtp(activeToken, {
+        verification_id: verificationId,
+      }),
+    );
     return response.data;
   }
 
@@ -261,6 +308,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshProfile,
         updateProfile,
+        getPhoneVerificationStatus,
+        sendPhoneOtp,
+        verifyPhoneOtp,
+        resendPhoneOtp,
         changePassword,
         resendVerificationEmail,
         clearError: () => setError(""),
@@ -270,4 +321,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
-

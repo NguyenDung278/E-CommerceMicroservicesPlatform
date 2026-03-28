@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LoaderCircle, ShoppingBag, Sparkles } from "lucide-react";
 import type { TextareaHTMLAttributes } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { buttonStyles } from "@/lib/button-styles";
 import { cn, fallbackImageForProduct, getProductImages, getStatusTone } from "@/lib/utils";
 import type { Product } from "@/types/api";
@@ -63,7 +64,7 @@ export function SurfaceCard({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-[2rem] bg-surface-container-low", className)}>{children}</div>
+    <div className={cn("rounded-[1.5rem] bg-surface-container-low", className)}>{children}</div>
   );
 }
 
@@ -144,12 +145,12 @@ export function StatusPill({ status }: { status: string }) {
 
 export function ProductCardSkeleton() {
   return (
-    <div className="animate-pulse rounded-[2rem] bg-surface-container-low p-4">
-      <div className="aspect-[4/5] rounded-[1.5rem] bg-surface-container-high" />
+    <div className="animate-pulse">
+      <div className="aspect-[4/5] rounded-[1.25rem] bg-surface-container-high" />
       <div className="mt-4 h-3 w-24 rounded-full bg-surface-container-high" />
       <div className="mt-3 h-7 w-3/4 rounded-full bg-surface-container-high" />
       <div className="mt-3 h-4 w-1/2 rounded-full bg-surface-container-high" />
-      <div className="mt-5 h-11 rounded-full bg-surface-container-high" />
+      <div className="mt-5 h-9 w-28 rounded-lg bg-surface-container-high" />
     </div>
   );
 }
@@ -171,52 +172,54 @@ export function ProductCard({
   const lowStock = product.stock > 0 && product.stock <= 5;
 
   return (
-    <article className="group rounded-[2rem] bg-surface transition hover:bg-surface-container-low">
-      <Link href={`/products/${product.id}`} className="block overflow-hidden rounded-[2rem]">
-        <div className="relative aspect-[4/5] overflow-hidden rounded-[2rem] bg-surface-container-low">
-          <img
+    <article className="group">
+      <Link href={`/products/${product.id}`} className="block overflow-hidden rounded-[1.25rem]">
+        <div className="relative aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-surface-container mb-5">
+          <StorefrontImage
             alt={product.name}
             src={previewImage}
-            className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.05]"
+            fill
+            sizes="(min-width: 1280px) 29vw, (min-width: 768px) 42vw, 92vw"
+            className="object-cover transition duration-700 group-hover:scale-[1.05]"
           />
           <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between gap-3">
             <Badge className="bg-background/90 text-primary">{product.category || "Catalog"}</Badge>
-            {saved ? <Badge className="bg-tertiary text-white">Saved</Badge> : null}
+            {saved ? <Badge className="bg-primary text-on-primary">Đã lưu</Badge> : null}
           </div>
         </div>
       </Link>
 
-      <div className="px-2 pb-2 pt-5">
+      <div className="space-y-3">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
               {product.brand || "Commerce Platform"}
             </p>
-            <Link href={`/products/${product.id}`} className="mt-2 block font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+            <Link href={`/products/${product.id}`} className="mt-2 block font-serif text-[1.7rem] font-semibold leading-[1.1] tracking-[-0.03em] text-primary">
               {product.name}
             </Link>
           </div>
-          <div className="text-right">
-            <strong className="block text-base font-semibold text-primary">{formatCurrency(product.price)}</strong>
-            <span className="mt-1 block text-xs text-on-surface-variant">
-              {soldOut ? "Hết hàng" : lowStock ? `Còn ${product.stock}` : "Còn hàng"}
-            </span>
-          </div>
+          <strong className="shrink-0 text-base font-semibold text-primary">{formatCurrency(product.price)}</strong>
         </div>
 
-        <p className="mt-3 line-clamp-2 text-sm leading-7 text-on-surface-variant">
+        <p className="line-clamp-2 text-sm leading-7 text-on-surface-variant">
           {product.description}
         </p>
 
-        {footerSlot ? <div className="mt-4">{footerSlot}</div> : null}
-
-        {actionSlot ? (
-          <div className="mt-5">{actionSlot}</div>
-        ) : (
-          <Link href={`/products/${product.id}`} className={cn(buttonStyles({ variant: "secondary" }), "w-full")}>
-            Xem chi tiết
-          </Link>
-        )}
+        <div className="flex items-end justify-between gap-4 pt-3">
+          <div className="min-h-10">
+            {footerSlot ? footerSlot : (
+              <span className="text-xs text-on-surface-variant">
+                {soldOut ? "Hết hàng" : lowStock ? `Còn ${product.stock}` : "Còn hàng"}
+              </span>
+            )}
+          </div>
+          {actionSlot ? actionSlot : (
+            <Link href={`/products/${product.id}`} className={buttonStyles({ variant: "secondary" })}>
+              Xem chi tiết
+            </Link>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -236,7 +239,7 @@ export function ProductCardAction({
   return (
     <button
       type="button"
-      className={cn(buttonStyles({ size: "md" }), "w-full")}
+      className={buttonStyles({ size: "md" })}
       disabled={disabled || loading}
       onClick={onClick}
     >
@@ -332,7 +335,7 @@ export function PageLinkCard({
   return (
     <Link
       href={href}
-      className="group rounded-[2rem] bg-surface-container-low p-6 transition hover:-translate-y-1 hover:bg-surface-container-high"
+      className="group rounded-[1.5rem] bg-surface-container-low p-6 transition hover:-translate-y-1 hover:bg-surface-container-high"
     >
       {badge ? <Badge>{badge}</Badge> : null}
       <h3 className="mt-4 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
@@ -345,4 +348,3 @@ export function PageLinkCard({
     </Link>
   );
 }
-

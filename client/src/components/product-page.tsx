@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Heart, LoaderCircle, Minus, Plus, ShoppingBag, Star } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -309,33 +310,44 @@ export function ProductPage({ productId }: { productId: string }) {
       <main className="shell section-spacing space-y-16">
         {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
 
-        <section className="grid gap-8 lg:grid-cols-[1.1fr_minmax(0,0.9fr)]">
+        <section className="grid gap-10 lg:grid-cols-[1.08fr_minmax(0,0.92fr)] lg:items-start">
           <div className="space-y-4">
-            <SurfaceCard className="overflow-hidden p-3">
-              <div className="aspect-[4/5] overflow-hidden rounded-[1.75rem] bg-surface">
-                <img
+            <div className="overflow-hidden rounded-[1.25rem] bg-surface-container-low p-3">
+              <div className="relative aspect-[4/5] overflow-hidden rounded-[1rem] bg-surface">
+                <StorefrontImage
                   alt={product.name}
                   src={activeImage || images[0] || fallbackImageForProduct(product.name)}
-                  className="h-full w-full object-cover"
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 52vw, 100vw"
+                  className="object-cover"
                 />
               </div>
-            </SurfaceCard>
+            </div>
             <div className="grid grid-cols-4 gap-3">
               {(images.length ? images : [fallbackImageForProduct(product.name)]).slice(0, 4).map((image) => (
                 <button
                   key={image}
                   type="button"
-                  className={cn("overflow-hidden rounded-[1.25rem] bg-surface-container-low", activeImage === image && "ring-2 ring-primary/20")}
+                  className={cn("overflow-hidden rounded-[1rem] bg-surface-container-low", activeImage === image && "ring-2 ring-primary/20")}
                   onClick={() => setActiveImage(image)}
                 >
-                  <img alt={product.name} src={image} className="aspect-square h-full w-full object-cover" />
+                  <div className="relative aspect-square">
+                    <StorefrontImage
+                      alt={product.name}
+                      src={image}
+                      fill
+                      sizes="(min-width: 1024px) 12vw, 24vw"
+                      className="object-cover"
+                    />
+                  </div>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-[2rem] bg-surface-container-low px-6 py-8 md:px-8">
+          <div className="space-y-6 lg:sticky lg:top-28">
+            <div className="rounded-[1.25rem] bg-surface-container-low px-6 py-8 md:px-8">
               <p className="eyebrow">{product.category || "Catalog"}</p>
               <h1 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
                 {product.name}

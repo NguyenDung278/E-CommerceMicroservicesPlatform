@@ -18,12 +18,37 @@ export type UserProfile = {
   id: string;
   email: string;
   phone?: string;
+  phone_verified: boolean;
+  phone_verified_at?: string;
   first_name: string;
   last_name: string;
   role: string;
   email_verified: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type ProfileAddressInput = {
+  recipient_name: string;
+  phone: string;
+  street: string;
+  ward?: string;
+  district: string;
+  city: string;
+};
+
+export type PhoneVerificationChallenge = {
+  verification_id: string;
+  phone: string;
+  phone_masked: string;
+  status: string;
+  expires_at?: string;
+  resend_available_at?: string;
+  expires_in_seconds: number;
+  resend_in_seconds: number;
+  max_attempts: number;
+  remaining_attempts: number;
+  verified_at?: string;
 };
 
 export type AuthPayload = {
@@ -201,4 +226,3 @@ export type Payment = {
   created_at: string;
   updated_at: string;
 };
-

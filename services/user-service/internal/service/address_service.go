@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,6 +72,57 @@ func (s *AddressService) CreateAddress(ctx context.Context, userID string, req d
 // GetAddresses returns all addresses for a user.
 func (s *AddressService) GetAddresses(ctx context.Context, userID string) ([]*model.Address, error) {
 	return s.repo.GetByUserID(ctx, userID)
+}
+
+func (s *AddressService) GetDefaultAddress(ctx context.Context, userID string) (*model.Address, error) {
+	addresses, err := s.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, address := range addresses {
+		if address.IsDefault {
+			return address, nil
+		}
+	}
+	if len(addresses) > 0 {
+		return addresses[0], nil
+	}
+	return nil, nil
+}
+
+func (s *AddressService) UpsertDefaultAddress(ctx context.Context, userID string, input dto.ProfileAddressInput) (*model.Address, error) {
+	defaultAddress, err := s.GetDefaultAddress(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if defaultAddress == nil {
+		return s.CreateAddress(ctx, userID, dto.CreateAddressRequest{
+			RecipientName: normalizeHumanName(input.RecipientName),
+			Phone:         normalizePhone(input.Phone),
+			Street:        strings.TrimSpace(input.Street),
+			Ward:          strings.TrimSpace(input.Ward),
+			District:      strings.TrimSpace(input.District),
+			City:          strings.TrimSpace(input.City),
+			IsDefault:     true,
+		})
+	}
+
+	defaultAddress.RecipientName = normalizeHumanName(input.RecipientName)
+	defaultAddress.Phone = normalizePhone(input.Phone)
+	defaultAddress.Street = strings.TrimSpace(input.Street)
+	defaultAddress.Ward = strings.TrimSpace(input.Ward)
+	defaultAddress.District = strings.TrimSpace(input.District)
+	defaultAddress.City = strings.TrimSpace(input.City)
+	defaultAddress.IsDefault = true
+	defaultAddress.UpdatedAt = time.Now()
+	if err := s.repo.ClearDefault(ctx, userID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.Update(ctx, defaultAddress); err != nil {
+		return nil, err
+	}
+	return defaultAddress, nil
 }
 
 // UpdateAddress updates an existing address. Only the owner can update.

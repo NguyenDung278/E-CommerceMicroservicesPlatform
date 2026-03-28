@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { InlineAlert, LoadingScreen, TextInput } from "@/components/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { authApi } from "@/lib/api/auth";
@@ -11,6 +12,9 @@ import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
 import { cn } from "@/lib/utils";
 import { readPendingOAuthRemember } from "@/utils/auth/oauth";
+
+const authVisualImage =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuAIsJktK36_aSW-UtyTylS7bIE2ag2K5vHEo9K5uBJWk3gz1aqmIxIwRCxvh34us8lJuqd38F1f1_5iV2bpMRvwvXSNMyiGATkYaLm7STijMcVISPQZHNt3D9CUfgonupg0m_MzMTO82sKbZCm2USnw5_ovQbp048QV1L1PX6UNbLo7BDur9ErKWBC0Nc9InTq493B4TV-aPEbU9sF6eHP6asBT15g5iFITrMLOqbdVJChAOCrr0gO-Exp_xb2duyf7o_lsTe6P7ed5";
 
 function splitFullName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -42,35 +46,40 @@ function AuthShell({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <main className="grid min-h-screen lg:grid-cols-[0.96fr_minmax(0,1fr)]">
+      <main className="grid min-h-screen lg:grid-cols-[1.2fr_minmax(0,1fr)]">
         <section className="relative hidden overflow-hidden bg-primary-container lg:block">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(212,129,102,0.18),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.14),transparent_28%)]" />
-          <div className="relative flex h-full flex-col justify-between p-12 text-surface">
-            <Link href="/" className="font-serif text-3xl font-semibold tracking-[-0.03em]">
+          <StorefrontImage
+            alt="Nền forest cho trang xác thực"
+            src={authVisualImage}
+            fill
+            priority
+            sizes="60vw"
+            className="object-cover opacity-50"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-primary/86 via-primary/50 to-primary/28" />
+          <div className="relative flex h-full flex-col justify-between p-12 text-surface lg:p-20">
+            <Link href="/" className="font-serif text-4xl font-semibold tracking-[-0.04em]">
               Commerce Platform
             </Link>
             <div className="max-w-xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#efd7ce]">{eyebrow}</p>
-              <h1 className="mt-6 font-serif text-6xl font-semibold leading-[0.95] tracking-[-0.05em]">
+              <h1 className="mt-6 font-serif text-6xl font-semibold leading-[0.92] tracking-[-0.05em] xl:text-7xl">
                 {title}
               </h1>
-              <p className="mt-6 text-lg leading-8 text-surface/78">{description}</p>
+              <p className="mt-6 max-w-lg text-lg leading-8 text-surface/78">{description}</p>
             </div>
-            <div className="grid max-w-xl grid-cols-2 gap-4">
-              <div className="rounded-[1.5rem] bg-white/10 p-5 backdrop-blur-lg">
-                <p className="text-3xl font-semibold">Auth</p>
-                <p className="mt-2 text-sm text-surface/78">Đăng nhập, đăng ký, xác minh email và phục hồi mật khẩu.</p>
-              </div>
-              <div className="rounded-[1.5rem] bg-white/10 p-5 backdrop-blur-lg">
-                <p className="text-3xl font-semibold">JWT</p>
-                <p className="mt-2 text-sm text-surface/78">Phiên làm việc và refresh token bám đúng contract hiện tại.</p>
-              </div>
+            <div className="ml-auto hidden w-full max-w-[320px] rounded-[1.1rem] border border-white/10 bg-white/8 p-6 backdrop-blur-md xl:block">
+              <span className="block text-[11px] uppercase tracking-[0.26em] text-surface/55">Phiên truy cập</span>
+              <span className="mt-3 block font-serif text-2xl font-semibold tracking-[-0.03em]">Live backend session</span>
+              <p className="mt-4 text-sm leading-7 text-surface/72">
+                Refresh token, bootstrap profile và redirect sau đăng nhập đang đi theo contract auth thật của hệ thống.
+              </p>
             </div>
           </div>
         </section>
 
-        <section className="flex items-center justify-center px-5 py-10 sm:px-8">
-          <div className="w-full max-w-xl rounded-[2rem] bg-surface-container-low p-6 shadow-editorial md:p-8">
+        <section className="flex items-center justify-center px-5 py-10 sm:px-8 lg:px-14">
+          <div className="w-full max-w-xl rounded-[1.5rem] bg-surface p-6 shadow-editorial md:p-8">
             <Link href="/" className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary lg:hidden">
               Commerce Platform
             </Link>

@@ -16,6 +16,8 @@ import type {
   ProductVariant,
   ShippingAddress,
   UserProfile,
+  ProfileAddressInput,
+  PhoneVerificationChallenge,
 } from "@/types/api";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -293,6 +295,8 @@ export function normalizeUserProfile(value: unknown): UserProfile {
     id: normalizeString(user.id),
     email: normalizeString(user.email),
     phone: normalizeString(user.phone) || undefined,
+    phone_verified: normalizeBoolean(user.phone_verified),
+    phone_verified_at: normalizeString(user.phone_verified_at) || undefined,
     first_name: normalizeString(user.first_name),
     last_name: normalizeString(user.last_name),
     role: normalizeString(user.role),
@@ -306,6 +310,39 @@ export function normalizeUserProfileList(value: unknown): UserProfile[] {
   return Array.isArray(value) ? value.map((item) => normalizeUserProfile(item)) : [];
 }
 
+export function normalizeProfileAddressInput(value: unknown): ProfileAddressInput {
+  const address = isRecord(value) ? value : {};
+
+  return {
+    recipient_name: normalizeString(address.recipient_name),
+    phone: normalizeString(address.phone),
+    street: normalizeString(address.street),
+    ward: normalizeString(address.ward) || undefined,
+    district: normalizeString(address.district),
+    city: normalizeString(address.city),
+  };
+}
+
+export function normalizePhoneVerificationChallenge(value: unknown): PhoneVerificationChallenge | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    verification_id: normalizeString(value.verification_id),
+    phone: normalizeString(value.phone),
+    phone_masked: normalizeString(value.phone_masked),
+    status: normalizeString(value.status),
+    expires_at: normalizeString(value.expires_at) || undefined,
+    resend_available_at: normalizeString(value.resend_available_at) || undefined,
+    expires_in_seconds: normalizeNumber(value.expires_in_seconds),
+    resend_in_seconds: normalizeNumber(value.resend_in_seconds),
+    max_attempts: normalizeNumber(value.max_attempts),
+    remaining_attempts: normalizeNumber(value.remaining_attempts),
+    verified_at: normalizeString(value.verified_at) || undefined,
+  };
+}
+
 export function normalizeProductPopularity(value: unknown): ProductPopularity {
   const popularity = isRecord(value) ? value : {};
 
@@ -314,4 +351,3 @@ export function normalizeProductPopularity(value: unknown): ProductPopularity {
     quantity: normalizeNumber(popularity.quantity),
   };
 }
-

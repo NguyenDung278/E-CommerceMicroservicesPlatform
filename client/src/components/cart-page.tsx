@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -11,7 +12,6 @@ import {
   LoadingScreen,
   ProductCard,
   ProductCardAction,
-  SectionHeading,
   SurfaceCard,
   TextInput,
 } from "@/components/storefront-ui";
@@ -175,11 +175,15 @@ export function CartPage() {
     <>
       <SiteHeader />
       <main className="shell section-spacing space-y-10">
-        <SectionHeading
-          eyebrow="Shopping bag"
-          title="Giỏ hàng đồng bộ với cart-service, giữ guest cart cục bộ cho đến khi người dùng đăng nhập."
-          description="Coupon preview gọi sang order-service để xem trước tổng tiền, còn checkout sẽ tạo order thật và chuyển sang payment-service."
-        />
+        <div className="max-w-4xl">
+          <p className="eyebrow">Shopping bag</p>
+          <h1 className="mt-4 font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.5rem]">
+            Giỏ hàng của bạn
+          </h1>
+          <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
+            Cart đồng bộ với `cart-service`, coupon preview đi qua `order-service`, còn checkout sẽ tạo order thật và chuyển sang `payment-service`.
+          </p>
+        </div>
 
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         {!isAuthenticated && cart.items.length > 0 ? (
@@ -206,11 +210,19 @@ export function CartPage() {
                 const imageUrl = product?.image_urls[0] || product?.image_url || "";
 
                 return (
-                  <SurfaceCard key={item.product_id} className="p-5">
-                    <div className="grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
-                      <div className="overflow-hidden rounded-[1.5rem] bg-surface">
+                  <SurfaceCard key={item.product_id} className="p-5 md:p-6">
+                    <div className="grid gap-5 md:grid-cols-[148px_minmax(0,1fr)]">
+                      <div className="overflow-hidden rounded-[1rem] bg-surface">
                         {imageUrl ? (
-                          <img alt={item.name} src={imageUrl} className="aspect-[4/5] h-full w-full object-cover" />
+                          <div className="relative aspect-[4/5]">
+                            <StorefrontImage
+                              alt={item.name}
+                              src={imageUrl}
+                              fill
+                              sizes="(min-width: 768px) 148px, 42vw"
+                              className="object-cover"
+                            />
+                          </div>
                         ) : (
                           <div className="aspect-[4/5] bg-surface-container-high" />
                         )}
@@ -222,7 +234,7 @@ export function CartPage() {
                             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
                               {product?.category || "Catalog"}
                             </p>
-                            <Link href={`/products/${item.product_id}`} className="mt-2 block font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                            <Link href={`/products/${item.product_id}`} className="mt-2 block font-serif text-[2rem] font-semibold tracking-[-0.03em] text-primary">
                               {item.name}
                             </Link>
                             <p className="mt-3 text-sm text-on-surface-variant">{product?.brand || "Commerce Platform"}</p>

@@ -18,8 +18,48 @@ type LoginRequest struct {
 
 // UpdateProfileRequest is the request body for updating user profile.
 type UpdateProfileRequest struct {
-	FirstName string `json:"first_name" validate:"omitempty,min=1"`
-	LastName  string `json:"last_name" validate:"omitempty,min=1"`
+	FirstName           string               `json:"first_name" validate:"required,min=1,max=100"`
+	LastName            string               `json:"last_name" validate:"required,min=1,max=100"`
+	Phone               string               `json:"phone" validate:"omitempty,min=10,max=20"`
+	PhoneVerificationID string               `json:"phone_verification_id" validate:"omitempty,uuid4"`
+	DefaultAddress      *ProfileAddressInput `json:"default_address" validate:"omitempty"`
+}
+
+type ProfileAddressInput struct {
+	RecipientName string `json:"recipient_name" validate:"required,min=2,max=100"`
+	Phone         string `json:"phone" validate:"required,min=10,max=20"`
+	Street        string `json:"street" validate:"required,min=5,max=255"`
+	Ward          string `json:"ward" validate:"omitempty,max=100"`
+	District      string `json:"district" validate:"required,min=2,max=100"`
+	City          string `json:"city" validate:"required,min=2,max=100"`
+}
+
+type SendPhoneOTPRequest struct {
+	Phone          string `json:"phone" validate:"required,min=10,max=20"`
+	TelegramChatID string `json:"telegram_chat_id" validate:"required,min=3,max=64"`
+}
+
+type VerifyPhoneOTPRequest struct {
+	VerificationID string `json:"verification_id" validate:"required,uuid4"`
+	OTPCode        string `json:"otp_code" validate:"required,len=6,numeric"`
+}
+
+type ResendPhoneOTPRequest struct {
+	VerificationID string `json:"verification_id" validate:"required,uuid4"`
+}
+
+type PhoneVerificationStatusResponse struct {
+	VerificationID    string  `json:"verification_id"`
+	Phone             string  `json:"phone"`
+	PhoneMasked       string  `json:"phone_masked"`
+	Status            string  `json:"status"`
+	ExpiresAt         string  `json:"expires_at,omitempty"`
+	ResendAvailableAt string  `json:"resend_available_at,omitempty"`
+	ExpiresInSeconds  int64   `json:"expires_in_seconds"`
+	ResendInSeconds   int64   `json:"resend_in_seconds"`
+	MaxAttempts       int     `json:"max_attempts"`
+	RemainingAttempts int     `json:"remaining_attempts"`
+	VerifiedAt        *string `json:"verified_at,omitempty"`
 }
 
 // ChangePasswordRequest is the request body for changing password.

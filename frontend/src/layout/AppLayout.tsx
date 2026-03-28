@@ -14,14 +14,17 @@ export function AppLayout() {
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
   const categoryNavigation = [
-    { label: "Men", category: "Shop Men" },
-    { label: "Women", category: "Shop Women" },
-    { label: "Footwear", category: "Footwear" },
-    { label: "Accessories", category: "Accessories" }
+    { label: "All Archive", to: "/products" },
+    { label: "Men", category: "Shop Men", to: `/categories/${encodeURIComponent("Shop Men")}` },
+    { label: "Women", category: "Shop Women", to: `/categories/${encodeURIComponent("Shop Women")}` },
+    { label: "Footwear", category: "Footwear", to: `/categories/${encodeURIComponent("Footwear")}` },
+    { label: "Accessories", category: "Accessories", to: `/categories/${encodeURIComponent("Accessories")}` }
   ];
-  const transactionalNavigation = categoryNavigation.map((item) => ({
+  const transactionalNavigation = categoryNavigation
+    .filter((item) => item.category)
+    .map((item) => ({
     label: item.label,
-    to: `/categories/${encodeURIComponent(item.category)}`
+    to: item.to
   }));
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const accountLabel = isAuthenticated ? "Account" : "Login";
@@ -46,14 +49,16 @@ export function AppLayout() {
                       {item.label}
                     </Link>
                   ))
-                : categoryNavigation.map((item, index) => {
-                    const isActive = currentCategory === item.category || (location.pathname === "/" && index === 0);
+                : categoryNavigation.map((item) => {
+                    const isActive = item.category
+                      ? currentCategory === item.category
+                      : location.pathname === "/products";
 
                     return (
                       <Link
                         className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
-                        key={item.category}
-                        to={`/categories/${encodeURIComponent(item.category)}`}
+                        key={item.label}
+                        to={item.to}
                       >
                         {item.label}
                       </Link>

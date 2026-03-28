@@ -1,6 +1,5 @@
 import { API_BASE_URL, request } from "@/lib/api/http-client";
-import { normalizeUserProfile } from "@/lib/api/normalizers";
-import type { ApiEnvelope, AuthPayload, UserProfile } from "@/types/api";
+import type { ApiEnvelope, AuthPayload } from "@/types/api";
 
 export type OAuthProvider = "google";
 
@@ -33,11 +32,6 @@ export interface ForgotPasswordData {
 export interface ResetPasswordData {
   token: string;
   new_password: string;
-}
-
-export interface UpdateProfileData {
-  first_name: string;
-  last_name: string;
 }
 
 export interface ChangePasswordData {
@@ -98,25 +92,6 @@ export const authApi = {
       body,
     });
   },
-
-  getProfile(token: string): Promise<ApiEnvelope<UserProfile>> {
-    return request<unknown>("/api/v1/users/profile", { token }).then((response) => ({
-      ...response,
-      data: normalizeUserProfile(response.data),
-    }));
-  },
-
-  updateProfile(token: string, body: UpdateProfileData): Promise<ApiEnvelope<UserProfile>> {
-    return request<unknown>("/api/v1/users/profile", {
-      method: "PUT",
-      token,
-      body,
-    }).then((response) => ({
-      ...response,
-      data: normalizeUserProfile(response.data),
-    }));
-  },
-
   changePassword(token: string, body: ChangePasswordData): Promise<ApiEnvelope<null>> {
     return request<null>("/api/v1/users/password", {
       method: "PUT",
@@ -155,4 +130,3 @@ function resolveOAuthBaseUrl() {
 
   return window.location.origin;
 }
-

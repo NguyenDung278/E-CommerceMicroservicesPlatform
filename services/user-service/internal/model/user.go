@@ -11,6 +11,9 @@ type User struct {
 	ID                         string     `json:"id"`
 	Email                      string     `json:"email"`
 	Phone                      string     `json:"phone,omitempty"`
+	PhoneVerified              bool       `json:"phone_verified"`
+	PhoneVerifiedAt            *time.Time `json:"phone_verified_at,omitempty"`
+	PhoneLastChangedAt         *time.Time `json:"phone_last_changed_at,omitempty"`
 	Password                   string     `json:"-"` // Never serialize the password hash
 	FirstName                  string     `json:"first_name"`
 	LastName                   string     `json:"last_name"`

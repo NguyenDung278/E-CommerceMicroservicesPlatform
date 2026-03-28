@@ -32,6 +32,16 @@ oauth:
   google:
     redirect_url: "http://localhost:8080/api/v1/auth/oauth/google/callback"
 
+telegram:
+  enabled: false
+  api_base_url: "https://api.telegram.org"
+  otp_message_ttl_seconds: 300
+  otp_resend_cooldown_seconds: 60
+  otp_max_attempts: 5
+  otp_daily_limit_per_user: 5
+  otp_hourly_limit_per_ip: 10
+  secret_pepper: "change-me"
+
 bootstrap:
   dev_accounts:
     enabled: true

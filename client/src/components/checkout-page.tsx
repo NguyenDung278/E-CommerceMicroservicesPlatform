@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -389,8 +390,14 @@ function CheckoutPageContent() {
                     : undefined;
                   return (
                     <div key={item.product_id} className="flex items-center gap-3 rounded-[1.25rem] bg-surface p-3">
-                      <div className="h-16 w-16 overflow-hidden rounded-[1rem] bg-surface-container-low">
-                        <img alt={item.name} src={image || fallbackImageForProduct(item.name)} className="h-full w-full object-cover" />
+                      <div className="relative h-16 w-16 overflow-hidden rounded-[1rem] bg-surface-container-low">
+                        <StorefrontImage
+                          alt={item.name}
+                          src={image || fallbackImageForProduct(item.name)}
+                          fill
+                          sizes="64px"
+                          className="object-cover"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-primary">{item.name}</p>

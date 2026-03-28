@@ -68,6 +68,10 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.Use(middleware.JWTAuth(jwtSecret))
 	users.GET("/profile", h.GetProfile)
 	users.PUT("/profile", h.UpdateProfile)
+	users.GET("/profile/phone-verification", h.GetPhoneVerificationStatus)
+	users.POST("/profile/phone-verification/send-otp", h.SendPhoneOTP)
+	users.POST("/profile/phone-verification/verify-otp", h.VerifyPhoneOTP)
+	users.POST("/profile/phone-verification/resend-otp", h.ResendPhoneOTP)
 	users.PUT("/password", h.ChangePassword)
 	users.POST("/verify-email/resend", h.ResendVerificationEmail)
 
@@ -277,10 +281,139 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 		if errors.Is(err, service.ErrUserNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
 		}
+		if errors.Is(err, service.ErrInvalidPhoneNumber) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
+		}
+		if errors.Is(err, service.ErrPhoneAlreadyExists) {
+			return response.Error(c, http.StatusConflict, "profile update failed", "phone already exists")
+		}
+		if errors.Is(err, service.ErrPhoneVerificationRequired) {
+			return response.Error(c, http.StatusBadRequest, "profile update failed", "phone verification required")
+		}
+		if errors.Is(err, service.ErrPhoneVerificationNotFound) || errors.Is(err, service.ErrPhoneVerificationAlreadyUsed) {
+			return response.Error(c, http.StatusBadRequest, "profile update failed", "phone verification is invalid or already used")
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 
 	return response.Success(c, http.StatusOK, "profile updated", user)
+}
+
+func (h *UserHandler) GetPhoneVerificationStatus(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	statusPayload, err := h.userService.GetPhoneVerificationStatus(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load phone verification status")
+	}
+	return response.Success(c, http.StatusOK, "phone verification status retrieved", statusPayload)
+}
+
+func (h *UserHandler) SendPhoneOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	var req dto.SendPhoneOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.StartPhoneVerification(c.Request().Context(), claims.UserID, c.RealIP(), req)
+	if err != nil {
+		return handlePhoneOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone verification otp sent", result)
+}
+
+func (h *UserHandler) VerifyPhoneOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	var req dto.VerifyPhoneOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.VerifyPhoneOTP(c.Request().Context(), claims.UserID, req)
+	if err != nil {
+		return handlePhoneOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone verification successful", result)
+}
+
+func (h *UserHandler) ResendPhoneOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	var req dto.ResendPhoneOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.ResendPhoneOTP(c.Request().Context(), claims.UserID, c.RealIP(), req)
+	if err != nil {
+		return handlePhoneOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone verification otp resent", result)
+}
+
+func handlePhoneOTPError(c echo.Context, err error) error {
+	if errors.Is(err, service.ErrUserNotFound) {
+		return response.Error(c, http.StatusNotFound, "not found", "user not found")
+	}
+	if errors.Is(err, service.ErrInvalidPhoneNumber) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
+	}
+	if errors.Is(err, service.ErrInvalidTelegramChatID) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "invalid telegram chat id")
+	}
+	if errors.Is(err, service.ErrPhoneAlreadyExists) {
+		return response.Error(c, http.StatusConflict, "phone verification failed", "phone already exists")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationNotFound) {
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", "phone verification not found")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationExpired) {
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", "otp has expired")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationInvalidOTP) {
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", "invalid otp code")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationLocked) {
+		return response.Error(c, http.StatusTooManyRequests, "phone verification locked", "too many invalid otp attempts")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationResendTooSoon) {
+		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", "please wait before resending otp")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationRateLimited) {
+		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", "otp rate limit exceeded")
+	}
+	if errors.Is(err, service.ErrPhoneVerificationAlreadyUsed) {
+		return response.Error(c, http.StatusBadRequest, "phone verification failed", "phone verification already used")
+	}
+
+	return response.Error(c, http.StatusInternalServerError, "phone verification failed", "internal server error")
 }
 
 // ChangePassword handles PUT /api/v1/users/password

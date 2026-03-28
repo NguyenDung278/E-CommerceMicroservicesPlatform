@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 
 import { userApi } from "@/lib/api";
 import type { Address } from "@/types/api";
@@ -20,6 +20,38 @@ export function useSavedAddresses(token: string) {
     token ? { ...emptySavedAddressesState, isLoading: true } : emptySavedAddressesState,
   );
 
+  const refreshAddresses = useCallback(async () => {
+    if (!token) {
+      startTransition(() => {
+        setState(emptySavedAddressesState);
+      });
+      return emptySavedAddressesState.addresses;
+    }
+
+    startTransition(() => {
+      setState((current) => ({ ...current, isLoading: true }));
+    });
+
+    try {
+      const response = await userApi.listAddresses(token);
+      startTransition(() => {
+        setState({
+          addresses: response.data,
+          isLoading: false,
+        });
+      });
+      return response.data;
+    } catch {
+      startTransition(() => {
+        setState({
+          addresses: [],
+          isLoading: false,
+        });
+      });
+      return [];
+    }
+  }, [token]);
+
   useEffect(() => {
     let active = true;
 
@@ -29,29 +61,13 @@ export function useSavedAddresses(token: string) {
       };
     }
 
-    startTransition(() => {
-      setState((current) => ({ ...current, isLoading: true }));
-    });
-
-    void userApi
-      .listAddresses(token)
-      .then((response) => {
+    void refreshAddresses().then((addresses) => {
         if (!active) {
           return;
         }
 
         setState({
-          addresses: response.data,
-          isLoading: false,
-        });
-      })
-      .catch(() => {
-        if (!active) {
-          return;
-        }
-
-        setState({
-          addresses: [],
+          addresses,
           isLoading: false,
         });
       });
@@ -59,7 +75,7 @@ export function useSavedAddresses(token: string) {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [refreshAddresses, token]);
 
-  return token ? state : emptySavedAddressesState;
+  return token ? { ...state, refreshAddresses } : { ...emptySavedAddressesState, refreshAddresses };
 }

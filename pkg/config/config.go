@@ -33,6 +33,19 @@ type Config struct {
 	Tracing        TracingConfig        `mapstructure:"tracing"`
 	Search         SearchConfig         `mapstructure:"search"`
 	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
+	Telegram       TelegramConfig       `mapstructure:"telegram"`
+}
+
+type TelegramConfig struct {
+	Enabled                  bool   `mapstructure:"enabled"`
+	BotToken                 string `mapstructure:"bot_token"`
+	APIBaseURL               string `mapstructure:"api_base_url"`
+	OTPMessageTTLSeconds     int    `mapstructure:"otp_message_ttl_seconds"`
+	OTPResendCooldownSeconds int    `mapstructure:"otp_resend_cooldown_seconds"`
+	OTPMaxAttempts           int    `mapstructure:"otp_max_attempts"`
+	OTPDailyLimitPerUser     int    `mapstructure:"otp_daily_limit_per_user"`
+	OTPHourlyLimitPerIP      int    `mapstructure:"otp_hourly_limit_per_ip"`
+	SecretPepper             string `mapstructure:"secret_pepper"`
 }
 
 type BootstrapConfig struct {
@@ -252,6 +265,15 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("bootstrap.dev_accounts.enabled", false)
 	v.SetDefault("bootstrap.dev_accounts.admin_password", "")
 	v.SetDefault("bootstrap.dev_accounts.staff_password", "")
+	v.SetDefault("telegram.enabled", false)
+	v.SetDefault("telegram.bot_token", "")
+	v.SetDefault("telegram.api_base_url", "https://api.telegram.org")
+	v.SetDefault("telegram.otp_message_ttl_seconds", 300)
+	v.SetDefault("telegram.otp_resend_cooldown_seconds", 60)
+	v.SetDefault("telegram.otp_max_attempts", 5)
+	v.SetDefault("telegram.otp_daily_limit_per_user", 5)
+	v.SetDefault("telegram.otp_hourly_limit_per_ip", 10)
+	v.SetDefault("telegram.secret_pepper", "change-me")
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port

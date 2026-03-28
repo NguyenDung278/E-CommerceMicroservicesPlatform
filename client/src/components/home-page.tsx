@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { StorefrontImage } from "@/components/storefront-image";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -104,6 +105,7 @@ export function HomePage() {
       .sort((left, right) => (popularityRank.get(right.id) ?? 0) - (popularityRank.get(left.id) ?? 0))
       .slice(0, 6);
   }, [state.popularity, state.products]);
+  const calloutProduct = trendingProducts[0] ?? heroProduct;
 
   async function handleAddToCart(product: Product) {
     try {
@@ -134,37 +136,40 @@ export function HomePage() {
       <main>
         <section className="relative overflow-hidden bg-primary-container">
           <div className="absolute inset-0">
-            <img
+            <StorefrontImage
               alt={heroProduct?.name || "Hero product"}
               src={
                 heroProduct
                   ? heroProduct.image_urls[0] || heroProduct.image_url || fallbackImageForProduct(heroProduct.name)
                   : fallbackImageForProduct("Commerce Platform")
               }
-              className="h-full w-full object-cover opacity-35"
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover opacity-55"
             />
           </div>
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/88 via-primary/64 to-primary/34" />
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/90 via-primary/72 to-primary/28" />
 
-          <div className="shell relative grid min-h-[82svh] items-end gap-10 pb-14 pt-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-20">
+          <div className="shell relative grid min-h-[76svh] items-end gap-10 pb-20 pt-28 lg:grid-cols-12">
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="max-w-3xl"
+              className="lg:col-span-7"
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#efd7ce]">
-                Storefront đồng bộ backend thật
+                Bộ sưu tập mới
               </p>
               <h1 className="headline-display mt-6 max-w-4xl text-surface">
-                Mua sắm trên cùng dữ liệu thật của platform.
+                Không gian mua sắm giàu nhịp điệu, bám backend thật.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-surface/84 md:text-xl">
-                Catalog, giỏ hàng, checkout, tài khoản và lịch sử đơn hàng đều đang map trực tiếp vào product-service, user-service, order-service và payment-service.
+                Catalog, giỏ hàng, checkout, tài khoản và lịch sử đơn hàng đều đồng bộ trực tiếp với product-service, user-service, order-service và payment-service hiện có trong repo.
               </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link href="/products" className={buttonStyles({ size: "lg" })}>
-                  Xem catalog
+                  Khám phá catalog
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 {heroProduct ? (
@@ -172,7 +177,7 @@ export function HomePage() {
                     href={`/products/${heroProduct.id}`}
                     className={cn(
                       buttonStyles({ variant: "secondary", size: "lg" }),
-                      "border-white/20 bg-white/8 text-surface hover:bg-white/14 hover:text-surface",
+                      "border-white/20 bg-white/10 text-surface hover:bg-white/16 hover:text-surface",
                     )}
                   >
                     Xem sản phẩm nổi bật
@@ -185,25 +190,28 @@ export function HomePage() {
               initial={{ opacity: 0, x: 28 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1, duration: 0.6 }}
-              className="rounded-[1.8rem] bg-white/10 p-6 text-surface shadow-editorial backdrop-blur-xl"
+              className="hidden border-l border-white/20 pb-2 pl-8 text-surface lg:col-span-4 lg:col-start-9 lg:block"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-surface/72">
-                Snapshot dữ liệu
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-surface/56">
+                Lớp thông tin hệ thống
               </p>
-              <div className="mt-6 grid gap-6">
+              <div className="mt-5 grid gap-5">
                 <div>
-                  <p className="font-serif text-4xl font-semibold tracking-[-0.03em]">{state.products.length}</p>
-                  <p className="mt-2 text-sm text-surface/76">sản phẩm đang hiển thị trên homepage</p>
-                </div>
-                <div>
-                  <p className="font-serif text-4xl font-semibold tracking-[-0.03em]">{categoryCards.length}</p>
-                  <p className="mt-2 text-sm text-surface/76">danh mục rút ra từ catalog active</p>
-                </div>
-                <div>
-                  <p className="font-serif text-4xl font-semibold tracking-[-0.03em]">
-                    {heroProduct ? formatCurrency(heroProduct.price) : "N/A"}
+                  <p className="font-serif text-3xl italic leading-snug text-surface/88">
+                    “Inventory đồng bộ theo thời gian thực cho từng sản phẩm active.”
                   </p>
-                  <p className="mt-2 text-sm text-surface/76">mức giá sản phẩm hero hiện tại</p>
+                </div>
+                <div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">{state.products.length}</span>
+                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Sản phẩm active</span>
+                    </div>
+                    <div>
+                      <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">{categoryCards.length}</span>
+                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Nhóm danh mục</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </motion.aside>
@@ -232,7 +240,7 @@ export function HomePage() {
               />
             </div>
           ) : (
-            <div className="mt-10 grid gap-5 md:grid-cols-12 md:auto-rows-[240px] lg:auto-rows-[300px]">
+            <div className="mt-10 grid gap-6 md:grid-cols-12 md:auto-rows-[260px] lg:h-[1120px] lg:auto-rows-auto">
               {categoryCards.map((product, index) => {
                 const layoutClass =
                   index === 0
@@ -247,15 +255,17 @@ export function HomePage() {
                   <Link
                     key={product.id}
                     href={`/categories/${encodeURIComponent(product.category)}`}
-                    className={cn("group relative overflow-hidden rounded-[2rem] bg-surface-container-low", layoutClass)}
+                    className={cn("group relative overflow-hidden rounded-[1.25rem] bg-surface-container-low", layoutClass)}
                   >
-                    <img
+                    <StorefrontImage
                       alt={product.category}
                       src={product.image_urls[0] || product.image_url || fallbackImageForProduct(product.category)}
-                      className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.05]"
+                      fill
+                      sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                      className={cn("object-cover transition duration-700 group-hover:scale-[1.05]", index === 0 && "grayscale-[18%]")}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-primary/72 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 p-7 text-surface md:p-9">
+                    <div className={cn("absolute inset-x-0 text-surface", index === 1 ? "top-0 p-8 md:p-10" : "bottom-0 p-7 md:p-9")}>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-surface/72">
                         {product.brand || "Commerce"}
                       </p>
@@ -273,23 +283,65 @@ export function HomePage() {
           )}
         </section>
 
-        <section className="bg-surface-container-low py-16 md:py-24">
+        <section className="bg-surface-container-low py-20 md:py-28">
           <div className="shell">
-            <SectionHeading
-              eyebrow="Phần chính"
-              title="Sản phẩm nổi bật lấy từ API thật, giữ nhịp thị giác của Stitch nhưng ưu tiên scan nhanh và CTA rõ."
-              description="Các card dùng nền tonal layer, image zoom nhẹ, headline serif và CTA rõ ràng hơn để phù hợp với trải nghiệm mua hàng thật."
-              action={
-                <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
-                  Xem toàn bộ catalog
-                </Link>
-              }
-            />
+            <div className="grid items-center gap-12 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1fr)] md:gap-20">
+              <div>
+                <p className="eyebrow">Tín hiệu nền tảng</p>
+                <h2 className="headline-section mt-4 text-primary">
+                  Chính xác ở backend, ấm và thoáng ở trải nghiệm.
+                </h2>
+                <p className="mt-6 max-w-xl text-lg leading-8 text-on-surface-variant">
+                  Dữ liệu kho, giá và thanh toán chạy qua microservices thật, còn storefront giữ đúng tinh thần “digital atelier” bằng nhịp thở rộng, card tonal và typography editorial.
+                </p>
+                <div className="mt-10 grid grid-cols-2 gap-8">
+                  <div>
+                    <span className="block font-serif text-3xl font-semibold tracking-[-0.03em] text-tertiary">0 mock</span>
+                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Dữ liệu chính</span>
+                  </div>
+                  <div>
+                    <span className="block font-serif text-3xl font-semibold tracking-[-0.03em] text-tertiary">
+                      {heroProduct ? formatCurrency(heroProduct.price) : "N/A"}
+                    </span>
+                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Hero live price</span>
+                  </div>
+                </div>
+              </div>
 
-            <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {trendingProducts.slice(0, 6).map((product) => (
+              <div className="group relative overflow-hidden rounded-[1.25rem] shadow-editorial">
+                <div className="relative aspect-[5/4] bg-surface-container-high">
+                  <StorefrontImage
+                    alt={calloutProduct?.name || "Feature"}
+                    src={
+                      calloutProduct
+                        ? calloutProduct.image_urls[0] || calloutProduct.image_url || fallbackImageForProduct(calloutProduct.name)
+                        : fallbackImageForProduct("Studio feature")
+                    }
+                    fill
+                    sizes="(min-width: 768px) 50vw, 100vw"
+                    className="object-cover transition duration-1000 group-hover:scale-[1.08]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="section-spacing overflow-hidden">
+          <div className="shell mb-14 flex items-end justify-between gap-6">
+            <div>
+              <p className="eyebrow">New arrivals</p>
+              <h2 className="headline-section mt-4 text-primary">Seasonal essentials</h2>
+            </div>
+            <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
+              Xem toàn bộ
+            </Link>
+          </div>
+
+          <div className="no-scrollbar flex gap-6 overflow-x-auto px-4 sm:px-6 lg:px-10 xl:px-12">
+            {trendingProducts.slice(0, 4).map((product) => (
+              <div key={product.id} className="min-w-[280px] md:min-w-[360px]">
                 <ProductCard
-                  key={product.id}
                   product={product}
                   saved={isSaved(product.id)}
                   footerSlot={
@@ -298,7 +350,7 @@ export function HomePage() {
                       className="text-sm font-medium text-tertiary hover:text-tertiary-container"
                       onClick={() => toggleWishlist(product.id)}
                     >
-                      {isSaved(product.id) ? "Bỏ khỏi yêu thích" : "Lưu yêu thích"}
+                      {isSaved(product.id) ? "Đã lưu" : "Lưu lại"}
                     </button>
                   }
                   actionSlot={
@@ -309,8 +361,8 @@ export function HomePage() {
                     />
                   }
                 />
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </section>
 

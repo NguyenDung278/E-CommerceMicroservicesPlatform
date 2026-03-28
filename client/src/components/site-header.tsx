@@ -6,7 +6,6 @@ import { Heart, Menu, Search, ShoppingBag, UserRound, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { Badge } from "@/components/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
@@ -30,9 +29,9 @@ export function SiteHeader() {
   return (
     <>
       <header className="sticky top-0 z-50 border-b border-transparent glass-nav">
-        <div className="shell flex h-20 items-center justify-between gap-6">
+        <div className="shell flex h-18 items-center justify-between gap-6 py-3">
           <div className="flex items-center gap-8">
-            <Link href="/" className="font-serif text-2xl font-semibold tracking-[-0.04em] text-primary">
+            <Link href="/" className="font-serif text-[1.85rem] font-semibold tracking-[-0.04em] text-primary">
               Commerce Platform
             </Link>
 
@@ -45,8 +44,8 @@ export function SiteHeader() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "pb-1 text-sm font-medium text-secondary transition hover:text-primary",
-                      active && "font-serif text-primary underline decoration-primary underline-offset-[10px]",
+                      "pb-1 text-[13px] font-medium text-secondary transition hover:text-primary",
+                      active && "border-b border-primary text-primary",
                     )}
                   >
                     {item.label}
@@ -56,31 +55,14 @@ export function SiteHeader() {
             </nav>
           </div>
 
-          <div className="hidden items-center gap-3 rounded-full bg-surface-container-high px-4 py-2 text-primary lg:flex">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em]">Live backend</span>
-            <Badge className="bg-secondary px-2 py-1 text-white">App Router</Badge>
-          </div>
-
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
               href="/products"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-low text-primary transition hover:bg-surface-container-high"
-              aria-label="Mở catalog"
+              className="hidden items-center gap-3 rounded-full bg-surface-container-low px-5 py-3 text-sm text-on-surface-variant transition hover:bg-surface-container-high lg:inline-flex"
+              aria-label="Tìm sản phẩm"
             >
-              <Search className="h-4 w-4" />
-            </Link>
-
-            <Link
-              href="/products?saved=1"
-              className="relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-low text-primary transition hover:bg-surface-container-high"
-              aria-label="Mở danh sách yêu thích"
-            >
-              <Heart className="h-4 w-4" />
-              {wishlistCount ? (
-                <span className="absolute right-1.5 top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-tertiary px-1 text-[10px] font-bold text-white">
-                  {wishlistCount}
-                </span>
-              ) : null}
+              <Search className="h-4 w-4 text-outline" />
+              <span>Tìm sản phẩm...</span>
             </Link>
 
             <Link
@@ -96,6 +78,19 @@ export function SiteHeader() {
               ) : null}
             </Link>
 
+            <Link
+              href="/products?saved=1"
+              className="relative hidden h-11 w-11 items-center justify-center rounded-full bg-surface-container-low text-primary transition hover:bg-surface-container-high md:inline-flex"
+              aria-label="Mở danh sách yêu thích"
+            >
+              <Heart className="h-4 w-4" />
+              {wishlistCount ? (
+                <span className="absolute right-1.5 top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-tertiary px-1 text-[10px] font-bold text-white">
+                  {wishlistCount}
+                </span>
+              ) : null}
+            </Link>
+
             <button
               type="button"
               aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
@@ -107,7 +102,7 @@ export function SiteHeader() {
 
             <Link
               href={isAuthenticated ? "/profile" : "/login"}
-              className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "hidden md:inline-flex")}
+              className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "hidden rounded-full px-4 md:inline-flex")}
             >
               <UserRound className="h-4 w-4" />
               <span>{isAuthenticated ? "Tài khoản" : "Đăng nhập"}</span>

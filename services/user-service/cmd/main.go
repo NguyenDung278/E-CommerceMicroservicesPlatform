@@ -31,6 +31,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/migrations"
 	"github.com/labstack/echo-contrib/echoprometheus"
 	"google.golang.org/grpc"
@@ -98,7 +99,11 @@ func main() {
 
 	// 6. Dependency injection: repo → service → handler.
 	emailSender := email.NewSender(cfg.SMTP, log)
+	telegramSender := telegramsender.NewSender(cfg.Telegram, log)
 	oauthRepo := repository.NewOAuthAccountRepository(db)
+	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
+	addressRepo := repository.NewAddressRepository(db)
+	addressService := service.NewAddressService(addressRepo)
 	oauthClient := service.NewOAuthProviderClient(cfg.OAuth)
 	userService := service.NewUserService(
 		userRepo,
@@ -106,13 +111,14 @@ func main() {
 		cfg.JWT.Expiration,
 		service.WithEmailSender(emailSender),
 		service.WithOAuthAccountRepository(oauthRepo),
+		service.WithPhoneVerificationRepository(phoneVerificationRepo),
+		service.WithAddressService(addressService),
+		service.WithTelegramSender(telegramSender),
+		service.WithTelegramConfig(cfg.Telegram),
 		service.WithOAuthProviderClient(oauthClient),
 		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
 	)
 	userHandler := handler.NewUserHandler(userService)
-
-	addressRepo := repository.NewAddressRepository(db)
-	addressService := service.NewAddressService(addressRepo)
 	addressHandler := handler.NewAddressHandler(addressService)
 
 	// 7. Set up Echo and register routes.
