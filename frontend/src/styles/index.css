@@ -29,3 +29,8 @@
 
 /* Shared global styles still used across routes/components */
 @import "./shared.css";
+
+/* Tailwind utilities for Stitch-derived surfaces. Intentionally skip preflight
+   so existing screens keep their current base styling. */
+@tailwind components;
+@tailwind utilities;

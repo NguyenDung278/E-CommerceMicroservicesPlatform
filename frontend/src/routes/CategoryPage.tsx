@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { ShopMenPage } from "../features/shop-men/ShopMenPage";
 import { ProductCard } from "../ui/product/ProductCard";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
@@ -9,10 +10,19 @@ import { formatCurrency } from "../utils/format";
 import "./CategoryPage.css";
 
 export function CategoryPage() {
-  const navigate = useNavigate();
-  const { addItem } = useCart();
   const { categoryName = "" } = useParams();
   const category = decodeURIComponent(categoryName);
+
+  if (category === "Shop Men") {
+    return <ShopMenPage />;
+  }
+
+  return <DefaultCategoryPage category={category} />;
+}
+
+function DefaultCategoryPage({ category }: { category: string }) {
+  const navigate = useNavigate();
+  const { addItem } = useCart();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [feedback, setFeedback] = useState("");

@@ -192,7 +192,7 @@ func (s *UserService) sendPasswordResetEmail(user *model.User, token string) err
 func (s *UserService) buildFrontendLink(path, token string) string {
 	baseURL := strings.TrimRight(strings.TrimSpace(s.frontendBaseURL), "/")
 	if baseURL == "" {
-		baseURL = "http://localhost:4173"
+		baseURL = "http://localhost:5174"
 	}
 
 	return fmt.Sprintf("%s%s?token=%s", baseURL, path, url.QueryEscape(token))

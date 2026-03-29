@@ -23,9 +23,9 @@ export function AppLayout() {
   const transactionalNavigation = categoryNavigation
     .filter((item) => item.category)
     .map((item) => ({
-    label: item.label,
-    to: item.to
-  }));
+      label: item.label,
+      to: item.to
+    }));
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const accountLabel = isAuthenticated ? "Account" : "Login";
   const profileDisplayName = getUserDisplayName(user);
@@ -33,39 +33,52 @@ export function AppLayout() {
   const currentCategory =
     location.pathname.startsWith("/categories/") ? decodeURIComponent(location.pathname.replace("/categories/", "")) : "";
 
+  const shellClassName = isTransactionalSurface
+    ? "editorial-app-shell editorial-app-shell-transactional"
+    : "editorial-app-shell";
+  const headerClassName = isTransactionalSurface
+    ? "editorial-site-header editorial-site-header-transactional"
+    : "editorial-site-header";
+  const footerClassName = isTransactionalSurface
+    ? "editorial-site-footer editorial-site-footer-transactional"
+    : "editorial-site-footer";
+
   return (
-    <div className={isTransactionalSurface ? "editorial-app-shell editorial-app-shell-transactional" : "editorial-app-shell"}>
-      <header className={isTransactionalSurface ? "editorial-site-header editorial-site-header-transactional" : "editorial-site-header"}>
+    <div className={shellClassName}>
+      <header className={headerClassName}>
         <div className="editorial-header-inner">
-          <div className="editorial-header-left">
-            <NavLink className={isTransactionalSurface ? "editorial-brand-mark editorial-brand-mark-transactional" : "editorial-brand-mark"} to="/">
+          <div className="editorial-header-brand-slot">
+            <NavLink
+              className={isTransactionalSurface ? "editorial-brand-mark editorial-brand-mark-transactional" : "editorial-brand-mark"}
+              to="/"
+            >
               ND Shop
             </NavLink>
+          </div>
 
-            <nav className="editorial-main-nav" aria-label="Main navigation">
-              {isTransactionalSurface
-                ? transactionalNavigation.map((item) => (
-                    <Link className="editorial-nav-link editorial-nav-link-transactional" key={item.label} to={item.to}>
+          <nav className="editorial-main-nav" aria-label="Main navigation">
+            {isTransactionalSurface
+              ? transactionalNavigation.map((item) => (
+                  <Link className="editorial-nav-link editorial-nav-link-transactional" key={item.label} to={item.to}>
+                    {item.label}
+                  </Link>
+                ))
+              : categoryNavigation.map((item) => {
+                  const isActive = item.category
+                    ? currentCategory === item.category
+                    : location.pathname === "/products";
+
+                  return (
+                    <Link
+                      className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
+                      key={item.label}
+                      to={item.to}
+                    >
                       {item.label}
                     </Link>
-                  ))
-                : categoryNavigation.map((item) => {
-                    const isActive = item.category
-                      ? currentCategory === item.category
-                      : location.pathname === "/products";
-
-                    return (
-                      <Link
-                        className={isActive ? "editorial-nav-link editorial-nav-link-active" : "editorial-nav-link"}
-                        key={item.label}
-                        to={item.to}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-            </nav>
-          </div>
+                  );
+                })}
+          </nav>
 
           <div className="editorial-header-actions">
             {isTransactionalSurface ? (
@@ -127,7 +140,7 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      <footer className={isTransactionalSurface ? "editorial-site-footer editorial-site-footer-transactional" : "editorial-site-footer"}>
+      <footer className={footerClassName}>
         <div className="editorial-footer-inner">
           <div className="editorial-footer-brand">
             <strong>ND Shop</strong>

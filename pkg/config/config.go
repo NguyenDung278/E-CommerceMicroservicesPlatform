@@ -241,7 +241,7 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("services.cart_service", "cart-service:8083")
 	v.SetDefault("services.order_service", "order-service:8084")
 	v.SetDefault("services.payment_service", "payment-service:8085")
-	v.SetDefault("frontend.base_url", "http://localhost:4173")
+	v.SetDefault("frontend.base_url", "http://localhost:5174")
 	v.SetDefault("payment_gateway.webhook_secret", "dev-momo-secret")
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:4173/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")

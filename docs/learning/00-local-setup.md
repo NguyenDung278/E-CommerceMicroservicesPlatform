@@ -90,7 +90,7 @@ make frontend-install
 make frontend-dev
 ```
 
-Frontend dev mặc định chạy ở `http://localhost:5173`.
+Frontend dev mặc định chạy ở `http://localhost:5174`.
 
 Nếu cần trỏ sang gateway khác:
 

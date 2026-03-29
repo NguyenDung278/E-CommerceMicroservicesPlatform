@@ -128,7 +128,7 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 		repo:            repo,
 		jwtSecret:       jwtSecret,
 		jwtExpiry:       jwtExpiry,
-		frontendBaseURL: "http://localhost:4173",
+		frontendBaseURL: "http://localhost:5174",
 		telegramCfg: config.TelegramConfig{
 			APIBaseURL:               "https://api.telegram.org",
 			OTPMessageTTLSeconds:     300,

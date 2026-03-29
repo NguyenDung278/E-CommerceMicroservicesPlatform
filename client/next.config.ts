@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
         hostname: "placehold.co",
       },
       {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
+      {
         protocol: "http",
         hostname: "localhost",
       },

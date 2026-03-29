@@ -442,7 +442,7 @@ func (s *UserService) resolveOAuthCallbackURL(provider, requestOrigin string) (s
 func (s *UserService) resolveFrontendOrigin(requestOrigin string) string {
 	defaultOrigin := extractOrigin(s.frontendBaseURL)
 	if defaultOrigin == "" {
-		defaultOrigin = "http://localhost:4173"
+		defaultOrigin = "http://localhost:5174"
 	}
 
 	requestOrigin = strings.TrimSpace(requestOrigin)
