@@ -5,9 +5,9 @@ import (
 	"time"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"go.uber.org/zap"
 
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
@@ -125,6 +125,8 @@ func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdatePro
 }
 
 func toProtoProduct(product *model.Product) *pb.Product {
+	// The current proto contract models price/time as float/string, so the gRPC
+	// adapter normalizes domain values into that transport shape here.
 	return &pb.Product{
 		Id:            product.ID,
 		Name:          product.Name,

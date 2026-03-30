@@ -4,6 +4,9 @@ package user;
 
 option go_package = "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto";
 
+// Source of truth for User gRPC contracts. Generated Go files in this
+// directory are derived from this schema and should not be edited manually.
+
 // Service definition
 service UserService {
   // User registration
@@ -12,10 +15,14 @@ service UserService {
   // User login
   rpc Login (LoginRequest) returns (LoginResponse);
   
-  // Get user profile
+  // Get user profile.
+  // Intended for the currently authenticated user; the concrete auth identity
+  // propagation strategy must stay aligned with the server implementation.
   rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
   
-  // Update user profile
+  // Update user profile.
+  // Like GetProfile, this RPC is only safe when caller identity propagation is
+  // well defined; request fields alone do not express that policy.
   rpc UpdateProfile (UpdateProfileRequest) returns (UpdateProfileResponse);
   
   // Get user by ID
@@ -30,7 +37,8 @@ message RegisterRequest {
   string last_name = 4;
 }
 
-// Registration response
+// Registration response.
+// Contains an auth token for interactive login-style flows; avoid logging it.
 message RegisterResponse {
   string token = 1;
   User user = 2;
@@ -42,7 +50,8 @@ message LoginRequest {
   string password = 2;
 }
 
-// Login response
+// Login response.
+// Contains an auth token for interactive login-style flows; avoid logging it.
 message LoginResponse {
   string token = 1;
   User user = 2;
@@ -80,7 +89,8 @@ message GetUserByIDResponse {
   User user = 1;
 }
 
-// User model
+// User model.
+// created_at / updated_at are currently serialized as strings by the Go server.
 message User {
   string id = 1;
   string email = 2;

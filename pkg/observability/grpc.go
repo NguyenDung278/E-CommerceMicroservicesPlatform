@@ -15,6 +15,10 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+// GRPCUnaryServerInterceptor extracts trace context and request metadata from
+// incoming gRPC metadata, opens a server span, and records the final gRPC
+// status. It intentionally stays transport-focused and does not inject domain
+// identity values such as userID into the context.
 func GRPCUnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor {
 	tracer := otel.Tracer(serviceName)
 
@@ -45,6 +49,9 @@ func GRPCUnaryServerInterceptor(serviceName string) grpc.UnaryServerInterceptor 
 	}
 }
 
+// GRPCUnaryClientInterceptor propagates the current trace context and request
+// ID to outbound gRPC calls so logs and spans can be correlated across service
+// boundaries.
 func GRPCUnaryClientInterceptor(serviceName string) grpc.UnaryClientInterceptor {
 	tracer := otel.Tracer(serviceName)
 

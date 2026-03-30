@@ -46,6 +46,10 @@ func NewRateLimiter(requestsPerSecond int, burst int, expiresIn time.Duration) e
 	})
 }
 
+// NewRedisBackedRateLimiter coordinates rate limits through Redis so multiple
+// replicas can share the same limiter state. If Redis is unavailable during
+// startup or for a particular request, the middleware degrades to the local
+// in-memory limiter to preserve availability, at the cost of global consistency.
 func NewRedisBackedRateLimiter(namespace string, redisCfg config.RedisConfig, log *zap.Logger, requestsPerSecond int, burst int, expiresIn time.Duration) echo.MiddlewareFunc {
 	fallback := NewRateLimiter(requestsPerSecond, burst, expiresIn)
 	if strings.TrimSpace(namespace) == "" {

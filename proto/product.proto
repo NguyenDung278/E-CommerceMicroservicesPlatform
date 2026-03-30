@@ -4,6 +4,9 @@ package product;
 
 option go_package = "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto";
 
+// Source of truth for Product gRPC contracts. Generated Go files in this
+// directory are derived from this schema and should not be edited manually.
+
 // Service definition
 service ProductService {
   // Get all products
@@ -25,7 +28,10 @@ service ProductService {
   rpc SearchProducts (SearchProductsRequest) returns (SearchProductsResponse);
 }
 
-// Get products request
+// Get products request.
+//
+// NOTE: This is offset/page-style pagination, which is different from the
+// cursor-based shape used by some HTTP catalog endpoints in the repo.
 message GetProductsRequest {
   int32 page = 1;
   int32 limit = 2;
@@ -66,7 +72,12 @@ message CreateProductResponse {
   Product product = 1;
 }
 
-// Update product request
+// Update product request.
+//
+// IMPORTANT: Because this schema uses plain proto3 scalar fields (string/float/
+// int32) instead of optional/wrapper types, the contract behaves closer to a
+// full snapshot update than a partial patch update. Callers should be careful
+// not to overwrite fields unintentionally with zero values.
 message UpdateProductRequest {
   string product_id = 1;
   string name = 2;
@@ -107,7 +118,13 @@ message SearchProductsResponse {
   int32 limit = 4;
 }
 
-// Product model
+// Product model.
+//
+// Compatibility note:
+// - price is currently encoded as float, which is convenient but not ideal for money
+// - created_at / updated_at are ISO-8601 strings emitted by the current Go server
+// Future improvements should prefer additive migration instead of changing the
+// meaning or type of these existing fields in place.
 message Product {
   string id = 1;
   string name = 2;

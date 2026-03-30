@@ -140,36 +140,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		return nil, err
 	}
 
-	now := time.Now()
-	order := &model.Order{
-		ID:              uuid.New().String(),
-		UserID:          userID,
-		Status:          model.OrderStatusPending,
-		Items:           make([]model.OrderItem, 0, len(quote.Items)),
-		CouponCode:      quote.CouponCode,
-		SubtotalPrice:   quote.SubtotalPrice,
-		DiscountAmount:  quote.DiscountAmount,
-		ShippingMethod:  quote.ShippingMethod,
-		ShippingFee:     quote.ShippingFee,
-		ShippingAddress: normalizeShippingAddress(req.ShippingAddress),
-		TotalPrice:      quote.TotalPrice,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	}
+	order := newOrderFromQuote(userID, req, quote, time.Now())
 
-	for _, item := range quote.Items {
-		orderItem := model.OrderItem{
-			ID:        uuid.New().String(),
-			OrderID:   order.ID,
-			ProductID: item.ProductID,
-			Name:      item.Name,
-			Price:     item.Price,
-			Quantity:  item.Quantity,
-		}
-		order.Items = append(order.Items, orderItem)
-	}
-
-	if err := s.repo.Create(ctx, order); err != nil {
+	if err := s.persistCreatedOrder(ctx, requestLog, order); err != nil {
 		outcome = appobs.OutcomeFromError(
 			err,
 			ErrCouponNotFound,
@@ -178,25 +151,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 			ErrCouponMinimumNotMet,
 			ErrCouponUsageLimit,
 		)
-		if outcome == appobs.OutcomeBusinessError {
-			requestLog.Warn("create order failed while persisting business state",
-				zap.String("order_id", order.ID),
-				zap.String("coupon_code", order.CouponCode),
-				zap.Error(err),
-			)
-		} else {
-			requestLog.Error("create order failed while persisting order",
-				zap.String("order_id", order.ID),
-				zap.Error(err),
-			)
-		}
-		if errors.Is(err, repository.ErrCouponNotFound) ||
-			errors.Is(err, repository.ErrCouponInactive) ||
-			errors.Is(err, repository.ErrCouponExpired) ||
-			errors.Is(err, repository.ErrCouponMinimumNotMet) ||
-			errors.Is(err, repository.ErrCouponUsageLimitReached) {
-			return nil, err
-		}
 		return nil, err
 	}
 
@@ -464,15 +418,9 @@ func (s *OrderService) ListPopularProducts(ctx context.Context, limit int) ([]mo
 }
 
 func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderRequest) (*pricedOrderQuote, error) {
-	if len(req.Items) == 0 {
-		return nil, ErrEmptyOrder
-	}
-	shippingMethod, err := normalizeShippingMethod(req.ShippingMethod)
+	shippingMethod, err := validateOrderRequest(req)
 	if err != nil {
 		return nil, err
-	}
-	if shippingMethod != string(model.ShippingMethodPickup) && normalizeShippingAddress(req.ShippingAddress) == nil {
-		return nil, ErrShippingAddressRequired
 	}
 
 	quote := &pricedOrderQuote{
@@ -482,35 +430,13 @@ func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderReques
 
 	var subtotal float64
 	for _, item := range req.Items {
-		product, err := s.productClient.GetProduct(ctx, item.ProductID)
+		quotedItem, err := s.quoteOrderItem(ctx, item)
 		if err != nil {
-			switch grpcstatus.Code(err) {
-			case codes.NotFound:
-				return nil, fmt.Errorf("%w: %s", ErrProductNotFound, item.ProductID)
-			case codes.InvalidArgument:
-				return nil, fmt.Errorf("%w: %s", ErrProductUnavailable, item.ProductID)
-			default:
-				return nil, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
-			}
+			return nil, err
 		}
 
-		if product.StockQuantity < int32(item.Quantity) {
-			return nil, fmt.Errorf(
-				"%w: product %s only has %d item(s)",
-				ErrInsufficientStock,
-				product.Name,
-				product.StockQuantity,
-			)
-		}
-
-		price := float64(product.Price)
-		quote.Items = append(quote.Items, pricedOrderItem{
-			ProductID: item.ProductID,
-			Name:      product.Name,
-			Price:     price,
-			Quantity:  item.Quantity,
-		})
-		subtotal += price * float64(item.Quantity)
+		quote.Items = append(quote.Items, quotedItem)
+		subtotal += quotedItem.Price * float64(quotedItem.Quantity)
 	}
 
 	quote.SubtotalPrice = roundCurrency(subtotal)
@@ -526,10 +452,7 @@ func (s *OrderService) quoteOrder(ctx context.Context, req dto.CreateOrderReques
 		return nil, err
 	}
 
-	quote.CouponCode = coupon.Code
-	quote.CouponDescription = strings.TrimSpace(coupon.Description)
-	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, quote.SubtotalPrice))
-	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount + quote.ShippingFee)
+	applyCouponToQuote(quote, coupon)
 
 	return quote, nil
 }
@@ -701,7 +624,7 @@ func roundCurrency(value float64) float64 {
 
 func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
 	previousStatus := order.Status
-	if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message); err != nil {
+	if err := s.markOrderCancelled(ctx, order, actorID, actorRole, message); err != nil {
 		appobs.RecordStateTransition("order-service", "order", string(previousStatus), string(model.OrderStatusCancelled), appobs.OutcomeSystemError)
 		return err
 	}
@@ -731,6 +654,141 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 		CreatedAt: time.Now(),
 	})
 
+	s.restoreCancelledOrderStock(ctx, order)
+
+	s.publishCancelEvent(ctx, order)
+	return nil
+}
+
+func newOrderFromQuote(userID string, req dto.CreateOrderRequest, quote *pricedOrderQuote, now time.Time) *model.Order {
+	orderID := uuid.New().String()
+
+	return &model.Order{
+		ID:              orderID,
+		UserID:          userID,
+		Status:          model.OrderStatusPending,
+		Items:           buildOrderItems(orderID, quote.Items),
+		CouponCode:      quote.CouponCode,
+		SubtotalPrice:   quote.SubtotalPrice,
+		DiscountAmount:  quote.DiscountAmount,
+		ShippingMethod:  quote.ShippingMethod,
+		ShippingFee:     quote.ShippingFee,
+		ShippingAddress: normalizeShippingAddress(req.ShippingAddress),
+		TotalPrice:      quote.TotalPrice,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+}
+
+func buildOrderItems(orderID string, items []pricedOrderItem) []model.OrderItem {
+	orderItems := make([]model.OrderItem, 0, len(items))
+	for _, item := range items {
+		orderItems = append(orderItems, model.OrderItem{
+			ID:        uuid.New().String(),
+			OrderID:   orderID,
+			ProductID: item.ProductID,
+			Name:      item.Name,
+			Price:     item.Price,
+			Quantity:  item.Quantity,
+		})
+	}
+
+	return orderItems
+}
+
+func (s *OrderService) persistCreatedOrder(ctx context.Context, requestLog *zap.Logger, order *model.Order) error {
+	if err := s.repo.Create(ctx, order); err != nil {
+		logCreateOrderPersistenceError(requestLog, order, err)
+		return err
+	}
+
+	return nil
+}
+
+func logCreateOrderPersistenceError(requestLog *zap.Logger, order *model.Order, err error) {
+	if isCouponError(err) {
+		requestLog.Warn("create order failed while persisting business state",
+			zap.String("order_id", order.ID),
+			zap.String("coupon_code", order.CouponCode),
+			zap.Error(err),
+		)
+		return
+	}
+
+	requestLog.Error("create order failed while persisting order",
+		zap.String("order_id", order.ID),
+		zap.Error(err),
+	)
+}
+
+func validateOrderRequest(req dto.CreateOrderRequest) (string, error) {
+	if len(req.Items) == 0 {
+		return "", ErrEmptyOrder
+	}
+
+	shippingMethod, err := normalizeShippingMethod(req.ShippingMethod)
+	if err != nil {
+		return "", err
+	}
+	if shippingMethod != string(model.ShippingMethodPickup) && normalizeShippingAddress(req.ShippingAddress) == nil {
+		return "", ErrShippingAddressRequired
+	}
+
+	return shippingMethod, nil
+}
+
+// quoteOrderItem keeps product lookup and stock validation in one place so
+// CreateOrder and PreviewOrder share exactly the same pricing rules.
+func (s *OrderService) quoteOrderItem(ctx context.Context, item dto.OrderItemRequest) (pricedOrderItem, error) {
+	product, err := s.productClient.GetProduct(ctx, item.ProductID)
+	if err != nil {
+		switch grpcstatus.Code(err) {
+		case codes.NotFound:
+			return pricedOrderItem{}, fmt.Errorf("%w: %s", ErrProductNotFound, item.ProductID)
+		case codes.InvalidArgument:
+			return pricedOrderItem{}, fmt.Errorf("%w: %s", ErrProductUnavailable, item.ProductID)
+		default:
+			return pricedOrderItem{}, fmt.Errorf("failed to fetch product %s: %w", item.ProductID, err)
+		}
+	}
+
+	if product.StockQuantity < int32(item.Quantity) {
+		return pricedOrderItem{}, fmt.Errorf(
+			"%w: product %s only has %d item(s)",
+			ErrInsufficientStock,
+			product.Name,
+			product.StockQuantity,
+		)
+	}
+
+	return pricedOrderItem{
+		ProductID: item.ProductID,
+		Name:      product.Name,
+		Price:     float64(product.Price),
+		Quantity:  item.Quantity,
+	}, nil
+}
+
+func applyCouponToQuote(quote *pricedOrderQuote, coupon *model.Coupon) {
+	quote.CouponCode = coupon.Code
+	quote.CouponDescription = strings.TrimSpace(coupon.Description)
+	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, quote.SubtotalPrice))
+	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount + quote.ShippingFee)
+}
+
+func isCouponError(err error) bool {
+	return errors.Is(err, repository.ErrCouponNotFound) ||
+		errors.Is(err, repository.ErrCouponInactive) ||
+		errors.Is(err, repository.ErrCouponExpired) ||
+		errors.Is(err, repository.ErrCouponMinimumNotMet) ||
+		errors.Is(err, repository.ErrCouponUsageLimitReached)
+}
+
+func (s *OrderService) markOrderCancelled(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
+	return s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message)
+}
+
+func (s *OrderService) restoreCancelledOrderStock(ctx context.Context, order *model.Order) {
 	for _, item := range order.Items {
 		stockRestoreStartedAt := time.Now()
 		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
@@ -746,9 +804,6 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 		}
 		appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSuccess, time.Since(stockRestoreStartedAt))
 	}
-
-	s.publishCancelEvent(ctx, order)
-	return nil
 }
 
 func (s *OrderService) recordAuditEntry(ctx context.Context, entry *model.AuditEntry) {

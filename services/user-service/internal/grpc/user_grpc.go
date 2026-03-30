@@ -104,7 +104,10 @@ func (s *UserGRPCServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.L
 
 // GetProfile handles getting user profile via gRPC
 func (s *UserGRPCServer) GetProfile(ctx context.Context, req *pb.GetProfileRequest) (*pb.GetProfileResponse, error) {
-	// Get user ID from context (extracted from JWT by interceptor)
+	// NOTE: Current behavior relies on user identity already being injected into
+	// the gRPC context by some upstream auth layer. The shared observability
+	// interceptor only propagates tracing/request metadata, not domain auth.
+	// Keep the proto contract and auth strategy aligned before expanding this RPC.
 	userID, ok := ctx.Value("userID").(string)
 	if !ok || userID == "" {
 		return nil, status.Error(codes.Unauthenticated, "user ID not found in context")
@@ -137,7 +140,8 @@ func (s *UserGRPCServer) GetProfile(ctx context.Context, req *pb.GetProfileReque
 
 // UpdateProfile handles updating user profile via gRPC
 func (s *UserGRPCServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest) (*pb.UpdateProfileResponse, error) {
-	// Get user ID from context (extracted from JWT by interceptor)
+	// See GetProfile: this RPC currently treats context identity as the source of
+	// truth, even though the proto message still carries user_id.
 	userID, ok := ctx.Value("userID").(string)
 	if !ok || userID == "" {
 		return nil, status.Error(codes.Unauthenticated, "user ID not found in context")

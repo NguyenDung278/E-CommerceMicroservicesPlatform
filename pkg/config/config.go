@@ -193,8 +193,10 @@ type JWTConfig struct {
 
 // Load reads configuration from environment variables and optional config files.
 //
-// PATTERN: Environment variables are prefixed with the service name (e.g., USER_SERVICE_SERVER_PORT).
-// This prevents collisions when multiple services run on the same host during development.
+// NOTE: Even though the function accepts serviceName, the current implementation
+// does not apply an environment-variable prefix (there is no v.SetEnvPrefix call).
+// Today, serviceName is only reused for defaults such as database.dbname.
+// Keep this in mind before assuming variables are namespaced per service.
 //
 // PRIORITY (highest to lowest):
 //  1. Environment variables

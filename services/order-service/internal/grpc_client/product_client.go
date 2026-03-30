@@ -82,6 +82,8 @@ func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quan
 	}
 
 	newStock := product.StockQuantity + int32(quantity)
+	// UpdateProduct currently behaves like a snapshot-style update, so we resend
+	// the fields we just read before applying the stock adjustment.
 	_, err = c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
 		ProductId:     productID,
 		Name:          product.Name,
