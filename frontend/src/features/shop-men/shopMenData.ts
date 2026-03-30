@@ -1,9 +1,3 @@
-export type ShopMenNavItem = {
-  label: string;
-  to: string;
-  active?: boolean;
-};
-
 export type ShopMenFilterOption = {
   label: string;
   active?: boolean;
@@ -22,16 +16,7 @@ export type ShopMenProduct = {
   imageUrl: string;
   imageAlt: string;
   badge?: ShopMenProductBadge;
-  offset?: boolean;
 };
-
-export const shopMenNavItems: ShopMenNavItem[] = [
-  { label: "Archive", to: "/products" },
-  { label: "Men", to: `/categories/${encodeURIComponent("Shop Men")}`, active: true },
-  { label: "Women", to: `/categories/${encodeURIComponent("Shop Women")}` },
-  { label: "Footwear", to: `/categories/${encodeURIComponent("Footwear")}` },
-  { label: "Accessories", to: `/categories/${encodeURIComponent("Accessories")}` }
-];
 
 export const shopMenCategoryFilters: ShopMenFilterOption[] = [
   { label: "Shirts", active: true },
@@ -112,14 +97,3 @@ export const shopMenProducts: ShopMenProduct[] = [
       "Close-up of khaki trousers texture with precise pocket detailing and premium hardware"
   }
 ];
-
-export const shopMenFooterLinks = [
-  { label: "Journal", href: "#" },
-  { label: "Sustainability", href: "#" },
-  { label: "Shipping", href: "#" },
-  { label: "Returns", href: "#" },
-  { label: "Privacy", href: "#" }
-];
-
-export const shopMenHeroImage =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuACWMir-mH0L8UXbUXQWypp-pFR6ldBwMeB_P57xJ4h6lF91JgCYYyEJ27pPIbRuST3wzOd8tibscQ-NbIurAXAyGOUWfZstI5mdT9d5_jh6VLXet-x-y-OPWmMV69qNvZALg2WhY1PVY_SFZnR1pxtNpFxR9lsyyLR7XmqRbJ_dhy0WQE2rK_YiUzI2TXstgAkQ537sWLyCCgyHe5Z2QW16TODc2jAY392leqTD0jFdmPyw689W_PhHTFoOURRakfD2ODeVuxVtb-u";

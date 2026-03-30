@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { ShopAccessoriesPage } from "../features/shop-accessories/ShopAccessoriesPage";
+import { ShopFootwearPage } from "../features/shop-footwear/ShopFootwearPage";
 import { ShopMenPage } from "../features/shop-men/ShopMenPage";
+import { ShopWomenPage } from "../features/shop-women/ShopWomenPage";
 import { ProductCard } from "../ui/product/ProductCard";
 import { useCart } from "../hooks/useCart";
 import { api, getErrorMessage } from "../lib/api";
 import type { Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
 import "./CategoryPage.css";
 
 export function CategoryPage() {
@@ -15,6 +17,18 @@ export function CategoryPage() {
 
   if (category === "Shop Men") {
     return <ShopMenPage />;
+  }
+
+  if (category === "Shop Women") {
+    return <ShopWomenPage />;
+  }
+
+  if (category === "Footwear") {
+    return <ShopFootwearPage />;
+  }
+
+  if (category === "Accessories") {
+    return <ShopAccessoriesPage />;
   }
 
   return <DefaultCategoryPage category={category} />;
@@ -72,101 +86,9 @@ function DefaultCategoryPage({ category }: { category: string }) {
     }
   }
 
-  const featuredProduct = products[0] ?? null;
-  const brands = Array.from(new Set(products.map((product) => product.brand).filter(Boolean))).slice(0, 4);
-  const priceRange =
-    products.length > 0
-      ? `${formatCurrency(Math.min(...products.map((product) => product.price)))} - ${formatCurrency(
-          Math.max(...products.map((product) => product.price))
-        )}`
-      : "Đang đồng bộ";
-  const totalStock = products.reduce((sum, product) => sum + product.stock, 0);
-  const categoryMetrics = [
-    {
-      label: "Active items",
-      value: `${products.length}`,
-      description: "Số lượng sản phẩm đang hiển thị cho danh mục này."
-    },
-    {
-      label: "Brands",
-      value: `${brands.length}`,
-      description: brands.length > 0 ? brands.join(", ") : "Sẽ hiện khi backend trả về dữ liệu."
-    },
-    {
-      label: "Price range",
-      value: priceRange,
-      description: `Tổng tồn kho hiện có: ${totalStock}`
-    }
-  ];
 
   return (
     <div className="page-stack category-page">
-      <section className="category-hero">
-        <div className="category-hero-panel">
-          <div className="category-hero-copy">
-            <span className="eyebrow">Category Focus</span>
-            <h1>{category}</h1>
-            <p>
-              Bộ sưu tập theo danh mục giúp bạn test nhanh luồng storefront thật mà vẫn giữ visual đồng bộ với phần
-              catalog và product detail mới.
-            </p>
-          </div>
-
-          {brands.length > 0 ? (
-            <div className="category-chip-row">
-              {brands.map((brand) => (
-                <span className="product-tag-chip" key={brand}>
-                  {brand}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="category-metric-grid">
-            {categoryMetrics.map((item) => (
-              <article className="summary-card category-metric-card" key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <p>{item.description}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="hero-actions">
-            <Link className="primary-link" to="/products">
-              Quay lại catalog
-            </Link>
-            {featuredProduct ? (
-              <Link className="secondary-link" to={`/products/${featuredProduct.id}`}>
-                Mở sản phẩm nổi bật
-              </Link>
-            ) : null}
-          </div>
-        </div>
-
-        <aside className="category-feature-card">
-          <div className="category-feature-media">
-            {featuredProduct?.image_urls[0] ?? featuredProduct?.image_url ? (
-              <img
-                alt={featuredProduct?.name || category}
-                src={featuredProduct?.image_urls[0] ?? featuredProduct?.image_url}
-              />
-            ) : (
-              <div className="category-feature-fallback">{category.slice(0, 1).toUpperCase()}</div>
-            )}
-          </div>
-
-          <div className="category-feature-copy">
-            <span className="section-kicker">Featured Item</span>
-            <strong>{featuredProduct?.name || "Đang chờ sản phẩm active"}</strong>
-            <p>
-              {featuredProduct
-                ? `${featuredProduct.brand || "ND Atelier"} • ${formatCurrency(featuredProduct.price)}`
-                : "Khi danh mục có sản phẩm active, màn này sẽ highlight item đầu tiên ngay tại đây."}
-            </p>
-          </div>
-        </aside>
-      </section>
 
       <section className="content-section category-results-section">
         <div className="section-heading category-results-head">
