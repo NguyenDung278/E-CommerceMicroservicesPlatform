@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
 
-import { useAuth } from "../hooks/useAuth";
-import { useOrderPayments } from "../hooks/useOrderPayments";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
-import { formatShortDate } from "../ui/account/accountConfig";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useOrderPayments } from "../features/account/hooks/useOrderPayments";
+import { formatShortDate } from "../features/account/utils/accountPresentation";
+import { useAuth } from "../features/auth/hooks/useAuth";
 import "./SecurityPage.css";
 
 type PasswordFormState = {
@@ -60,7 +60,7 @@ export function SecurityPage() {
   }
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="security-route">
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
@@ -213,6 +213,6 @@ export function SecurityPage() {
           </div>
         </section>
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }

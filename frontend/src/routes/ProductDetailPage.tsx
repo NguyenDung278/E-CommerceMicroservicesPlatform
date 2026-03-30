@@ -1,19 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage, isHttpError } from "../lib/api";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { useCart } from "../features/cart/hooks/useCart";
+import { api, getErrorMessage, isHttpError } from "../shared/api";
 import type {
   Product,
   ProductReview,
   ProductReviewList,
   ProductReviewSummary,
   ProductVariant
-} from "../types/api";
-import { formatCurrency } from "../utils/format";
-import "../ui/form/FormField.css";
-import "../ui/product/ProductCard.css";
+} from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
+import "../shared/components/form/FormField.css";
+import "../shared/components/product/ProductCard.css";
 import "./ProductDetailPage.css";
 
 type ReviewFormState = {

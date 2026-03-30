@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { FormField } from "../ui/form/FormField";
-import { api, getErrorMessage } from "../lib/api";
-import { isStrongPassword } from "../utils/validation";
+import { FormField } from "../shared/components/form/FormField";
+import { api, getErrorMessage } from "../shared/api";
+import { isStrongPassword } from "../shared/utils/validation";
 import "./AuthPages.css";
 
 export function ResetPasswordPage() {

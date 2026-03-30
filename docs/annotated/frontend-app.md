@@ -1,111 +1,211 @@
-# Annotated: Frontend App
+# Annotated: Frontend App Entry And Route Shell
 
-Frontend trong repo này không chỉ là UI demo. Nó còn là nơi gom các flow end-to-end quan trọng như auth, guest cart, checkout và admin catalog.
+Tài liệu này tập trung vào lớp “khởi động ứng dụng” của frontend React + Vite: từ lúc React mount, qua provider tree, tới route tree, layout shell và logic chặn quyền.
 
-File nên đọc:
+File nên mở song song:
 
-- `frontend/src/App.tsx`
-- `frontend/src/contexts/AuthContext.tsx`
-- `frontend/src/contexts/CartContext.tsx`
-- `frontend/src/lib/api.ts`
+- `frontend/src/app/main.tsx`
+- `frontend/src/app/App.tsx`
+- `frontend/src/app/providers/AppProviders.tsx`
+- `frontend/src/app/router/ProtectedRoute.tsx`
+- `frontend/src/app/router/ScrollToTop.tsx`
+- `frontend/src/app/layout/AppLayout.tsx`
 
-## 1. Router và provider tree trong `App.tsx`
+## 1. `main.tsx`: entrypoint nên càng mỏng càng tốt
 
-### Block `App.tsx:22-77`
+### Code đang làm gì
 
-Thứ tự wrapper hiện tại là:
+- import CSS global từ `styles/index.css`
+- mount `App` bằng `createRoot`
+- bọc `App` trong `StrictMode`
+
+### Vì sao code như vậy
+
+`main.tsx` được giữ rất nhỏ để:
+
+- làm “điểm bắt đầu” rõ ràng cho người mới
+- tránh nhồi business logic vào entrypoint
+- dồn phần orchestration thật sang `App.tsx` và `AppProviders.tsx`
+
+### Nếu viết cách khác
+
+Nếu nhét provider, router, side effect và config runtime vào ngay `main.tsx`, file mở đầu sẽ trở nên cồng kềnh rất nhanh. Cách tổ chức hiện tại tốt hơn cho onboarding.
+
+## 2. `App.tsx`: bản đồ runtime thật của frontend
+
+### Route groups thực tế
+
+| Nhóm | Route | Ghi chú |
+| --- | --- | --- |
+| Auth/public | `/login`, `/register`, `/forgot-password`, `/auth/callback`, `/verify-email`, `/reset-password` | không bọc `AppLayout` |
+| Storefront | `/`, `/products`, `/products/:productId`, `/categories/:categoryName`, `/cart`, `/checkout` | dùng `AppLayout` |
+| Account protected | `/profile`, `/myorders`, `/addresses`, `/orders/:orderId`, `/payments`, `/security`, `/notifications` | bọc `ProtectedRoute` |
+| Admin protected | `/admin` | bọc `ProtectedRoute allowStaff` |
+
+### Điều đáng học
+
+- public flow và protected flow được tách rất rõ
+- route account cũ như `/profile/orders` được redirect về route mới, giúp giữ backward compatibility về navigation
+- `AppLayout` chỉ bọc phần có shell chung, nên auth pages không bị ép dùng cùng layout với storefront
+
+### Vì sao đây là cách tốt
+
+Nó biến `App.tsx` thành “runtime contract” của UI:
+
+- nhìn một file là biết app có những surface nào
+- route guard và layout guard không bị phân tán trong từng page
+- thêm route mới dễ hơn và ít duplication hơn
+
+## 3. `AppProviders.tsx`: dựng dependency graph theo đúng thứ tự
+
+Thứ tự hiện tại:
 
 1. `AuthProvider`
 2. `CartProvider`
-3. `BrowserRouter`
-4. `Routes`
 
-Ý nghĩa:
+### Vì sao auth phải đứng trên cart
 
-- auth state có trước để cart biết user đang guest hay authenticated
-- cart state có trước khi page render
-- route nào cần bảo vệ thì bọc bởi `ProtectedRoute`
+`CartProvider` cần biết:
 
-Route `/admin` dùng `allowStaff`, nghĩa là cả `admin` và `staff` đều có thể đi vào khu vực catalog management.
+- hiện có token không
+- đang là guest cart hay authenticated cart
+- khi login xong có cần merge guest cart vào server cart không
 
-## 2. Auth bootstrap trong `AuthContext.tsx`
+Nên nếu cart đứng trên auth, provider dưới sẽ thiếu thông tin quyết định quan trọng.
 
-### Block `AuthContext.tsx:50-112`
+### Khi nào nên dùng mẫu này
 
-Đây là block rất quan trọng:
+Dùng khi:
 
-- lấy token từ `useSessionToken`
-- nếu không có token thì reset user state
-- nếu có token nhưng chưa có user thì gọi `api.getProfile(token)`
-- nếu request profile fail thì xóa token
+- provider dưới phụ thuộc dữ liệu của provider trên
+- bạn muốn giữ dependency graph rõ ràng ngay ở root app
 
-Điều này tránh tình trạng frontend giữ token hỏng và tưởng rằng user vẫn login.
+## 4. `ProtectedRoute.tsx`: guard đặt đúng ở boundary router
 
-`startTransition(...)` được dùng để giảm cảm giác UI bị block khi cập nhật state từ network response.
+### Logic chính
 
-### Block `AuthContext.tsx:114-174`
+- nếu đang bootstrap session: hiển thị trạng thái chờ
+- nếu chưa authenticated: redirect về `/login` và giữ `from` trong `location.state`
+- nếu `allowStaff` mà user không đủ quyền: đẩy về `/`
+- nếu `requireAdmin` mà user không đủ quyền: đẩy về `/`
 
-Các action `register`, `login`, `logout`, `refreshProfile`, `updateProfile`, `resendVerificationEmail` đều đi qua API client tập trung. Nhờ vậy UI page không cần biết chi tiết HTTP.
+### Vì sao code như vậy
 
-## 3. Cart state và guest cart merge
+Đặt guard ở router boundary giúp:
 
-### Block `CartContext.tsx:34-112`
+- không để page render nửa chừng rồi mới phát hiện thiếu quyền
+- tránh lặp auth check ở nhiều page
+- giữ redirect sau login nhất quán
 
-Đây là điểm đáng đọc nhất của frontend:
+### Điều cần nhớ
 
-- nếu chưa login thì đọc cart từ local storage qua `guestCart`
-- nếu đã login thì fetch cart từ backend
-- nếu guest cart có item, context sẽ lần lượt gọi `api.addToCart(...)` để merge sang server cart
-- trong lúc merge, nó lưu `remainingGuestItems` để tránh mất trạng thái nếu request fail giữa chừng
+- `allowStaff` != `requireAdmin`
+- repo hiện dùng `allowStaff` cho `/admin`, tức cả `admin` và `staff` đều vào được admin surface
 
-Đây là block thể hiện rõ tư duy UX + resilience.
+## 5. `ScrollToTop.tsx`: utility nhỏ nhưng UX rất quan trọng
 
-### Block `CartContext.tsx:134-257`
+### Code đang làm gì
 
-Guest mode và authenticated mode được tách khá rõ:
+Khi `pathname` hoặc `search` đổi:
 
-- guest mode: đọc product trực tiếp rồi lưu cart ở client
-- authenticated mode: gọi `cart-service` qua API Gateway
+- gọi `window.scrollTo({ top: 0, left: 0, behavior: "auto" })`
 
-Điều này giúp người dùng có thể thêm sản phẩm trước khi login, rồi merge lại sau.
+### Vì sao nên tách file riêng
 
-## 4. API client tập trung
+Đây là side effect đúng kiểu utility component:
 
-### Block `api.ts:20-22`
+- không render UI
+- logic rất rõ
+- tránh lặp `scrollTo` trong từng page
 
-`apiBaseUrl` mặc định là rỗng, nghĩa là frontend ưu tiên gọi cùng origin như `/api/...`. Đây là lựa chọn tốt khi chạy sau reverse proxy.
+## 6. `AppLayout.tsx`: application shell, không phải business page
 
-### Block `api.ts:24-210`
+### Nó đang làm gì
 
-Các hàm `normalize...` giúp frontend chịu lỗi tốt hơn trước JSON response không hoàn toàn sạch hoặc thiếu field.
+- đọc `location` để biết đang ở storefront, transactional surface hay account surface
+- lấy `isAuthenticated`, `canAccessAdmin`, `logout`, `user` từ auth
+- lấy `itemCount` từ cart
+- sinh navigation theo context
+- hiển thị dev badge nếu user là dev account
+- render `Outlet` cho page thật
 
-### Block `api.ts:230-275`
+### Vì sao code như vậy
 
-`request<T>(...)` là wrapper fetch chung:
+Đây là pattern rất đáng học:
 
-- set headers
-- auto stringify JSON
-- thêm JWT nếu có
-- parse response envelope
-- ném `ApiError` nếu HTTP status hoặc `success` không đúng
+- shell điều hướng được tách khỏi page nghiệp vụ
+- checkout/order detail có thể dùng navigation gọn hơn để giảm nhiễu
+- account surface có cảm giác thống nhất mà không làm từng page tự lo header/footer
 
-### Block `api.ts:277-303`
+### Nếu viết cách khác
 
-`getErrorMessage(...)` map một số lỗi backend phổ biến sang thông báo dễ đọc bằng tiếng Việt.
+Nếu mỗi page tự render header/footer/nav:
 
-## 5. Flow frontend tổng quát
+- UI nhanh bị lệch nhau
+- sửa global navigation sẽ tốn công ở nhiều nơi
+- khó tạo cảm giác ứng dụng liền mạch
+
+## 7. Flow dữ liệu của lớp app shell
 
 ```mermaid
 flowchart TD
-    App[App.tsx] --> Auth[AuthProvider]
+    Main[main.tsx] --> App[App.tsx]
+    App --> Providers[AppProviders]
+    Providers --> Auth[AuthProvider]
     Auth --> Cart[CartProvider]
-    Cart --> Pages[Pages + Components]
-    Pages --> API[api.ts]
-    API --> Gateway[API Gateway]
+    Cart --> Router[BrowserRouter]
+    Router --> Guard[ProtectedRoute]
+    Guard --> Layout[AppLayout]
+    Layout --> Outlet[Route Page]
 ```
 
-## 6. Khi sửa frontend, nên nhớ
+## 8. Vì sao lớp app shell hiện tại dễ maintain hơn cách “thông thường”
 
-- auth state không chỉ là token, mà còn có bootstrap profile
-- cart có hai chế độ: guest và logged-in
-- error message đã có lớp normalize trung tâm, đừng lặp lại mapping ở từng page
+### Cách hiện tại
+
+- route tree rõ
+- provider tree rõ
+- layout shell rõ
+- guard rõ
+
+### Cách kém tối ưu hơn thường gặp
+
+- `main.tsx` làm quá nhiều việc
+- page vừa lo layout vừa lo auth
+- component con tự lấy thông tin global state không có provider rõ ràng
+- route protected được xử lý bằng `if (!user) return null` rải rác ở từng page
+
+Nhược điểm của cách kém tối ưu:
+
+- khó trace bug
+- dễ duplication
+- thay đổi một policy auth/layout phải chạm nhiều file
+
+## 9. Điểm cần ghi nhớ khi học
+
+- `main.tsx` là nơi framework boot, không phải nơi business logic
+- `App.tsx` là bản đồ route thật của frontend
+- `AppProviders.tsx` cho biết provider nào phụ thuộc provider nào
+- `ProtectedRoute.tsx` là boundary quyền truy cập
+- `AppLayout.tsx` là shell điều hướng, không phải nơi fetch nghiệp vụ
+
+## 10. Lỗi thường gặp
+
+- thêm route protected nhưng quên bọc `ProtectedRoute`
+- nghĩ `AppLayout` là nơi hợp lý để nhét logic fetch data của page
+- đặt provider sai thứ tự làm auth/cart bootstrap lệch
+- sửa page nhưng quên route thật nằm ở `App.tsx`
+
+## 11. Cách debug
+
+1. Route không vào được: xem `App.tsx` và `ProtectedRoute.tsx`
+2. Header/nav hiện sai: xem `AppLayout.tsx` và các điều kiện phân surface
+3. Cart count hoặc auth badge sai: trace `AppLayout -> useAuth/useCart -> provider`
+4. Chuyển route nhưng scroll không reset: xem `ScrollToTop.tsx`
+
+## 12. Mối liên hệ với file khác
+
+- [frontend-source-map.md](./frontend-source-map.md)
+- [frontend-auth-cart-providers.md](./frontend-auth-cart-providers.md)
+- [frontend-api-layer.md](./frontend-api-layer.md)
+- [frontend-routes-and-flows.md](./frontend-routes-and-flows.md)

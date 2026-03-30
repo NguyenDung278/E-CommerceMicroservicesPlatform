@@ -1,18 +1,18 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useOrderPayments } from "../hooks/useOrderPayments";
-import type { Payment } from "../types/api";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useOrderPayments } from "../features/account/hooks/useOrderPayments";
 import {
   buildTileLabel,
   formatShortDate,
   formatShortOrderId,
   getPaymentStatusTone,
   humanizeToken
-} from "../ui/account/accountConfig";
-import { formatCurrency, formatDateTime, formatStatusLabel } from "../utils/format";
+} from "../features/account/utils/accountPresentation";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import type { Payment } from "../shared/types/api";
+import { formatCurrency, formatDateTime, formatStatusLabel } from "../shared/utils/format";
 import "./PaymentHistoryPage.css";
 
 type PaymentEntry = {
@@ -60,7 +60,7 @@ export function PaymentHistoryPage() {
   );
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="payments-route">
         <section className="payments-route-hero">
           <div className="payments-route-hero-copy">
@@ -211,7 +211,7 @@ export function PaymentHistoryPage() {
           )}
         </section>
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }
 

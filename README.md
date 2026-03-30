@@ -1,131 +1,322 @@
 # E-Commerce Platform
 
-Repo này là một nền tảng e-commerce demo theo kiến trúc Go microservices, có frontend chính React + Vite và bộ công cụ local runtime bằng Docker Compose. Mục tiêu chính là giúp developer mới hiểu cách một hệ thống commerce được tách thành nhiều service, cách các service giao tiếp với nhau, và cách đọc source có phương pháp.
+Repo này là một nền tảng thương mại điện tử nhiều service viết chủ yếu bằng Go. Runtime local mặc định đi qua `api-gateway`, dùng PostgreSQL làm nguồn dữ liệu chính, Redis cho cart và rate limit, RabbitMQ cho event bất đồng bộ, và có thêm MinIO, Elasticsearch, Prometheus, Grafana, Jaeger trong stack Docker Compose.
 
-## Tổng quan nhanh
+Trạng thái hiện tại của UI có hai nhánh:
 
-- `api-gateway`: cửa vào HTTP chung cho frontend và client.
-- `frontend/`: Ứng dụng React + Vite là UI path chính cho local development và verification end-to-end.
-- `client/`: Prototype Next.js ở trạng thái experimental, chưa nằm trong runtime mặc định.
-- `services/user-service`: đăng ký, đăng nhập, JWT, profile, address.
-- `services/product-service`: catalog, media upload, search, gRPC product lookup.
-- `services/cart-service`: giỏ hàng trên Redis, đồng bộ giá/stock qua gRPC.
-- `services/order-service`: quote, tạo đơn, coupon, shipping, audit, phát event.
-- `services/payment-service`: payment lifecycle, webhook, refund, phát event.
-- `services/notification-service`: worker consume RabbitMQ và gửi email.
-- `pkg/`: config, database, middleware, validation, observability dùng chung.
-- `deployments/docker/`: Docker Compose cho local development.
+- `frontend/`: React + Vite, là đường chạy local chính và là frontend đang được dùng để verify end-to-end.
+- `client/`: Next.js, đang ở trạng thái experimental, có nhiều route và provider hơn trước nhưng chưa nằm trong Docker Compose mặc định và chưa được CI build như `frontend/`.
 
-## Quick Start
+README này ưu tiên phản ánh đúng source code hiện tại. Một số tài liệu sâu hơn trong `docs/` vẫn hữu ích, nhưng nếu có chỗ lệch nhau thì hãy tin `cmd/main.go`, `internal/handler`, `internal/service`, `deployments/docker/` và cấu hình thật trong repo.
 
-1. Tạo file môi trường local-only:
+## Mục tiêu và kiến trúc tổng quan
+
+Hệ thống đang được tổ chức theo hướng microservices vừa đủ cho domain hiện tại:
+
+- `api-gateway` nhận HTTP từ UI/client và proxy xuống service tương ứng.
+- `user-service`, `product-service`, `order-service`, `payment-service` dùng PostgreSQL riêng theo database.
+- `cart-service` dùng Redis làm storage chính cho giỏ hàng.
+- `product-service` cung cấp gRPC cho `cart-service` và `order-service` để kiểm tra thông tin sản phẩm, giá và tồn kho.
+- `order-service` và `payment-service` phát event qua RabbitMQ; `notification-service` consume event để gửi email.
+- `product-service` có tích hợp MinIO cho media và Elasticsearch cho search, nhưng cả hai được code theo hướng optional/degrade gracefully.
+
+```mermaid
+flowchart LR
+    Browser[Frontend / Client] --> Gateway[api-gateway]
+    Gateway --> User[user-service]
+    Gateway --> Product[product-service]
+    Gateway --> Cart[cart-service]
+    Gateway --> Order[order-service]
+    Gateway --> Payment[payment-service]
+    Cart -->|gRPC| Product
+    Order -->|gRPC| Product
+    Order -->|event| RabbitMQ[(RabbitMQ)]
+    Payment -->|event| RabbitMQ
+    RabbitMQ --> Notification[notification-service]
+    User --> UserDB[(ecommerce_user)]
+    Product --> ProductDB[(ecommerce_product)]
+    Order --> OrderDB[(ecommerce_order)]
+    Payment --> PaymentDB[(ecommerce_payment)]
+    Cart --> Redis[(Redis)]
+    Product --> MinIO[(MinIO)]
+    Product --> Elasticsearch[(Elasticsearch)]
+```
+
+## Thành phần chính của hệ thống
+
+| Thành phần | Vai trò thực tế trong source |
+| --- | --- |
+| `api-gateway/` | Reverse proxy HTTP dùng Echo, có tracing, metrics, Redis-backed rate limiter, request logging, retry có chọn lọc cho method an toàn và circuit breaker trong proxy layer. |
+| `services/user-service/` | Đăng ký, đăng nhập, refresh token, verify email, forgot/reset password, Google OAuth, profile, đổi role user từ admin, quản lý địa chỉ, xác minh số điện thoại qua Telegram OTP, bootstrap tài khoản dev. |
+| `services/product-service/` | CRUD sản phẩm, upload ảnh, review, listing có cursor pagination và filter, gRPC product lookup, optional Elasticsearch sync, optional MinIO bucket, low-stock monitor chạy nền. |
+| `services/cart-service/` | Giỏ hàng trên Redis, xác thực dữ liệu sản phẩm qua gRPC product-service, hỗ trợ get/add/update/remove/clear cart cho user đã đăng nhập. |
+| `services/order-service/` | Preview order, tạo đơn, lấy lịch sử đơn, timeline/event, hủy đơn, báo cáo admin, coupon, cập nhật trạng thái admin, consume payment event để đồng bộ trạng thái đơn. |
+| `services/payment-service/` | Tạo payment, lấy lịch sử/detail, refund, webhook MoMo, publish payment event, gọi `order-service` qua HTTP để lấy dữ liệu đơn. |
+| `services/notification-service/` | Worker consume RabbitMQ và gửi email cho `order.created`, `order.cancelled`, `payment.completed`, `payment.failed`, `payment.refunded`. |
+| `pkg/` | Shared packages cho config, database, logger, middleware, observability, response, validation. |
+| `proto/` | Contract gRPC dùng giữa service, hiện rõ nhất ở product gRPC và user gRPC definitions. |
+| `frontend/` | Frontend React + Vite, có storefront, account area, checkout, admin UI và là entrypoint local chính. |
+| `client/` | Frontend Next.js App Router ở trạng thái experimental; có nhiều route và provider nhưng chưa nằm trong compose mặc định. |
+| `deployments/docker/` | Docker Compose, config YAML cho từng service, Prometheus, Grafana provisioning, Nginx edge config, Postgres init script. |
+
+## Hạ tầng, dữ liệu và trạng thái runtime
+
+| Thành phần | Trạng thái trong repo hiện tại |
+| --- | --- |
+| PostgreSQL | Một container Postgres, nhiều database: `ecommerce_user`, `ecommerce_product`, `ecommerce_order`, `ecommerce_payment`. Đây là nguồn dữ liệu chính. |
+| Redis | Dùng cho cart storage và rate limiter. `cart-service` không có PostgreSQL riêng. |
+| RabbitMQ | Dùng cho event bất đồng bộ giữa order/payment/notification. RabbitMQ management UI không được publish port trong compose hiện tại. |
+| MinIO | Được bật trong compose và được `product-service` dùng cho media upload nếu object storage enabled. |
+| Elasticsearch | Được bật trong compose; `product-service` có thể sync index khi startup nếu config bật search. |
+| Prometheus/Grafana | Có mặt trong compose và provisioning sẵn, nhưng hiện chưa publish port ra host nên không vào dashboard trực tiếp từ máy host nếu không sửa compose. |
+| Jaeger | Có publish `16686` và `4318`, dùng cho tracing local. |
+| ORM | Repo hiện không dùng ORM. Layer persistence đi qua `database/sql` + `lib/pq` + SQL migration. |
+| Migration/seed | `user-service`, `product-service`, `order-service`, `payment-service` có thư mục `migrations/` và auto-run migration khi service khởi động. Không có bộ seed chung; dữ liệu mẫu rõ nhất là bootstrap tài khoản dev ở `user-service`. |
+
+## Chạy nhanh bằng Docker Compose
+
+Điều kiện tối thiểu:
+
+- Docker Desktop hoặc Docker Engine + Docker Compose plugin
+- Go chỉ cần khi bạn muốn chạy test/build ngoài container
+- Node.js 22 nếu bạn muốn chạy `frontend/` hoặc `client/` trên host
+
+Luồng khuyến nghị cho người mới:
+
+1. Tạo file môi trường local:
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-2. Dựng toàn bộ stack backend + hạ tầng:
+2. Chỉnh các giá trị cần thiết trong `.env.local`.
+
+Các biến quan trọng nhất:
+
+- `POSTGRES_PASSWORD`, `JWT_SECRET`, `RABBITMQ_PASSWORD`
+- `FRONTEND_BASE_URL`
+- `SMTP_*` nếu muốn test email thật
+- `OAUTH_GOOGLE_*` nếu muốn test Google OAuth
+- `TELEGRAM_*` nếu muốn test phone verification qua Telegram
+
+3. Render lại compose để kiểm tra cấu hình:
 
 ```bash
 make docker-config
+```
+
+Lệnh này tạo file compose đã render tại `/tmp/ecommerce-compose.rendered.yaml`.
+
+4. Dựng stack:
+
+```bash
 make compose-up
 ```
 
-3. Chạy frontend chính ở chế độ dev nếu muốn:
+Lưu ý: `make compose-up` chạy ở chế độ attached, tức là terminal sẽ bám theo logs. Nếu muốn chạy nền, dùng raw Docker Compose:
+
+```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml up --build -d
+```
+
+5. Kiểm tra nhanh:
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:4173/health
+curl http://localhost/health
+```
+
+Các URL thường dùng khi compose đang chạy:
+
+- `http://localhost:4173`: frontend Docker, là UI nên mở đầu tiên
+- `http://localhost:8080`: API Gateway
+- `http://localhost`: Nginx edge trong `deployments/docker/nginx.conf`, hiện chỉ route `/api/*` và `/health`, không serve frontend
+- `http://localhost:9000`: MinIO API
+- `http://localhost:9001`: MinIO Console
+- `http://localhost:16686`: Jaeger UI
+- `http://localhost:9200`: Elasticsearch
+
+Điểm dễ nhầm:
+
+- `frontend` service chạy ở `4173` và tự proxy `/api` sang `api-gateway`
+- `nginx` service chạy ở `80` nhưng config hiện tại chỉ proxy API, không phải entrypoint chính cho UI
+- PostgreSQL, Redis, RabbitMQ, Prometheus và Grafana không publish port ra host trong compose hiện tại
+
+## Chạy frontend trên host để refactor UI
+
+Nếu bạn đang làm việc ở `frontend/` và muốn hot reload trực tiếp trên host:
 
 ```bash
 make frontend-install
 make frontend-dev
 ```
 
-4. Kiểm tra nhanh:
+Thực tế hiện tại:
+
+- Vite dev server chạy cứng trên `http://localhost:5174`
+- `frontend/vite.config.ts` proxy `/api` và `/health` sang `http://localhost:8080`
+- `frontend` Docker image lại serve bản build static ở `http://localhost:4173`
+
+Vì vậy, khi bạn đổi giữa Vite dev và frontend Docker, hãy chỉnh `FRONTEND_BASE_URL` cho khớp mode đang dùng:
+
+- dùng Vite dev: `FRONTEND_BASE_URL=http://localhost:5174`
+- dùng frontend Docker: `FRONTEND_BASE_URL=http://localhost:4173`
+
+Điểm này ảnh hưởng trực tiếp tới verify email, reset password và redirect sau OAuth.
+
+## Chạy `client/` nếu muốn xem nhánh Next.js thử nghiệm
+
+Repo vẫn có `client/` với Next.js App Router:
 
 ```bash
-curl http://localhost:8080/health
-curl http://localhost:8081/health
-curl http://localhost:8082/health
+make client-install
+make client-dev
+make client-build
 ```
 
-## Development Test Accounts
+Hiện trạng:
 
-Khi chạy local qua Docker Compose, `user-service` sẽ seed sẵn hai tài khoản test chỉ dành cho development:
+- có Dockerfile riêng trong `client/Dockerfile`
+- không có service `client` trong `deployments/docker/docker-compose.yml`
+- workflow CI hiện build `frontend/`, chưa build `client/`
+
+Hãy coi `client/` là nhánh giao diện thử nghiệm, không phải entrypoint mặc định của hệ thống.
+
+## Biến môi trường và cấu hình
+
+Luồng config hiện tại đi theo thứ tự sau:
+
+1. `Makefile` ưu tiên `.env.local`, nếu không có sẽ fallback sang `.env.example`
+2. Docker Compose mount các file YAML ở `deployments/docker/config/*.yaml` vào từng service qua `CONFIG_PATH=/config/config.yaml`
+3. `pkg/config` load default + config file + environment variable override
+
+Những chỗ cần nhớ:
+
+- `.env.local` là file local-only, không commit
+- `deployments/docker/config/*.yaml` mới là cấu hình runtime gần production/local stack nhất cho từng service
+- frontend Docker build có `ARG VITE_API_BASE_URL`, nhưng để trống vẫn hoạt động vì `frontend/nginx.conf` proxy `/api` sang gateway
+- nếu bạn chạy service ngoài compose, hãy tự map lại host của Postgres/Redis/RabbitMQ tương ứng
+
+## Database, migration và dữ liệu mẫu
+
+Repo đang đi theo hướng raw SQL thay vì ORM:
+
+- connection pool + migration helper nằm ở `pkg/database/postgres.go`
+- migration của từng service nằm ở:
+  - `services/user-service/migrations/`
+  - `services/product-service/migrations/`
+  - `services/order-service/migrations/`
+  - `services/payment-service/migrations/`
+
+Trạng thái thực tế:
+
+- các service dùng PostgreSQL sẽ tự chạy embedded migrations khi startup
+- `cart-service` không có migration SQL vì lưu giỏ hàng trên Redis
+- `deployments/docker/postgres-init/01-create-databases.sql` chỉ tạo database cho từng service, không seed nghiệp vụ
+- dữ liệu mẫu rõ ràng nhất hiện nay là bootstrap tài khoản local ở `user-service`
+
+Có sẵn Make target cho migration:
+
+```bash
+make migrate-up
+make migrate-down
+make migrate-force
+```
+
+Nhưng cần lưu ý:
+
+- các target này mặc định nhắm vào `localhost:5432`
+- compose hiện tại không publish Postgres ra host
+- vì vậy trong flow Docker mặc định, bạn thường không cần chạy `make migrate-up`; migration đã được service tự apply
+
+## Tài khoản test local
+
+Khi `user-service` chạy với `bootstrap.dev_accounts.enabled`, repo sẽ tạo sẵn hai tài khoản deterministic để test khu vực `/admin`:
 
 - `admin.dev@ndshop.local` / `AdminTest!2026-ChangeMe`
 - `staff.dev@ndshop.local` / `StaffTest!2026-ChangeMe`
 
-Lưu ý:
+Có thể override password qua env:
 
-- đây là tài khoản deterministic để test nhanh khu vực `/admin`
-- tuyệt đối không bật `bootstrap.dev_accounts` ở production
-- nếu cần override password local, dùng env `BOOTSTRAP_DEV_ACCOUNTS_ADMIN_PASSWORD` hoặc `BOOTSTRAP_DEV_ACCOUNTS_STAFF_PASSWORD`
+- `BOOTSTRAP_DEV_ACCOUNTS_ADMIN_PASSWORD`
+- `BOOTSTRAP_DEV_ACCOUNTS_STAFF_PASSWORD`
 
-## Công nghệ chính
+Không nên bật flow này ngoài môi trường development.
 
-- Backend: Go, Echo, gRPC
-- Data: PostgreSQL, Redis
-- Messaging: RabbitMQ
-- Catalog infra: MinIO, Elasticsearch
-- Observability: Prometheus, Grafana, Jaeger
-- Frontend (Primary): React, Vite, TypeScript
-- Frontend (Experimental): Next.js 16.2.1, React 19, TypeScript
-
-## Luồng chạy local
-
-```mermaid
-flowchart LR
-    Browser[Frontend / Browser] --> Gateway[API Gateway]
-    Gateway --> User[User Service]
-    Gateway --> Product[Product Service]
-    Gateway --> Cart[Cart Service]
-    Gateway --> Order[Order Service]
-    Gateway --> Payment[Payment Service]
-    Cart -->|gRPC| Product
-    Order -->|gRPC| Product
-    Order -->|event| RabbitMQ[(RabbitMQ)]
-    Payment -->|event| RabbitMQ
-    RabbitMQ --> Notification[Notification Service]
-    User --> Postgres[(PostgreSQL)]
-    Product --> Postgres
-    Order --> Postgres
-    Payment --> Postgres
-    Cart --> Redis[(Redis)]
-    Product --> MinIO[(MinIO)]
-    Product --> Elasticsearch[(Elasticsearch)]
-```
-
-## Tài liệu
-
-- [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể.
-- [docs/learning/README.md](./docs/learning/README.md): lộ trình onboarding cho người mới.
-- [docs/learning/11-senior-source-code-review-guide.md](./docs/learning/11-senior-source-code-review-guide.md): review toàn repo theo góc nhìn senior engineer + technical mentor.
-- [docs/deep-dive/README.md](./docs/deep-dive/README.md): kiến trúc, stack, flow runtime.
-- [docs/annotated/README.md](./docs/annotated/README.md): đọc source theo block code quan trọng.
-
-## Test và verify
-
-Kiểm tra Go modules:
+## Các lệnh quan trọng
 
 ```bash
+make fmt
+make tidy
 make test
 make vet
-```
-
-Build frontend:
-
-```bash
+make ci
 make frontend-build
+make client-build
+make compose-build
+make compose-down
 ```
 
-Chi tiết cách verify end-to-end nằm tại:
+Một vài lưu ý khi dùng lệnh:
 
-- [docs/learning/06-testing-and-verification.md](./docs/learning/06-testing-and-verification.md)
+- `make test` và `make vet` chạy qua toàn bộ Go modules trong repo
+- `frontend` và `client` dùng `npm`, không dùng `pnpm` hay `yarn`
+- CI hiện chạy Go checks cho mọi module và build `frontend`, chưa build `client`
+- pipeline publish Docker hiện build/push `api-gateway`, toàn bộ Go services và `frontend`
 
-## Dành cho contributor mới
+## Cấu trúc thư mục nên đọc đầu tiên
 
-Nếu bạn mới vào repo, thứ tự đọc ngắn nhất là:
+| Đường dẫn | Nên hiểu gì ở đây |
+| --- | --- |
+| `api-gateway/cmd/main.go` | Cách gateway khởi động middleware, tracing, metrics và mount route handler/proxy. |
+| `api-gateway/internal/handler/` | Route HTTP công khai ở gateway. |
+| `api-gateway/internal/proxy/` | Logic proxy xuống service và retry/circuit breaker. |
+| `services/*/cmd/main.go` | Wiring thật của từng service: config, DB, migration, background worker, route, graceful shutdown. |
+| `services/*/internal/handler/` | API boundary của service. |
+| `services/*/internal/service/` | Business logic. |
+| `services/*/internal/repository/` | SQL, Redis, RabbitMQ persistence/integration. |
+| `services/*/internal/grpc/` | gRPC server/client khi service có dùng. |
+| `pkg/` | Shared code mà nhiều service đang dùng chung. |
+| `proto/` | Contract gRPC giữa service. |
+| `deployments/docker/` | Compose, config file, init SQL, observability stack. |
+| `frontend/src/` | UI chính đang dùng để đọc flow end-to-end và admin flow. |
+| `client/src/` | Nhánh Next.js thử nghiệm. |
 
-1. [docs/learning/00-local-setup.md](./docs/learning/00-local-setup.md)
-2. [docs/deep-dive/system-overview.md](./docs/deep-dive/system-overview.md)
-3. [docs/learning/05-first-contribution-walkthrough.md](./docs/learning/05-first-contribution-walkthrough.md)
-4. [docs/annotated/frontend-app.md](./docs/annotated/frontend-app.md)
-5. [docs/annotated/shared-packages.md](./docs/annotated/shared-packages.md)
+## Cách hiểu nhanh source code
+
+Nếu bạn mới vào repo, luồng đọc ngắn nhất thường là:
+
+1. `deployments/docker/docker-compose.yml`
+2. `deployments/docker/config/*.yaml`
+3. `api-gateway/cmd/main.go`
+4. service `cmd/main.go` của domain bạn đang sửa
+5. `internal/handler -> internal/service -> internal/repository`
+6. frontend page/provider/api module tương ứng trong `frontend/src/`
+
+Khi debug end-to-end, hãy bám flow:
+
+1. route frontend gọi API nào
+2. gateway map route đó vào service nào
+3. service giữ business rule ở đâu
+4. repository đang chạm Postgres/Redis/RabbitMQ như thế nào
+5. có event bất đồng bộ nào phát ra sau đó không
+
+## Trạng thái hiện tại và lưu ý khi phát triển
+
+- `frontend/` là frontend nên ưu tiên đọc và sửa trước khi đụng `client/`
+- `client/` có nhiều route thực tế hơn tài liệu cũ mô tả, nhưng vẫn chưa được đưa vào runtime mặc định
+- `product-service` đã có cursor pagination cho catalog, nhưng `order-service` admin listing vẫn theo offset/count
+- frontend hiện có một số khu vực đang ở trạng thái partial hoặc thiên về UI nhiều hơn backend, nhất là security/preferences/notifications và một phần flow quản lý địa chỉ
+- trong `frontend/`, có 4 category page theo kiểu editorial/static data: `Shop Men`, `Shop Women`, `Footwear`, `Accessories`; các category khác mới đi qua API product thật
+- đừng assume `http://localhost` là frontend chính; trong compose hiện tại frontend chính là `http://localhost:4173`
+- đừng assume Postgres ở `localhost:5432` khi chỉ dùng compose mặc định; database nằm trong network nội bộ compose
+
+## Tài liệu liên quan
+
+- [feature_tracker.md](./feature_tracker.md): feature inventory và roadmap gợi ý bám theo source hiện tại
+- [DOCKER_GUIDE.md](./DOCKER_GUIDE.md): hướng dẫn Docker/Compose thực chiến cho chính repo này
+- [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể
+- [docs/learning/README.md](./docs/learning/README.md): lộ trình onboarding
+- [docs/deep-dive/README.md](./docs/deep-dive/README.md): đọc sâu hơn về kiến trúc và runtime
+- [docs/annotated/README.md](./docs/annotated/README.md): đọc source theo block quan trọng

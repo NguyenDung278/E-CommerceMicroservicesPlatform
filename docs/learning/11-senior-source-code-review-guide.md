@@ -925,17 +925,19 @@ Payment-service đang có tư duy khá trưởng thành ở 3 điểm:
 
 ### File nên đọc
 
-- `frontend/src/lib/http/client.ts`
-- `frontend/src/lib/api/*.ts`
-- `frontend/src/lib/normalizers/index.ts`
+- `frontend/src/shared/api/http-client.ts`
+- `frontend/src/shared/api/modules/*.ts`
+- `frontend/src/shared/api/normalizers.ts`
+- `frontend/src/shared/types/api.ts`
+- các file compatibility như `frontend/src/lib/api.ts`, `frontend/src/lib/http/client.ts` để hiểu chiến lược re-export hiện tại
 
 ### Điều đáng học nhất: chia `http client` + `api module` + `normalizer`
 
 Đây là một cấu trúc frontend rất sạch:
 
-1. `http/client.ts`: lo request raw, error parsing, auth header
-2. `api/*.ts`: lo endpoint cụ thể
-3. `normalizers/`: ép dữ liệu lỏng từ API thành shape typed, an toàn hơn cho UI
+1. `shared/api/http-client.ts`: lo request raw, error parsing, auth header
+2. `shared/api/modules/*.ts`: lo endpoint cụ thể
+3. `shared/api/normalizers.ts`: ép dữ liệu lỏng từ API thành shape typed, an toàn hơn cho UI
 
 ### Vì sao cách này tốt?
 
@@ -943,7 +945,7 @@ Payment-service đang có tư duy khá trưởng thành ở 3 điểm:
 - nếu backend trả thiếu field, normalizer giữ UI ít gãy hơn
 - dễ test và dễ refactor hơn việc gọi `fetch` rải rác khắp component
 
-### Ví dụ: `frontend/src/lib/api/product.ts`
+### Ví dụ: `frontend/src/shared/api/modules/productApi.ts`
 
 Điểm hay:
 
@@ -1239,9 +1241,9 @@ Khi mở một function, đừng chỉ hỏi "nó làm gì?". Hãy hỏi theo th
 
 ### Giai đoạn 5: Học frontend boundary
 
-- `frontend/src/lib/http/client.ts`
-- `frontend/src/lib/api/*.ts`
-- `frontend/src/lib/normalizers/index.ts`
+- `frontend/src/shared/api/http-client.ts`
+- `frontend/src/shared/api/modules/*.ts`
+- `frontend/src/shared/api/normalizers.ts`
 
 ---
 

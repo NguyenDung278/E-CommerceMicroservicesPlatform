@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { api, getErrorMessage } from "../lib/api";
-import type { Order, Payment, Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { api, getErrorMessage } from "../shared/api";
+import type { Order, Payment, Product } from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
 import "./OrderDetailPage.css";
 
 type ConfirmationLocationState = {

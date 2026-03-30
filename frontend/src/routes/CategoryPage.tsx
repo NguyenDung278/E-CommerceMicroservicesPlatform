@@ -5,10 +5,10 @@ import { ShopAccessoriesPage } from "../features/shop-accessories/ShopAccessorie
 import { ShopFootwearPage } from "../features/shop-footwear/ShopFootwearPage";
 import { ShopMenPage } from "../features/shop-men/ShopMenPage";
 import { ShopWomenPage } from "../features/shop-women/ShopWomenPage";
-import { ProductCard } from "../ui/product/ProductCard";
-import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage } from "../lib/api";
-import type { Product } from "../types/api";
+import { useCart } from "../features/cart/hooks/useCart";
+import { api, getErrorMessage } from "../shared/api";
+import { ProductCard } from "../shared/components/product/ProductCard";
+import type { Product } from "../shared/types/api";
 import "./CategoryPage.css";
 
 export function CategoryPage() {

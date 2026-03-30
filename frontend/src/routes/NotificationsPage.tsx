@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useOrderPayments } from "../hooks/useOrderPayments";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
-import { formatShortDate, formatShortOrderId, humanizeToken } from "../ui/account/accountConfig";
-import { formatCurrency, formatStatusLabel } from "../utils/format";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useOrderPayments } from "../features/account/hooks/useOrderPayments";
+import { formatShortDate, formatShortOrderId, humanizeToken } from "../features/account/utils/accountPresentation";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { formatCurrency, formatStatusLabel } from "../shared/utils/format";
 import "./NotificationsPage.css";
 
 type NotificationPreferences = {
@@ -124,7 +124,7 @@ export function NotificationsPage() {
   }, [latestPayment, orders, user?.email_verified]);
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="notifications-route">
         <header className="notifications-route-head">
           <h1>Notifications</h1>
@@ -180,6 +180,6 @@ export function NotificationsPage() {
           </div>
         </section>
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }

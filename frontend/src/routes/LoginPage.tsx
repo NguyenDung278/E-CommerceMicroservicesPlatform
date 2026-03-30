@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, type Location as RouterLocation } from "react-router-dom";
 
-import { NotificationStack, type NotificationItem } from "../ui/feedback/NotificationStack";
-import { FormField } from "../ui/form/FormField";
-import { useAuth } from "../hooks/useAuth";
-import { getErrorMessage } from "../lib/api";
-import { getVisibleErrors, inputClassName, normalizeIdentifier, type TouchedFields } from "../utils/authForm";
-import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "../utils/authStorage";
-import { type LoginFormValues, validateLoginFields } from "../utils/validation";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "../features/auth/storage/rememberedLoginStorage";
+import { getVisibleErrors, inputClassName, normalizeIdentifier, type TouchedFields } from "../features/auth/utils/authForm";
+import { NotificationStack, type NotificationItem } from "../shared/components/feedback/NotificationStack";
+import { FormField } from "../shared/components/form/FormField";
+import { getErrorMessage } from "../shared/api";
+import { type LoginFormValues, validateLoginFields } from "../shared/utils/validation";
 import "./AuthPages.css";
 
 type AuthLocationState = {

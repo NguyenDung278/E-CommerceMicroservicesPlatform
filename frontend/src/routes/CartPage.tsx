@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage } from "../lib/api";
-import type { OrderPreview, Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
-import "../ui/form/FormField.css";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { useCart } from "../features/cart/hooks/useCart";
+import { api, getErrorMessage } from "../shared/api";
+import type { OrderPreview, Product } from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
+import "../shared/components/form/FormField.css";
 import "./CartPage.css";
 
 export function CartPage() {

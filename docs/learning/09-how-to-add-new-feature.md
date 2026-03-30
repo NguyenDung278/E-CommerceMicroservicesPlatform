@@ -1,58 +1,213 @@
-# Hướng dẫn Phát triển tính năng mới (How to add a new feature)
+# Hướng dẫn phát triển tính năng mới
 
-Khi đã nắm được kiến trúc ở mức tổng quan, bước tiếp theo của bạn là thử tay trực tiếp vào việc lập trình. 
-Tài liệu này sẽ hướng dẫn step-by-step cách thêm 1 API mới vào nền tảng.
+Tài liệu này hướng dẫn cách thêm một tính năng backend mới theo đúng cấu trúc và workflow hiện tại của repo, không dùng path cũ như `internal/delivery/http`.
 
-> Ví dụ: Chúng ta sẽ tạo một API Lấy chi tiết thông tin kho trong `product-service` và public nó ra ngoài thông qua `api-gateway`.
+## 1. Bắt đầu từ boundary, không bắt đầu từ code
 
-## Bước 1: Khai báo Contract trong `proto/` (Nếu là gRPC)
-Hệ thống sử dụng Protocol Buffers làm nguồn chân lý cho các service kết nối với nhau.
-1. Mở file `proto/product.proto`.
-2. Định nghĩa message Request và Response.
-3. Thêm hàm RPC vào trong `service ProductService { ... }`.
-4. Rời khỏi file và chạy lệnh sinh code Go:
-   ```bash
-   make proto
-   ```
-   (Lệnh này sẽ tự động sinh/cập nhật code ở `pkg/grpc/pb/product.pb.go`).
+Trước khi viết gì, hãy xác định feature của bạn thuộc loại nào:
 
-## Bước 2: Thiết kế Database và Cập nhật Entity
-1. Mở file `.sql` trong folder `services/product-service/migrations/`.
-2. Nếu thêm bảng hoặc thêm cột, viết SQL nguyên thuỷ (`CREATE TABLE...`, `ALTER TABLE...`).
-3. Trong code Go, tìm đến file định nghĩa struct (vd: `services/product-service/internal/repository/product.go` hoặc folder `domain/`).
-4. Khai báo struct tương ứng ở Go.
+- HTTP API public qua gateway
+- HTTP API chỉ dùng nội bộ service
+- gRPC contract giữa service
+- event publish / consume
+- logic nội bộ không lộ ra ngoài
 
-## Bước 3: Viết Repository (Tương tác Database)
-1. Mở file thư mục `repository` của service đó.
-2. Viết câu query raw SQL (`SELECT`, `INSERT`, `UPDATE`), dùng biến truyền chuẩn (vd: `$1, $2`) để chống SQL Injection.
-3. Nhớ ánh xạ (scan) kết quả từ SQL row trở lại struct Go.
+### Vì sao bước này quan trọng
 
-## Bước 4: Viết Service Logic (Business Logic)
-1. Thêm hàm vào tầng Service (`internal/service`).
-2. Tầng này sẽ gọi Repository để lấy dữ liệu, áp dụng các tính toán logic (kiểm tra điều kiện, xử lý lỗi, v.v.).
-3. Nếu cần ném lỗi, hãy tự throw các lỗi rõ ràng để controller ở trên bắt và phản hồi.
+Boundary quyết định:
 
-## Bước 5: Viết HTTP Controller / gRPC Handler
-Nếu tính năng này cung cấp API RESTful cho Frontend ngoài cùng:
-1. Vào mục `internal/delivery/http` của `product-service`.
-2. Định nghĩa hàm xử lý HTTP (sử dụng [Echo framework](https://echo.labstack.com/)).
-3. Validate Payload từ Frontend (Dùng `pkg/validation`).
-4. Nếu hợp lệ, gọi xuống tầng Service ở **Bước 4**.
-5. Đóng gói kết quả bằng format chuẩn qua `pkg/response`.
+- file nào cần sửa
+- contract nào cần thay đổi
+- có phải cập nhật gateway hay không
+- có cần migration, config, docs hay test mới không
 
-Nếu tính năng này là gọi ngầm gRPC (vd: Cart gọi tới Product):
-- Sửa file `internal/delivery/grpc/handler.go` và implements hàm Interface đã sinh ra ở Bước 1.
+## 2. Đường đi chuẩn khi thêm feature trong repo này
 
-## Bước 6: Route và API Gateway
-Gắn endpoint của bạn vào App:
-1. Khai báo route (Vd: `e.GET("/api/v1/products/:id/stock", handler.GetStock)`) trong router file của service đó (`api.go` hay `router.go`).
-2. Mở `api-gateway/main.go`. Khai báo reverse proxy route ánh xạ đường dẫn từ Gateway vào thẳng Service đích của bạn.
+Với một service chuẩn, bạn sẽ thường động vào:
 
-## Bước 7: Chạy và Test local
-Dùng Terminal hoặc Postman để gọi thẳng vào localhost xem kết quả.
-```bash
-make compose-up
+- `services/<service>/internal/dto/`
+- `services/<service>/internal/model/`
+- `services/<service>/internal/repository/`
+- `services/<service>/internal/service/`
+- `services/<service>/internal/handler/`
+- `services/<service>/internal/grpc/` nếu có gRPC
+- `services/<service>/cmd/main.go`
+- `services/<service>/migrations/` nếu schema đổi
+
+Nếu feature phải đi ra ngoài qua gateway:
+
+- `api-gateway/internal/handler/*`
+- `api-gateway/cmd/main.go` chỉ để wiring handler/proxy, không phải chỗ nhét business logic
+
+## 3. Ví dụ thực chiến: thêm một API mới cho `product-service`
+
+Giả sử bạn muốn thêm endpoint đọc thông tin tồn kho mở rộng cho sản phẩm.
+
+### Bước 1: Xác định schema và migration nếu cần
+
+Nếu feature cần thêm cột hoặc bảng:
+
+1. tạo migration mới trong `services/product-service/migrations/`
+2. cập nhật model hoặc persistence struct liên quan
+
+### Bước 2: Viết repository trước
+
+Ở `services/product-service/internal/repository/`:
+
+- viết query SQL parameterized
+- chỉ select cột cần thiết
+- scan dữ liệu về model rõ ràng
+
+### Vì sao bắt đầu từ repository
+
+Với feature liên quan DB, repository là nơi giúp bạn kiểm tra ngay:
+
+- query có đúng không
+- index có cần không
+- dữ liệu trả về có đủ cho business logic không
+
+## 4. Viết service để giữ rule nghiệp vụ
+
+Ở `services/product-service/internal/service/`:
+
+- gọi repository
+- validate rule nghiệp vụ
+- map lỗi sang domain error có ý nghĩa
+
+### Nguyên tắc
+
+- service không nên nhận `echo.Context`
+- service không nên biết HTTP status code
+- service là nơi giữ business invariant
+
+## 5. Viết HTTP handler ở đúng chỗ
+
+Trong repo này, HTTP handler nằm ở:
+
+```text
+services/<service>/internal/handler/
 ```
-Thử gọi API mới của bạn thông qua `localhost:8080/api/...`
 
-Chúc bạn thành công với API đầu tiên!
+Ví dụ với product:
+
+- `services/product-service/internal/handler/product_handler.go`
+
+### Handler nên làm gì
+
+- bind request
+- validate input
+- gọi service
+- map domain error sang response envelope từ `pkg/response`
+
+### Handler không nên làm gì
+
+- viết SQL
+- giữ transaction
+- nhồi business rule phức tạp
+
+## 6. Nếu feature là gRPC, sửa ở đâu
+
+### Contract
+
+Proto nằm ở:
+
+- `proto/product.proto`
+- `proto/user.proto`
+
+Generated files hiện được commit ngay trong `proto/`:
+
+- `proto/*.pb.go`
+- `proto/*_grpc.pb.go`
+
+### Điều rất quan trọng
+
+Repo hiện **không có** target `make proto`. Vì vậy nếu bạn sửa `.proto`, bạn cần dùng workflow `protoc` phù hợp trên máy mình để regenerate các file generated rồi commit chúng cùng thay đổi.
+
+### gRPC implementation
+
+Với service có gRPC server:
+
+- xem `services/product-service/internal/grpc/`
+- wiring thường nằm trong `services/<service>/cmd/main.go`
+
+Với service có gRPC client:
+
+- xem `internal/grpc_client/` hoặc package tương đương trong service gọi
+
+## 7. Đăng ký route HTTP trong service
+
+Hầu hết service đăng ký route ngay trong handler bằng hàm `RegisterRoutes(...)`.
+
+Ví dụ:
+
+- `services/product-service/internal/handler/product_handler.go`
+- `services/user-service/internal/handler/user_handler.go`
+
+Sau đó `cmd/main.go` gọi:
+
+- tạo handler
+- gọi `handler.RegisterRoutes(e, cfg.JWT.Secret)`
+
+### Vì sao nên đọc `cmd/main.go`
+
+Đây là nơi bạn thấy đầy đủ:
+
+- config nào được load
+- middleware nào đang được gắn
+- feature mới đã được wire vào runtime hay chưa
+
+## 8. Nếu feature cần public qua gateway
+
+Gateway của repo này không phải generic catch-all router. Nó có handler theo domain:
+
+- `api-gateway/internal/handler/user_handler.go`
+- `api-gateway/internal/handler/product_handler.go`
+- `api-gateway/internal/handler/cart_handler.go`
+- `api-gateway/internal/handler/order_handler.go`
+- `api-gateway/internal/handler/payment_handler.go`
+
+Vì vậy khi thêm HTTP API public mới:
+
+1. thêm route ở service đích
+2. thêm route forward tương ứng ở gateway handler cùng domain
+3. đảm bảo `api-gateway/cmd/main.go` vẫn wire đúng handler/proxy
+
+## 9. Nếu feature cần config mới
+
+Khi thêm config runtime:
+
+1. cập nhật `pkg/config`
+2. thêm default hợp lý cho local/dev
+3. cập nhật file trong `deployments/docker/config/`
+4. cập nhật `.env.example` hoặc `.env.local.example` nếu cần
+5. cập nhật docs liên quan
+
+## 10. Test và verify
+
+### Tối thiểu nên có
+
+- unit test cho service nếu logic có rule nghiệp vụ
+- repository test nếu query/transaction quan trọng
+- handler test cho request/response mapping nếu endpoint mới có nhiều edge case
+
+### Verify local
+
+1. chạy `make test`
+2. chạy `make vet`
+3. nếu có frontend hoặc API contract liên quan, verify qua `curl` hoặc UI
+4. nếu route đi qua gateway, test cả gateway path
+
+## 11. Checklist trước khi coi feature là xong
+
+- feature nằm đúng layer `handler -> service -> repository`
+- query mới đã nghĩ đến index hoặc performance chưa
+- route service và route gateway đã đồng bộ chưa
+- docs hoặc README liên quan đã cập nhật chưa
+- có điểm nào đang partial hoặc chưa expose hết cho frontend không
+- có contract nào ở frontend cần cập nhật normalizer/type không
+
+## 12. Mẹo thực chiến
+
+- bắt đầu bằng feature nhỏ nhưng đi trọn vòng đời: migration -> repo -> service -> handler -> gateway -> test -> docs
+- đừng bắt đầu bằng refactor lớn nếu bạn chưa trace xong flow hiện tại
+- nếu có thể giải quyết trong service hiện tại, đừng vội đề xuất thêm service mới

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useOrderPayments } from "../hooks/useOrderPayments";
-import { useSavedAddresses } from "../hooks/useSavedAddresses";
-import { getErrorMessage } from "../lib/api";
-import type { PhoneVerificationChallenge, ProfileAddressPatch } from "../types/api";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
-import { formatShortDate, formatShortOrderId } from "../ui/account/accountConfig";
-import { formatCurrency, formatStatusLabel } from "../utils/format";
-import { getUserDisplayName, isDevelopmentAccount } from "../utils/devAccounts";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useOrderPayments } from "../features/account/hooks/useOrderPayments";
+import { useSavedAddresses } from "../features/account/hooks/useSavedAddresses";
+import { formatShortDate, formatShortOrderId } from "../features/account/utils/accountPresentation";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { getErrorMessage } from "../shared/api";
+import type { PhoneVerificationChallenge, ProfileAddressPatch } from "../shared/types/api";
+import { getUserDisplayName, isDevelopmentAccount } from "../shared/utils/devAccounts";
+import { formatCurrency, formatStatusLabel } from "../shared/utils/format";
 import "./ProfilePage.css";
 
 type ProfileFormState = {
@@ -463,7 +463,7 @@ export function ProfilePage() {
   }
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="profile-route">
         {feedback ? (
           <div className="profile-route-feedback">
@@ -764,7 +764,7 @@ export function ProfilePage() {
           </article>
         </section>
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }
 

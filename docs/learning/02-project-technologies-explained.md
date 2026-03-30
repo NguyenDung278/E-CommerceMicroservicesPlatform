@@ -219,6 +219,127 @@ Khi hệ thống có nhiều service, bạn cần biết:
 - Grafana: visualize metrics
 - Jaeger: tracing request qua nhiều service
 
+## 11. React + Vite
+
+### Trong project dùng để làm gì?
+
+`frontend/` là UI local chính hiện tại của repo.
+
+Nó dùng:
+
+- React
+- TypeScript
+- Vite
+- React Router
+
+### Bạn cần hiểu tới đâu?
+
+- component function
+- `useState`, `useEffect`, `useMemo`
+- provider/context
+- React Router route tree
+- Vite dev server và preview mode
+
+### Điểm đáng học trong repo này
+
+- tách `app/`, `routes/`, `features/`, `shared/`
+- dùng API layer + normalizer thay vì `fetch` rải khắp component
+- giữ compatibility layer để refactor dần
+
+## 12. TypeScript
+
+### Vì sao quan trọng ở repo này?
+
+TypeScript giúp frontend:
+
+- mô tả contract dữ liệu từ backend
+- phát hiện sớm mismatch ở UI
+- giữ code refactorable hơn khi app lớn
+
+### Bạn nên chú ý gì?
+
+- `shared/types/api.ts` là hợp đồng type chính ở frontend React + Vite
+- `client/src/types/api.ts` là hợp đồng type phía Next experimental
+
+## 13. React Router
+
+### Trong project này dùng thế nào?
+
+Route tree của frontend chính nằm ở:
+
+- `frontend/src/app/App.tsx`
+
+### Bạn cần hiểu tới đâu?
+
+- route nesting
+- redirect
+- route guard
+- `Outlet`
+- `location.state`
+
+### Vì sao đáng học?
+
+Nó cho bạn thấy cách app tách:
+
+- public/auth route
+- storefront route
+- account protected route
+- admin route
+
+## 14. Browser Storage
+
+### Trong project dùng ở đâu?
+
+- auth token/session storage
+- remembered identifier
+- pending OAuth remember state
+- guest cart storage
+
+### Vì sao nên hiểu?
+
+Vì frontend của repo này có hai capability rất đáng học:
+
+- session với remember me
+- guest cart merge sau khi login
+
+Nếu không hiểu `localStorage` và `sessionStorage`, bạn sẽ khó theo kịp hai flow này.
+
+## 15. Normalizer và API Boundary
+
+### Vì sao repo dùng normalizer?
+
+Thay vì để page nhận raw JSON từ backend, repo dùng:
+
+- `http-client`
+- `api modules`
+- `normalizers`
+- `shared types`
+
+### Bạn cần hiểu tới đâu?
+
+- dữ liệu vào UI không nhất thiết phải giữ nguyên shape backend
+- normalizer là lớp phòng thủ quan trọng
+- compatibility layer giúp refactor an toàn
+
+## 16. Next.js App Router
+
+### Trong project dùng ở đâu?
+
+Trong nhánh `client/` experimental.
+
+### Vì sao vẫn đáng học dù chưa là runtime chính?
+
+- cho bạn thấy một chiến lược frontend khác với React Router
+- có import alias `@/*` sạch hơn
+- có `WishlistProvider` để học thêm pattern state domain
+
+### Bạn cần hiểu tới đâu?
+
+- `app/` routing
+- layout gốc
+- provider tree
+- sự khác nhau giữa nhánh experimental và runtime chính `frontend/`
+
 ### Với người học, cần hiểu gì?
 
 Không cần master ngay từ đầu, nhưng nên biết:

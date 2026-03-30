@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { getErrorMessage } from "../lib/errors/handler";
-import { clearPendingOAuthRemember, readPendingOAuthRemember } from "../utils/auth/oauth";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { clearPendingOAuthRemember, readPendingOAuthRemember } from "../features/auth/storage/oauthSessionStorage";
+import { getErrorMessage } from "../shared/api/error-handler";
 import "./AuthPages.css";
 
 type AuthCallbackStatus = "idle" | "success" | "error";

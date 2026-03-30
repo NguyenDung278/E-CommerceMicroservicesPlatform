@@ -1,163 +1,130 @@
-# Feature Tracker — Roadmap nâng cấp project theo hướng Senior Backend Golang
+# Feature Tracker
 
-Tệp này không phải wishlist tính năng. Đây là backlog cải tiến có chủ đích để:
+Tài liệu này theo dõi hai thứ:
 
-- nâng chất lượng source code hiện tại
-- cải thiện performance và reliability theo số liệu
-- giúp người học rèn đúng năng lực của một Back-end Senior Golang
+- feature nào đang thật sự có trong source code hiện tại
+- hướng mở rộng nào đáng làm tiếp, bám sát trạng thái repo và định hướng refactor frontend theo hướng dễ đọc, dễ quản lý, dễ mở rộng
 
-Nguyên tắc chọn việc:
+Các nhãn trạng thái dùng trong file này:
 
-- ưu tiên thay đổi có tác động thật lên codebase hiện tại
-- ưu tiên thứ đang lệch giữa tài liệu và code
-- ưu tiên bottleneck có thể đo được
-- ưu tiên tính đúng đắn dữ liệu trước “độ ngầu” kiến trúc
+- `Đang dùng`: đã có trong runtime mặc định hoặc đã được UI/backend dùng thật
+- `Optional`: có trong code nhưng phụ thuộc config hoặc hạ tầng phụ trợ
+- `Partial`: đã có một phần nhưng flow chưa khép kín hoặc UI/backend chưa khớp hoàn toàn
+- `Experimental`: đã có nhánh triển khai nhưng chưa phải đường chạy mặc định
 
-Những việc đã được code làm tốt thì không đưa lại vào roadmap chỉ để đủ danh sách. Ví dụ: `product-service` đã có cursor pagination cho catalog; vì vậy roadmap không lặp lại mục đó nữa.
+## Hiện trạng feature theo domain
 
----
+### 1. Tài khoản, danh tính và phân quyền
 
-## P0 — Việc nên làm sớm nhất
+- `Đang dùng`: đăng ký, đăng nhập, refresh token, verify email, forgot password, reset password qua `user-service` và gateway.
+- `Đang dùng`: lấy/cập nhật profile người dùng.
+- `Đang dùng`: quản lý địa chỉ giao hàng ở backend, gồm create/list/update/delete/set-default.
+- `Đang dùng`: admin có thể xem danh sách user và đổi role qua `/api/v1/admin/users`.
+- `Optional`: Google OAuth đã có start/callback/exchange flow, nhưng chỉ hoạt động khi cấu hình `OAUTH_GOOGLE_*`.
+- `Optional`: xác minh số điện thoại qua Telegram OTP đã có đầy đủ status/send/resend/verify, nhưng phụ thuộc `TELEGRAM_*`.
+- `Đang dùng`: local bootstrap account cho `admin` và `staff` chỉ dành cho development.
+- `Partial`: frontend account area đã có nhiều trang, nhưng phần đổi mật khẩu và preference/security chưa nối trọn vẹn với capability backend hiện có.
 
-### 1. [ ] Chuẩn hoá tài liệu phát triển tính năng theo đúng path và flow thật của repo
+### 2. Catalog, sản phẩm và media
 
-- **Vì sao cần làm:** Một phần tài liệu hiện vẫn nói theo path cũ như `internal/delivery/http` hoặc `api-gateway/main.go`, trong khi source code thực tế đang đi theo `internal/handler`, `internal/grpc`, `cmd/main.go`, `api-gateway/internal/proxy`.
-- **Kết quả mong muốn:** Người mới có thể thêm feature mà không phải đoán cấu trúc hoặc sửa sai nhiều lần.
-- **Giá trị học tập:** Senior không chỉ viết code; còn phải giữ tài liệu sống khớp với codebase.
+- `Đang dùng`: CRUD sản phẩm với các field như brand, sku, tags, variants, image_url, image_urls, status `draft|active|inactive`.
+- `Đang dùng`: product listing public có cursor pagination, `next_cursor`, `has_next`, filter theo category, brand, tag, status, search, min/max price, size, color, sort.
+- `Đang dùng`: review sản phẩm gồm list, summary, lấy review của tôi, create/update/delete review.
+- `Đang dùng`: upload ảnh sản phẩm qua endpoint `/api/v1/products/uploads`.
+- `Optional`: MinIO object storage đã được bật trong compose và được `product-service` dùng nếu object storage enabled.
+- `Optional`: Elasticsearch search index đã được bật trong compose; `product-service` có sync search index khi startup nếu config bật.
+- `Đang dùng`: gRPC product lookup đang được `cart-service` và `order-service` dùng để đọc thông tin sản phẩm/stock có tính authoritative.
+- `Đang dùng`: low-stock monitor chạy nền trong `product-service`.
+- `Partial`: ở frontend chính, ngoài các category động từ API còn có 4 trang editorial/static data là `Shop Men`, `Shop Women`, `Footwear`, `Accessories`.
 
-### 2. [ ] Tạo transaction helper dùng lại được cho các write flow nhiều bước
+### 3. Cart, checkout và giao vận
 
-- **Vì sao cần làm:** Hiện transaction xuất hiện trực tiếp ở repository write path, đặc biệt trong order flow. Khi số lượng case tăng, việc copy/paste `BeginTx/Commit/Rollback` sẽ làm code khó đọc và dễ thiếu rollback path.
-- **Kết quả mong muốn:** Có helper kiểu `RunInTx(ctx, db, fn)` hoặc abstraction tương đương, đủ đơn giản, dùng được cho order/payment/coupon/audit path mà không làm service layer bị dính `*sql.Tx` lung tung.
-- **Giá trị học tập:** Đây là bước nâng từ “biết transaction” sang “biết tổ chức transactional boundary sạch”.
+- `Đang dùng`: `cart-service` lưu giỏ hàng của user trong Redis với TTL, hỗ trợ get/add/update/remove/clear cart.
+- `Đang dùng`: frontend React có guest cart trong `localStorage` và merge lại sau login bằng cách replay `addToCart`.
+- `Đang dùng`: checkout flow gọi `order-service` để preview order trước khi create.
+- `Đang dùng`: shipping method hiện có `standard`, `express`, `pickup`.
+- `Đang dùng`: coupon đã có backend create/list trong admin và được dùng trong order flow.
+- `Partial`: chưa có server-side guest cart hoặc endpoint merge cart riêng; merge hiện nằm ở logic frontend.
 
-### 3. [ ] Thêm idempotency cho `payment-service`
+### 4. Đơn hàng, timeline và vận hành admin
 
-- **Vì sao cần làm:** Thanh toán là nơi client retry, timeout, refresh trình duyệt, webhook duplicate xảy ra thường xuyên. Không có idempotency thì rất dễ tạo duplicate payment hoặc trải nghiệm khó hiểu.
-- **Kết quả mong muốn:** Hỗ trợ `X-Idempotency-Key` cho payment initiation và chuẩn hoá xử lý duplicate webhook/event.
-- **Giá trị học tập:** Đây là kỹ năng thực chiến cốt lõi của backend xử lý money flow.
+- `Đang dùng`: user có thể preview, tạo đơn, xem danh sách đơn, xem chi tiết đơn, xem timeline/event, hủy đơn.
+- `Đang dùng`: admin/staff có thể xem report, list đơn, xem chi tiết, xem event, cập nhật trạng thái, hủy đơn.
+- `Đang dùng`: order-service có `audit_entries` và `order_events` để lưu vết.
+- `Đang dùng`: order-service consume payment event từ RabbitMQ để chuyển trạng thái đơn sang `paid` hoặc `refunded`.
+- `Đang dùng`: order-service restore stock khi cancel flow yêu cầu.
+- `Đang dùng`: endpoint `/api/v1/catalog/popularity` đang được frontend dùng cho một số khu vực catalog/home.
+- `Partial`: admin order listing vẫn theo page/limit/total metadata, chưa đi theo cursor như product catalog.
 
-### 4. [ ] Áp dụng outbox pattern cho event publish quan trọng ở order/payment
+### 5. Thanh toán
 
-- **Vì sao cần làm:** Code hiện tại có các đoạn lưu DB xong rồi mới publish RabbitMQ; nếu broker lỗi đúng lúc đó thì dữ liệu và event có thể lệch nhau.
-- **Kết quả mong muốn:** Persist business data và outbox record trong cùng transaction; background publisher chịu trách nhiệm phát event và đánh dấu đã gửi.
-- **Giá trị học tập:** Học cách xử lý consistency thực dụng hơn nhiều so với nhảy ngay vào Saga.
+- `Đang dùng`: tạo payment, lấy payment history, lấy payment detail, lấy payment theo order, refund cho admin/staff.
+- `Đang dùng`: webhook MoMo đã có verify signature bằng secret cấu hình.
+- `Đang dùng`: payment-service publish `payment.completed`, `payment.failed`, `payment.refunded` sang RabbitMQ.
+- `Đang dùng`: model payment đã có các field lifecycle tương đối đầy đủ như gateway provider, gateway transaction ID, checkout URL, signature_verified, outstanding_amount.
+- `Partial`: backend chấp nhận nhiều payment method hơn (`manual`, `momo`, `credit_card`, `digital_wallet`, `demo`), nhưng frontend chính hiện chủ yếu expose `manual` và `momo`.
+- `Partial`: chưa thấy idempotency key rõ ràng cho initiation/payment retry path.
 
-### 5. [ ] Bổ sung benchmark + pprof cho hot path chính
+### 6. Thông báo và async workflow
 
-- **Vì sao cần làm:** Repo đã có log, metric, tracing, nhưng profiling và benchmark chưa thành thói quen. Không có số liệu thì rất dễ tối ưu sai chỗ.
-- **Kết quả mong muốn:** Có benchmark tối thiểu cho product listing, order listing/filtering, payment summary path; có hướng dẫn chạy `pprof` trong local.
-- **Giá trị học tập:** Senior tối ưu bằng evidence, không tối ưu theo trực giác.
+- `Đang dùng`: `notification-service` consume event từ RabbitMQ và gửi email cho order/payment flows.
+- `Đang dùng`: service này có HTTP server nội bộ tối thiểu cho health/metrics, không phải public business API.
+- `Partial`: chưa có notification center riêng ở backend để phục vụ in-app notification hoặc user inbox.
 
----
+### 7. Frontend React + Vite (`frontend/`)
 
-## P1 — Performance và hiệu quả dữ liệu
+- `Đang dùng`: đây là frontend local chính, có storefront, auth pages, cart, checkout, profile, orders, payments, admin area.
+- `Đang dùng`: API layer đã được tách thành `frontend/src/lib/api/*` và vẫn có lớp compatibility qua `frontend/src/lib/api.ts`.
+- `Đang dùng`: `AuthProvider` và `CartProvider` đang là hai provider chính cho session/cart flow.
+- `Đang dùng`: `/admin` đã nối với API thật cho products, upload ảnh, coupon, order report/listing, payment history/refund, user role.
+- `Partial`: một số trang account vẫn thiên về UI hoặc derived data hơn là flow nghiệp vụ hoàn chỉnh, nhất là `SecurityPage`, `NotificationsPage`, một phần `AddressesPage`.
 
-### 6. [ ] Thay dần `COUNT(*) + OFFSET/LIMIT` ở các list endpoint lớn bằng chiến lược bền hơn
+### 8. Frontend Next.js (`client/`)
 
-- **Vì sao cần làm:** `product-service` đã đi trước với cursor pagination, nhưng `order-service` admin listing vẫn dùng `COUNT(*) + OFFSET/LIMIT`. Khi dữ liệu tăng, đây sẽ là chi phí thật.
-- **Kết quả mong muốn:** Xác định endpoint nào cần giữ offset cho backoffice, endpoint nào nên chuyển sang cursor hoặc seek pagination; cập nhật API contract có chủ đích, không làm đại trà.
-- **Giá trị học tập:** Học cách chọn pagination theo bối cảnh chứ không dùng một mẫu cho mọi nơi.
+- `Experimental`: `client/` đã có nhiều route storefront/account, provider cho auth/cart/wishlist và Dockerfile riêng.
+- `Experimental`: chưa có service `client` trong Docker Compose mặc định.
+- `Experimental`: CI hiện không build `client/`; workflow publish Docker cũng không push image cho `client/`.
+- `Experimental`: phù hợp để thử nghiệm hướng UI khác, nhưng chưa nên coi là source of truth cho onboarding.
 
-### 7. [ ] Đưa các phép tổng hợp payment về SQL thay vì load nhiều record rồi tính trong Go
+### 9. DevOps, observability và local runtime
 
-- **Vì sao cần làm:** Payment flow hiện có xu hướng đọc danh sách payment của một order rồi tổng hợp trong memory. Với lịch sử giao dịch lớn hơn, cách này sẽ tăng latency và allocations không cần thiết.
-- **Kết quả mong muốn:** Thêm repository query dạng aggregate cho `net paid`, `refundable amount`, `latest charge/refund summary`, kèm index phù hợp.
-- **Giá trị học tập:** Tư duy “đưa việc nặng cho DB làm đúng chỗ” là kỹ năng quan trọng của backend senior.
+- `Đang dùng`: Docker Compose hiện có đầy đủ `frontend`, `api-gateway`, 6 Go services, PostgreSQL, Redis, RabbitMQ, MinIO, Jaeger, Elasticsearch, Prometheus, Grafana, Nginx edge.
+- `Đang dùng`: gateway và các service có tracing/metrics/logging theo cấu trúc hiện có.
+- `Đang dùng`: CI chạy repo-safety, Go checks cho mọi module và build `frontend`.
+- `Đang dùng`: Docker publish workflow build/push `api-gateway`, tất cả Go services và `frontend`.
+- `Partial`: Prometheus/Grafana có trong compose nhưng hiện chưa publish port ra host.
 
-### 8. [ ] Audit index và query plan cho các endpoint nóng bằng `EXPLAIN ANALYZE`
+## Các điểm lệch hoặc khoảng trống đang thấy từ source
 
-- **Vì sao cần làm:** Repo đã có một số migration thêm index đúng hướng, nhưng chưa có nhịp audit bài bản cho query mới/cũ.
-- **Kết quả mong muốn:** Lập danh sách top query theo volume hoặc độ chậm, kiểm tra execution plan, thêm composite index hoặc rewrite query khi có bằng chứng.
-- **Giá trị học tập:** Học cách đọc plan, cardinality, scan type, và trade-off index write/read.
+- `frontend/src/lib/api/cart.ts` có helper `mergeCart`, nhưng backend/gateway hiện không có route `/api/v1/cart/merge`. Merge thật đang nằm ở logic provider phía frontend.
+- `frontend/src/lib/api/order.ts` đang gọi hủy đơn bằng `POST`, trong khi route backend/gateway user hiện là `PUT /api/v1/orders/:id/cancel`.
+- `frontend/src/lib/api/payment.ts` có helper `verifyPaymentSignature`, nhưng backend không có route `/api/v1/payments/:id/verify`.
+- `frontend` có UI cho security/preferences/notifications, nhưng chưa phải mọi hành vi đều có backend API chuyên biệt hoặc flow hoàn chỉnh.
+- `client/README.md` mô tả phạm vi hẹp hơn so với source hiện tại của `client/`.
+- local runtime mặc định không chạy `client/`, không expose Postgres/Redis/RabbitMQ ra host, và `http://localhost` không phải frontend chính.
 
-### 9. [ ] Xây dựng chiến lược cache có điều kiện cho dữ liệu đọc nhiều
+## Hướng mở rộng gợi ý bám theo codebase hiện tại
 
-- **Vì sao cần làm:** Redis đã có trong hệ thống, nhưng cache chỉ nên thêm sau khi đã đo được read hotspot thật. Cache sai chỗ sẽ tạo complexity mà không tăng hiệu quả.
-- **Kết quả mong muốn:** Chọn 1–2 read path đáng giá nhất, định nghĩa TTL, invalidation rule, cache key, fallback khi Redis lỗi.
-- **Giá trị học tập:** Senior biết khi nào cache đáng tiền và khi nào chỉ là nợ vận hành.
+| Ưu tiên | Đề xuất | Giá trị mang lại | Phụ thuộc chính |
+| --- | --- | --- | --- |
+| P0 | Chuẩn hóa kiến trúc frontend theo domain module trong `frontend/`: tách rõ page container, hook/use-case, API mapper, UI component thuần | Giảm độ khó khi refactor, dễ đọc hơn, giảm coupling giữa UI và business logic | Cần chốt boundary cho auth, catalog, cart, checkout, admin |
+| P0 | Làm sạch API layer frontend và sửa các contract mismatch hiện có như `mergeCart`, `cancelOrder`, `verifyPaymentSignature` | Tránh bug âm thầm, giảm chỗ phải workaround trong provider/page | Cần đối chiếu lại route gateway và service thật |
+| P0 | Nối trọn vẹn các flow account còn partial: đổi mật khẩu, quản lý địa chỉ rõ ràng hơn, notifications/preferences có boundary thật hoặc ghi rõ chỉ là UI | Làm account area bớt "nửa backend nửa mock", giúp onboarding dễ hiểu | Cần quyết định feature nào thực sự cần backend mới, feature nào giữ ở UI |
+| P0 | Tách `/admin` thành các khối rõ hơn theo domain: users, products, coupons, orders, payments; gom guard quyền và action state | Giảm độ phức tạp của một page lớn, dễ mở rộng cho staff/admin | Cần chuẩn hóa naming, route segment và shared admin primitives |
+| P1 | Chuẩn hóa strategy state management cho `frontend/`: tiếp tục với provider + custom hook khi đủ, chỉ thêm store/query library nếu pain point thật | Tránh thêm framework sớm nhưng vẫn giảm duplication và request orchestration rối | Cần audit chỗ nào đang duplicate fetch/cache/error state |
+| P1 | Chuẩn hóa naming convention, DTO mapping và shared type strategy giữa `frontend/` và `client/` | Giảm drift giữa hai nhánh UI, giảm công refactor về sau | Cần quyết định nhánh UI nào là source of truth cho shared contract |
+| P1 | Làm rõ search/filter/sort UX dựa trên contract catalog hiện có, đặc biệt khi backend đã có cursor pagination và optional Elasticsearch | Tăng giá trị thực cho product discovery mà không cần bẻ backend quá nhiều | Cần quyết định search nào dùng DB filter, search nào cần ES |
+| P1 | Nâng cấp cart/checkout theo hướng retry-safe hơn: xác định rõ merge strategy, payment retry behavior, xử lý lỗi hiển thị tốt hơn | Giảm bug ở flow mua hàng, phù hợp với backend order/payment hiện có | Phụ thuộc vào việc chốt contract cart merge và payment initiation |
+| P1 | Chuẩn hóa transaction helper cho write flow nhiều bước ở backend, sau đó cân nhắc outbox cho order/payment event quan trọng | Giảm duplication transaction code, tăng độ an toàn dữ liệu và event consistency | Cần khoanh rõ write path nào đang nhạy cảm nhất |
+| P1 | Giảm dần `COUNT(*) + OFFSET/LIMIT` ở admin order listing hoặc ít nhất audit lại query/index theo số liệu | Tránh bottleneck khi dữ liệu đơn tăng | Cần số liệu query plan và nhu cầu UX thật của backoffice |
+| P2 | Bổ sung test chiến lược cho các flow rủi ro cao: payment webhook, order status transition, authz admin/staff, frontend API integration quan trọng | Tăng tự tin khi refactor frontend/backend song song | Cần chốt test boundary trước để không viết test dàn trải |
+| P2 | Tăng logging/monitoring cho async flow và lỗi frontend gọi API, tận dụng tracing/Prometheus/Jaeger đã có | Debug sự cố nhanh hơn, nhất là order/payment/notification path | Cần quyết định field correlation và dashboard tối thiểu |
+| P2 | Rà soát bảo mật thực dụng: callback URL, upload, webhook idempotency, secret handling, authz cho admin route | Giảm risk khi dự án mở rộng tính năng thật | Cần checklist ngắn gọn bám repo thay vì policy chung chung |
+| P3 | Quyết định rõ vai trò của `client/`: tiếp tục đầu tư hay giữ experimental; sau đó cập nhật CI/CD và docs cho nhất quán | Giảm nhiễu khi onboarding và giảm chi phí giữ hai nhánh UI | Cần thống nhất owner và mục tiêu của `client/` |
+| P3 | Giữ tài liệu sống đồng bộ với source, ưu tiên README, Docker guide và feature tracker mỗi khi route/config/runtime thay đổi | Giảm nhầm lẫn cho contributor mới, giảm drift giữa docs và code | Cần đưa việc cập nhật docs vào checklist merge |
 
-### 10. [ ] Tối ưu bulk import/catalog maintenance theo batch và streaming
+## Cách dùng file này
 
-- **Vì sao cần làm:** Nếu project tiến tới quản trị catalog lớn, import/update số lượng lớn sẽ sớm thành bài toán thật. Làm sớm theo batch sẽ tránh phải rewrite muộn.
-- **Kết quả mong muốn:** Thiết kế flow import dùng streaming parse, batch insert/update, bounded worker, backpressure rõ ràng.
-- **Giá trị học tập:** Đây là bài tập rất tốt về memory profile, channel design, và throughput.
-
----
-
-## P2 — Reliability, resilience, vận hành
-
-### 11. [ ] Thêm dead-letter và retry policy chuẩn cho `notification-service`
-
-- **Vì sao cần làm:** Notification hiện đã consume event và gửi email, nhưng retry/dead-letter cần rõ ràng hơn để tránh poison message hoặc retry vô hạn.
-- **Kết quả mong muốn:** Có retry count, delay policy, dead-letter queue, log/metric cho message fail cuối cùng.
-- **Giá trị học tập:** Học cách vận hành consumer thực chiến thay vì chỉ “consume được là xong”.
-
-### 12. [ ] Chuẩn hoá graceful shutdown cho mọi service và mọi worker
-
-- **Vì sao cần làm:** Nhiều service đã có shutdown logic, nhưng cần thống nhất handling cho HTTP, gRPC, worker, consumer, ticker, và signal như `SIGTERM`.
-- **Kết quả mong muốn:** Mọi service dừng có kiểm soát, không rơi request, không bỏ dở goroutine nền, không làm mất work dễ tránh.
-- **Giá trị học tập:** Đây là kỹ năng production readiness tối thiểu của backend senior.
-
-### 13. [ ] Chuẩn hoá timeout/retry/circuit breaker cho outbound call
-
-- **Vì sao cần làm:** Gateway đã có retry + circuit breaker cho một số flow, nhưng các outbound path khác cần cùng tiêu chuẩn về timeout, retry-safe method, logging, tracing field.
-- **Kết quả mong muốn:** Có rule dùng chung cho HTTP/gRPC client: timeout mặc định, retry policy, idempotency expectation, error mapping.
-- **Giá trị học tập:** Senior phải kiểm soát failure mode xuyên service, không chỉ code happy path.
-
-### 14. [ ] Nâng cấp observability cho background job và async flow
-
-- **Vì sao cần làm:** HTTP request thường đã có log/trace khá ổn, nhưng cron, queue consumer, sync job, low-stock monitor cần signal quan sát rõ hơn.
-- **Kết quả mong muốn:** Có metric cho throughput/failure/retry, trace hoặc correlation field hợp lý, dashboard tối thiểu cho async path.
-- **Giá trị học tập:** Năng lực debug distributed flow đến từ observability tốt, không đến từ đoán mò.
-
----
-
-## P3 — Chất lượng code, security, CI/CD, tư duy thiết kế
-
-### 15. [ ] Mở rộng test coverage theo vùng rủi ro thay vì chạy theo phần trăm
-
-- **Vì sao cần làm:** Repo đã có khá nhiều unit/integration test, nhưng chưa đồng đều ở các flow dễ hỏng như webhook, transaction rollback, authz, duplicate side effect.
-- **Kết quả mong muốn:** Ưu tiên test vào payment, order status transition, repository query quan trọng, gateway proxy edge case, permission path.
-- **Giá trị học tập:** Senior biết nơi nào đáng test nhất để giảm rủi ro thực tế.
-
-### 16. [ ] Đưa `go test`, race test, lint, migration verification vào CI bắt buộc
-
-- **Vì sao cần làm:** Chất lượng không nên phụ thuộc vào việc reviewer nhớ chạy tay.
-- **Kết quả mong muốn:** Pipeline tối thiểu gồm unit test, integration test quan trọng, `-race` cho phần phù hợp, static checks, và verify migration/app startup cơ bản.
-- **Giá trị học tập:** Đây là bước biến codebase từ “project học tập” thành “repo có kỷ luật kỹ thuật”.
-
-### 17. [ ] Rà soát bảo mật theo checklist backend thực dụng
-
-- **Vì sao cần làm:** Project đã có auth, OAuth, webhook, upload, proxy, email flow. Bề mặt tấn công không còn nhỏ.
-- **Kết quả mong muốn:** Có checklist định kỳ cho secret/config, authz, validation, file upload, redirect handling, logging PII, signature verification, rate-limit.
-- **Giá trị học tập:** Senior backend phải nhìn thấy risk trước khi incident xảy ra.
-
-### 18. [ ] Viết design note ngắn cho các quyết định khó thay vì thêm abstraction vô tội vạ
-
-- **Vì sao cần làm:** Khi repo lớn dần, những chỗ như transaction boundary, outbox, cache policy, pagination strategy, event contract cần được giải thích bằng decision log ngắn gọn.
-- **Kết quả mong muốn:** Mỗi thay đổi kiến trúc đáng kể có 1 note ngắn: bối cảnh, lựa chọn, trade-off, failure mode, migration path.
-- **Giá trị học tập:** Đây là phần rất quan trọng để bước từ level “code tốt” sang “design tốt”.
-
-### 19. [ ] Chỉ xem Saga hoặc choreography là bước sau, không phải ưu tiên mặc định
-
-- **Vì sao cần làm:** Repo có RabbitMQ và microservices, nhưng điều đó không có nghĩa mọi bài toán consistency đều phải leo thẳng lên Saga. Outbox, idempotency, compensation cục bộ và transaction boundary tốt thường mang lại giá trị sớm hơn.
-- **Kết quả mong muốn:** Chỉ nghiên cứu/triển khai Saga sau khi đã làm xong những nền tảng reliability cơ bản ở trên và có use case thật chứng minh cần thiết.
-- **Giá trị học tập:** Senior biết phản kháng với độ phức tạp không cần thiết.
-
----
-
-## Cách dùng roadmap này
-
-1. Luôn làm từ trên xuống theo ưu tiên, trừ khi có incident hoặc requirement gấp.
-2. Mỗi lần chỉ kéo 1 mục lớn hoặc 1 lát cắt nhỏ của mục lớn.
-3. Trước khi code, viết rõ:
-   - vấn đề hiện tại
-   - số liệu hoặc dấu hiệu đang có
-   - tiêu chí hoàn thành
-4. Sau khi xong, cập nhật:
-   - thay đổi chính
-   - benchmark/metric nếu có
-   - lesson learned
-
-Nếu hoàn thành tốt phần P0 và P1, bạn đã đi rất gần tới tư duy của một Backend Senior Go: ưu tiên tính đúng đắn dữ liệu, hiệu năng đo được, observability, và độ đơn giản có chủ đích.
+- Khi thêm feature mới, hãy cập nhật cả phần "Hiện trạng feature" và "Hướng mở rộng" nếu nó làm đổi roadmap.
+- Khi refactor frontend, ưu tiên làm rõ trạng thái `Partial` trước khi bổ sung abstraction mới.
+- Khi backend thay đổi contract, hãy rà lại ngay những dòng đang ghi "điểm lệch" để tránh tài liệu cũ tiếp tục tồn tại.

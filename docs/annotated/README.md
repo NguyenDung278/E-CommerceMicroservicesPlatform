@@ -1,36 +1,57 @@
 # Annotated Source Reading
 
-Thư mục này dành cho việc đọc source code theo từng block quan trọng. Mục tiêu không phải là diễn giải mọi dòng, mà là:
+Thư mục `annotated/` dành cho việc đọc source code có hướng dẫn. Trọng tâm của tầng này là:
 
-- chỉ ra những đoạn quyết định flow xử lý,
-- giải thích vì sao block đó tồn tại,
-- cho bạn biết nên đặt câu hỏi gì khi đọc source thật.
+- chỉ ra module nào giữ trách nhiệm gì
+- giải thích vì sao cách tổ chức hiện tại có ích cho readability và maintainability
+- mô tả luồng dữ liệu theo từng file quan trọng
+- ghi rõ trade-off hoặc nợ refactor nếu source hiện tại đang ở trạng thái chuyển tiếp
 
 ## Cách đọc hiệu quả
 
-1. Mở file markdown annotate tương ứng.
-2. Mở source code thật song song trong IDE.
-3. Đi theo từng block line number hoặc từng function chính.
-4. Tự trace dữ liệu đi qua các layer: `handler -> service -> repository` hoặc `context -> hook -> page`.
-5. Nếu cần bức tranh lớn trước khi vào từng block, đọc thêm [../learning/11-senior-source-code-review-guide.md](../learning/11-senior-source-code-review-guide.md).
+1. Mở doc annotate tương ứng.
+2. Mở source thật song song trong IDE.
+3. Đọc theo luồng `input -> xử lý -> side effect -> output`.
+4. Tự trace dependency: route/page -> provider/hook -> api -> gateway/service hoặc handler -> service -> repository.
+5. Nếu cần bức tranh kiến trúc trước, đọc [../deep-dive/README.md](../deep-dive/README.md) trước khi xuống từng file.
 
 ## Thứ tự đọc khuyến nghị
 
+### Nếu bạn muốn hiểu frontend hiện tại
+
+1. [frontend-source-map.md](./frontend-source-map.md)
+2. [frontend-app.md](./frontend-app.md)
+3. [frontend-auth-cart-providers.md](./frontend-auth-cart-providers.md)
+4. [frontend-api-layer.md](./frontend-api-layer.md)
+5. [frontend-routes-and-flows.md](./frontend-routes-and-flows.md)
+6. [client-experimental.md](./client-experimental.md)
+
+### Nếu bạn muốn hiểu backend Go
+
 1. [shared-packages.md](./shared-packages.md)
 2. [api-gateway-main.md](./api-gateway-main.md)
-3. [frontend-app.md](./frontend-app.md)
-4. [auth-go.md](./auth-go.md)
-5. [user-service.md](./user-service.md)
-6. [product-service.md](./product-service.md)
-7. [cart-service.md](./cart-service.md)
-8. [order-service.md](./order-service.md)
-9. [payment-service.md](./payment-service.md)
-10. [notification-service.md](./notification-service.md)
+3. [auth-go.md](./auth-go.md)
+4. [user-service.md](./user-service.md)
+5. [product-service.md](./product-service.md)
+6. [cart-service.md](./cart-service.md)
+7. [order-service.md](./order-service.md)
+8. [payment-service.md](./payment-service.md)
+9. [notification-service.md](./notification-service.md)
 
-## File annotate theo module
+## Bộ annotate theo module
+
+### Frontend
+
+- [frontend-source-map.md](./frontend-source-map.md)
+- [frontend-app.md](./frontend-app.md)
+- [frontend-auth-cart-providers.md](./frontend-auth-cart-providers.md)
+- [frontend-api-layer.md](./frontend-api-layer.md)
+- [frontend-routes-and-flows.md](./frontend-routes-and-flows.md)
+- [client-experimental.md](./client-experimental.md)
+
+### Backend và shared packages
 
 - [shared-packages.md](./shared-packages.md)
-- [frontend-app.md](./frontend-app.md)
 - [api-gateway-main.md](./api-gateway-main.md)
 - [auth-go.md](./auth-go.md)
 - [user-service.md](./user-service.md)
@@ -42,7 +63,7 @@ Thư mục này dành cho việc đọc source code theo từng block quan trọ
 - [order-repository.md](./order-repository.md)
 - [payment-repository.md](./payment-repository.md)
 
-## File line-by-line sâu hơn
+## File line-by-line backend sâu hơn
 
 - [line-by-line-auth-go.md](./line-by-line-auth-go.md)
 - [line-by-line-order-service.md](./line-by-line-order-service.md)
@@ -50,16 +71,17 @@ Thư mục này dành cho việc đọc source code theo từng block quan trọ
 
 ## Khi nào nên đọc annotate nào
 
-- Sửa auth, role, JWT: bắt đầu từ `shared-packages.md`, `auth-go.md`, `user-service.md`
-- Sửa catalog hoặc search: đọc `product-service.md`
-- Sửa guest cart hoặc cart merge: đọc `frontend-app.md`, `cart-service.md`
-- Sửa order/payment flow: đọc `order-service.md`, `payment-service.md`, `notification-service.md`
+- Sửa router, provider tree hoặc layout của React app: đọc `frontend-app.md`
+- Sửa auth bootstrap, token, OAuth, session nhớ đăng nhập: đọc `frontend-auth-cart-providers.md`
+- Sửa guest cart, cart merge hoặc local storage flow: đọc `frontend-auth-cart-providers.md` và `cart-service.md`
+- Sửa API module, normalizer, type hoặc mapping lỗi: đọc `frontend-api-layer.md`
+- Sửa page/storefront/account/admin: đọc `frontend-routes-and-flows.md`
+- Sửa gateway hoặc wiring service: đọc `api-gateway-main.md`
+- Sửa auth, role, JWT, verify/reset password: bắt đầu từ `shared-packages.md`, `auth-go.md`, `user-service.md`
+- Sửa order/payment: đọc `order-service.md`, `payment-service.md`, `notification-service.md`
 
-## Kết quả mong đợi
+## Điều cần ghi nhớ
 
-Sau khi đọc xong bộ này, bạn nên trả lời được:
-
-- request vào từ đâu,
-- business rule nằm ở layer nào,
-- source of truth của mỗi domain là gì,
-- service nào gọi service nào bằng HTTP, gRPC hoặc RabbitMQ.
+- Bộ docs frontend mới không che đi refactor dở dang. Nếu route vẫn import `../hooks` hay `../lib/api`, hãy tra `frontend-source-map.md` để biết implementation thực nằm ở đâu trong `features/` và `shared/`.
+- Annotated docs không thay thế source thật. Chúng giúp bạn đặt câu hỏi đúng và đọc đúng layer.
+- Mỗi khi gặp một file dài, đừng cố nhớ từng dòng; hãy nhớ boundary, dependency và side effect của file đó.

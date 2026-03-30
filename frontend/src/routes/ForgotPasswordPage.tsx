@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
-import { FormField } from "../ui/form/FormField";
-import { api, getErrorMessage } from "../lib/api";
-import { sanitizeEmail } from "../utils/sanitize";
-import { isValidEmail } from "../utils/validation";
+import { FormField } from "../shared/components/form/FormField";
+import { api, getErrorMessage } from "../shared/api";
+import { sanitizeEmail } from "../shared/utils/sanitize";
+import { isValidEmail } from "../shared/utils/validation";
 import "./AuthPages.css";
 
 export function ForgotPasswordPage() {

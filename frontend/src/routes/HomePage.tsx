@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api, getErrorMessage } from "../lib/api";
-import type { Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
+import { api, getErrorMessage } from "../shared/api";
+import type { Product } from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
 import "./HomePage.css";
 
 const fallbackEditorialImages = {

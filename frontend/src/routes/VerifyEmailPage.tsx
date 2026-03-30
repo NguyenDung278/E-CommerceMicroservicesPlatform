@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { api, getErrorMessage } from "../lib/api";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { api, getErrorMessage } from "../shared/api";
 import "./AuthPages.css";
 
 export function VerifyEmailPage() {

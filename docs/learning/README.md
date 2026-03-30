@@ -1,35 +1,34 @@
 # Learning Path
 
-Thư mục này dành cho developer mới hoặc người đang dùng repo như một playground để học backend/full-stack thực chiến.
+`learning/` là tầng tài liệu dành cho người mới vào repo hoặc người đang dùng dự án như một bộ case study để học backend/full-stack thực chiến.
 
 ## Thứ tự học khuyến nghị
 
 1. [00-local-setup.md](./00-local-setup.md)
-2. [01-go-backend-foundations.md](./01-go-backend-foundations.md)
-3. [02-project-technologies-explained.md](./02-project-technologies-explained.md)
-4. [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
-5. [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md)
-6. [05-first-contribution-walkthrough.md](./05-first-contribution-walkthrough.md)
-7. [06-testing-and-verification.md](./06-testing-and-verification.md)
-8. [07-core-concepts-and-terms.md](./07-core-concepts-and-terms.md)
-9. [08-career-path-golang-backend.md](./08-career-path-golang-backend.md)
-10. [04-study-prompts.md](./04-study-prompts.md)
+2. [02-project-technologies-explained.md](./02-project-technologies-explained.md)
+3. [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
+4. [05-first-contribution-walkthrough.md](./05-first-contribution-walkthrough.md)
+5. [06-testing-and-verification.md](./06-testing-and-verification.md)
+6. [10-guide-to-debugging.md](./10-guide-to-debugging.md)
+7. [09-how-to-add-new-feature.md](./09-how-to-add-new-feature.md)
+8. [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 
-- dựng môi trường local mà không đoán mò
-- hiểu thuật ngữ repo trước khi đọc source
-- biết nên đọc service nào trước service nào sau
-- biết cách verify thay đổi trước khi mở PR
-- biết cách review code theo tư duy senior thay vì chỉ mô tả bề mặt
+- dựng local runtime đúng với compose hiện tại, không đoán mò theo docs cũ
+- biết frontend nào là đường chính, backend nào là source of truth, dependency nào đang optional
+- học cách đọc repo theo flow chứ không đọc rời từng file
+- biết verify thay đổi theo đúng runtime hiện tại
+- biết cách debug khi compose, env, gateway, DB hoặc frontend đang lệch nhau
 
 ## Khi nào chuyển sang `deep-dive/` và `annotated/`
 
-- Khi bạn đã chạy được repo local, chuyển sang `deep-dive/`
-- Khi bạn đã hiểu luồng tổng thể, chuyển sang `annotated/`
+- Khi đã chạy được local: sang `deep-dive/`
+- Khi đã hiểu boundary của hệ thống: sang `annotated/`
+- Nếu bạn đang sửa frontend sau refactor: đọc `deep-dive/frontend-architecture.md` rồi mới sang annotate frontend
 
 ## Tài liệu tổng hợp nên ưu tiên đọc
 
-- [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md): tài liệu tổng hợp kiến trúc, vai trò từng service, luồng xử lý chính, điểm mạnh, điểm yếu, kỹ năng nên học thêm và lộ trình phát triển khả năng đọc/review code.
-
-Ba thư mục `learning`, `deep-dive`, `annotated` được thiết kế như ba tầng: vào nghề, hiểu hệ thống, rồi đọc source.
+- [03-source-reading-roadmap.md](./03-source-reading-roadmap.md): biết phải mở file nào trước khi sửa code
+- [06-testing-and-verification.md](./06-testing-and-verification.md): biết verify gì trước khi tin rằng mình đã sửa xong
+- [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md): nhìn repo như một senior engineer thay vì chỉ như người học syntax

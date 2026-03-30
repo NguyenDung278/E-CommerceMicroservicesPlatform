@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { ProductCard } from "../ui/product/ProductCard";
-import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage } from "../lib/api";
-import type { Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
+import { useCart } from "../features/cart/hooks/useCart";
+import { api, getErrorMessage } from "../shared/api";
+import { ProductCard } from "../shared/components/product/ProductCard";
+import type { Product } from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
 import "./CatalogPage.css";
 
 export function CatalogPage() {

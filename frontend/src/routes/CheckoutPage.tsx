@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useCart } from "../hooks/useCart";
-import { api, getErrorMessage } from "../lib/api";
-import type { Address, Product } from "../types/api";
-import { formatCurrency } from "../utils/format";
-import { sanitizeText } from "../utils/sanitize";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { useCart } from "../features/cart/hooks/useCart";
+import { api, getErrorMessage } from "../shared/api";
+import type { Address, Product } from "../shared/types/api";
+import { formatCurrency } from "../shared/utils/format";
+import { sanitizeText } from "../shared/utils/sanitize";
 import "./CheckoutPage.css";
 
 type DirectProductState = {

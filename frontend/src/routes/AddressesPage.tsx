@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useSavedAddresses } from "../hooks/useSavedAddresses";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useSavedAddresses } from "../features/account/hooks/useSavedAddresses";
+import { useAuth } from "../features/auth/hooks/useAuth";
 import "./AddressesPage.css";
 
 export function AddressesPage() {
@@ -10,7 +10,7 @@ export function AddressesPage() {
   const { addresses, isLoading } = useSavedAddresses(token);
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="addresses-route">
         <header className="addresses-route-head">
           <div>
@@ -81,6 +81,6 @@ export function AddressesPage() {
           </div>
         )}
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "../hooks/useAuth";
-import { useOrderPayments } from "../hooks/useOrderPayments";
-import type { Order } from "../types/api";
-import { AccountPageFrame } from "../ui/account/AccountPageFrame";
-import { buildTileLabel, formatShortDate, formatShortOrderId, getOrderStatusTone } from "../ui/account/accountConfig";
-import { formatCurrency, formatStatusLabel } from "../utils/format";
+import { AccountPageLayout } from "../features/account/components/AccountPageLayout";
+import { useOrderPayments } from "../features/account/hooks/useOrderPayments";
+import { buildTileLabel, formatShortDate, formatShortOrderId, getOrderStatusTone } from "../features/account/utils/accountPresentation";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import type { Order } from "../shared/types/api";
+import { formatCurrency, formatStatusLabel } from "../shared/utils/format";
 import "./OrdersPage.css";
 
 export function OrdersPage() {
@@ -17,7 +17,7 @@ export function OrdersPage() {
   const hasMoreOrders = visibleCount < orders.length;
 
   return (
-    <AccountPageFrame>
+    <AccountPageLayout>
       <div className="orders-route">
         <header className="orders-route-head">
           <h1>Order History</h1>
@@ -96,7 +96,7 @@ export function OrdersPage() {
           </>
         )}
       </div>
-    </AccountPageFrame>
+    </AccountPageLayout>
   );
 }
 

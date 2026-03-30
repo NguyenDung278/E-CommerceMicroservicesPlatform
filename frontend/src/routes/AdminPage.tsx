@@ -1,7 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
-import { FormField } from "../ui/form/FormField";
-import { ProductCard } from "../ui/product/ProductCard";
 import {
   createEmptyVariant,
   createDefaultCouponForm,
@@ -17,16 +15,18 @@ import {
   type CouponFormState,
   type ProductFormState,
   type VariantFormRow,
-  validateSelectedImageFiles
-} from "../features/admin/formUtils";
-import { useAuth } from "../hooks/useAuth";
-import { api, getErrorMessage } from "../lib/api";
-import type { AdminOrderReport, Coupon, Order, Payment, Product, UserProfile } from "../types/api";
-import { formatRoleLabel, isDevelopmentAccount } from "../utils/devAccounts";
-import { formatCurrency, formatDateTime } from "../utils/format";
-import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "../utils/sanitize";
-import { validateProduct } from "../utils/validation";
-import "../ui/orders/OrderHistoryList.css";
+  validateSelectedImageFiles,
+} from "../features/admin/utils/productForm";
+import { useAuth } from "../features/auth/hooks/useAuth";
+import { FormField } from "../shared/components/form/FormField";
+import "../shared/components/orders/OrderHistoryList.css";
+import { ProductCard } from "../shared/components/product/ProductCard";
+import { api, getErrorMessage } from "../shared/api";
+import type { AdminOrderReport, Coupon, Order, Payment, Product, UserProfile } from "../shared/types/api";
+import { formatRoleLabel, isDevelopmentAccount } from "../shared/utils/devAccounts";
+import { formatCurrency, formatDateTime } from "../shared/utils/format";
+import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "../shared/utils/sanitize";
+import { validateProduct } from "../shared/utils/validation";
 import "./AdminPage.css";
 
 export function AdminPage() {

@@ -1,6 +1,6 @@
 # Local Setup Guide
 
-Tài liệu này là đường ngắn nhất để chạy repo trên máy local.
+Tài liệu này là đường ngắn nhất để chạy repo trên máy local mà không bị lệch với Docker Compose và Makefile hiện tại.
 
 ## 1. Yêu cầu
 
@@ -8,136 +8,223 @@ Tài liệu này là đường ngắn nhất để chạy repo trên máy local.
 - Docker Desktop hoặc Docker Engine + Docker Compose
 - Node.js 20+
 - `make`
+- nếu muốn chạy migration từ host: cài thêm `migrate` CLI
 
 ## 2. Chuẩn bị biến môi trường
 
-Từ root repo:
+Repo hiện ưu tiên `.env.local`. Nếu file này không tồn tại, workflow mới fallback sang `.env.example`.
+
+Khuyến nghị:
 
 ```bash
-cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-Giá trị tối thiểu cần kiểm tra:
+Nếu bạn chưa muốn tạo file local riêng, có thể đọc `.env.example` để biết danh sách biến cần có.
+
+### Những biến tối thiểu nên kiểm tra
 
 - `POSTGRES_PASSWORD`
 - `JWT_SECRET`
 - `RABBITMQ_PASSWORD`
+- `FRONTEND_BASE_URL`
 - `GRAFANA_ADMIN_PASSWORD`
 
-## 3. Dựng backend và hạ tầng
+### Điều dễ nhầm
 
-Render file compose:
+- `.env.local.example` đang dùng `FRONTEND_BASE_URL=http://localhost:4173` vì đây là cổng preview/container của `frontend`
+- `.env.example` dùng `http://localhost:5174` để thuận tiện hơn cho Vite dev server chạy ngoài Docker
+
+## 3. Render compose trước khi chạy
+
+Lệnh này giúp bạn xác nhận Compose đang đọc đúng env file:
 
 ```bash
 make docker-config
 ```
 
-Chạy toàn bộ stack:
+Kết quả render được lưu ở:
+
+```bash
+/tmp/ecommerce-compose.rendered.yaml
+```
+
+## 4. Dựng toàn bộ stack bằng Docker Compose
 
 ```bash
 make compose-up
 ```
 
-Các service chính sau khi lên:
+Lưu ý:
 
-- API Gateway: `http://localhost:8080`
-- User Service: `http://localhost:8081`
-- Product Service: `http://localhost:8082`
-- Cart Service: `http://localhost:8083`
-- Order Service: `http://localhost:8084`
-- Payment Service: `http://localhost:8085`
-- Notification Service: `http://localhost:8086`
+- target này chạy `docker compose up --build`, tức là attach log luôn
+- nếu muốn chạy nền, hãy dùng lệnh compose trực tiếp với `-d`
 
-Các công cụ hỗ trợ:
-
-- Frontend static container: `http://localhost:4173`
-- Grafana: `http://localhost:3000`
-- Prometheus: `http://localhost:9090`
-- Jaeger: `http://localhost:16686`
-- RabbitMQ UI: `http://localhost:15672`
-- MinIO Console: `http://localhost:9001`
-- Elasticsearch: `http://localhost:9200`
-
-## 4. Tài khoản test admin và staff
-
-Khi dựng local bằng Docker Compose, `user-service` sẽ bootstrap hai tài khoản development để test nhanh:
-
-- Admin: `admin.dev@ndshop.local` / `AdminTest!2026-ChangeMe`
-- Staff: `staff.dev@ndshop.local` / `StaffTest!2026-ChangeMe`
-
-Quyền mặc định:
-
-- `admin`: vào được khu vực `/admin` và có quyền đổi role user
-- `staff`: vào được khu vực `/admin` cho các thao tác vận hành, nhưng không đổi role người khác
-
-Nếu cần đổi password local mà vẫn giữ seed account, bạn có thể override bằng env:
+Ví dụ:
 
 ```bash
-export BOOTSTRAP_DEV_ACCOUNTS_ADMIN_PASSWORD='AdminLocal!2026'
-export BOOTSTRAP_DEV_ACCOUNTS_STAFF_PASSWORD='StaffLocal!2026'
+cd deployments/docker
+docker compose --env-file ../../.env.local up --build -d
 ```
 
-Nếu cần tắt hoàn toàn seed account:
+## 5. Những endpoint host nên nhớ
 
-```bash
-export BOOTSTRAP_DEV_ACCOUNTS_ENABLED=false
-```
+Compose hiện publish ra host các cổng sau:
 
-## 5. Chạy frontend ở chế độ dev
+- `http://localhost:80` -> `nginx`
+- `http://localhost:4173` -> `frontend` preview container
+- `http://localhost:8080` -> `api-gateway`
+- `http://localhost:9000` -> MinIO API
+- `http://localhost:9001` -> MinIO Console
+- `http://localhost:9200` -> Elasticsearch
+- `http://localhost:16686` -> Jaeger UI
+
+### Điều rất dễ nhầm
+
+Các service sau **không publish ra host mặc định**:
+
+- `postgres`
+- `redis`
+- `rabbitmq`
+- `prometheus`
+- `grafana`
+- `user-service`
+- `product-service`
+- `cart-service`
+- `order-service`
+- `payment-service`
+- `notification-service`
+
+Vì vậy:
+
+- smoke test từ máy host nên đi qua `api-gateway`
+- chẩn đoán service nội bộ nên dùng `docker compose ps`, `docker compose logs`, `docker inspect`
+
+## 6. Frontend nào là UI chính
+
+Repo hiện có hai frontend:
+
+- `frontend/`: React + Vite, là UI local chính và có service Compose mặc định
+- `client/`: Next.js experimental, không nằm trong Compose mặc định
+
+### Chạy frontend ở chế độ dev ngoài Docker
 
 ```bash
 make frontend-install
 make frontend-dev
 ```
 
-Frontend dev mặc định chạy ở `http://localhost:5174`.
-
-Nếu cần trỏ sang gateway khác:
+Vite dev server mặc định chạy ở:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:8080 npm run dev
+http://localhost:5174
 ```
 
-## 6. Kiểm tra health nhanh
+Khi chạy cách này, frontend dev sẽ proxy API về gateway ở `http://localhost:8080`.
+
+## 7. Health checks nhanh
+
+### Từ host
 
 ```bash
 curl http://localhost:8080/health
-curl http://localhost:8081/health
-curl http://localhost:8082/health
-curl http://localhost:8083/health
-curl http://localhost:8084/health
-curl http://localhost:8085/health
-curl http://localhost:8086/health
+curl http://localhost/health
 ```
 
-## 7. Chạy test cơ bản
+### Xem trạng thái container
 
 ```bash
-make test
-make vet
-make frontend-build
+cd deployments/docker
+docker compose --env-file ../../.env.local ps
 ```
 
-## 8. Nếu có lỗi startup
+Đây là cách đáng tin hơn việc giả định từng service nội bộ đều có port host riêng.
 
-### Lỗi container chưa healthy
+## 8. Tài khoản development mặc định
 
-- kiểm tra `docker compose ps`
-- kiểm tra log của container liên quan
-- ưu tiên xác minh PostgreSQL, Redis, RabbitMQ lên trước
+Khi chạy local bằng Compose, `user-service` bootstrap hai tài khoản để test nhanh:
+
+- Admin: `admin.dev@ndshop.local` / `AdminTest!2026-ChangeMe`
+- Staff: `staff.dev@ndshop.local` / `StaffTest!2026-ChangeMe`
+
+### Ý nghĩa quyền
+
+- `admin`: vào được `/admin` và có thể đổi role user khác
+- `staff`: vào được `/admin` cho các thao tác vận hành, nhưng không đổi role người khác
+
+### Override password local
+
+```bash
+export BOOTSTRAP_DEV_ACCOUNTS_ADMIN_PASSWORD='AdminLocal!2026'
+export BOOTSTRAP_DEV_ACCOUNTS_STAFF_PASSWORD='StaffLocal!2026'
+```
+
+### Tắt seed account
+
+```bash
+export BOOTSTRAP_DEV_ACCOUNTS_ENABLED=false
+```
+
+## 9. Kiểm tra nhanh flow đăng nhập
+
+```bash
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identifier": "admin.dev@ndshop.local",
+    "password": "AdminTest!2026-ChangeMe"
+  }' | jq -r '.data.token')
+```
+
+```bash
+curl http://localhost:8080/api/v1/users/profile \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+## 10. Migration và database: điểm dễ nhầm nhất khi setup
+
+`Makefile` có target:
+
+```bash
+make migrate-up
+```
+
+Nhưng cần nhớ:
+
+- target này mặc định trỏ tới `localhost:5432`
+- Compose hiện **không publish Postgres ra host**
+
+Điều đó có nghĩa:
+
+- khi chạy full stack Compose, migration thường đã được service tự chạy lúc startup
+- muốn dùng `make migrate-up` từ host, bạn phải tự publish Postgres ra `5432` hoặc tạo cách truy cập tương đương
+
+### Cách kiểm tra DB đang sống
+
+```bash
+cd deployments/docker
+docker compose --env-file ../../.env.local exec postgres pg_isready -U admin
+```
+
+## 11. Nếu có lỗi startup
+
+### Container chưa healthy
+
+- chạy `docker compose ps`
+- xem log của container lỗi
+- ưu tiên kiểm tra `postgres`, `redis`, `rabbitmq`, `api-gateway`
 
 ### Frontend không gọi được API
 
 - kiểm tra `http://localhost:8080/health`
-- nếu chạy frontend dev, kiểm tra `VITE_API_BASE_URL`
-- nếu chạy frontend qua container static, frontend thường gọi cùng origin `/api`
+- nếu chạy Vite dev, kiểm tra port `5174`
+- nếu chạy frontend preview/container, kiểm tra `http://localhost:4173`
 
-### Không đăng nhập được bằng tài khoản test
+### Không đăng nhập được bằng dev account
 
-- kiểm tra `user-service` có đang dùng config local với `bootstrap.dev_accounts.enabled: true`
-- nếu đã export `BOOTSTRAP_DEV_ACCOUNTS_ENABLED=false`, seed account sẽ không được tạo
-- kiểm tra log `user-service` để xác nhận bootstrapper đã chạy
-- nếu đã override password bằng env, hãy dùng password mới thay cho built-in default
+- kiểm tra `user-service` có log bootstrap dev accounts không
+- kiểm tra bạn có override password qua env hay không
+- kiểm tra `BOOTSTRAP_DEV_ACCOUNTS_ENABLED` có bị tắt không
 
 ### Search hoặc object storage lỗi
 

@@ -1,64 +1,73 @@
 # Annotated: Cart Service
 
-`cart-service` nhỏ hơn các service khác nhưng lại là nơi có nhiều quyết định nghiệp vụ quan trọng về source of truth.
+`cart-service` nhỏ hơn nhiều service khác, nhưng lại là nơi thể hiện rất rõ tư duy source of truth và trust boundary.
 
 File chính nên đọc:
 
 - `services/cart-service/internal/service/cart_service.go`
 
-## 1. Khối định nghĩa lỗi và dependency
+## 1. Dependency và ý nghĩa của từng dependency
 
-### Block `cart_service.go:16-30`
+### `repo`
 
-- `repo` là Redis-backed repository
-- `productClient` là gRPC client sang `product-service`
+- repository lưu cart vào Redis
+- chịu trách nhiệm đọc/ghi cart state
 
-Điểm mấu chốt: cart không tự giữ giá chuẩn hoặc stock chuẩn. Nó chỉ cache trạng thái giỏ hiện tại theo user.
+### `productClient`
 
-## 2. `AddItem` là block quan trọng nhất
+- gRPC client sang `product-service`
+- dùng để lấy giá và tồn kho authoritative
 
-### Block `cart_service.go:44-60`
+### Vì sao thiết kế này đáng học
 
-Ngay khi add item, service gọi:
+`cart-service` không coi Redis là source of truth cho catalog. Redis chỉ giữ trạng thái giỏ theo user. Giá và stock luôn phải xin lại từ `product-service`.
+
+## 2. `AddItem`: hàm quan trọng nhất của service
+
+### Điều gì xảy ra trước khi lưu cart
+
+Service gọi:
 
 ```go
 product, err := s.productClient.GetProduct(ctx, req.ProductID)
 ```
 
-Ý nghĩa:
+### Vì sao bước này cực kỳ quan trọng
 
-- không tin `price` do frontend gửi lên
-- không tin `stock` mà cart từng lưu từ trước
-- luôn lấy thông tin authoritative từ `product-service`
+- không tin `price` từ frontend
+- không tin `stock` đã cache trong cart từ trước
+- luôn lấy dữ liệu authoritative trước khi quyết định update cart
 
-Đây là lý do `cart-service` dùng Redis nhưng không trở thành source of truth của catalog.
+Đây là một bài học backend rất quan trọng:
 
-### Block `cart_service.go:62-97`
+> Cart có thể chạy trên Redis, nhưng catalog truth vẫn phải đến từ product domain.
 
-Logic add item:
+### Flow `AddItem`
 
-- nếu sản phẩm đã có trong giỏ thì tăng quantity
-- trước khi tăng phải check stock mới
-- nếu chưa có thì append item mới
-- luôn cập nhật lại `Name` và `Price` từ dữ liệu product mới nhất
-- gọi `cart.CalculateTotal()` rồi mới `repo.Save(...)`
+- nếu item đã có, tăng quantity
+- kiểm tra stock mới
+- refresh `name` và `price` theo product mới nhất
+- `CalculateTotal()`
+- lưu lại vào Redis
 
-Điều này giúp cart tự refresh giá hiển thị theo catalog hiện tại mỗi lần add.
+## 3. `UpdateItem`, `RemoveItem`, `ClearCart`
 
-## 3. `UpdateItem` và `RemoveItem`
+### `UpdateItem`
 
-### Block `cart_service.go:101-125`
+- cập nhật quantity
+- lưu lại cart
 
-`UpdateItem` hiện chỉ sửa quantity trong cart rồi save lại. Nó không re-fetch product tại bước này.
+Điểm cần nhớ:
 
-Hàm này đơn giản, nhưng khi đọc source bạn nên ghi nhớ:
+- validation sâu nhất về stock được làm tốt nhất ở `AddItem`
+- frontend guest cart có một lớp check stock riêng bên client để giữ UX tốt hơn
 
-- validate sâu hơn về stock đang được đảm bảo tốt nhất ở bước `AddItem`
-- frontend guest cart lại có một lớp kiểm tra stock riêng ở client side
+### `RemoveItem` và `ClearCart`
 
-### Block `cart_service.go:129-160`
+- thuần thao tác trên Redis state
+- không cần gọi `product-service`
 
-`RemoveItem` và `ClearCart` là các thao tác thuần trên Redis state, không đụng tới product-service.
+Điều này hợp lý vì xóa item không đòi hỏi xác minh lại catalog.
 
 ## 4. Flow tổng quát
 
@@ -71,14 +80,31 @@ sequenceDiagram
 
     UI->>Cart: Add item
     Cart->>Product: gRPC GetProduct(product_id)
-    Product-->>Cart: product name/price/stock
-    Cart->>Cart: merge quantity + validate stock
+    Product-->>Cart: name/price/stock
+    Cart->>Cart: validate + merge quantity
     Cart->>Redis: save cart
     Cart-->>UI: updated cart
 ```
 
-## 5. Điều cần nhớ khi sửa service này
+## 5. Mối liên hệ với frontend hiện tại
 
-- Redis là store cho session cart, không phải catalog database.
+Ở frontend React + Vite:
+
+- API authenticated cart đi qua `frontend/src/shared/api/modules/cartApi.ts`
+- abstraction state nằm ở `frontend/src/features/cart/providers/CartProvider.tsx`
+- guest cart storage nằm ở `frontend/src/features/cart/utils/guestCartStorage.ts`
+
+### Vì sao nên đọc song song backend và frontend
+
+Bạn sẽ thấy một bài học rất hay:
+
+- backend cart giữ source of truth đúng chỗ
+- frontend cart lại phải giải quyết thêm bài toán guest cart và merge sau login
+
+Đây là chỗ rất tốt để học cách một feature tưởng nhỏ nhưng thực ra có nhiều boundary và failure mode.
+
+## 6. Điều cần nhớ khi sửa service này
+
+- Redis là store cho cart state, không phải catalog database.
 - Giá và stock phải được xác nhận từ `product-service`.
-- Nếu sửa cart flow, hãy kiểm tra cả frontend guest cart trong `frontend/src/contexts/CartContext.tsx`.
+- nếu sửa cart flow, hãy kiểm tra cả `frontend/src/features/cart/providers/CartProvider.tsx` để xem guest mode và merge sau login có còn hợp logic không.

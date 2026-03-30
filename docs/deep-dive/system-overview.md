@@ -1,26 +1,33 @@
 # System Overview
 
-Tài liệu này mô tả hệ thống ở mức runtime: request đi đâu, event đi đâu, data nằm ở đâu, và thành phần nào là bắt buộc hay chỉ là integration bổ sung.
+Tài liệu này mô tả hệ thống ở mức runtime: request đi đâu, data nằm ở đâu, service nào là bắt buộc trong local stack, service nào chỉ là integration bổ trợ, và frontend nào đang được Compose dùng thật.
 
 ## 1. Kiến trúc tổng thể
 
 ```mermaid
 flowchart LR
-    FE[Frontend / Browser]
-    Gateway[API Gateway]
-    User[User Service]
-    Product[Product Service]
-    Cart[Cart Service]
-    Order[Order Service]
-    Payment[Payment Service]
-    Notification[Notification Service]
+    Browser[Browser]
+    Frontend[frontend / Vite preview]
+    Nginx[nginx]
+    Gateway[api-gateway]
+    User[user-service]
+    Product[product-service]
+    Cart[cart-service]
+    Order[order-service]
+    Payment[payment-service]
+    Notification[notification-service]
     PG[(PostgreSQL)]
     Redis[(Redis)]
     MQ[(RabbitMQ)]
     MinIO[(MinIO)]
     ES[(Elasticsearch)]
+    Jaeger[(Jaeger)]
 
-    FE --> Gateway
+    Browser --> Frontend
+    Browser --> Nginx
+    Frontend --> Gateway
+    Nginx --> Gateway
+
     Gateway --> User
     Gateway --> Product
     Gateway --> Cart
@@ -33,145 +40,210 @@ flowchart LR
     Payment --> PG
 
     Cart --> Redis
-    Cart -->|gRPC product lookup| Product
-    Order -->|gRPC product lookup| Product
-
-    Order -->|order.created / order.cancelled| MQ
-    Payment -->|payment.*| MQ
-    MQ --> Notification
+    Cart -->|gRPC lookup| Product
+    Order -->|gRPC lookup| Product
 
     Product --> MinIO
     Product --> ES
+
+    Order -->|order.*| MQ
+    Payment -->|payment.*| MQ
+    MQ --> Notification
+
+    Gateway -. tracing .-> Jaeger
+    User -. tracing .-> Jaeger
+    Product -. tracing .-> Jaeger
+    Order -. tracing .-> Jaeger
+    Payment -. tracing .-> Jaeger
 ```
 
-## 2. Boundary của từng thành phần
+## 2. Service nào đang có trong Docker Compose
 
-### API Gateway
+### Runtime ứng dụng
 
-- là điểm vào HTTP cho frontend
-- forward request xuống service đích
-- thêm resilience qua retry và circuit breaker
-- không giữ business logic nặng
+- `frontend`
+- `nginx`
+- `api-gateway`
+- `user-service`
+- `product-service`
+- `cart-service`
+- `order-service`
+- `payment-service`
+- `notification-service`
 
-### User Service
+### Hạ tầng
 
-- quản lý user profile, password, JWT-related flow
-- lưu dữ liệu ở PostgreSQL
-- có cả HTTP và gRPC surface
+- `postgres`
+- `redis`
+- `rabbitmq`
+- `minio`
+- `elasticsearch`
+- `jaeger`
+- `prometheus`
+- `grafana`
 
-### Product Service
+### Điều rất dễ nhầm
 
-- quản lý catalog
-- PostgreSQL là source of truth
-- MinIO là nơi lưu product media
-- Elasticsearch là search backend tùy chọn
-- gRPC được dùng cho cart/order lookup
+- `frontend` là UI chính chạy preview Vite ở host port `4173`
+- `nginx` publish host port `80`, nhưng chủ yếu proxy `/api/*` và `/health`, không phải frontend React đầy đủ
+- `client/` không có service compose mặc định
 
-### Cart Service
+## 3. Những cổng host thực sự nên nhớ
 
-- lưu giỏ hàng theo user trong Redis
-- không phải source of truth cho giá/stock
-- phải hỏi `product-service` trước các thao tác quan trọng
+Các cổng publish ra host theo compose hiện tại:
 
-### Order Service
+- `http://localhost:80` -> `nginx`
+- `http://localhost:4173` -> `frontend` preview
+- `http://localhost:8080` -> `api-gateway`
+- `http://localhost:9000` và `http://localhost:9001` -> MinIO API / Console
+- `http://localhost:9200` -> Elasticsearch
+- `http://localhost:16686` và `http://localhost:4318` -> Jaeger UI / OTLP
 
-- quote, tạo đơn, coupon, shipping, audit timeline
-- lưu order ở PostgreSQL
-- hỏi `product-service` bằng gRPC để định giá và kiểm tra stock
+Các service quan trọng nhưng không publish ra host mặc định:
+
+- `postgres`
+- `redis`
+- `rabbitmq`
+- `prometheus`
+- `grafana`
+- từng backend service riêng lẻ như `user-service`, `product-service`, `order-service`, ...
+
+Ý nghĩa:
+
+- smoke test từ host nên đi qua `api-gateway`
+- muốn chẩn đoán service nội bộ, thường phải dùng `docker compose exec` hoặc `docker compose logs`
+
+## 4. Boundary của từng thành phần
+
+### `api-gateway`
+
+- entrypoint HTTP cho frontend
+- tạo proxy tới downstream services
+- có retry cho request idempotent và circuit breaker
+- không nên nhồi business logic vào đây
+
+### `user-service`
+
+- auth, refresh token, verify email, reset password
+- profile, address, phone verification, role update
+- dùng PostgreSQL
+
+### `product-service`
+
+- catalog, review, product image metadata
+- source of truth là PostgreSQL
+- MinIO và Elasticsearch là optional integration
+- expose gRPC cho cart/order lookup
+
+### `cart-service`
+
+- lưu cart state trong Redis
+- không phải source of truth của giá và tồn kho
+- gọi `product-service` qua gRPC để lấy product authoritative
+
+### `order-service`
+
+- preview order, create order, list/detail, cancel, admin report
+- source of truth là PostgreSQL
+- gọi `product-service` qua gRPC
 - phát event sang RabbitMQ
 
-### Payment Service
+### `payment-service`
 
-- quản lý charge, refund, pending/completed lifecycle
-- lưu payment ở PostgreSQL
-- gọi lại `order-service` để đọc order
-- phát event payment sang RabbitMQ
+- tạo payment, history, refund, webhook
+- source of truth là PostgreSQL
+- publish payment events sang RabbitMQ
 
-### Notification Service
+### `notification-service`
 
-- consumer chạy nền
-- không phải API business service
-- nhận event từ RabbitMQ rồi gửi email
+- worker nền, không phải service UI chính
+- consume event `order.*` và `payment.*`
+- gửi email qua SMTP
 
-## 3. Các kiểu giao tiếp trong hệ thống
+## 5. Source of truth của từng domain
 
-### HTTP qua API Gateway
+| Domain | Source of truth | Ghi chú |
+| --- | --- | --- |
+| User/Profile | PostgreSQL | qua `user-service` |
+| Product/Catalog | PostgreSQL | Elasticsearch chỉ hỗ trợ search/index |
+| Product Media Metadata | PostgreSQL | file thực có thể nằm ở MinIO |
+| Cart | Redis | trạng thái tạm thời theo user/session |
+| Order | PostgreSQL | audit/timeline cũng gắn với order domain |
+| Payment | PostgreSQL | RabbitMQ chỉ là event transport |
+
+## 6. Kiểu giao tiếp trong hệ thống
+
+### HTTP qua gateway
 
 Dùng cho:
 
 - frontend gọi API
-- auth, profile, cart, catalog, order, payment flow từ UI
+- OAuth callback/exchange
+- cart, order, payment, account flows
 
-Lý do:
+Lợi ích:
 
-- đơn giản cho client
-- chỉ cần một host/entrypoint
+- client chỉ cần biết một entrypoint
+- auth, CORS, rate limiting, observability được gom ở gateway
 
 ### gRPC service-to-service
 
-Dùng chủ yếu cho:
+Dùng rõ nhất ở:
 
 - `cart-service -> product-service`
 - `order-service -> product-service`
 
-Lý do:
+Lợi ích:
 
-- lookup nội bộ nhanh
-- contract rõ ràng
-- không phải đi vòng qua API Gateway
+- contract rõ ràng hơn HTTP nội bộ
+- tránh đi vòng qua gateway cho lookup backend-backend
 
 ### RabbitMQ event flow
 
 Dùng cho:
 
-- `order-service` phát `order.created`, `order.cancelled`
-- `payment-service` phát `payment.completed`, `payment.failed`, `payment.refunded`
-- `notification-service` consume để gửi email
+- `order.created`
+- `order.cancelled`
+- `payment.completed`
+- `payment.failed`
+- `payment.refunded`
 
-Lý do:
+Lợi ích:
 
-- tách biệt side effect khỏi request path chính
-- không làm user chờ email provider
+- tách side effect như email ra khỏi request path
+- user không phải chờ notification flow
 
-## 4. Source of truth
+## 7. Flow tiêu biểu
 
-| Domain | Source of truth | Ghi chú |
-| --- | --- | --- |
-| User/Profile | PostgreSQL | qua `user-service` |
-| Product/Catalog | PostgreSQL | Elasticsearch chỉ hỗ trợ search |
-| Product Media | MinIO | metadata vẫn nằm ở PostgreSQL |
-| Cart | Redis | session-like state |
-| Order | PostgreSQL | audit events cũng nằm ở DB |
-| Payment | PostgreSQL | RabbitMQ chỉ để phát tín hiệu |
+### Đăng nhập
 
-## 5. Flow tiêu biểu
-
-### Đăng nhập và bootstrap user
-
-1. Frontend gọi `/api/v1/auth/login` qua gateway
-2. Gateway forward sang `user-service`
-3. `user-service` xác thực password và trả JWT
-4. Frontend lưu token rồi gọi profile để bootstrap state
+1. Browser gọi frontend hoặc thẳng gateway.
+2. Frontend gửi `POST /api/v1/auth/login` qua gateway.
+3. Gateway forward sang `user-service`.
+4. `user-service` xác thực và trả token pair.
+5. Frontend bootstrap profile qua `GET /api/v1/users/profile`.
 
 ### Add to cart
 
-1. Frontend gọi gateway
-2. `cart-service` hỏi `product-service` qua gRPC
-3. Nếu stock đủ thì lưu cart vào Redis
-4. Frontend nhận cart mới
+1. Frontend gọi gateway.
+2. `cart-service` dùng gRPC hỏi `product-service`.
+3. `product-service` trả giá/stock authoritative.
+4. `cart-service` lưu cart vào Redis.
 
-### Checkout và thanh toán
+### Checkout
 
-1. Frontend tạo order
-2. `order-service` quote lại theo catalog thật
-3. Order được lưu vào PostgreSQL
-4. `order-service` phát event `order.created`
-5. Frontend hoặc admin tạo payment
-6. `payment-service` lưu payment và phát `payment.*`
-7. `notification-service` gửi email tương ứng
+1. Frontend preview/create order qua gateway.
+2. `order-service` hỏi `product-service` để định giá và kiểm tra stock.
+3. `order-service` ghi PostgreSQL.
+4. `order-service` phát event `order.created`.
+5. Frontend tạo payment qua `payment-service`.
+6. `payment-service` ghi PostgreSQL và phát `payment.*`.
+7. `notification-service` consume event và gửi email.
 
-## 6. Điều cần nhớ khi contribute
+## 8. Điều cần nhớ khi đóng góp vào repo
 
-- PostgreSQL vẫn là nền tảng chính của business data.
-- Redis và RabbitMQ phục vụ bài toán rất cụ thể, không thay thế transaction core.
-- Một số dependency như MinIO và Elasticsearch là integration bổ sung; service nên degrade gracefully khi chúng lỗi.
+- PostgreSQL là trung tâm của business data.
+- Redis và RabbitMQ không thay thế transaction core.
+- MinIO và Elasticsearch là optional integration; service nên degrade gracefully khi chúng lỗi.
+- `frontend/` mới là UI local chính; `client/` chưa phải runtime mặc định.
+- nếu test từ host, hãy ưu tiên qua `api-gateway` thay vì giả định từng service đều publish port riêng.

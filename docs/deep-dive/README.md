@@ -1,33 +1,40 @@
 # Deep Dive
 
-Thư mục này dành cho việc hiểu hệ thống ở cấp kiến trúc và runtime behavior, trước khi đi xuống từng dòng code.
+Thư mục `deep-dive/` dành cho việc hiểu repo ở mức kiến trúc và runtime. Đây là tầng nên đọc trước khi đi vào annotate hay sửa code, vì nó giúp bạn trả lời:
+
+- service nào sở hữu domain nào
+- UI nào là đường chạy chính và UI nào đang experimental
+- dữ liệu nào là source of truth, dữ liệu nào chỉ là cache/tích hợp phụ trợ
+- request, gRPC call và event đang chạy qua những boundary nào
 
 ## Nên đọc theo thứ tự này
 
 1. [system-overview.md](./system-overview.md)
-2. [technology-stack.md](./technology-stack.md)
-3. [api-gateway.md](./api-gateway.md)
-4. [user-service.md](./user-service.md)
-5. [product-service.md](./product-service.md)
-6. [cart-service.md](./cart-service.md)
-7. [order-service.md](./order-service.md)
-8. [payment-service.md](./payment-service.md)
-9. [notification-service.md](./notification-service.md)
+2. [frontend-architecture.md](./frontend-architecture.md)
+3. [technology-stack.md](./technology-stack.md)
+4. [api-gateway.md](./api-gateway.md)
+5. [user-service.md](./user-service.md)
+6. [product-service.md](./product-service.md)
+7. [cart-service.md](./cart-service.md)
+8. [order-service.md](./order-service.md)
+9. [payment-service.md](./payment-service.md)
+10. [notification-service.md](./notification-service.md)
 
-## Mục tiêu của bộ tài liệu này
+## Mục tiêu của tầng tài liệu này
 
-- hiểu service nào chịu trách nhiệm domain nào
-- phân biệt source of truth của từng loại dữ liệu
-- nắm được luồng HTTP, gRPC và RabbitMQ
-- hiểu vì sao repo dùng nhiều thành phần infra khác nhau
+- hiểu bức tranh runtime trước khi mở IDE đọc code
+- nắm rõ ranh giới giữa frontend, gateway, service và hạ tầng
+- nhìn thấy trade-off kiến trúc đang dùng thật trong repo
+- phân biệt chỗ nào là feature hoàn chỉnh, chỗ nào là optional integration, chỗ nào là trạng thái chuyển tiếp sau refactor
 
-## Tư duy đọc kiến trúc
+## Cách đọc hiệu quả
 
-Mỗi khi mở một file deep-dive, hãy tự trả lời bốn câu:
+Mỗi khi mở một doc trong `deep-dive/`, hãy tự trả lời:
 
-1. Input vào service là gì
-2. Dependency bắt buộc và dependency tùy chọn là gì
-3. Dữ liệu được lưu ở đâu
-4. Service phát hay consume tín hiệu gì từ service khác
+1. Input nào đi vào module này
+2. Module này phụ thuộc vào ai
+3. Dữ liệu thật nằm ở đâu
+4. Side effect hoặc tín hiệu nào được phát ra
+5. Nếu module này lỗi, toàn hệ thống degrade như thế nào
 
-Sau khi trả lời được bốn câu này cho từng service, bạn sẽ đọc source nhanh hơn rất nhiều.
+Nếu bạn trả lời được năm câu này, việc đọc source bên dưới sẽ nhanh và chắc hơn nhiều.

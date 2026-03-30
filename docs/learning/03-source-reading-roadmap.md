@@ -1,189 +1,245 @@
 # 03. Roadmap đọc source code
 
-Tài liệu này là "kim chỉ nam" giúp bạn biết nên mở file nào trước, file nào sau để hiểu dự án này nhanh nhất mà không bị lạc trong Microservices.
+Tài liệu này là lộ trình đọc repo theo thứ tự giúp bạn hiểu nhanh nhất mà không bị lạc giữa nhiều service và hai frontend.
 
----
+## 1. Đọc gì trước trong 10 phút đầu
 
-## 🏎️ 1. Quick Start (5 phút để hiểu cấu trúc)
+Nếu bạn vừa clone repo và muốn có mental model đúng càng nhanh càng tốt, hãy đọc theo thứ tự này:
 
-Nếu bạn vừa clone repo này và muốn biết "nó làm cái gì ở đâu", hãy đọc theo đúng thứ tự này:
+1. `README.md`
+2. `docs/deep-dive/system-overview.md`
+3. `docs/deep-dive/frontend-architecture.md`
+4. `frontend/src/app/App.tsx`
+5. `api-gateway/cmd/main.go`
+6. `pkg/config/config.go`
 
-1. **`api-gateway/cmd/main.go`**: Điểm vào của mọi request. Bạn sẽ thấy các route công khai.
-2. **`pkg/middleware/auth.go`**: Cách hệ thống bảo vệ API bằng JWT.
-3. **`services/user-service/internal/service/user_service.go`**: Business logic cơ bản nhất (Đăng ký/Đăng nhập).
-4. **`pkg/response/response.go`**: Cách backend trả dữ liệu JSON tiêu chuẩn.
+### Vì sao thứ tự này hiệu quả
 
----
+- `README.md` cho bạn bức tranh runtime và lệnh chạy
+- `system-overview` giúp bạn biết request đi đâu, data nằm đâu
+- `frontend-architecture` giúp bạn không nhầm `frontend/` và `client/`
+- `App.tsx` cho bạn route map thật của UI
+- `api-gateway/cmd/main.go` cho bạn entrypoint HTTP của backend
 
-## 🏗️ 2. Quy tắc "3 Lớp" (Phải hiểu trước khi đọc tiếp)
+## 2. Ba mental model bắt buộc phải có trước khi đọc sâu
 
-Mọi service trong dự án này (User, Product, Order...) đều tuân theo một khuôn mẫu (Pattern) duy nhất. Khi bạn hiểu khuôn này, bạn sẽ đọc file nào cũng thấy quen thuộc:
+### Backend
 
-1. **`internal/handler/` (Tầng Giao Diện)**: Nhận request từ HTTP, kiểm tra dữ liệu đầu vào (Validation).
-2. **`internal/service/` (Tầng Nghiệp Vụ)**: Nơi chứa logic chính (Tính tiền, kiểm kho, gửi mail). Đây là phần quan trọng nhất.
-3. **`internal/repository/` (Tầng Dữ Liệu)**: Nơi viết các câu lệnh SQL hoặc gọi Redis để lưu/lấy dữ liệu.
+Hầu hết service Go trong repo đi theo:
 
----
+- `handler`
+- `service`
+- `repository`
 
-## 📅 3. Lộ trình đọc chi tiết theo từng giai đoạn
+### Frontend
 
-### Giai đoạn 1: Hiểu "Xương sống" (`pkg/` và `api-gateway/`)
+Frontend React + Vite hiện đi theo:
 
-Đừng đọc logic nghiệp vụ ngay. Hãy đọc những thứ bổ trợ trước vì service nào cũng dùng chúng.
+- `app`
+- `routes`
+- `features`
+- `shared`
 
-- [ ] **Lớp bảo vệ**: `pkg/middleware/auth.go` (JWT) và `rate_limit.go`.
-- [ ] **Cấu hình**: `pkg/config/config.go` (Cách load file `.yaml` và `.env`).
-- [ ] **Dữ liệu trả về**: `pkg/response/response.go` (Bạn sẽ thấy `success`, `message`, `data`).
-- [ ] **Cổng vào**: `api-gateway/internal/proxy/service_proxy.go` (Cách Gateway forward request đi).
+Ngoài ra vẫn còn `hooks`, `lib`, `ui`, `providers`, `utils`, `types` ở root làm compatibility layer.
 
-### Giai đoạn 2: Đọc Service mô hình mẫu (`user-service`)
+### Runtime
 
-`user-service` là service đơn giản nhất để học trọn vẹn quy trình:
-1. Mở `internal/handler/user_handler.go` để xem các endpoint.
-2. Mở `internal/service/user_service.go` để xem logic đăng ký.
-3. Mở `internal/repository/user_repository.go` để xem cách viết SQL.
+- frontend local chính là `frontend/`
+- gateway là HTTP entrypoint
+- PostgreSQL là source of truth cho domain business chính
+- Redis/RabbitMQ/MinIO/Elasticsearch là dependency bổ trợ
 
-### Giai đoạn 3: Học về giao tiếp giữa các Service (`product-service` & `cart-service`)
+## 3. Giai đoạn 1: Hiểu runtime và entrypoint
 
-Ở đây bạn sẽ học được cách các service "nói chuyện" với nhau:
-- [ ] **gRPC Server**: Đọc `services/product-service/internal/handler/grpc_handler.go`.
-- [ ] **gRPC Client**: Đọc `services/cart-service/internal/service/cart_service.go`. Bạn sẽ thấy Cart gọi Product để lấy giá thật.
-- [ ] **Redis**: Đọc `services/cart-service/internal/repository/cart_repository.go` để xem cách dùng DB bộ nhớ tạm.
+Đọc các file này trước:
 
+- `deployments/docker/docker-compose.yml`
+- `deployments/docker/config/*.yaml`
+- `frontend/src/app/main.tsx`
+- `frontend/src/app/App.tsx`
+- `frontend/src/app/providers/AppProviders.tsx`
+- `api-gateway/cmd/main.go`
 
-Vì service này có:
+### Bạn sẽ học được gì
 
-- auth flow đơn giản,
-- PostgreSQL repository dễ hiểu,
-- JWT generation,
-- profile update.
+- service nào thực sự chạy trong local stack
+- route tree thật của frontend
+- provider tree thật của frontend
+- gateway đang proxy những domain nào
 
-### Tiếp theo là `product-service`
+## 4. Giai đoạn 2: Hiểu backend foundation dùng chung
 
-Vì đây là CRUD thuần, rất hợp để luyện:
+Đừng lao ngay vào business flow. Hãy đọc phần hạ tầng chung trước:
 
-- route
-- service
-- repository
-- migration
+- `pkg/config/config.go`
+- `pkg/database/postgres.go`
+- `pkg/middleware/*`
+- `pkg/response/*`
+- `pkg/validation/*`
+- `pkg/observability/*`
+- `api-gateway/internal/proxy/service_proxy.go`
 
-## Giai đoạn 4: Đọc service trung bình
+### Vì sao
+
+Những package này được dùng lặp lại khắp repo. Nếu hiểu chúng trước, bạn sẽ đọc service nào cũng dễ hơn.
+
+## 5. Giai đoạn 3: Đọc frontend theo chiều từ ngoài vào trong
+
+### Bước 1: App shell
+
+- `frontend/src/app/App.tsx`
+- `frontend/src/app/layout/AppLayout.tsx`
+- `frontend/src/app/router/ProtectedRoute.tsx`
+
+### Bước 2: Provider và global state
+
+- `frontend/src/features/auth/providers/AuthProvider.tsx`
+- `frontend/src/features/cart/providers/CartProvider.tsx`
+- `frontend/src/features/account/hooks/useOrderPayments.ts`
+- `frontend/src/features/account/hooks/useSavedAddresses.ts`
+
+### Bước 3: API boundary
+
+- `frontend/src/shared/api/http-client.ts`
+- `frontend/src/shared/api/error-handler.ts`
+- `frontend/src/shared/api/normalizers.ts`
+- `frontend/src/shared/api/modules/*.ts`
+- `frontend/src/shared/types/api.ts`
+
+### Bước 4: Route pages
+
+Đọc theo use case bạn quan tâm:
+
+- auth: `LoginPage`, `RegisterPage`, `AuthCallbackPage`, `VerifyEmailPage`
+- storefront: `HomePage`, `CatalogPage`, `CategoryPage`, `ProductDetailPage`
+- cart/checkout: `CartPage`, `CheckoutPage`
+- account: `ProfilePage`, `OrdersPage`, `OrderDetailPage`, `PaymentHistoryPage`
+- partial pages: `AddressesPage`, `SecurityPage`, `NotificationsPage`
+- admin: `AdminPage`
+
+## 6. Giai đoạn 4: Đọc service “dễ hiểu nhất” trước
+
+### `user-service`
+
+Nên đọc đầu tiên vì có:
+
+- auth flow rõ
+- repository PostgreSQL dễ theo
+- nhiều route cơ bản nhưng thực tế
+
+Thứ tự đọc:
+
+1. `services/user-service/cmd/main.go`
+2. `services/user-service/internal/handler/user_handler.go`
+3. `services/user-service/internal/service/user_service.go`
+4. `services/user-service/internal/service/oauth_service.go`
+5. `services/user-service/internal/repository/*`
+
+## 7. Giai đoạn 5: Đọc service có inter-service communication
+
+### `product-service`
+
+Bạn học được:
+
+- catalog CRUD
+- review
+- search/object storage optional integration
+- gRPC server
 
 ### `cart-service`
 
-Học được:
+Bạn học được:
 
 - Redis
-- gRPC client
-- source of truth
+- gRPC client sang product-service
+- source of truth mindset
 
-### `notification-service`
-
-Học được:
-
-- RabbitMQ consumer
-- event-driven flow
-- health endpoint cho worker
-
-## Giai đoạn 5: Đọc service khó nhất
+## 8. Giai đoạn 6: Đọc service orchestration nặng hơn
 
 ### `order-service`
 
-Bạn nên đọc sau khi đã hiểu:
+Bạn sẽ thấy:
 
-- gRPC cơ bản
-- transaction
-- repository pattern
+- order preview / create / cancel
+- transaction với PostgreSQL
+- gRPC lookup sang product-service
+- event publishing
 
 ### `payment-service`
 
-Bạn nên đọc sau khi đã hiểu:
+Bạn sẽ thấy:
 
-- auth/authorization
-- duplicate protection
-- trust boundary giữa frontend và backend
+- payment lifecycle
+- refund
+- webhook flow
+- publish payment events
 
-## Giai đoạn 6: Trace use case end-to-end
+## 9. Giai đoạn 7: Đọc worker async
 
-Sau khi đọc từng service riêng, hãy trace theo use case:
+### `notification-service`
 
-### Use case 1: Login
+Đây là nơi tốt để học:
 
-- gateway
-- user handler
-- user service
-- user repository
-- JWT middleware
+- RabbitMQ consumer
+- event-driven flow
+- vì sao email không nên nằm trong request path chính
 
-### Use case 2: Browse product
+## 10. Giai đoạn 8: Trace use case end-to-end
 
-- gateway
-- product handler
-- product service
-- product repository
+Sau khi đọc từng phần riêng, hãy trace theo use case:
 
-### Use case 3: Add to cart
+### Login
 
-- gateway
-- cart handler
-- cart service
-- gRPC product client
-- Redis repository
+`LoginPage -> useAuth -> AuthProvider -> authApi -> api-gateway -> user-service`
 
-### Use case 4: Create order
+### Add to cart
 
-- gateway
-- order handler
-- order service
-- gRPC product client
-- order repository
-- RabbitMQ event
+`CatalogPage/ProductDetailPage -> useCart -> CartProvider -> cartApi hoặc guest storage -> cart-service -> product-service gRPC -> Redis`
 
-### Use case 5: Process payment
+### Checkout
 
-- gateway
-- payment handler
-- payment service
-- order client
-- payment repository
-- RabbitMQ event
+`CheckoutPage -> orderApi -> order-service -> product-service gRPC -> PostgreSQL -> paymentApi -> payment-service`
 
-## Giai đoạn 7: Đọc migration và proto
+### Admin product management
+
+`AdminPage -> api compatibility layer -> product-service`
+
+## 11. Giai đoạn 9: Đọc migration và gRPC contract
 
 ### Migration
 
-Đọc `migrations/*.sql` để hiểu:
+Đọc từng service có DB riêng:
 
-- schema thật đang lưu gì,
-- constraint nào bảo vệ dữ liệu,
-- index nào tối ưu truy vấn.
+- `services/user-service/migrations/*`
+- `services/product-service/migrations/*`
+- `services/order-service/migrations/*`
+- `services/payment-service/migrations/*`
 
 ### Proto
 
-Đọc `proto/*.proto` để hiểu:
+Đọc:
 
-- internal contract giữa service,
-- request/response của gRPC,
-- service nào expose capability gì.
+- `proto/product.proto`
+- `proto/user.proto`
 
-## Cách đọc một file backend Go cho hiệu quả
+Generated files `.pb.go` hiện cũng được commit ngay trong `proto/`.
 
-Với mỗi file, hãy làm theo mẫu này:
+## 12. Cách đọc một file hiệu quả hơn
 
-1. Xem package name.
-2. Xem import nào được dùng.
-3. Xem struct chính của file là gì.
-4. Xem public methods nào có trên struct đó.
-5. Tự hỏi file này là input layer, domain layer hay storage layer.
+Với mỗi file, hãy tự hỏi:
 
-## Checklist tự đánh giá
+1. file này là boundary hay implementation?
+2. input của nó đến từ đâu?
+3. output của nó được dùng ở đâu?
+4. nó có side effect gì?
+5. nếu file này hỏng, feature nào sẽ vỡ?
 
-Sau khi học hết roadmap này, bạn nên tự kiểm tra xem mình đã làm được chưa:
+## 13. Checklist tự đánh giá
 
-- tôi có thể mô tả login flow mà không mở code không?
-- tôi có thể nói order total được tính ở đâu không?
-- tôi có thể giải thích vì sao cart không tin `price` từ frontend không?
-- tôi có thể chỉ ra event nào được publish sau khi tạo order/payment không?
-- tôi có thể giải thích vai trò của `context.Context` trong các service không?
+Sau khi đi hết roadmap này, bạn nên tự hỏi:
 
-Nếu trả lời được những câu này, bạn đã hiểu project ở mức rất tốt.
+- tôi có mô tả được login flow mà không mở code không?
+- tôi có chỉ ra được cart đang tin dữ liệu nào và không tin dữ liệu nào không?
+- tôi có biết page account nào đang full backend-backed, page nào còn partial không?
+- tôi có biết vì sao `frontend/src` vừa có `shared/*` vừa còn `lib/*`, `hooks/*`, `ui/*` không?
+- tôi có giải thích được vì sao PostgreSQL vẫn là trung tâm của business data không?
