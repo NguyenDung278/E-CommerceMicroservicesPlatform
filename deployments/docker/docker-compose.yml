@@ -172,8 +172,8 @@ services:
     networks:
       - ecommerce-network
 
-  # Primary local UI path. The Next.js client remains experimental and is not
-  # part of the default Compose runtime yet.
+  # Primary Compose UI path. The Next.js client is still run separately on the
+  # host, but its standalone runtime is supported for smoke tests.
   frontend:
     build:
       context: ../..
@@ -344,6 +344,7 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
+      PAYMENT_GATEWAY_MOMO_RETURN_URL: ${PAYMENT_GATEWAY_MOMO_RETURN_URL:-http://localhost:4173/payments}
     volumes:
       - ./config/payment-service.yaml:/config/config.yaml
     networks:

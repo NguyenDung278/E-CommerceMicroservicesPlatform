@@ -145,11 +145,11 @@ export type AtelierPageConfig = {
 };
 
 export const atelierNavItems: AtelierNavItem[] = [
-  { id: "archive", label: "All Archive", href: "/products" },
-  { id: "men", label: "Men", href: "/categories/Shop%20Men" },
-  { id: "women", label: "Women", href: "/categories/Shop%20Women" },
-  { id: "footwear", label: "Footwear", href: "/categories/Footwear" },
-  { id: "accessories", label: "Accessories", href: "/categories/Accessories" },
+  { id: "archive", label: "Catalog", href: "/products" },
+  { id: "men", label: "Men", href: "/editorial/Shop%20Men" },
+  { id: "women", label: "Women", href: "/editorial/Shop%20Women" },
+  { id: "footwear", label: "Footwear", href: "/editorial/Footwear" },
+  { id: "accessories", label: "Accessories", href: "/editorial/Accessories" },
 ];
 
 export const atelierFooterLinks = [

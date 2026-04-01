@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { nextImageRemotePatterns } from "./src/lib/images/host-policy";
+
 const gatewayOrigin =
   process.env.API_GATEWAY_URL?.trim().replace(/\/+$/, "") ||
   "http://localhost:8080";
@@ -7,28 +9,7 @@ const gatewayOrigin =
 const nextConfig: NextConfig = {
   output: "standalone",
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "lh3.googleusercontent.com",
-      },
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-      },
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-      },
-      {
-        protocol: "http",
-        hostname: "localhost",
-      },
-      {
-        protocol: "http",
-        hostname: "127.0.0.1",
-      },
-    ],
+    remotePatterns: nextImageRemotePatterns,
   },
   async rewrites() {
     return [

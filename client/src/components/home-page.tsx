@@ -308,7 +308,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
                   Chính xác ở backend, ấm và thoáng ở trải nghiệm.
                 </h2>
                 <p className="mt-6 max-w-xl text-lg leading-8 text-on-surface-variant">
-                  Dữ liệu kho, giá và thanh toán chạy qua microservices thật, còn storefront giữ đúng tinh thần “digital atelier” bằng nhịp thở rộng, card tonal và typography editorial.
+                  Dữ liệu kho, giá và thanh toán chạy qua microservices thật, còn storefront giữ nhịp biên tập gọn gàng để catalog, checkout và khu vực tài khoản luôn bám vào flow commerce chính.
                 </p>
                 <div className="mt-10 grid grid-cols-2 gap-8">
                   <div>

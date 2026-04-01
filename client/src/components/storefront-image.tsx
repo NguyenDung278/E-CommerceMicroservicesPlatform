@@ -1,11 +1,8 @@
 import Image, { type ImageLoader, type ImageProps } from "next/image";
 
-const trustedRemoteHosts = new Set([
-  "127.0.0.1",
-  "localhost",
-  "lh3.googleusercontent.com",
-  "placehold.co",
-]);
+import { trustedImageHosts } from "@/lib/images/host-policy";
+
+const trustedRemoteHosts = new Set<string>(trustedImageHosts);
 
 const passthroughLoader: ImageLoader = ({ src }) => src;
 

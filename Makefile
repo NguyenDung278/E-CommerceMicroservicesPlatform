@@ -19,7 +19,7 @@ PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HO
 ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
 PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build k8s-apply k8s-delete migrate-up migrate-down migrate-force
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build client-start k8s-apply k8s-delete migrate-up migrate-down migrate-force
 
 fmt:
 	@find api-gateway services pkg proto -name '*.go' -print0 | xargs -0 gofmt -w
@@ -73,6 +73,9 @@ client-dev:
 
 client-build:
 	@cd client && npm run build
+
+client-start:
+	@cd client && npm run start
 
 k8s-apply:
 	kubectl apply -f deployments/k8s/

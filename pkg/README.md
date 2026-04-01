@@ -294,7 +294,7 @@ Thư mục này gom các Echo middleware dùng chung.
 #### `cors.go`
 
 - `FrontendCORS()` trả Echo CORS middleware với allowlist khá chặt cho local runtime.
-- Có comment giải thích rõ: đường UI chính hiện là frontend chạy qua localhost/nginx/Vite; client Next.js experimental chưa được đưa vào allowlist mặc định.
+- Có comment giải thích rõ: allowlist hiện bao phủ `frontend` qua Docker/Vite, `client` Next.js qua host `3000`, và nginx edge local.
 
 **Cẩn trọng**: khi promote thêm frontend origin mới, phải cập nhật allowlist; nếu mở quá rộng (`*`) sẽ giảm an toàn.
 
