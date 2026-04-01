@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -37,6 +38,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Public routes.
 	public := e.Group("/api/v1/products")
 	public.GET("", h.List)
+	public.GET("/batch", h.ListByIDs)
 	public.GET("/:id", h.GetByID)
 	public.GET("/:id/reviews", h.ListReviews)
 
@@ -92,6 +94,26 @@ func (h *ProductHandler) GetByID(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	return response.Success(c, http.StatusOK, "product retrieved", product)
+}
+
+func (h *ProductHandler) ListByIDs(c echo.Context) error {
+	ids := parseRequestedProductIDs(c.QueryParams()["ids"])
+	if len(ids) == 0 {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "at least one product id is required")
+	}
+
+	products, err := h.productService.ListByIDs(c.Request().Context(), ids)
+	if err != nil {
+		if errors.Is(err, service.ErrTooManyProductIDs) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "too many product ids")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if products == nil {
+		products = []*model.Product{}
+	}
+
+	return response.Success(c, http.StatusOK, "products retrieved", products)
 }
 
 func (h *ProductHandler) Update(c echo.Context) error {
@@ -181,4 +203,23 @@ func (h *ProductHandler) List(c echo.Context) error {
 		NextCursor: pageInfo.NextCursor,
 		HasNext:    &hasNext,
 	})
+}
+
+func parseRequestedProductIDs(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, rawID := range strings.Split(value, ",") {
+			clean := strings.TrimSpace(rawID)
+			if clean == "" {
+				continue
+			}
+			ids = append(ids, clean)
+		}
+	}
+
+	return ids
 }

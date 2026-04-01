@@ -28,6 +28,7 @@ import { useOrderPayments } from "@/hooks/useOrderPayments";
 import { useSavedAddresses } from "@/hooks/useSavedAddresses";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import { invalidateSavedAddressesResource } from "@/lib/resources/account-resources";
 import { cn } from "@/lib/utils";
 import type { PhoneVerificationChallenge, ProfileAddressPatch } from "@/types/api";
 import {
@@ -349,6 +350,9 @@ export function ProfileDashboard() {
     try {
       setBusy(true);
       await updateProfile(profilePatch);
+      if (token && profilePatch.default_address) {
+        invalidateSavedAddressesResource(token);
+      }
       await Promise.all([refreshProfile(), refreshAddresses()]);
       resetVerificationState();
       setFormErrors({});

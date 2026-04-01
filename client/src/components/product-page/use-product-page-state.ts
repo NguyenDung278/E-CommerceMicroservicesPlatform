@@ -1,13 +1,14 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useCart } from "@/hooks/useCart";
+import { useAuthState } from "@/hooks/useAuth";
+import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { productApi } from "@/lib/api/product";
 import { getErrorMessage } from "@/lib/errors/handler";
+import type { ProductPageInitialData } from "@/lib/storefront/initial-data";
 import { fallbackImageForProduct, getProductImages } from "@/lib/utils";
 import type { Product, ProductReview, ProductReviewList } from "@/types/api";
 
@@ -20,41 +21,60 @@ import {
   type ReviewFormState,
 } from "./shared";
 
-export function useProductPageState(productId: string) {
+export function useProductPageState(
+  productId: string,
+  initialData?: ProductPageInitialData,
+) {
   const router = useRouter();
   const pathname = usePathname();
-  const { token, isAuthenticated } = useAuth();
-  const { addItem } = useCart();
+  const { token, isAuthenticated } = useAuthState();
+  const { addItem } = useCartActions();
   const { isSaved, toggleWishlist } = useWishlist();
+  const skipInitialProductLoad = useRef(Boolean(initialData));
 
-  const [product, setProduct] = useState<Product | null>(null);
+  const [product, setProduct] = useState<Product | null>(initialData?.product ?? null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
-  const [reviewList, setReviewList] = useState<ProductReviewList>(emptyReviewList);
+  const [reviewList, setReviewList] = useState<ProductReviewList>(
+    initialData?.reviewList ?? emptyReviewList,
+  );
   const [myReview, setMyReview] = useState<ProductReview | null>(null);
   const [reviewForm, setReviewForm] = useState<ReviewFormState>({ rating: 0, comment: "" });
-  const [selectedVariantSku, setSelectedVariantSku] = useState("");
+  const [selectedVariantSku, setSelectedVariantSku] = useState(
+    initialData?.product ? (getDefaultVariant(initialData.product)?.sku ?? "") : "",
+  );
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [reviewFeedback, setReviewFeedback] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isReviewLoading, setIsReviewLoading] = useState(true);
+  const [activeImage, setActiveImage] = useState(() => {
+    if (!initialData?.product) {
+      return "";
+    }
+
+    const images = getProductImages(initialData.product.image_url, initialData.product.image_urls);
+    return images[0] || fallbackImageForProduct(initialData.product.name);
+  });
+  const [feedback, setFeedback] = useState(initialData?.feedback ?? "");
+  const [reviewFeedback, setReviewFeedback] = useState(initialData?.reviewFeedback ?? "");
+  const [isLoading, setIsLoading] = useState(!initialData);
+  const [isReviewLoading, setIsReviewLoading] = useState(!initialData);
   const [busy, setBusy] = useState<ProductPageBusyState>("");
 
   useEffect(() => {
-    let active = true;
+    if (skipInitialProductLoad.current) {
+      skipInitialProductLoad.current = false;
+      setIsLoading(false);
+      setIsReviewLoading(false);
+      return;
+    }
 
-    const productRequest = productApi.getProductById(productId);
-    const reviewRequest = productApi.listProductReviews(productId, { page: 1, limit: 8 });
-    const myReviewRequest =
-      isAuthenticated && token ? getMyProductReviewOrNull(token, productId) : Promise.resolve(null);
+    let active = true;
 
     setIsLoading(true);
     setIsReviewLoading(true);
 
-    // Load product, public reviews and the current user's review in parallel to keep the page responsive.
-    void Promise.allSettled([productRequest, reviewRequest, myReviewRequest]).then(
-      ([productResult, reviewResult, myReviewResult]) => {
+    // Load product details and public reviews in parallel for the initial page view.
+    void Promise.allSettled([
+      productApi.getProductById(productId),
+      productApi.listProductReviews(productId, { page: 1, limit: 8 }),
+    ]).then(([productResult, reviewResult]) => {
         if (!active) {
           return;
         }
@@ -75,21 +95,45 @@ export function useProductPageState(productId: string) {
           setReviewFeedback(getErrorMessage(reviewResult.reason));
         }
 
-        if (myReviewResult.status === "fulfilled") {
-          setMyReview(myReviewResult.value);
-          setReviewForm(
-            myReviewResult.value
-              ? { rating: myReviewResult.value.rating, comment: myReviewResult.value.comment }
-              : { rating: 0, comment: "" },
-          );
-        } else {
-          setReviewFeedback(getErrorMessage(myReviewResult.reason));
-        }
-
         setIsLoading(false);
         setIsReviewLoading(false);
       },
     );
+
+    return () => {
+      active = false;
+    };
+  }, [productId]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!isAuthenticated || !token) {
+      setMyReview(null);
+      setReviewForm({ rating: 0, comment: "" });
+      return () => {
+        active = false;
+      };
+    }
+
+    void getMyProductReviewOrNull(token, productId)
+      .then((nextMyReview) => {
+        if (!active) {
+          return;
+        }
+
+        setMyReview(nextMyReview);
+        setReviewForm(
+          nextMyReview
+            ? { rating: nextMyReview.rating, comment: nextMyReview.comment }
+            : { rating: 0, comment: "" },
+        );
+      })
+      .catch((reason) => {
+        if (active) {
+          setReviewFeedback(getErrorMessage(reason));
+        }
+      });
 
     return () => {
       active = false;

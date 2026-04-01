@@ -15,7 +15,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { ProtectedView } from "@/components/protected-view";
 import { Badge, SurfaceCard } from "@/components/storefront-ui";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthActions, useAuthState } from "@/hooks/useAuth";
 import { buttonStyles } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 import { getDisplayName, getInitials } from "@/utils/format";
@@ -39,7 +39,8 @@ export function AccountShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user } = useAuthState();
+  const { logout } = useAuthActions();
 
   return (
     <ProtectedView>

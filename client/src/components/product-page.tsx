@@ -6,6 +6,7 @@ import { EmptyState, InlineAlert, LoadingScreen } from "@/components/storefront-
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { buttonStyles } from "@/lib/button-styles";
+import type { ProductPageInitialData } from "@/lib/storefront/initial-data";
 import { fallbackImageForProduct } from "@/lib/utils";
 
 import { ProductImageGallery } from "./product-page/product-image-gallery";
@@ -14,7 +15,13 @@ import { ProductReviewsSection } from "./product-page/product-reviews-section";
 import { RelatedProductsSection } from "./product-page/related-products-section";
 import { useProductPageState } from "./product-page/use-product-page-state";
 
-export function ProductPage({ productId }: { productId: string }) {
+export function ProductPage({
+  productId,
+  initialData,
+}: {
+  productId: string;
+  initialData?: ProductPageInitialData;
+}) {
   const {
     activeImage,
     busy,
@@ -46,7 +53,7 @@ export function ProductPage({ productId }: { productId: string }) {
     handleDeleteReview,
     handleReviewSubmit,
     handleViewRelatedProduct,
-  } = useProductPageState(productId);
+  } = useProductPageState(productId, initialData);
 
   if (isLoading) {
     return (

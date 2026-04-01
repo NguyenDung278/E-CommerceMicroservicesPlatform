@@ -4,7 +4,7 @@ import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { LoadingScreen } from "@/components/storefront-ui";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthState } from "@/hooks/useAuth";
 
 export function ProtectedView({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +18,7 @@ function ProtectedViewContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isBootstrapping } = useAuth();
+  const { isAuthenticated, isBootstrapping } = useAuthState();
 
   useEffect(() => {
     if (isBootstrapping || isAuthenticated) {

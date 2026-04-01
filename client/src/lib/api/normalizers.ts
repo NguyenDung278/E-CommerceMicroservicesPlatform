@@ -6,6 +6,7 @@ import type {
   OrderEvent,
   OrderItem,
   OrderPreview,
+  OrderPaymentsSummary,
   Payment,
   Product,
   ProductPopularity,
@@ -286,6 +287,25 @@ export function normalizePayment(value: unknown): Payment {
 
 export function normalizePaymentList(value: unknown): Payment[] {
   return Array.isArray(value) ? value.map((item) => normalizePayment(item)) : [];
+}
+
+export function normalizeOrderPaymentsSummary(value: unknown): OrderPaymentsSummary {
+  const summary = isRecord(value) ? value : {};
+  const paymentsByOrderSource = isRecord(summary.payments_by_order)
+    ? summary.payments_by_order
+    : isRecord(summary.paymentsByOrder)
+      ? summary.paymentsByOrder
+      : {};
+
+  return {
+    orders: normalizeOrderList(summary.orders),
+    paymentsByOrder: Object.fromEntries(
+      Object.entries(paymentsByOrderSource).map(([orderId, payments]) => [
+        orderId,
+        normalizePaymentList(payments),
+      ]),
+    ),
+  };
 }
 
 export function normalizeUserProfile(value: unknown): UserProfile {

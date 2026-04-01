@@ -1,9 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 
-import { orderApi, paymentApi } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors/handler";
+import {
+  peekOrderPaymentsResource,
+  readOrderPaymentsResource,
+} from "@/lib/resources/account-resources";
 import type { Order, Payment } from "@/types/api";
 
 type OrderPaymentsState = {
@@ -21,69 +24,92 @@ const emptyOrderPaymentsState: OrderPaymentsState = {
 };
 
 export function useOrderPayments(token: string) {
+  const cachedOrderPayments = token ? peekOrderPaymentsResource(token) : undefined;
   const [state, setState] = useState<OrderPaymentsState>(() =>
-    token ? { ...emptyOrderPaymentsState, isLoading: true } : emptyOrderPaymentsState,
+    token
+      ? {
+          orders: cachedOrderPayments?.orders ?? [],
+          paymentsByOrder: cachedOrderPayments?.paymentsByOrder ?? {},
+          isLoading: !cachedOrderPayments,
+          error: "",
+        }
+      : emptyOrderPaymentsState,
   );
 
-  useEffect(() => {
-    let active = true;
-
+  const refreshOrderPayments = useCallback(async (forceRefresh = false) => {
     if (!token) {
-      return () => {
-        active = false;
-      };
+      startTransition(() => {
+        setState(emptyOrderPaymentsState);
+      });
+      return emptyOrderPaymentsState;
     }
 
     startTransition(() => {
       setState((current) => ({ ...current, isLoading: true, error: "" }));
     });
 
-    void orderApi
-      .listOrders(token)
-      .then(async (response) => {
-        const orders = (Array.isArray(response.data) ? response.data : [])
-          .slice()
-          .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
-
-        const paymentHistoryResponse = await paymentApi.listPaymentHistory(token);
-        const paymentsByOrder: Record<string, Payment[]> = {};
-
-        (Array.isArray(paymentHistoryResponse.data) ? paymentHistoryResponse.data : []).forEach((payment) => {
-          if (!paymentsByOrder[payment.order_id]) {
-            paymentsByOrder[payment.order_id] = [];
-          }
-
-          paymentsByOrder[payment.order_id].push(payment);
-        });
-
-        if (!active) {
-          return;
-        }
-
+    try {
+      const resource = await readOrderPaymentsResource(token, { forceRefresh });
+      startTransition(() => {
         setState({
-          orders,
-          paymentsByOrder,
+          orders: resource.orders,
+          paymentsByOrder: resource.paymentsByOrder,
           isLoading: false,
           error: "",
         });
-      })
-      .catch((reason) => {
-        if (!active) {
-          return;
-        }
-
+      });
+      return {
+        orders: resource.orders,
+        paymentsByOrder: resource.paymentsByOrder,
+        isLoading: false,
+        error: "",
+      };
+    } catch (reason) {
+      const fallbackState: OrderPaymentsState = {
+        orders: cachedOrderPayments?.orders ?? [],
+        paymentsByOrder: cachedOrderPayments?.paymentsByOrder ?? {},
+        isLoading: false,
+        error: getErrorMessage(reason),
+      };
+      startTransition(() => {
         setState({
-          orders: [],
-          paymentsByOrder: {},
-          isLoading: false,
-          error: getErrorMessage(reason),
+          ...fallbackState,
         });
       });
+      return fallbackState;
+    }
+  }, [cachedOrderPayments, token]);
 
-    return () => {
-      active = false;
-    };
-  }, [token]);
+  useEffect(() => {
+    if (!token) {
+      startTransition(() => {
+        setState(emptyOrderPaymentsState);
+      });
+      return;
+    }
 
-  return token ? state : emptyOrderPaymentsState;
+    if (cachedOrderPayments) {
+      startTransition(() => {
+        setState({
+          orders: cachedOrderPayments.orders,
+          paymentsByOrder: cachedOrderPayments.paymentsByOrder,
+          isLoading: false,
+          error: "",
+        });
+      });
+      return;
+    }
+
+    startTransition(() => {
+      setState({
+        orders: [],
+        paymentsByOrder: {},
+        isLoading: true,
+        error: "",
+      });
+    });
+    void refreshOrderPayments();
+  }, [cachedOrderPayments, refreshOrderPayments, token]);
+
+  return token ? { ...state, refreshOrderPayments } : { ...emptyOrderPaymentsState, refreshOrderPayments };
 }

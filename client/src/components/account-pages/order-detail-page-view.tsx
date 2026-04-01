@@ -13,9 +13,11 @@ import {
   SurfaceCard,
 } from "@/components/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
-import { orderApi, paymentApi, productApi } from "@/lib/api";
+import { orderApi, paymentApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import { invalidateOrderPaymentsResource } from "@/lib/resources/account-resources";
+import { readProductLookupResource } from "@/lib/resources/product-resources";
 import { fallbackImageForProduct } from "@/lib/utils";
 import type { Order, OrderEvent, Payment, Product } from "@/types/api";
 import {
@@ -73,15 +75,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
         const productIds = Array.from(
           new Set(orderResponse.data.items.map((item) => item.product_id).filter(Boolean)),
         );
-        const results = await Promise.allSettled(
-          productIds.map((productId) => productApi.getProductById(productId)),
-        );
-        const nextLookup: Record<string, Product> = {};
-        results.forEach((result) => {
-          if (result.status === "fulfilled") {
-            nextLookup[result.value.data.id] = result.value.data;
-          }
-        });
+        const nextLookup = await readProductLookupResource(productIds);
         if (active) {
           setProductLookup(nextLookup);
         }
@@ -110,6 +104,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
     try {
       setBusy(true);
       await orderApi.cancelOrder(token, order.id);
+      invalidateOrderPaymentsResource(token);
       const refreshedOrder = await orderApi.getOrderById(token, order.id);
       const refreshedEvents = await orderApi
         .getOrderEvents(token, order.id)

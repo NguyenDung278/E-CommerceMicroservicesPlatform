@@ -235,3 +235,8 @@ export type Payment = {
   created_at: string;
   updated_at: string;
 };
+
+export type OrderPaymentsSummary = {
+  orders: Order[];
+  paymentsByOrder: Record<string, Payment[]>;
+};

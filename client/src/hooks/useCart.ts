@@ -2,7 +2,11 @@
 
 import { useContext } from "react";
 
-import { CartContext } from "@/providers/cart-provider";
+import {
+  CartActionsContext,
+  CartContext,
+  CartStateContext,
+} from "@/providers/cart-provider";
 
 export function useCart() {
   const context = useContext(CartContext);
@@ -14,3 +18,22 @@ export function useCart() {
   return context;
 }
 
+export function useCartState() {
+  const context = useContext(CartStateContext);
+
+  if (!context) {
+    throw new Error("useCartState must be used within CartProvider");
+  }
+
+  return context;
+}
+
+export function useCartActions() {
+  const context = useContext(CartActionsContext);
+
+  if (!context) {
+    throw new Error("useCartActions must be used within CartProvider");
+  }
+
+  return context;
+}

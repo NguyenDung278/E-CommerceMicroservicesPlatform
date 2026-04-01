@@ -21,6 +21,7 @@ import (
 	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
+	paymentclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
@@ -95,8 +96,10 @@ func main() {
 	}
 	defer productClient.Close()
 
+	paymentClient := paymentclient.NewPaymentClient(cfg.Services.PaymentService, log)
+
 	orderRepo := repository.NewOrderRepository(db)
-	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient)
+	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient, paymentClient)
 	orderHandler := handler.NewOrderHandler(orderService)
 	if amqpConsumerCh != nil {
 		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {

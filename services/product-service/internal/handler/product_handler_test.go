@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,7 +85,23 @@ func (r *fakeProductRepo) List(_ context.Context, params repository.ListProducts
 	return products[start:end], nextCursor, hasNext, nil
 }
 func (r *fakeProductRepo) ListByIDs(_ context.Context, ids []string) ([]*model.Product, error) {
-	return []*model.Product{}, nil
+	if len(ids) == 0 {
+		return []*model.Product{}, nil
+	}
+
+	byID := make(map[string]*model.Product, len(r.created))
+	for _, product := range r.created {
+		byID[product.ID] = product
+	}
+
+	products := make([]*model.Product, 0, len(ids))
+	for _, id := range ids {
+		if product, ok := byID[id]; ok {
+			products = append(products, product)
+		}
+	}
+
+	return products, nil
 }
 func (r *fakeProductRepo) ListForSearchIndex(_ context.Context) ([]*model.Product, error) {
 	return []*model.Product{}, nil
@@ -347,6 +364,84 @@ func TestListReturnsCursorMetadata(t *testing.T) {
 	}
 	if payload.Data[0].ID != "p1" || payload.Data[1].ID != "p2" {
 		t.Fatalf("unexpected product order: %+v", payload.Data)
+	}
+}
+
+func TestListByIDsReturnsProductsInRequestedOrder(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	repo := &fakeProductRepo{created: []*model.Product{
+		{ID: "p1", Name: "One"},
+		{ID: "p2", Name: "Two"},
+		{ID: "p3", Name: "Three"},
+	}}
+	productService := service.NewProductService(repo)
+	handler := NewProductHandler(productService)
+	handler.RegisterRoutes(e, "unused-secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/batch?ids=p3,p1,p3", nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Success bool `json:"success"`
+		Data    []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(payload.Data) != 2 {
+		t.Fatalf("expected 2 products after dedupe, got %d", len(payload.Data))
+	}
+	if payload.Data[0].ID != "p3" || payload.Data[1].ID != "p1" {
+		t.Fatalf("unexpected product order: %+v", payload.Data)
+	}
+}
+
+func TestListByIDsRequiresAtLeastOneID(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	productService := service.NewProductService(&fakeProductRepo{})
+	handler := NewProductHandler(productService)
+	handler.RegisterRoutes(e, "unused-secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/batch", nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListByIDsRejectsLargeBatch(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	productService := service.NewProductService(&fakeProductRepo{})
+	handler := NewProductHandler(productService)
+	handler.RegisterRoutes(e, "unused-secret")
+
+	query := make([]string, 0, 101)
+	for index := 0; index < 101; index++ {
+		query = append(query, fmt.Sprintf("ids=product-%d", index))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/batch?"+strings.Join(query, "&"), nil)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

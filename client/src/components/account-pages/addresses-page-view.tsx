@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { AccountShell } from "@/components/account-shell";
 import {
@@ -11,11 +11,12 @@ import {
   SurfaceCard,
   TextInput,
 } from "@/components/storefront-ui";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthState } from "@/hooks/useAuth";
+import { useSavedAddresses } from "@/hooks/useSavedAddresses";
 import { userApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
-import type { Address } from "@/types/api";
+import { invalidateSavedAddressesResource } from "@/lib/resources/account-resources";
 
 const emptyAddressForm = {
   recipient_name: "",
@@ -28,33 +29,17 @@ const emptyAddressForm = {
 };
 
 export function AddressesPageView() {
-  const { token } = useAuth();
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { token } = useAuthState();
+  const {
+    addresses,
+    isLoading,
+    error,
+    refreshAddresses,
+  } = useSavedAddresses(token);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyAddressForm);
-
-  const reload = useCallback(async () => {
-    if (!token) {
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const response = await userApi.listAddresses(token);
-      setAddresses(response.data);
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
 
   function resetForm() {
     setEditingId("");
@@ -76,8 +61,9 @@ export function AddressesPageView() {
         await userApi.createAddress(token, form);
         setFeedback("Địa chỉ mới đã được lưu.");
       }
+      invalidateSavedAddressesResource(token);
       resetForm();
-      await reload();
+      await refreshAddresses(true);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -94,7 +80,8 @@ export function AddressesPageView() {
       setBusy(true);
       await userApi.deleteAddress(token, addressId);
       setFeedback("Địa chỉ đã được xóa.");
-      await reload();
+      invalidateSavedAddressesResource(token);
+      await refreshAddresses(true);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -111,7 +98,8 @@ export function AddressesPageView() {
       setBusy(true);
       await userApi.setDefaultAddress(token, addressId);
       setFeedback("Đã cập nhật địa chỉ mặc định.");
-      await reload();
+      invalidateSavedAddressesResource(token);
+      await refreshAddresses(true);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -125,6 +113,7 @@ export function AddressesPageView() {
       description="Quản lý đầy đủ create, update, delete và set default cho địa chỉ người dùng bằng API thật của user-service."
     >
       {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
+      {!feedback && error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
 
       <div className="grid gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
         <SurfaceCard className="p-6">

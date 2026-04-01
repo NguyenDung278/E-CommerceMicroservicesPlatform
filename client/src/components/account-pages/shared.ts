@@ -3,7 +3,7 @@
 import { CreditCard, Wallet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { productApi } from "@/lib/api";
+import { readProductLookupResource } from "@/lib/resources/product-resources";
 import { fallbackImageForProduct } from "@/lib/utils";
 import type { Order, Payment, Product } from "@/types/api";
 
@@ -139,18 +139,12 @@ export function useOrderProductLookup(orders: Order[]) {
       };
     }
 
-    void Promise.allSettled(previewProductIds.map((productId) => productApi.getProductById(productId)))
-      .then((results) => {
+    void readProductLookupResource(previewProductIds)
+      .then((nextLookup) => {
         if (!active) {
           return;
         }
 
-        const nextLookup: Record<string, Product> = {};
-        results.forEach((result) => {
-          if (result.status === "fulfilled") {
-            nextLookup[result.value.data.id] = result.value.data;
-          }
-        });
         setProductLookup(nextLookup);
       })
       .catch(() => {

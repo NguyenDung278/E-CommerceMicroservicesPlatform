@@ -15,8 +15,8 @@ import {
   type AtelierPageConfig,
 } from "@/components/atelier-page-data";
 import { StorefrontImage } from "@/components/storefront-image";
-import { useAuth } from "@/hooks/useAuth";
-import { useCart } from "@/hooks/useCart";
+import { useAuthState } from "@/hooks/useAuth";
+import { useCartState } from "@/hooks/useCart";
 import { cn } from "@/lib/utils";
 
 const badgeToneClasses: Record<AtelierBadgeTone, string> = {
@@ -31,8 +31,8 @@ type AtelierCategoryPageProps = {
 };
 
 export function AtelierCategoryPage({ config }: AtelierCategoryPageProps) {
-  const { isAuthenticated } = useAuth();
-  const { itemCount } = useCart();
+  const { isAuthenticated } = useAuthState();
+  const { itemCount } = useCartState();
 
   return (
     <div className="min-h-screen bg-background text-on-surface">

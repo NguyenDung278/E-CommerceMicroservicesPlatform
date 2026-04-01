@@ -27,6 +27,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.Use(appmw.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.forwardRequest)
 	orders.POST("", h.forwardRequest)
+	orders.GET("/summary", h.forwardRequest)
 	orders.GET("", h.forwardRequest)
 	orders.GET("/:id/events", h.forwardRequest)
 	orders.GET("/:id", h.forwardRequest)

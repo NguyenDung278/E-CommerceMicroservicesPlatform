@@ -5,6 +5,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -77,7 +78,40 @@ type AuthContextValue = {
   clearError: () => void;
 };
 
+type AuthStateValue = Pick<
+  AuthContextValue,
+  | "token"
+  | "refreshToken"
+  | "user"
+  | "isAuthenticated"
+  | "isAdmin"
+  | "isStaff"
+  | "canAccessAdmin"
+  | "isBootstrapping"
+  | "error"
+>;
+
+type AuthActionsValue = Pick<
+  AuthContextValue,
+  | "register"
+  | "login"
+  | "beginOAuthLogin"
+  | "exchangeOAuthTicket"
+  | "logout"
+  | "refreshProfile"
+  | "updateProfile"
+  | "getPhoneVerificationStatus"
+  | "sendPhoneOtp"
+  | "verifyPhoneOtp"
+  | "resendPhoneOtp"
+  | "changePassword"
+  | "resendVerificationEmail"
+  | "clearError"
+>;
+
 export const AuthContext = createContext<AuthContextValue | null>(null);
+export const AuthStateContext = createContext<AuthStateValue | null>(null);
+export const AuthActionsContext = createContext<AuthActionsValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { token, refreshToken, remember, hasSession, setTokens, clearTokens } = useSessionToken();
@@ -189,43 +223,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [clearTokens, hasSession, refreshToken, token, user, withFreshToken]);
 
-  async function register(input: RegisterInput, rememberSession = false) {
+  const register = useCallback(async (input: RegisterInput, rememberSession = false) => {
     setError("");
     const response = await authApi.register(input);
     completeAuth(response, rememberSession);
     return response.data.user;
-  }
+  }, [completeAuth]);
 
-  async function login(input: LoginInput, rememberSession = false) {
+  const login = useCallback(async (input: LoginInput, rememberSession = false) => {
     setError("");
     const response = await authApi.login(input);
     completeAuth(response, rememberSession);
     return response.data.user;
-  }
+  }, [completeAuth]);
 
-  function beginOAuthLogin(provider: OAuthProvider, redirectTo = "/profile", rememberSession = false) {
+  const beginOAuthLogin = useCallback((
+    provider: OAuthProvider,
+    redirectTo = "/profile",
+    rememberSession = false,
+  ) => {
     savePendingOAuthRemember(rememberSession);
     window.location.assign(authApi.buildOAuthStartUrl(provider, redirectTo));
-  }
+  }, []);
 
-  async function exchangeOAuthTicket(ticket: string, rememberSession = false) {
+  const exchangeOAuthTicket = useCallback(async (ticket: string, rememberSession = false) => {
     setError("");
     const response = await authApi.exchangeOAuthTicket({ ticket });
     completeAuth(response, rememberSession);
     clearPendingOAuthRemember();
     return response.data.user;
-  }
+  }, [completeAuth]);
 
-  function logout() {
+  const logout = useCallback(() => {
     clearTokens();
     clearPendingOAuthRemember();
     startTransition(() => {
       setUser(null);
       setError("");
     });
-  }
+  }, [clearTokens]);
 
-  async function refreshProfile() {
+  const refreshProfile = useCallback(async () => {
     setError("");
     const response = await withFreshToken((activeToken) => userApi.getProfile(activeToken));
     startTransition(() => {
@@ -233,9 +271,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError("");
     });
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function updateProfile(input: UpdateProfileInput) {
+  const updateProfile = useCallback(async (input: UpdateProfileInput) => {
     setError("");
     const response = await withFreshToken((activeToken) => userApi.updateProfile(activeToken, input));
     startTransition(() => {
@@ -243,15 +281,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError("");
     });
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function getPhoneVerificationStatus() {
+  const getPhoneVerificationStatus = useCallback(async () => {
     setError("");
     const response = await withFreshToken((activeToken) => userApi.getPhoneVerificationStatus(activeToken));
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function sendPhoneOtp(phone: string) {
+  const sendPhoneOtp = useCallback(async (phone: string) => {
     setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.sendPhoneOtp(activeToken, {
@@ -259,9 +297,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }),
     );
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function verifyPhoneOtp(verificationId: string, otpCode: string) {
+  const verifyPhoneOtp = useCallback(async (verificationId: string, otpCode: string) => {
     setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.verifyPhoneOtp(activeToken, {
@@ -270,9 +308,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }),
     );
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function resendPhoneOtp(verificationId: string) {
+  const resendPhoneOtp = useCallback(async (verificationId: string) => {
     setError("");
     const response = await withFreshToken((activeToken) =>
       userApi.resendPhoneOtp(activeToken, {
@@ -280,51 +318,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }),
     );
     return response.data;
-  }
+  }, [withFreshToken]);
 
-  async function changePassword(input: ChangePasswordInput) {
+  const changePassword = useCallback(async (input: ChangePasswordInput) => {
     setError("");
     await withFreshToken((activeToken) => authApi.changePassword(activeToken, input));
-  }
+  }, [withFreshToken]);
 
-  async function resendVerificationEmail() {
+  const resendVerificationEmail = useCallback(async () => {
     setError("");
     await withFreshToken((activeToken) => authApi.resendVerificationEmail(activeToken));
-  }
+  }, [withFreshToken]);
+
+  const clearError = useCallback(() => {
+    setError("");
+  }, []);
 
   const isAdmin = user?.role === "admin";
   const isStaff = user?.role === "staff";
   const canAccessAdmin = isAdmin || isStaff;
+  const isAuthenticated = Boolean(token || refreshToken);
+
+  const authState = useMemo<AuthStateValue>(
+    () => ({
+      token,
+      refreshToken,
+      user,
+      isAuthenticated,
+      isAdmin,
+      isStaff,
+      canAccessAdmin,
+      isBootstrapping,
+      error,
+    }),
+    [
+      token,
+      refreshToken,
+      user,
+      isAuthenticated,
+      isAdmin,
+      isStaff,
+      canAccessAdmin,
+      isBootstrapping,
+      error,
+    ],
+  );
+
+  const authActions = useMemo<AuthActionsValue>(
+    () => ({
+      register,
+      login,
+      beginOAuthLogin,
+      exchangeOAuthTicket,
+      logout,
+      refreshProfile,
+      updateProfile,
+      getPhoneVerificationStatus,
+      sendPhoneOtp,
+      verifyPhoneOtp,
+      resendPhoneOtp,
+      changePassword,
+      resendVerificationEmail,
+      clearError,
+    }),
+    [
+      register,
+      login,
+      beginOAuthLogin,
+      exchangeOAuthTicket,
+      logout,
+      refreshProfile,
+      updateProfile,
+      getPhoneVerificationStatus,
+      sendPhoneOtp,
+      verifyPhoneOtp,
+      resendPhoneOtp,
+      changePassword,
+      resendVerificationEmail,
+      clearError,
+    ],
+  );
+
+  const authContextValue = useMemo<AuthContextValue>(
+    () => ({
+      ...authState,
+      ...authActions,
+    }),
+    [authState, authActions],
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        token,
-        refreshToken,
-        user,
-        isAuthenticated: Boolean(token || refreshToken),
-        isAdmin,
-        isStaff,
-        canAccessAdmin,
-        isBootstrapping,
-        error,
-        register,
-        login,
-        beginOAuthLogin,
-        exchangeOAuthTicket,
-        logout,
-        refreshProfile,
-        updateProfile,
-        getPhoneVerificationStatus,
-        sendPhoneOtp,
-        verifyPhoneOtp,
-        resendPhoneOtp,
-        changePassword,
-        resendVerificationEmail,
-        clearError: () => setError(""),
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthStateContext.Provider value={authState}>
+      <AuthActionsContext.Provider value={authActions}>
+        <AuthContext.Provider value={authContextValue}>
+          {children}
+        </AuthContext.Provider>
+      </AuthActionsContext.Provider>
+    </AuthStateContext.Provider>
   );
 }

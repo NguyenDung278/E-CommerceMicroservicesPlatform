@@ -18,6 +18,7 @@ import (
 type fakeOrderRepo struct {
 	createdOrder *model.Order
 	coupons      map[string]*model.Coupon
+	userOrders   []*model.Order
 }
 
 func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order) error {
@@ -30,7 +31,7 @@ func (r *fakeOrderRepo) GetByID(_ context.Context, _ string) (*model.Order, erro
 }
 
 func (r *fakeOrderRepo) GetByUserID(_ context.Context, _ string) ([]*model.Order, error) {
-	return nil, nil
+	return r.userOrders, nil
 }
 
 func (r *fakeOrderRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*model.Order, int64, error) {
@@ -97,6 +98,18 @@ func (c *fakeProductCatalog) RestoreStock(_ context.Context, _ string, _ int) er
 	return nil
 }
 
+type fakePaymentHistoryClient struct {
+	payments []model.PaymentSummary
+	err      error
+}
+
+func (c *fakePaymentHistoryClient) ListPaymentHistory(_ context.Context, _ string) ([]model.PaymentSummary, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	return c.payments, nil
+}
+
 func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
 	repo := &fakeOrderRepo{
 		coupons: map[string]*model.Coupon{
@@ -121,7 +134,7 @@ func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
 			},
 		},
 	}
-	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
 	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
@@ -170,7 +183,7 @@ func TestPreviewOrderRejectsCouponWhenMinimumNotMet(t *testing.T) {
 			},
 		},
 	}
-	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
 	_, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
@@ -209,7 +222,7 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 			},
 		},
 	}
-	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
 	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
@@ -251,7 +264,7 @@ func TestPreviewOrderAddsShippingFeeForStandardDelivery(t *testing.T) {
 			},
 		},
 	}
-	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
 	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
@@ -290,7 +303,7 @@ func TestCreateOrderRequiresShippingAddressForDelivery(t *testing.T) {
 			},
 		},
 	}
-	svc := NewOrderService(repo, nil, zap.NewNop(), catalog)
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
 	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
@@ -303,6 +316,59 @@ func TestCreateOrderRequiresShippingAddressForDelivery(t *testing.T) {
 	}
 	if err != ErrShippingAddressRequired {
 		t.Fatalf("expected ErrShippingAddressRequired, got %v", err)
+	}
+}
+
+func TestGetUserOrderSummaryGroupsPaymentsByOrder(t *testing.T) {
+	repo := &fakeOrderRepo{
+		userOrders: []*model.Order{
+			{ID: "order-2", UserID: "user-1"},
+			{ID: "order-1", UserID: "user-1"},
+		},
+	}
+	paymentClient := &fakePaymentHistoryClient{
+		payments: []model.PaymentSummary{
+			{ID: "payment-1", OrderID: "order-1", Amount: 40},
+			{ID: "payment-2", OrderID: "order-1", Amount: 10, TransactionType: "refund"},
+			{ID: "payment-3", OrderID: "order-2", Amount: 90},
+			{ID: "payment-4", OrderID: "other-order", Amount: 999},
+		},
+	}
+
+	svc := NewOrderService(repo, nil, zap.NewNop(), &fakeProductCatalog{}, paymentClient)
+
+	summary, err := svc.GetUserOrderSummary(context.Background(), "user-1", "Bearer token")
+	if err != nil {
+		t.Fatalf("GetUserOrderSummary returned error: %v", err)
+	}
+
+	if len(summary.Orders) != 2 {
+		t.Fatalf("expected 2 orders, got %d", len(summary.Orders))
+	}
+	if len(summary.PaymentsByOrder["order-1"]) != 2 {
+		t.Fatalf("expected 2 payments for order-1, got %d", len(summary.PaymentsByOrder["order-1"]))
+	}
+	if len(summary.PaymentsByOrder["order-2"]) != 1 {
+		t.Fatalf("expected 1 payment for order-2, got %d", len(summary.PaymentsByOrder["order-2"]))
+	}
+	if _, exists := summary.PaymentsByOrder["other-order"]; exists {
+		t.Fatalf("expected unrelated payments to be filtered out")
+	}
+}
+
+func TestGetUserOrderSummaryReturnsEmptyPaymentsWhenNoOrders(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), &fakeProductCatalog{}, nil)
+
+	summary, err := svc.GetUserOrderSummary(context.Background(), "user-1", "Bearer token")
+	if err != nil {
+		t.Fatalf("GetUserOrderSummary returned error: %v", err)
+	}
+
+	if len(summary.Orders) != 0 {
+		t.Fatalf("expected no orders, got %d", len(summary.Orders))
+	}
+	if len(summary.PaymentsByOrder) != 0 {
+		t.Fatalf("expected no grouped payments, got %d", len(summary.PaymentsByOrder))
 	}
 }
 

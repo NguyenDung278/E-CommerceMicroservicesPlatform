@@ -3,12 +3,14 @@ import {
   normalizeOrder,
   normalizeOrderEventList,
   normalizeOrderList,
+  normalizeOrderPaymentsSummary,
   normalizeOrderPreview,
 } from "@/lib/api/normalizers";
 import type {
   ApiEnvelope,
   Order,
   OrderEvent,
+  OrderPaymentsSummary,
   OrderPreview,
   ShippingAddress,
 } from "@/types/api";
@@ -62,6 +64,13 @@ export const orderApi = {
     }));
   },
 
+  getOrderSummary(token: string): Promise<ApiEnvelope<OrderPaymentsSummary>> {
+    return request<unknown>("/api/v1/orders/summary", { token }).then((response) => ({
+      ...response,
+      data: normalizeOrderPaymentsSummary(response.data),
+    }));
+  },
+
   getOrderById(token: string, orderId: string): Promise<ApiEnvelope<Order>> {
     return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}`, {
       token,
@@ -87,4 +96,3 @@ export const orderApi = {
     });
   },
 };
-

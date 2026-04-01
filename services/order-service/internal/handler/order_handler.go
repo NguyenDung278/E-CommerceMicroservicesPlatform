@@ -34,6 +34,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.Use(middleware.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.PreviewOrder)
 	orders.POST("", h.CreateOrder)
+	orders.GET("/summary", h.GetUserOrderSummary)
 	orders.GET("", h.GetUserOrders)
 	orders.GET("/:id/events", h.GetOrderTimeline)
 	orders.GET("/:id", h.GetOrder)
@@ -126,6 +127,27 @@ func (h *OrderHandler) GetUserOrders(c echo.Context) error {
 		orders = []*model.Order{}
 	}
 	return response.Success(c, http.StatusOK, "orders retrieved", orders)
+}
+
+func (h *OrderHandler) GetUserOrderSummary(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	summary, err := h.orderService.GetUserOrderSummary(
+		c.Request().Context(),
+		claims.UserID,
+		c.Request().Header.Get(echo.HeaderAuthorization),
+	)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to retrieve order summary")
+	}
+
+	if summary == nil {
+		summary = &model.UserOrderSummary{
+			Orders:          []*model.Order{},
+			PaymentsByOrder: map[string][]model.PaymentSummary{},
+		}
+	}
+
+	return response.Success(c, http.StatusOK, "order summary retrieved", summary)
 }
 
 // CancelOrder handles PUT /api/v1/orders/:id/cancel

@@ -24,6 +24,7 @@ func NewProductHandler(p *proxy.ServiceProxy) *ProductHandler {
 func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public := e.Group("/api/v1/products")
 	public.GET("", h.forwardRequest)
+	public.GET("/batch", h.forwardRequest)
 	public.GET("/:id", h.forwardRequest)
 	public.GET("/:id/reviews", h.forwardRequest)
 

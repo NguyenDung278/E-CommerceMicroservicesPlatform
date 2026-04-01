@@ -1,4 +1,5 @@
 import { ProductPage } from "@/components/product-page";
+import { getProductPageInitialData } from "@/lib/server/storefront";
 
 export default async function Page({
   params,
@@ -6,6 +7,7 @@ export default async function Page({
   params: Promise<{ productId: string }>;
 }) {
   const { productId } = await params;
-  return <ProductPage productId={productId} />;
-}
+  const initialData = await getProductPageInitialData(productId);
 
+  return <ProductPage key={productId} productId={productId} initialData={initialData} />;
+}

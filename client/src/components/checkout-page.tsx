@@ -17,12 +17,14 @@ import {
   SurfaceCard,
   TextInput,
 } from "@/components/storefront-ui";
-import { useAuth } from "@/hooks/useAuth";
-import { useCart } from "@/hooks/useCart";
+import { useAuthState } from "@/hooks/useAuth";
+import { useCartActions, useCartState } from "@/hooks/useCart";
 import { useSavedAddresses } from "@/hooks/useSavedAddresses";
-import { orderApi, paymentApi, productApi } from "@/lib/api";
+import { orderApi, paymentApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import { invalidateOrderPaymentsResource } from "@/lib/resources/account-resources";
+import { readProductResource } from "@/lib/resources/product-resources";
 import { cn, fallbackImageForProduct } from "@/lib/utils";
 import type { Address, OrderPreview, Product } from "@/types/api";
 import { formatCurrency, formatShippingMethodLabel } from "@/utils/format";
@@ -59,8 +61,9 @@ function CheckoutPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { token, isAuthenticated } = useAuth();
-  const { cart, clearCart } = useCart();
+  const { token, isAuthenticated } = useAuthState();
+  const { cart } = useCartState();
+  const { clearCart } = useCartActions();
   const { addresses, isLoading: isLoadingAddresses } = useSavedAddresses(token);
 
   const [form, setForm] = useState<CheckoutFormState>(emptyForm);
@@ -88,11 +91,10 @@ function CheckoutPageContent() {
     }
 
     setIsLoadingDirectProduct(true);
-    void productApi
-      .getProductById(directProductId)
-      .then((response) => {
+    void readProductResource(directProductId)
+      .then((product) => {
         if (active) {
-          setDirectProduct(response.data);
+          setDirectProduct(product);
         }
       })
       .catch((reason) => {
@@ -219,11 +221,14 @@ function CheckoutPageContent() {
         shipping_method: shippingMethod,
         shipping_address: shippingAddress,
       });
+      // A new order changes the account summary even if the payment request later fails.
+      invalidateOrderPaymentsResource(token);
 
       const paymentResponse = await paymentApi.processPayment(token, {
         order_id: orderResponse.data.id,
         payment_method: paymentMethod,
       });
+      invalidateOrderPaymentsResource(token);
 
       if (!directProduct && cart.items.length > 0) {
         await clearCart();

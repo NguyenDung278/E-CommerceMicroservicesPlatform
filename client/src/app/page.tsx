@@ -1,6 +1,8 @@
 import { HomePage } from "@/components/home-page";
+import { getHomePageInitialData } from "@/lib/server/storefront";
 
-export default function Page() {
-  return <HomePage />;
+export default async function Page() {
+  const initialData = await getHomePageInitialData();
+
+  return <HomePage initialData={initialData} />;
 }
-

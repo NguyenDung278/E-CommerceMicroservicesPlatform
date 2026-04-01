@@ -2,25 +2,38 @@
 
 import { startTransition, useCallback, useEffect, useState } from "react";
 
-import { userApi } from "@/lib/api";
+import {
+  peekSavedAddressesResource,
+  readSavedAddressesResource,
+} from "@/lib/resources/account-resources";
 import type { Address } from "@/types/api";
+import { getErrorMessage } from "@/lib/errors/handler";
 
 type SavedAddressesState = {
   addresses: Address[];
   isLoading: boolean;
+  error: string;
 };
 
 const emptySavedAddressesState: SavedAddressesState = {
   addresses: [],
   isLoading: false,
+  error: "",
 };
 
 export function useSavedAddresses(token: string) {
+  const cachedAddresses = token ? peekSavedAddressesResource(token) : undefined;
   const [state, setState] = useState<SavedAddressesState>(() =>
-    token ? { ...emptySavedAddressesState, isLoading: true } : emptySavedAddressesState,
+    token
+      ? {
+          addresses: cachedAddresses ?? [],
+          isLoading: !cachedAddresses,
+          error: "",
+        }
+      : emptySavedAddressesState,
   );
 
-  const refreshAddresses = useCallback(async () => {
+  const refreshAddresses = useCallback(async (forceRefresh = false) => {
     if (!token) {
       startTransition(() => {
         setState(emptySavedAddressesState);
@@ -29,53 +42,59 @@ export function useSavedAddresses(token: string) {
     }
 
     startTransition(() => {
-      setState((current) => ({ ...current, isLoading: true }));
+      setState((current) => ({ ...current, isLoading: true, error: "" }));
     });
 
     try {
-      const response = await userApi.listAddresses(token);
+      const addresses = await readSavedAddressesResource(token, { forceRefresh });
       startTransition(() => {
         setState({
-          addresses: response.data,
+          addresses,
           isLoading: false,
+          error: "",
         });
       });
-      return response.data;
-    } catch {
+      return addresses;
+    } catch (reason) {
       startTransition(() => {
         setState({
-          addresses: [],
+          addresses: cachedAddresses ?? [],
           isLoading: false,
+          error: getErrorMessage(reason),
         });
       });
       return [];
     }
-  }, [token]);
+  }, [cachedAddresses, token]);
 
   useEffect(() => {
-    let active = true;
-
     if (!token) {
-      return () => {
-        active = false;
-      };
+      startTransition(() => {
+        setState(emptySavedAddressesState);
+      });
+      return;
     }
 
-    void refreshAddresses().then((addresses) => {
-        if (!active) {
-          return;
-        }
-
+    if (cachedAddresses) {
+      startTransition(() => {
         setState({
-          addresses,
+          addresses: cachedAddresses,
           isLoading: false,
+          error: "",
         });
       });
+      return;
+    }
 
-    return () => {
-      active = false;
-    };
-  }, [refreshAddresses, token]);
+    startTransition(() => {
+      setState({
+        addresses: [],
+        isLoading: true,
+        error: "",
+      });
+    });
+    void refreshAddresses();
+  }, [cachedAddresses, refreshAddresses, token]);
 
   return token ? { ...state, refreshAddresses } : { ...emptySavedAddressesState, refreshAddresses };
 }

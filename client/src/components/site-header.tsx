@@ -6,8 +6,8 @@ import { Heart, Menu, Search, ShoppingBag, UserRound, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useCart } from "@/hooks/useCart";
+import { useAuthState } from "@/hooks/useAuth";
+import { useCartState } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { buttonStyles } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,8 @@ const primaryNav = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { isAuthenticated } = useAuth();
-  const { itemCount } = useCart();
+  const { isAuthenticated } = useAuthState();
+  const { itemCount } = useCartState();
   const { wishlistCount } = useWishlist();
   const [menuOpen, setMenuOpen] = useState(false);
 

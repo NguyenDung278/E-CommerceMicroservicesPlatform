@@ -17,11 +17,12 @@ import {
   ProductCardSkeleton,
   SectionHeading,
 } from "@/components/storefront-ui";
-import { useCart } from "@/hooks/useCart";
+import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { productApi } from "@/lib/api/product";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import type { HomePageInitialData } from "@/lib/storefront/initial-data";
 import { cn, fallbackImageForProduct } from "@/lib/utils";
 import type { Product, ProductPopularity } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
@@ -33,18 +34,33 @@ type HomeState = {
   error: string;
 };
 
-export function HomePage() {
-  const { addItem } = useCart();
+const emptyHomeState: HomeState = {
+  products: [],
+  popularity: [],
+  isLoading: true,
+  error: "",
+};
+
+export function HomePage({ initialData }: { initialData?: HomePageInitialData }) {
+  const { addItem } = useCartActions();
   const { isSaved, toggleWishlist } = useWishlist();
   const [busyProductId, setBusyProductId] = useState("");
-  const [state, setState] = useState<HomeState>({
-    products: [],
-    popularity: [],
-    isLoading: true,
-    error: "",
-  });
+  const [state, setState] = useState<HomeState>(() =>
+    initialData
+      ? {
+          products: initialData.products,
+          popularity: initialData.popularity,
+          isLoading: false,
+          error: initialData.error,
+        }
+      : emptyHomeState,
+  );
 
   useEffect(() => {
+    if (initialData) {
+      return;
+    }
+
     let active = true;
 
     void Promise.all([
@@ -79,7 +95,7 @@ export function HomePage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialData]);
 
   const heroProduct = state.products[0] ?? null;
   const categoryCards = useMemo(() => {

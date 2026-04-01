@@ -39,11 +39,12 @@ import {
   SurfaceCard,
   TextInput,
 } from "@/components/storefront-ui";
-import { useCart } from "@/hooks/useCart";
+import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { productApi } from "@/lib/api/product";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import type { CatalogPageInitialData } from "@/lib/storefront/initial-data";
 import { buildSearchParams, cn } from "@/lib/utils";
 import type { Product, ProductPopularity } from "@/types/api";
 
@@ -73,40 +74,77 @@ type FilterPanelProps = {
   onReset: () => void;
 };
 
+function applyCatalogClientTransforms(
+  products: Product[],
+  options: {
+    popularity: ProductPopularity[];
+    wishlist: string[];
+    savedOnly: boolean;
+    sort: SortMode;
+  },
+) {
+  let nextProducts = products;
+
+  if (options.savedOnly) {
+    nextProducts = nextProducts.filter((product) => options.wishlist.includes(product.id));
+  }
+
+  if (options.sort === "popular" && options.popularity.length > 0) {
+    const popularityRank = new Map(
+      options.popularity.map((item, index) => [item.product_id, item.quantity * 1000 - index]),
+    );
+
+    nextProducts = nextProducts
+      .slice()
+      .sort(
+        (left, right) =>
+          (popularityRank.get(right.id) ?? 0) - (popularityRank.get(left.id) ?? 0),
+      );
+  }
+
+  return nextProducts;
+}
+
 export function CatalogPage({
   initialCategory,
+  initialData,
 }: {
   initialCategory?: string;
+  initialData?: CatalogPageInitialData;
 }) {
   return (
     <Suspense fallback={<CatalogPageFallback />}>
-      <CatalogPageContent initialCategory={initialCategory} />
+      <CatalogPageContent initialCategory={initialCategory} initialData={initialData} />
     </Suspense>
   );
 }
 
 function CatalogPageContent({
   initialCategory,
+  initialData,
 }: {
   initialCategory?: string;
+  initialData?: CatalogPageInitialData;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { addItem } = useCart();
+  const { addItem } = useCartActions();
   const { wishlist, isSaved, toggleWishlist } = useWishlist();
 
-  const [catalogIndex, setCatalogIndex] = useState<Product[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [popularity, setPopularity] = useState<ProductPopularity[]>([]);
-  const [feedback, setFeedback] = useState("");
+  const [catalogIndex, setCatalogIndex] = useState<Product[]>(() => initialData?.catalogIndex ?? []);
+  const [listingProducts, setListingProducts] = useState<Product[]>(() => initialData?.products ?? []);
+  const [popularity, setPopularity] = useState<ProductPopularity[]>(() => initialData?.popularity ?? []);
+  const [feedback, setFeedback] = useState(initialData?.feedback ?? "");
   const [busyProductId, setBusyProductId] = useState("");
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isLoadingIndex, setIsLoadingIndex] = useState(true);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingIndex, setIsLoadingIndex] = useState(!initialData);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(!initialData);
   const [isPending, startTransition] = useTransition();
+  const skipInitialIndexLoad = useRef(Boolean(initialData));
+  const skipInitialProductLoad = useRef(Boolean(initialData));
 
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [category, setCategory] = useState(initialCategory ?? searchParams.get("category") ?? "");
@@ -120,6 +158,16 @@ function CatalogPageContent({
 
   const deferredSearch = useDeferredValue(search);
   const liveRegionTimer = useRef<number | null>(null);
+  const products = useMemo(
+    () =>
+      applyCatalogClientTransforms(listingProducts, {
+        popularity,
+        wishlist,
+        savedOnly,
+        sort,
+      }),
+    [listingProducts, popularity, savedOnly, sort, wishlist],
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -141,6 +189,11 @@ function CatalogPageContent({
   }, []);
 
   useEffect(() => {
+    if (skipInitialIndexLoad.current) {
+      skipInitialIndexLoad.current = false;
+      return;
+    }
+
     let active = true;
 
     setIsLoadingIndex(true);
@@ -194,6 +247,11 @@ function CatalogPageContent({
   }, [brand, category, color, deferredSearch, maxPrice, minPrice, pathname, router, savedOnly, size, sort]);
 
   useEffect(() => {
+    if (skipInitialProductLoad.current) {
+      skipInitialProductLoad.current = false;
+      return;
+    }
+
     let active = true;
 
     setIsLoadingProducts(true);
@@ -215,25 +273,7 @@ function CatalogPageContent({
           return;
         }
 
-        let nextProducts = response.data;
-
-        if (savedOnly) {
-          nextProducts = nextProducts.filter((product) => wishlist.includes(product.id));
-        }
-
-        if (sort === "popular") {
-          const popularityRank = new Map(
-            popularity.map((item, index) => [item.product_id, item.quantity * 1000 - index]),
-          );
-          nextProducts = nextProducts
-            .slice()
-            .sort(
-              (left, right) =>
-                (popularityRank.get(right.id) ?? 0) - (popularityRank.get(left.id) ?? 0),
-            );
-        }
-
-        setProducts(nextProducts);
+        setListingProducts(response.data);
         setFeedback("");
       })
       .catch((reason) => {
@@ -241,7 +281,7 @@ function CatalogPageContent({
           return;
         }
 
-        setProducts([]);
+        setListingProducts([]);
         setFeedback(getErrorMessage(reason));
       })
       .finally(() => {
@@ -253,7 +293,7 @@ function CatalogPageContent({
     return () => {
       active = false;
     };
-  }, [brand, category, color, deferredSearch, maxPrice, minPrice, popularity, savedOnly, size, sort, wishlist]);
+  }, [brand, category, color, deferredSearch, maxPrice, minPrice, size, sort]);
 
   const categoryOptions = useMemo(
     () =>

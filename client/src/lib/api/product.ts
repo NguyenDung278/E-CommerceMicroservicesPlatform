@@ -70,6 +70,21 @@ export const productApi = {
     }));
   },
 
+  getProductsByIds(productIds: string[]): Promise<ApiEnvelope<Product[]>> {
+    const params = new URLSearchParams();
+    productIds.forEach((productId) => {
+      const normalizedProductId = productId.trim();
+      if (normalizedProductId) {
+        params.append("ids", normalizedProductId);
+      }
+    });
+
+    return request<unknown>(`/api/v1/products/batch?${params.toString()}`).then((response) => ({
+      ...response,
+      data: normalizeProductList(response.data),
+    }));
+  },
+
   listProductReviews(productId: string, options: ProductReviewListOptions = {}): Promise<ApiEnvelope<ProductReviewList>> {
     const params = new URLSearchParams();
     params.set("page", String(options.page ?? 1));
@@ -139,4 +154,3 @@ export const productApi = {
     });
   },
 };
-

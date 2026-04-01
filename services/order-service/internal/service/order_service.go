@@ -58,11 +58,16 @@ type OrderService struct {
 	amqpCh        *amqp.Channel
 	log           *zap.Logger
 	productClient productCatalog
+	paymentClient paymentHistorySource
 }
 
 type productCatalog interface {
 	GetProduct(ctx context.Context, productID string) (*pb.Product, error)
 	RestoreStock(ctx context.Context, productID string, quantity int) error
+}
+
+type paymentHistorySource interface {
+	ListPaymentHistory(ctx context.Context, authHeader string) ([]model.PaymentSummary, error)
 }
 
 type pricedOrderItem struct {
@@ -95,12 +100,19 @@ func (q *pricedOrderQuote) ToPreview() *model.OrderPreview {
 	}
 }
 
-func NewOrderService(repo repository.OrderRepository, amqpCh *amqp.Channel, log *zap.Logger, productClient productCatalog) *OrderService {
+func NewOrderService(
+	repo repository.OrderRepository,
+	amqpCh *amqp.Channel,
+	log *zap.Logger,
+	productClient productCatalog,
+	paymentClient paymentHistorySource,
+) *OrderService {
 	return &OrderService{
 		repo:          repo,
 		amqpCh:        amqpCh,
 		log:           log,
 		productClient: productClient,
+		paymentClient: paymentClient,
 	}
 }
 
@@ -203,6 +215,56 @@ func (s *OrderService) GetOrderForAdmin(ctx context.Context, orderID string) (*m
 
 func (s *OrderService) GetUserOrders(ctx context.Context, userID string) ([]*model.Order, error) {
 	return s.repo.GetByUserID(ctx, userID)
+}
+
+func (s *OrderService) GetUserOrderSummary(ctx context.Context, userID, authHeader string) (*model.UserOrderSummary, error) {
+	startedAt := time.Now()
+	outcome := appobs.OutcomeSuccess
+	requestLog := appobs.LoggerWithContext(s.log, ctx, zap.String("user_id", userID))
+	defer func() {
+		appobs.ObserveOperation("order-service", "get_user_order_summary", outcome, time.Since(startedAt))
+	}()
+
+	orders, err := s.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("failed to load user orders for summary", zap.Error(err))
+		return nil, err
+	}
+
+	summary := &model.UserOrderSummary{
+		Orders:          orders,
+		PaymentsByOrder: map[string][]model.PaymentSummary{},
+	}
+	if len(orders) == 0 {
+		return summary, nil
+	}
+	if s.paymentClient == nil {
+		outcome = appobs.OutcomeSystemError
+		return nil, fmt.Errorf("payment client is not configured")
+	}
+
+	payments, err := s.paymentClient.ListPaymentHistory(ctx, authHeader)
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("failed to load payment history for order summary", zap.Error(err))
+		return nil, err
+	}
+
+	orderIDs := make(map[string]struct{}, len(orders))
+	for _, order := range orders {
+		orderIDs[order.ID] = struct{}{}
+	}
+
+	for _, payment := range payments {
+		if _, exists := orderIDs[payment.OrderID]; !exists {
+			continue
+		}
+
+		summary.PaymentsByOrder[payment.OrderID] = append(summary.PaymentsByOrder[payment.OrderID], payment)
+	}
+
+	return summary, nil
 }
 
 func (s *OrderService) ListAdminOrders(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error) {

@@ -15,19 +15,24 @@ import {
   SurfaceCard,
   TextInput,
 } from "@/components/storefront-ui";
-import { useAuth } from "@/hooks/useAuth";
-import { useCart } from "@/hooks/useCart";
+import { useAuthState } from "@/hooks/useAuth";
+import { useCartActions, useCartState } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
-import { orderApi, productApi } from "@/lib/api";
+import { orderApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
+import {
+  readProductListResource,
+  readProductLookupResource,
+} from "@/lib/resources/product-resources";
 import { cn } from "@/lib/utils";
 import type { OrderPreview, Product } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 
 export function CartPage() {
-  const { token, isAuthenticated } = useAuth();
-  const { cart, clearCart, error, removeItem, updateItem, addItem, isLoading } = useCart();
+  const { token, isAuthenticated } = useAuthState();
+  const { cart, error, isLoading } = useCartState();
+  const { clearCart, removeItem, updateItem, addItem } = useCartActions();
   const { wishlist, isSaved, toggleWishlist } = useWishlist();
   const [couponCode, setCouponCode] = useState("");
   const [couponPreview, setCouponPreview] = useState<OrderPreview | null>(null);
@@ -57,22 +62,11 @@ export function CartPage() {
       };
     }
 
-    void Promise.allSettled(
-      cart.items.map((item) =>
-        productApi.getProductById(item.product_id).then((response) => [item.product_id, response.data] as const),
-      ),
-    ).then((results) => {
+    void readProductLookupResource(cart.items.map((item) => item.product_id)).then((nextMap) => {
       if (!active) {
         return;
       }
 
-      const nextMap: Record<string, Product> = {};
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          const [productId, product] = result.value;
-          nextMap[productId] = product;
-        }
-      });
       setProductMap(nextMap);
     });
 
@@ -91,23 +85,12 @@ export function CartPage() {
       };
     }
 
-    void Promise.allSettled(
-      wishlist.slice(0, 4).map((productId) => productApi.getProductById(productId)),
-    ).then((results) => {
+    void readProductListResource(wishlist.slice(0, 4)).then((products) => {
       if (!active) {
         return;
       }
 
-      setSavedProducts(
-        results
-          .filter(
-            (
-              result,
-            ): result is PromiseFulfilledResult<Awaited<ReturnType<typeof productApi.getProductById>>> =>
-              result.status === "fulfilled",
-          )
-          .map((result) => result.value.data),
-      );
+      setSavedProducts(products);
     });
 
     return () => {

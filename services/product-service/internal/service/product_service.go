@@ -19,7 +19,10 @@ var (
 	ErrInvalidStatus           = errors.New("invalid product status")
 	ErrInvalidCursor           = errors.New("invalid cursor")
 	ErrImageStorageUnavailable = errors.New("image storage unavailable")
+	ErrTooManyProductIDs       = errors.New("too many product ids")
 )
+
+const maxProductBatchLookup = 100
 
 type ProductListPageInfo struct {
 	NextCursor string
@@ -126,6 +129,18 @@ func (s *ProductService) GetByID(ctx context.Context, id string) (*model.Product
 		return nil, ErrProductNotFound
 	}
 	return product, nil
+}
+
+func (s *ProductService) ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error) {
+	normalizedIDs := normalizeProductIDs(ids)
+	if len(normalizedIDs) == 0 {
+		return []*model.Product{}, nil
+	}
+	if len(normalizedIDs) > maxProductBatchLookup {
+		return nil, ErrTooManyProductIDs
+	}
+
+	return s.repo.ListByIDs(ctx, normalizedIDs)
 }
 
 func (s *ProductService) Update(ctx context.Context, id string, req dto.UpdateProductRequest) (*model.Product, error) {
@@ -377,6 +392,29 @@ func normalizeStatus(value string) (string, error) {
 	default:
 		return "", ErrInvalidStatus
 	}
+}
+
+func normalizeProductIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return []string{}
+	}
+
+	seen := make(map[string]struct{}, len(ids))
+	normalized := make([]string, 0, len(ids))
+	for _, id := range ids {
+		clean := strings.TrimSpace(id)
+		if clean == "" {
+			continue
+		}
+		if _, exists := seen[clean]; exists {
+			continue
+		}
+
+		seen[clean] = struct{}{}
+		normalized = append(normalized, clean)
+	}
+
+	return normalized
 }
 
 func normalizeImageURLs(urls []string, fallback string) []string {
