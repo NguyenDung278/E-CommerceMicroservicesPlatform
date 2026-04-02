@@ -4,14 +4,37 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
+	"math"
 
 	"github.com/lib/pq"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 )
 
-func (r *postgresProductRepository) CreateReview(ctx context.Context, review *model.ProductReview) error {
+type ProductReviewRepository interface {
+	CreateReview(ctx context.Context, review *model.ProductReview) error
+	GetReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error)
+	GetReviewByProductAndUserForUpdate(ctx context.Context, productID, userID string) (*model.ProductReview, error)
+	UpdateReview(ctx context.Context, review *model.ProductReview) error
+	DeleteReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error)
+	ListReviewsByProduct(ctx context.Context, productID string, offset, limit int) ([]*model.ProductReview, error)
+	GetReviewSummary(ctx context.Context, productID string) (*model.ProductReviewSummary, error)
+	ApplyReviewSummaryDelta(ctx context.Context, productID string, delta model.ProductReviewSummaryDelta) error
+}
+
+type postgresProductReviewRepository struct {
+	executor sqlExecutor
+}
+
+func NewProductReviewRepository(db *sql.DB) ProductReviewRepository {
+	return newProductReviewRepositoryWithExecutor(db)
+}
+
+func newProductReviewRepositoryWithExecutor(executor sqlExecutor) ProductReviewRepository {
+	return &postgresProductReviewRepository{executor: executor}
+}
+
+func (r *postgresProductReviewRepository) CreateReview(ctx context.Context, review *model.ProductReview) error {
 	const query = `
 		INSERT INTO product_reviews (
 			id, product_id, user_id, author_label, rating, comment, created_at, updated_at
@@ -19,7 +42,7 @@ func (r *postgresProductRepository) CreateReview(ctx context.Context, review *mo
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	if _, err := r.db.ExecContext(ctx, query,
+	if _, err := r.executor.ExecContext(ctx, query,
 		review.ID,
 		review.ProductID,
 		review.UserID,
@@ -30,7 +53,7 @@ func (r *postgresProductRepository) CreateReview(ctx context.Context, review *mo
 		review.UpdatedAt,
 	); err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
-			return fmt.Errorf("duplicate product review: %w", err)
+			return model.ErrProductReviewAlreadyExists
 		}
 		return fmt.Errorf("failed to create product review: %w", err)
 	}
@@ -38,16 +61,32 @@ func (r *postgresProductRepository) CreateReview(ctx context.Context, review *mo
 	return nil
 }
 
-func (r *postgresProductRepository) GetReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
-	const query = `
+func (r *postgresProductReviewRepository) GetReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
+	return r.getReviewByProductAndUser(ctx, productID, userID, false)
+}
+
+func (r *postgresProductReviewRepository) GetReviewByProductAndUserForUpdate(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
+	return r.getReviewByProductAndUser(ctx, productID, userID, true)
+}
+
+func (r *postgresProductReviewRepository) getReviewByProductAndUser(
+	ctx context.Context,
+	productID string,
+	userID string,
+	forUpdate bool,
+) (*model.ProductReview, error) {
+	query := `
 		SELECT id, product_id, user_id, author_label, rating, comment, created_at, updated_at
 		FROM product_reviews
 		WHERE product_id = $1 AND user_id = $2
 	`
+	if forUpdate {
+		query += "\n\t\tFOR UPDATE"
+	}
 
-	review, err := scanProductReviewRow(r.db.QueryRowContext(ctx, query, productID, userID))
+	review, err := scanProductReviewRow(r.executor.QueryRowContext(ctx, query, productID, userID))
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, model.ErrProductReviewNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get product review: %w", err)
@@ -56,14 +95,14 @@ func (r *postgresProductRepository) GetReviewByProductAndUser(ctx context.Contex
 	return review, nil
 }
 
-func (r *postgresProductRepository) UpdateReview(ctx context.Context, review *model.ProductReview) error {
+func (r *postgresProductReviewRepository) UpdateReview(ctx context.Context, review *model.ProductReview) error {
 	const query = `
 		UPDATE product_reviews
 		SET rating = $1, comment = $2, updated_at = $3
 		WHERE id = $4
 	`
 
-	result, err := r.db.ExecContext(ctx, query, review.Rating, review.Comment, review.UpdatedAt, review.ID)
+	result, err := r.executor.ExecContext(ctx, query, review.Rating, review.Comment, review.UpdatedAt, review.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update product review: %w", err)
 	}
@@ -73,44 +112,32 @@ func (r *postgresProductRepository) UpdateReview(ctx context.Context, review *mo
 		return fmt.Errorf("failed to inspect updated product review rows: %w", err)
 	}
 	if rowsAffected == 0 {
-		return sql.ErrNoRows
+		return model.ErrProductReviewNotFound
 	}
 
 	return nil
 }
 
-func (r *postgresProductRepository) DeleteReviewByProductAndUser(ctx context.Context, productID, userID string) (bool, error) {
+func (r *postgresProductReviewRepository) DeleteReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
 	const query = `
 		DELETE FROM product_reviews
 		WHERE product_id = $1 AND user_id = $2
+		RETURNING id, product_id, user_id, author_label, rating, comment, created_at, updated_at
 	`
 
-	result, err := r.db.ExecContext(ctx, query, productID, userID)
+	review, err := scanProductReviewRow(r.executor.QueryRowContext(ctx, query, productID, userID))
+	if err == sql.ErrNoRows {
+		return nil, model.ErrProductReviewNotFound
+	}
 	if err != nil {
-		return false, fmt.Errorf("failed to delete product review: %w", err)
+		return nil, fmt.Errorf("failed to delete product review: %w", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("failed to inspect deleted product review rows: %w", err)
-	}
-
-	return rowsAffected > 0, nil
+	return review, nil
 }
 
-func (r *postgresProductRepository) ListReviewsByProduct(ctx context.Context, productID string, offset, limit int) ([]*model.ProductReview, int64, error) {
-	const countQuery = `
-		SELECT COUNT(*)
-		FROM product_reviews
-		WHERE product_id = $1
-	`
-
-	var total int64
-	if err := r.db.QueryRowContext(ctx, countQuery, productID).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("failed to count product reviews: %w", err)
-	}
-
-	const listQuery = `
+func (r *postgresProductReviewRepository) ListReviewsByProduct(ctx context.Context, productID string, offset, limit int) ([]*model.ProductReview, error) {
+	const query = `
 		SELECT id, product_id, user_id, author_label, rating, comment, created_at, updated_at
 		FROM product_reviews
 		WHERE product_id = $1
@@ -118,9 +145,9 @@ func (r *postgresProductRepository) ListReviewsByProduct(ctx context.Context, pr
 		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, listQuery, productID, limit, offset)
+	rows, err := r.executor.QueryContext(ctx, query, productID, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list product reviews: %w", err)
+		return nil, fmt.Errorf("failed to list product reviews: %w", err)
 	}
 	defer rows.Close()
 
@@ -128,45 +155,135 @@ func (r *postgresProductRepository) ListReviewsByProduct(ctx context.Context, pr
 	for rows.Next() {
 		review, scanErr := scanProductReviewRow(rows)
 		if scanErr != nil {
-			return nil, 0, fmt.Errorf("failed to scan product review: %w", scanErr)
+			return nil, fmt.Errorf("failed to scan product review: %w", scanErr)
 		}
 		reviews = append(reviews, review)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("failed to iterate product reviews: %w", err)
+		return nil, fmt.Errorf("failed to iterate product reviews: %w", err)
 	}
 
-	return reviews, total, nil
+	return reviews, nil
 }
 
-func (r *postgresProductRepository) GetReviewSummary(ctx context.Context, productID string) (*model.ProductReviewSummary, error) {
+func (r *postgresProductReviewRepository) GetReviewSummary(ctx context.Context, productID string) (*model.ProductReviewSummary, error) {
 	const query = `
-		SELECT
-			COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float8 AS average_rating,
-			COUNT(*) AS review_count,
-			COUNT(*) FILTER (WHERE rating = 1) AS rating_one,
-			COUNT(*) FILTER (WHERE rating = 2) AS rating_two,
-			COUNT(*) FILTER (WHERE rating = 3) AS rating_three,
-			COUNT(*) FILTER (WHERE rating = 4) AS rating_four,
-			COUNT(*) FILTER (WHERE rating = 5) AS rating_five
-		FROM product_reviews
+		SELECT review_count, rating_total, rating_one, rating_two, rating_three, rating_four, rating_five
+		FROM product_review_summaries
 		WHERE product_id = $1
 	`
 
-	summary := &model.ProductReviewSummary{}
-	if err := r.db.QueryRowContext(ctx, query, productID).Scan(
-		&summary.AverageRating,
-		&summary.ReviewCount,
-		&summary.RatingBreakdown.One,
-		&summary.RatingBreakdown.Two,
-		&summary.RatingBreakdown.Three,
-		&summary.RatingBreakdown.Four,
-		&summary.RatingBreakdown.Five,
+	var (
+		reviewCount int64
+		ratingTotal int64
+		breakdown   model.ProductRatingBreakdown
+	)
+	if err := r.executor.QueryRowContext(ctx, query, productID).Scan(
+		&reviewCount,
+		&ratingTotal,
+		&breakdown.One,
+		&breakdown.Two,
+		&breakdown.Three,
+		&breakdown.Four,
+		&breakdown.Five,
 	); err != nil {
+		if err == sql.ErrNoRows {
+			return &model.ProductReviewSummary{}, nil
+		}
 		return nil, fmt.Errorf("failed to summarize product reviews: %w", err)
 	}
 
-	return summary, nil
+	return &model.ProductReviewSummary{
+		AverageRating:   averageRating(reviewCount, ratingTotal),
+		ReviewCount:     reviewCount,
+		RatingBreakdown: breakdown,
+	}, nil
+}
+
+func (r *postgresProductReviewRepository) ApplyReviewSummaryDelta(
+	ctx context.Context,
+	productID string,
+	delta model.ProductReviewSummaryDelta,
+) error {
+	if delta.ReviewCountDelta > 0 {
+		return r.upsertReviewSummaryDelta(ctx, productID, delta)
+	}
+
+	const query = `
+		UPDATE product_review_summaries
+		SET review_count = review_count + $2,
+		    rating_total = rating_total + $3,
+		    rating_one = rating_one + $4,
+		    rating_two = rating_two + $5,
+		    rating_three = rating_three + $6,
+		    rating_four = rating_four + $7,
+		    rating_five = rating_five + $8,
+		    updated_at = $9
+		WHERE product_id = $1
+	`
+
+	result, err := r.executor.ExecContext(ctx, query,
+		productID,
+		delta.ReviewCountDelta,
+		delta.RatingTotalDelta,
+		delta.RatingBreakdown.One,
+		delta.RatingBreakdown.Two,
+		delta.RatingBreakdown.Three,
+		delta.RatingBreakdown.Four,
+		delta.RatingBreakdown.Five,
+		delta.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update product review summary: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to inspect updated product review summary rows: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("product review summary does not exist for product %s", productID)
+	}
+
+	return nil
+}
+
+func (r *postgresProductReviewRepository) upsertReviewSummaryDelta(
+	ctx context.Context,
+	productID string,
+	delta model.ProductReviewSummaryDelta,
+) error {
+	const query = `
+		INSERT INTO product_review_summaries (
+			product_id, review_count, rating_total, rating_one, rating_two, rating_three, rating_four, rating_five, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (product_id) DO UPDATE
+		SET review_count = product_review_summaries.review_count + EXCLUDED.review_count,
+		    rating_total = product_review_summaries.rating_total + EXCLUDED.rating_total,
+		    rating_one = product_review_summaries.rating_one + EXCLUDED.rating_one,
+		    rating_two = product_review_summaries.rating_two + EXCLUDED.rating_two,
+		    rating_three = product_review_summaries.rating_three + EXCLUDED.rating_three,
+		    rating_four = product_review_summaries.rating_four + EXCLUDED.rating_four,
+		    rating_five = product_review_summaries.rating_five + EXCLUDED.rating_five,
+		    updated_at = EXCLUDED.updated_at
+	`
+
+	if _, err := r.executor.ExecContext(ctx, query,
+		productID,
+		delta.ReviewCountDelta,
+		delta.RatingTotalDelta,
+		delta.RatingBreakdown.One,
+		delta.RatingBreakdown.Two,
+		delta.RatingBreakdown.Three,
+		delta.RatingBreakdown.Four,
+		delta.RatingBreakdown.Five,
+		delta.UpdatedAt,
+	); err != nil {
+		return fmt.Errorf("failed to upsert product review summary: %w", err)
+	}
+
+	return nil
 }
 
 type productReviewScanner interface {
@@ -189,6 +306,14 @@ func scanProductReviewRow(scanner productReviewScanner) (*model.ProductReview, e
 		return nil, err
 	}
 
-	review.Comment = strings.TrimSpace(review.Comment)
 	return review, nil
+}
+
+func averageRating(reviewCount int64, ratingTotal int64) float64 {
+	if reviewCount == 0 {
+		return 0
+	}
+
+	average := float64(ratingTotal) / float64(reviewCount)
+	return math.Round(average*10) / 10
 }

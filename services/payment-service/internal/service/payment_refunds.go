@@ -116,7 +116,15 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		UpdatedAt:          now,
 	}
 
-	if err := s.repo.Create(ctx, refund); err != nil {
+	enriched := enrichPayment(refund, append([]*model.Payment{refund}, payments...))
+	outbox, err := buildPaymentOutboxMessage(ctx, enriched, userEmail)
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("refund failed while building outbox payload", zap.Error(err))
+		return nil, err
+	}
+
+	if err := s.repo.Create(ctx, refund, outbox); err != nil {
 		if isUniqueViolation(err) {
 			outcome = appobs.OutcomeBusinessError
 			requestLog.Warn("refund rejected due to duplicate payment record", zap.Error(err))
@@ -127,7 +135,6 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		return nil, err
 	}
 
-	enriched := enrichPayment(refund, append([]*model.Payment{refund}, payments...))
 	s.recordAuditEntry(ctx, &model.AuditEntry{
 		ID:         uuid.New().String(),
 		EntityType: "payment",
@@ -145,7 +152,6 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		},
 		CreatedAt: time.Now(),
 	})
-	s.publishPaymentEvent(ctx, enriched, userEmail)
 	requestLog.Info("refund processed",
 		zap.String("refund_id", refund.ID),
 		zap.String("order_id", refund.OrderID),
@@ -232,6 +238,13 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		return nil, ErrPaymentAmountMismatch
 	}
 
+	payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment webhook failed while loading sibling payments", zap.Error(err))
+		return nil, err
+	}
+
 	payment.SignatureVerified = true
 	payment.GatewayTransactionID = strings.TrimSpace(req.GatewayTransactionID)
 	payment.UpdatedAt = time.Now()
@@ -243,7 +256,21 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		payment.FailureReason = strings.TrimSpace(req.Message)
 	}
 
-	if err := s.repo.Update(ctx, payment); err != nil {
+	enriched := enrichPayment(payment, replacePayment(payments, payment))
+	outbox, err := buildPaymentOutboxMessage(ctx, enriched, "")
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("payment webhook failed while building outbox payload", zap.Error(err))
+		return nil, err
+	}
+
+	duplicate, err := s.repo.ApplyWebhookResult(ctx, payment, &model.InboxMessage{
+		Consumer:   paymentWebhookConsumer,
+		MessageID:  momoWebhookMessageID(req),
+		RoutingKey: "payment.momo.webhook",
+		CreatedAt:  time.Now(),
+	}, outbox)
+	if err != nil {
 		outcome = appobs.OutcomeSystemError
 		requestLog.Error("payment webhook failed while updating payment state",
 			zap.String("next_status", string(payment.Status)),
@@ -251,16 +278,23 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		)
 		return nil, err
 	}
-
-	payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
-	if err != nil {
-		outcome = appobs.OutcomeSystemError
-		requestLog.Error("payment webhook failed while loading enriched payments", zap.Error(err))
-		return nil, err
+	if duplicate {
+		payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
+		if err != nil {
+			outcome = appobs.OutcomeSystemError
+			requestLog.Error("payment webhook failed while reloading duplicate delivery state", zap.Error(err))
+			return nil, err
+		}
+		current := payment
+		for _, candidate := range payments {
+			if candidate.ID == payment.ID {
+				current = candidate
+				break
+			}
+		}
+		requestLog.Info("payment webhook skipped because inbox message already exists")
+		return enrichPayment(current, payments), nil
 	}
-
-	enriched := enrichPayment(payment, payments)
-	s.publishPaymentEvent(ctx, enriched, "")
 	requestLog.Info("payment webhook processed",
 		zap.String("payment_status", string(payment.Status)),
 		zap.String("gateway_transaction_id", payment.GatewayTransactionID),

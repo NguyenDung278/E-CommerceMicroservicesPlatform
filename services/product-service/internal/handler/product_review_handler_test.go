@@ -149,11 +149,8 @@ func TestDeleteMyReviewRemovesReview(t *testing.T) {
 	}
 
 	review, err := repo.GetReviewByProductAndUser(req.Context(), "product-1", "user-1")
-	if err != nil {
-		t.Fatalf("unexpected error looking up deleted review: %v", err)
-	}
-	if review != nil {
-		t.Fatalf("expected review to be deleted, got %+v", review)
+	if err == nil || review != nil {
+		t.Fatalf("expected deleted review lookup to fail with not found, got review=%+v err=%v", review, err)
 	}
 }
 
@@ -180,7 +177,8 @@ func newReviewHandlerTestServer() (*echo.Echo, *fakeProductRepo) {
 	}
 
 	productService := service.NewProductService(repo)
-	NewProductHandler(productService).RegisterRoutes(e, reviewSecret)
+	reviewService := service.NewProductReviewService(productService, repo)
+	NewProductHandler(productService, reviewService).RegisterRoutes(e, reviewSecret)
 
 	return e, repo
 }

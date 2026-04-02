@@ -17,12 +17,14 @@ import (
 )
 
 type fakePaymentRepo struct {
-	payments []*model.Payment
+	payments      []*model.Payment
+	createdOutbox *model.OutboxMessage
 }
 
-func (r *fakePaymentRepo) Create(_ context.Context, payment *model.Payment) error {
+func (r *fakePaymentRepo) Create(_ context.Context, payment *model.Payment, outbox *model.OutboxMessage) error {
 	copyValue := *payment
 	r.payments = append([]*model.Payment{&copyValue}, r.payments...)
+	r.createdOutbox = outbox
 	return nil
 }
 
@@ -105,7 +107,7 @@ func (r *fakePaymentRepo) ListByUserID(_ context.Context, userID string) ([]*mod
 	return payments, nil
 }
 
-func (r *fakePaymentRepo) Update(_ context.Context, payment *model.Payment) error {
+func (r *fakePaymentRepo) Update(_ context.Context, payment *model.Payment, _ *model.OutboxMessage) error {
 	for index, existing := range r.payments {
 		if existing.ID == payment.ID {
 			copyValue := *payment
@@ -117,6 +119,26 @@ func (r *fakePaymentRepo) Update(_ context.Context, payment *model.Payment) erro
 }
 
 func (r *fakePaymentRepo) CreateAuditEntry(_ context.Context, _ *model.AuditEntry) error {
+	return nil
+}
+
+func (r *fakePaymentRepo) ApplyWebhookResult(_ context.Context, payment *model.Payment, _ *model.InboxMessage, outbox *model.OutboxMessage) (bool, error) {
+	if err := r.Update(context.Background(), payment, outbox); err != nil {
+		return false, err
+	}
+	r.createdOutbox = outbox
+	return false, nil
+}
+
+func (r *fakePaymentRepo) ClaimPendingOutbox(_ context.Context, _ int, _ time.Duration) ([]*model.OutboxMessage, error) {
+	return nil, nil
+}
+
+func (r *fakePaymentRepo) MarkOutboxPublished(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
+func (r *fakePaymentRepo) MarkOutboxFailed(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }
 
@@ -191,6 +213,9 @@ func TestProcessPaymentDefaultsToOutstandingAmount(t *testing.T) {
 	}
 	if payment.OutstandingAmount != 0 {
 		t.Fatalf("expected outstanding amount 0, got %.2f", payment.OutstandingAmount)
+	}
+	if repo.createdOutbox == nil {
+		t.Fatal("expected completed payment to enqueue an outbox message")
 	}
 }
 

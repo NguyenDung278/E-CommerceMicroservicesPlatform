@@ -101,6 +101,11 @@ func main() {
 	orderRepo := repository.NewOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient, paymentClient)
 	orderHandler := handler.NewOrderHandler(orderService)
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	defer relayCancel()
+	if amqpCh != nil {
+		go orderService.StartOutboxRelay(relayCtx)
+	}
 	if amqpConsumerCh != nil {
 		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {
 			log.Warn("failed to start payment event consumer", zap.Error(err))
@@ -148,6 +153,7 @@ func main() {
 	<-quit
 
 	log.Info("shutting down server...")
+	relayCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {

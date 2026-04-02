@@ -66,8 +66,14 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 	}
 
 	order := newOrderFromQuote(userID, quote, time.Now())
+	createdOutbox, err := buildCreatedOrderOutbox(ctx, order, userEmail)
+	if err != nil {
+		outcome = appobs.OutcomeSystemError
+		requestLog.Error("create order failed while building outbox payload", zap.Error(err))
+		return nil, err
+	}
 
-	if err := s.persistCreatedOrder(ctx, requestLog, order); err != nil {
+	if err := s.persistCreatedOrder(ctx, requestLog, order, createdOutbox); err != nil {
 		outcome = appobs.OutcomeFromError(
 			err,
 			ErrCouponNotFound,
@@ -87,7 +93,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		zap.String("shipping_method", order.ShippingMethod),
 	)
 
-	s.publishOrderEvent(ctx, order, userEmail)
 	return order, nil
 }
 
@@ -125,7 +130,7 @@ func (s *OrderService) UpdateStatus(ctx context.Context, orderID string, status 
 		return nil
 	}
 
-	if err := s.repo.UpdateStatus(ctx, orderID, status, actorID, actorRole, message); err != nil {
+	if err := s.repo.UpdateStatus(ctx, orderID, status, actorID, actorRole, message, nil); err != nil {
 		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(status), appobs.OutcomeSystemError)
 		appobs.LoggerWithContext(s.log, ctx,
 			zap.String("order_id", orderID),
@@ -249,7 +254,19 @@ func (s *OrderService) CancelOrderAsAdmin(ctx context.Context, orderID, actorID,
 //   - O(n) over order items for the stock restoration portion.
 func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
 	previousStatus := order.Status
-	if err := s.markOrderCancelled(ctx, order, actorID, actorRole, message); err != nil {
+	order.Status = model.OrderStatusCancelled
+	cancelOutbox, err := buildCancelledOrderOutbox(ctx, order)
+	if err != nil {
+		order.Status = previousStatus
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("order_id", order.ID),
+			zap.String("actor_id", actorID),
+			zap.String("actor_role", actorRole),
+		).Error("failed to build cancellation outbox payload", zap.Error(err))
+		return err
+	}
+	if err := s.markOrderCancelled(ctx, order, actorID, actorRole, message, cancelOutbox); err != nil {
+		order.Status = previousStatus
 		appobs.RecordStateTransition("order-service", "order", string(previousStatus), string(model.OrderStatusCancelled), appobs.OutcomeSystemError)
 		return err
 	}
@@ -281,7 +298,6 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 	})
 
 	s.restoreCancelledOrderStock(ctx, order)
-	s.publishCancelEvent(ctx, order)
 	return nil
 }
 
@@ -377,8 +393,8 @@ func buildOrderItems(orderID string, items []pricedOrderItem) []model.OrderItem 
 //
 // Performance:
 //   - dominated by one repository transaction.
-func (s *OrderService) persistCreatedOrder(ctx context.Context, requestLog *zap.Logger, order *model.Order) error {
-	if err := s.repo.Create(ctx, order); err != nil {
+func (s *OrderService) persistCreatedOrder(ctx context.Context, requestLog *zap.Logger, order *model.Order, outbox *model.OutboxMessage) error {
+	if err := s.repo.Create(ctx, order, outbox); err != nil {
 		logCreateOrderPersistenceError(requestLog, order, err)
 		return err
 	}
@@ -440,8 +456,13 @@ func logCreateOrderPersistenceError(requestLog *zap.Logger, order *model.Order, 
 //
 // Performance:
 //   - dominated by one repository update.
-func (s *OrderService) markOrderCancelled(ctx context.Context, order *model.Order, actorID, actorRole, message string) error {
-	return s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message)
+func (s *OrderService) markOrderCancelled(
+	ctx context.Context,
+	order *model.Order,
+	actorID, actorRole, message string,
+	outbox *model.OutboxMessage,
+) error {
+	return s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message, outbox)
 }
 
 // restoreCancelledOrderStock best-effort restores stock for every cancelled line

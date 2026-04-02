@@ -133,7 +133,18 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 		payment.CheckoutURL = buildMomoCheckoutURL(s.momoReturnURL, payment.GatewayOrderID)
 	}
 
-	if err := s.repo.Create(ctx, payment); err != nil {
+	enriched := enrichPayment(payment, append([]*model.Payment{payment}, payments...))
+	var outbox *model.OutboxMessage
+	if payment.Status == model.PaymentStatusCompleted {
+		outbox, err = buildPaymentOutboxMessage(ctx, enriched, userEmail)
+		if err != nil {
+			outcome = appobs.OutcomeSystemError
+			requestLog.Error("payment processing failed while building outbox payload", zap.Error(err))
+			return nil, err
+		}
+	}
+
+	if err := s.repo.Create(ctx, payment, outbox); err != nil {
 		outcome = appobs.OutcomeSystemError
 		if isUniqueViolation(err) {
 			outcome = appobs.OutcomeBusinessError
@@ -149,11 +160,6 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 			zap.Error(err),
 		)
 		return nil, err
-	}
-
-	enriched := enrichPayment(payment, append([]*model.Payment{payment}, payments...))
-	if payment.Status == model.PaymentStatusCompleted {
-		s.publishPaymentEvent(ctx, enriched, userEmail)
 	}
 
 	requestLog.Info("payment processed",

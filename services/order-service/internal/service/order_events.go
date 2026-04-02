@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -13,158 +16,231 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 )
 
-// publishOrderEvent emits the asynchronous `order.created` event after the order
-// transaction commits.
+const (
+	orderOutboxPollInterval = time.Second
+	orderOutboxLease        = 30 * time.Second
+	orderOutboxClaimLimit   = 50
+	orderInboxConsumer      = "payment-lifecycle-events"
+)
+
+// buildCreatedOrderOutbox materializes the durable broker message that must be
+// committed with the newly created order.
 //
 // Inputs:
-//   - ctx carries request metadata and timeout budget.
-//   - order is the newly persisted order aggregate.
+//   - ctx carries request metadata such as request id for trace propagation.
+//   - order is the newly built aggregate that will be persisted in the same transaction.
 //   - userEmail is included for downstream notification consumers.
 //
 // Returns:
-//   - none; publication failures are logged because the order is already
-//     persisted.
+//   - a ready-to-persist outbox row.
+//   - an error when event serialization fails.
 //
 // Edge cases:
-//   - nil RabbitMQ channels degrade gracefully and simply skip publication.
+//   - request ids may be blank for non-HTTP flows; the payload still remains valid.
 //
 // Side effects:
-//   - publishes one RabbitMQ message with up to three attempts.
-//   - emits observability metrics and logs.
+//   - none; this helper only builds an in-memory payload.
 //
 // Performance:
-//   - O(1) application work plus JSON marshaling and network I/O.
-func (s *OrderService) publishOrderEvent(ctx context.Context, order *model.Order, userEmail string) {
-	if s.amqpCh == nil {
-		s.log.Warn("RabbitMQ channel not available, skipping event publish")
-		return
-	}
+//   - O(1) application work plus JSON marshaling.
+func buildCreatedOrderOutbox(ctx context.Context, order *model.Order, userEmail string) (*model.OutboxMessage, error) {
+	return buildOrderOutboxMessage(ctx, order, userEmail, "order.created", string(order.Status))
+}
 
-	startedAt := time.Now()
-	requestLog := appobs.LoggerWithContext(s.log, ctx,
-		zap.String("order_id", order.ID),
-		zap.String("routing_key", "order.created"),
-	)
+// buildCancelledOrderOutbox materializes the durable broker message that tracks
+// a cancellation side effect in the same transaction as the status change.
+//
+// Inputs:
+//   - ctx carries request metadata such as request id for trace propagation.
+//   - order is the cancelled order aggregate.
+//
+// Returns:
+//   - a ready-to-persist outbox row.
+//   - an error when event serialization fails.
+//
+// Edge cases:
+//   - callers are responsible for setting the order status to cancelled before building the payload.
+//
+// Side effects:
+//   - none; this helper only builds an in-memory payload.
+//
+// Performance:
+//   - O(1) application work plus JSON marshaling.
+func buildCancelledOrderOutbox(ctx context.Context, order *model.Order) (*model.OutboxMessage, error) {
+	return buildOrderOutboxMessage(ctx, order, "", "order.cancelled", string(model.OrderStatusCancelled))
+}
 
-	event := OrderEvent{
+func buildOrderOutboxMessage(ctx context.Context, order *model.Order, userEmail, routingKey, status string) (*model.OutboxMessage, error) {
+	eventID := uuid.NewString()
+	requestID := appobs.RequestIDFromContext(ctx)
+	now := time.Now()
+	payload, err := json.Marshal(OrderEvent{
+		EventID:    eventID,
 		OrderID:    order.ID,
 		UserID:     order.UserID,
 		UserEmail:  userEmail,
 		TotalPrice: order.TotalPrice,
-		Status:     string(order.Status),
-		RequestID:  appobs.RequestIDFromContext(ctx),
-	}
-
-	body, err := json.Marshal(event)
+		Status:     status,
+		RequestID:  requestID,
+	})
 	if err != nil {
-		appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to marshal order event", zap.Error(err))
-		return
+		return nil, fmt.Errorf("failed to marshal order outbox payload: %w", err)
 	}
 
-	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(
-			publishCtx,
-			"events",
-			"order.created",
-			false,
-			false,
-			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        body,
-				Timestamp:   time.Now(),
-			},
-		)
-		if err == nil {
-			appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSuccess, time.Since(startedAt))
-			requestLog.Info("published order event")
-			return
-		}
-
-		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
-	}
-
-	appobs.ObserveOperation("order-service", "publish_order_created_event", appobs.OutcomeSystemError, time.Since(startedAt))
-	requestLog.Error("failed to publish order event", zap.Error(err))
+	return &model.OutboxMessage{
+		ID:            eventID,
+		AggregateType: "order",
+		AggregateID:   order.ID,
+		EventType:     routingKey,
+		RoutingKey:    routingKey,
+		Payload:       payload,
+		RequestID:     requestID,
+		AvailableAt:   now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}, nil
 }
 
-// publishCancelEvent emits the asynchronous `order.cancelled` event after a
-// cancellation succeeds.
-//
-// Inputs:
-//   - ctx carries request metadata and timeout budget.
-//   - order is the cancelled order aggregate.
-//
-// Returns:
-//   - none; publication failures are logged because the primary state change has
-//     already completed.
-//
-// Edge cases:
-//   - nil RabbitMQ channels degrade gracefully and simply skip publication.
-//
-// Side effects:
-//   - publishes one RabbitMQ message with up to three attempts.
-//   - emits observability metrics and logs.
-//
-// Performance:
-//   - O(1) application work plus JSON marshaling and network I/O.
-func (s *OrderService) publishCancelEvent(ctx context.Context, order *model.Order) {
-	if s.amqpCh == nil {
-		s.log.Warn("RabbitMQ channel not available, skipping cancel event publish")
+// publishOrderEvent keeps a direct broker publish helper for tests and
+// low-level diagnostics, while production flows enqueue the same payload via
+// the outbox table.
+func (s *OrderService) publishOrderEvent(ctx context.Context, order *model.Order, userEmail string) {
+	message, err := buildCreatedOrderOutbox(ctx, order, userEmail)
+	if err != nil {
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("order_id", order.ID),
+			zap.String("routing_key", "order.created"),
+		).Error("failed to build direct order event payload", zap.Error(err))
 		return
+	}
+	_ = s.publishOutboxMessage(ctx, message)
+}
+
+// publishCancelEvent keeps a direct broker publish helper for tests and
+// low-level diagnostics, while production flows enqueue the same payload via
+// the outbox table.
+func (s *OrderService) publishCancelEvent(ctx context.Context, order *model.Order) {
+	message, err := buildCancelledOrderOutbox(ctx, order)
+	if err != nil {
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("order_id", order.ID),
+			zap.String("routing_key", "order.cancelled"),
+		).Error("failed to build direct cancel event payload", zap.Error(err))
+		return
+	}
+	_ = s.publishOutboxMessage(ctx, message)
+}
+
+// StartOutboxRelay continuously drains durable outbox rows to RabbitMQ.
+//
+// Scalability:
+//   - the worker is safe to run on multiple replicas because claims use
+//     `FOR UPDATE SKIP LOCKED` with a short lease instead of process-local state.
+//
+// Failure mode:
+//   - when RabbitMQ is unavailable, rows remain pending in PostgreSQL and are
+//     retried later rather than being lost after the order transaction commits.
+func (s *OrderService) StartOutboxRelay(ctx context.Context) {
+	if s.amqpCh == nil {
+		s.log.Warn("RabbitMQ channel not available, order outbox relay is disabled")
+		return
+	}
+
+	ticker := time.NewTicker(orderOutboxPollInterval)
+	defer ticker.Stop()
+
+	for {
+		if err := s.flushOutboxBatch(ctx); err != nil && ctx.Err() == nil {
+			s.log.Warn("order outbox relay batch failed", zap.Error(err))
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *OrderService) flushOutboxBatch(ctx context.Context) error {
+	for {
+		messages, err := s.repo.ClaimPendingOutbox(ctx, orderOutboxClaimLimit, orderOutboxLease)
+		if err != nil {
+			return err
+		}
+		if len(messages) == 0 {
+			return nil
+		}
+
+		for _, message := range messages {
+			publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := s.publishOutboxMessage(publishCtx, message)
+			cancel()
+			if err != nil {
+				backoff := time.Duration(minInt(message.Attempts, 5)) * time.Second
+				if markErr := s.repo.MarkOutboxFailed(ctx, message.ID, err.Error(), time.Now().Add(backoff)); markErr != nil {
+					s.log.Warn("failed to mark order outbox message failed",
+						zap.String("outbox_id", message.ID),
+						zap.Error(markErr),
+					)
+				}
+				continue
+			}
+
+			if err := s.repo.MarkOutboxPublished(ctx, message.ID, time.Now()); err != nil {
+				s.log.Warn("failed to mark order outbox message published",
+					zap.String("outbox_id", message.ID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+}
+
+func (s *OrderService) publishOutboxMessage(ctx context.Context, message *model.OutboxMessage) error {
+	if s.amqpCh == nil {
+		return fmt.Errorf("rabbitmq channel not available")
 	}
 
 	startedAt := time.Now()
 	requestLog := appobs.LoggerWithContext(s.log, ctx,
-		zap.String("order_id", order.ID),
-		zap.String("routing_key", "order.cancelled"),
+		zap.String("outbox_id", message.ID),
+		zap.String("aggregate_type", message.AggregateType),
+		zap.String("aggregate_id", message.AggregateID),
+		zap.String("routing_key", message.RoutingKey),
 	)
 
-	event := OrderEvent{
-		OrderID:    order.ID,
-		UserID:     order.UserID,
-		TotalPrice: order.TotalPrice,
-		Status:     string(model.OrderStatusCancelled),
-		RequestID:  appobs.RequestIDFromContext(ctx),
+	headers := amqp.Table{
+		"x-event-id": message.ID,
+	}
+	if message.RequestID != "" {
+		headers["x-request-id"] = message.RequestID
 	}
 
-	body, err := json.Marshal(event)
+	err := s.amqpCh.PublishWithContext(
+		ctx,
+		"events",
+		message.RoutingKey,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         message.Payload,
+			Timestamp:    time.Now(),
+			MessageId:    message.ID,
+			DeliveryMode: amqp.Persistent,
+			Headers:      headers,
+		},
+	)
 	if err != nil {
-		appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to marshal cancel event", zap.Error(err))
-		return
+		appobs.ObserveOperation("order-service", "publish_order_outbox_event", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to publish order outbox event", zap.Error(err))
+		return err
 	}
 
-	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(
-			publishCtx,
-			"events",
-			"order.cancelled",
-			false,
-			false,
-			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        body,
-				Timestamp:   time.Now(),
-			},
-		)
-		if err == nil {
-			appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSuccess, time.Since(startedAt))
-			requestLog.Info("published order cancel event")
-			return
-		}
-
-		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
-	}
-
-	appobs.ObserveOperation("order-service", "publish_order_cancel_event", appobs.OutcomeSystemError, time.Since(startedAt))
-	requestLog.Error("failed to publish order cancel event", zap.Error(err))
+	appobs.ObserveOperation("order-service", "publish_order_outbox_event", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("published order outbox event")
+	return nil
 }
 
 // SetupExchange declares the RabbitMQ exchange used by order lifecycle events.
@@ -234,4 +310,20 @@ func (s *OrderService) recordAuditEntry(ctx context.Context, entry *model.AuditE
 			zap.Error(err),
 		)
 	}
+}
+
+func messageIDFromDelivery(msg amqp.Delivery) string {
+	if msg.MessageId != "" {
+		return msg.MessageId
+	}
+
+	sum := sha256.Sum256(append([]byte(msg.RoutingKey), msg.Body...))
+	return fmt.Sprintf("%x", sum[:])
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

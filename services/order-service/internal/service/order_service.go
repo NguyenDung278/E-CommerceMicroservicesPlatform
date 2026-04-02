@@ -34,6 +34,7 @@ var (
 // OrderEvent is published to RabbitMQ when an order is created or cancelled so
 // downstream services can react asynchronously.
 type OrderEvent struct {
+	EventID    string  `json:"event_id"`
 	OrderID    string  `json:"order_id"`
 	UserID     string  `json:"user_id"`
 	UserEmail  string  `json:"user_email"`

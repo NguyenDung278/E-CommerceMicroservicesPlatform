@@ -62,7 +62,7 @@ func StartPaymentEventConsumer(ch *amqp.Channel, log *zap.Logger, service *Order
 			if err := service.handlePaymentEventMessage(msg); err != nil {
 				log.Error("failed to handle payment lifecycle event",
 					zap.String("routing_key", msg.RoutingKey),
-					zap.ByteString("body", msg.Body),
+					zap.String("message_id", messageIDFromDelivery(msg)),
 					zap.Error(err),
 				)
 				_ = msg.Nack(false, true)
@@ -89,60 +89,87 @@ func (s *OrderService) handlePaymentEventMessage(msg amqp.Delivery) error {
 		ctx = appobs.WithRequestID(ctx, event.RequestID)
 	}
 	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("message_id", messageIDFromDelivery(msg)),
 		zap.String("routing_key", msg.RoutingKey),
 		zap.String("order_id", event.OrderID),
 		zap.String("payment_id", event.PaymentID),
 		zap.String("payment_status", event.Status),
 	)
 
-	order, err := s.repo.GetByID(ctx, event.OrderID)
-	if err != nil {
-		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to load order while handling payment event", zap.Error(err))
-		return err
-	}
-	if order == nil {
-		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
-		requestLog.Warn("payment event ignored because order no longer exists")
-		return nil
-	}
-
 	switch msg.RoutingKey {
 	case "payment.completed":
-		if !event.FullyPaid || order.Status != model.OrderStatusPending {
+		if !event.FullyPaid {
 			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
-			requestLog.Info("payment completed event did not trigger status transition",
-				zap.Bool("fully_paid", event.FullyPaid),
-				zap.String("current_order_status", string(order.Status)),
-			)
+			requestLog.Info("payment completed event did not trigger status transition", zap.Bool("fully_paid", event.FullyPaid))
 			return nil
 		}
-		if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusPaid, "payment-service", "system", paymentEventMessage("paid", event)); err != nil {
-			appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusPaid), appobs.OutcomeSystemError)
+		result, err := s.repo.ApplyInboxStatusTransition(ctx, &model.InboxMessage{
+			Consumer:   orderInboxConsumer,
+			MessageID:  messageIDFromDelivery(msg),
+			RoutingKey: msg.RoutingKey,
+			CreatedAt:  time.Now(),
+		}, event.OrderID, model.OrderStatusPending, model.OrderStatusPaid, "payment-service", "system", paymentEventMessage("paid", event))
+		if err != nil {
 			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
 			requestLog.Error("failed to transition order to paid from payment event", zap.Error(err))
 			return err
 		}
-		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusPaid), appobs.OutcomeSuccess)
+		if result.Duplicate {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
+			requestLog.Info("payment completed event skipped because inbox message already exists")
+			return nil
+		}
+		if !result.OrderFound {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Warn("payment event ignored because order no longer exists")
+			return nil
+		}
+		if !result.Transitioned {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Info("payment completed event did not trigger status transition",
+				zap.String("current_order_status", string(result.PreviousStatus)),
+			)
+			return nil
+		}
+		appobs.RecordStateTransition("order-service", "order", string(result.PreviousStatus), string(model.OrderStatusPaid), appobs.OutcomeSuccess)
 		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
 		requestLog.Info("order transitioned to paid from payment event")
 		return nil
 	case "payment.refunded":
-		if !event.FullyRefunded || order.Status == model.OrderStatusRefunded {
+		if !event.FullyRefunded {
 			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
-			requestLog.Info("payment refunded event did not trigger status transition",
-				zap.Bool("fully_refunded", event.FullyRefunded),
-				zap.String("current_order_status", string(order.Status)),
-			)
+			requestLog.Info("payment refunded event did not trigger status transition", zap.Bool("fully_refunded", event.FullyRefunded))
 			return nil
 		}
-		if err := s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusRefunded, "payment-service", "system", paymentEventMessage("refunded", event)); err != nil {
-			appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusRefunded), appobs.OutcomeSystemError)
+		result, err := s.repo.ApplyInboxStatusTransition(ctx, &model.InboxMessage{
+			Consumer:   orderInboxConsumer,
+			MessageID:  messageIDFromDelivery(msg),
+			RoutingKey: msg.RoutingKey,
+			CreatedAt:  time.Now(),
+		}, event.OrderID, "", model.OrderStatusRefunded, "payment-service", "system", paymentEventMessage("refunded", event))
+		if err != nil {
 			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSystemError, time.Since(startedAt))
 			requestLog.Error("failed to transition order to refunded from payment event", zap.Error(err))
 			return err
 		}
-		appobs.RecordStateTransition("order-service", "order", string(order.Status), string(model.OrderStatusRefunded), appobs.OutcomeSuccess)
+		if result.Duplicate {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
+			requestLog.Info("payment refunded event skipped because inbox message already exists")
+			return nil
+		}
+		if !result.OrderFound {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Warn("payment event ignored because order no longer exists")
+			return nil
+		}
+		if !result.Transitioned {
+			appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Info("payment refunded event did not trigger status transition",
+				zap.String("current_order_status", string(result.PreviousStatus)),
+			)
+			return nil
+		}
+		appobs.RecordStateTransition("order-service", "order", string(result.PreviousStatus), string(model.OrderStatusRefunded), appobs.OutcomeSuccess)
 		appobs.ObserveOperation("order-service", "payment_event_consume", appobs.OutcomeSuccess, time.Since(startedAt))
 		requestLog.Info("order transitioned to refunded from payment event")
 		return nil

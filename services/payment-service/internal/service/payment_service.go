@@ -13,6 +13,7 @@ import (
 
 // PaymentEvent is published to RabbitMQ after payment processing.
 type PaymentEvent struct {
+	EventID            string  `json:"event_id"`
 	PaymentID          string  `json:"payment_id"`
 	OrderID            string  `json:"order_id"`
 	UserID             string  `json:"user_id"`

@@ -9,22 +9,22 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
 )
 
 func TestCreateReviewPreventsDuplicates(t *testing.T) {
-	repo := seededReviewRepo()
-	productService := NewProductService(repo)
+	lookup := seededReviewLookup()
+	repo := newFakeReviewServiceRepo()
+	svc := NewProductReviewService(lookup, repo, WithProductReviewTxManager(fakeProductReviewTxManager{repo: repo}))
 	ctx := context.Background()
 
-	if _, err := productService.CreateReview(ctx, "product-1", "user-1", "alice@example.com", dto.CreateProductReviewRequest{
+	if _, err := svc.CreateReview(ctx, "product-1", "user-1", "alice@example.com", dto.CreateProductReviewRequest{
 		Rating:  5,
 		Comment: "Excellent",
 	}); err != nil {
 		t.Fatalf("CreateReview returned error: %v", err)
 	}
 
-	_, err := productService.CreateReview(ctx, "product-1", "user-1", "alice@example.com", dto.CreateProductReviewRequest{
+	_, err := svc.CreateReview(ctx, "product-1", "user-1", "alice@example.com", dto.CreateProductReviewRequest{
 		Rating:  4,
 		Comment: "Duplicate",
 	})
@@ -33,10 +33,43 @@ func TestCreateReviewPreventsDuplicates(t *testing.T) {
 	}
 }
 
+func TestCreateReviewNormalizesCommentAndMasksAuthor(t *testing.T) {
+	lookup := seededReviewLookup()
+	repo := newFakeReviewServiceRepo()
+	factory := ProductReviewFactory{
+		now:   func() time.Time { return time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC) },
+		newID: func() string { return "review-1" },
+	}
+	svc := NewProductReviewService(
+		lookup,
+		repo,
+		WithProductReviewTxManager(fakeProductReviewTxManager{repo: repo}),
+		WithProductReviewFactory(factory),
+	)
+
+	review, err := svc.CreateReview(context.Background(), "product-1", "user-1", "Alice@example.com ", dto.CreateProductReviewRequest{
+		Rating:  5,
+		Comment: "  Excellent craftsmanship  ",
+	})
+	if err != nil {
+		t.Fatalf("CreateReview returned error: %v", err)
+	}
+
+	if review.ID != "review-1" {
+		t.Fatalf("expected factory-generated review id, got %q", review.ID)
+	}
+	if review.Comment != "Excellent craftsmanship" {
+		t.Fatalf("expected trimmed comment, got %q", review.Comment)
+	}
+	if review.AuthorLabel != "a***@example.com" {
+		t.Fatalf("expected masked author label, got %q", review.AuthorLabel)
+	}
+}
+
 func TestUpdateReviewRequiresOwnership(t *testing.T) {
-	repo := seededReviewRepo()
+	repo := newFakeReviewServiceRepo()
 	now := time.Now()
-	_ = repo.CreateReview(context.Background(), &model.ProductReview{
+	repo.reviews["product-1::user-1"] = &model.ProductReview{
 		ID:          "review-1",
 		ProductID:   "product-1",
 		UserID:      "user-1",
@@ -45,10 +78,10 @@ func TestUpdateReviewRequiresOwnership(t *testing.T) {
 		Comment:     "Initial",
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	})
+	}
 
-	productService := NewProductService(repo)
-	_, err := productService.UpdateReview(context.Background(), "product-1", "user-2", dto.UpdateProductReviewRequest{
+	svc := NewProductReviewService(seededReviewLookup(), repo, WithProductReviewTxManager(fakeProductReviewTxManager{repo: repo}))
+	_, err := svc.UpdateReview(context.Background(), "product-1", "user-2", dto.UpdateProductReviewRequest{
 		Rating:  1,
 		Comment: "Should fail",
 	})
@@ -58,9 +91,9 @@ func TestUpdateReviewRequiresOwnership(t *testing.T) {
 }
 
 func TestDeleteReviewRequiresOwnership(t *testing.T) {
-	repo := seededReviewRepo()
+	repo := newFakeReviewServiceRepo()
 	now := time.Now()
-	_ = repo.CreateReview(context.Background(), &model.ProductReview{
+	repo.reviews["product-1::user-1"] = &model.ProductReview{
 		ID:          "review-1",
 		ProductID:   "product-1",
 		UserID:      "user-1",
@@ -69,19 +102,19 @@ func TestDeleteReviewRequiresOwnership(t *testing.T) {
 		Comment:     "Initial",
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	})
+	}
 
-	productService := NewProductService(repo)
-	err := productService.DeleteReview(context.Background(), "product-1", "user-2")
+	svc := NewProductReviewService(seededReviewLookup(), repo, WithProductReviewTxManager(fakeProductReviewTxManager{repo: repo}))
+	err := svc.DeleteReview(context.Background(), "product-1", "user-2")
 	if !errors.Is(err, ErrProductReviewNotFound) {
 		t.Fatalf("expected ErrProductReviewNotFound, got %v", err)
 	}
 }
 
 func TestListReviewsReturnsSummary(t *testing.T) {
-	repo := seededReviewRepo()
+	repo := newFakeReviewServiceRepo()
 	now := time.Now()
-	_ = repo.CreateReview(context.Background(), &model.ProductReview{
+	repo.reviews["product-1::user-1"] = &model.ProductReview{
 		ID:          "review-1",
 		ProductID:   "product-1",
 		UserID:      "user-1",
@@ -90,8 +123,8 @@ func TestListReviewsReturnsSummary(t *testing.T) {
 		Comment:     "Excellent",
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	})
-	_ = repo.CreateReview(context.Background(), &model.ProductReview{
+	}
+	repo.reviews["product-1::user-2"] = &model.ProductReview{
 		ID:          "review-2",
 		ProductID:   "product-1",
 		UserID:      "user-2",
@@ -100,10 +133,10 @@ func TestListReviewsReturnsSummary(t *testing.T) {
 		Comment:     "Average",
 		CreatedAt:   now.Add(time.Minute),
 		UpdatedAt:   now.Add(time.Minute),
-	})
+	}
 
-	productService := NewProductService(repo)
-	reviews, total, err := productService.ListReviews(context.Background(), "product-1", dto.ListProductReviewsQuery{
+	svc := NewProductReviewService(seededReviewLookup(), repo)
+	reviews, total, err := svc.ListReviews(context.Background(), "product-1", dto.ListProductReviewsQuery{
 		Page:  1,
 		Limit: 10,
 	})
@@ -127,8 +160,40 @@ func TestListReviewsReturnsSummary(t *testing.T) {
 	}
 }
 
-func seededReviewRepo() *fakeReviewServiceRepo {
-	return &fakeReviewServiceRepo{
+func TestListReviewsFallsBackWhenCacheFails(t *testing.T) {
+	repo := newFakeReviewServiceRepo()
+	now := time.Now()
+	repo.reviews["product-1::user-1"] = &model.ProductReview{
+		ID:          "review-1",
+		ProductID:   "product-1",
+		UserID:      "user-1",
+		AuthorLabel: "a***@example.com",
+		Rating:      5,
+		Comment:     "Excellent",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	cache := &fakeProductReviewCache{
+		summaryErr:   errors.New("redis down"),
+		firstPageErr: errors.New("redis down"),
+	}
+	svc := NewProductReviewService(seededReviewLookup(), repo, WithProductReviewCache(cache))
+
+	reviews, total, err := svc.ListReviews(context.Background(), "product-1", dto.ListProductReviewsQuery{
+		Page:  1,
+		Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("ListReviews returned error: %v", err)
+	}
+	if total != 1 || len(reviews.Items) != 1 {
+		t.Fatalf("expected DB fallback results, got total=%d items=%d", total, len(reviews.Items))
+	}
+}
+
+func seededReviewLookup() ProductLookup {
+	return fakeProductLookup{
 		products: map[string]*model.Product{
 			"product-1": {
 				ID:          "product-1",
@@ -141,70 +206,96 @@ func seededReviewRepo() *fakeReviewServiceRepo {
 				UpdatedAt:   time.Now(),
 			},
 		},
-		reviews: make(map[string]*model.ProductReview),
 	}
 }
 
-type fakeReviewServiceRepo struct {
+type fakeProductLookup struct {
 	products map[string]*model.Product
-	reviews  map[string]*model.ProductReview
 }
 
-func (r *fakeReviewServiceRepo) Create(_ context.Context, product *model.Product) error {
-	if r.products == nil {
-		r.products = make(map[string]*model.Product)
-	}
-	copyProduct := *product
-	r.products[product.ID] = &copyProduct
-	return nil
-}
-
-func (r *fakeReviewServiceRepo) GetByID(_ context.Context, id string) (*model.Product, error) {
-	product, ok := r.products[id]
+func (f fakeProductLookup) GetByID(_ context.Context, id string) (*model.Product, error) {
+	product, ok := f.products[id]
 	if !ok {
-		return nil, nil
+		return nil, ErrProductNotFound
 	}
+
 	copyProduct := *product
 	return &copyProduct, nil
 }
 
-func (r *fakeReviewServiceRepo) Update(_ context.Context, product *model.Product) error {
-	return r.Create(context.Background(), product)
+type fakeProductReviewTxManager struct {
+	repo ProductReviewRepository
 }
 
-func (r *fakeReviewServiceRepo) Delete(_ context.Context, id string) error {
-	delete(r.products, id)
+func (m fakeProductReviewTxManager) RunInTx(ctx context.Context, fn func(ProductReviewTxRepositories) error) error {
+	return fn(ProductReviewTxRepositories{Reviews: m.repo})
+}
+
+type fakeProductReviewCache struct {
+	summary      *model.ProductReviewSummary
+	summaryHit   bool
+	summaryErr   error
+	firstPage    []*model.ProductReview
+	firstPageHit bool
+	firstPageErr error
+}
+
+func (c *fakeProductReviewCache) GetSummary(_ context.Context, _ string) (*model.ProductReviewSummary, bool, error) {
+	if c.summaryErr != nil {
+		return nil, false, c.summaryErr
+	}
+	if !c.summaryHit {
+		return nil, false, nil
+	}
+
+	return c.summary, true, nil
+}
+
+func (c *fakeProductReviewCache) SetSummary(_ context.Context, _ string, summary *model.ProductReviewSummary) error {
+	c.summary = summary
+	c.summaryHit = true
 	return nil
 }
 
-func (r *fakeReviewServiceRepo) List(_ context.Context, _ repository.ListProductsParams) ([]*model.Product, string, bool, error) {
-	return []*model.Product{}, "", false, nil
+func (c *fakeProductReviewCache) GetFirstPage(_ context.Context, _ string, _ int) ([]*model.ProductReview, bool, error) {
+	if c.firstPageErr != nil {
+		return nil, false, c.firstPageErr
+	}
+	if !c.firstPageHit {
+		return nil, false, nil
+	}
+
+	return c.firstPage, true, nil
 }
 
-func (r *fakeReviewServiceRepo) ListByIDs(_ context.Context, ids []string) ([]*model.Product, error) {
-	return []*model.Product{}, nil
-}
-
-func (r *fakeReviewServiceRepo) ListForSearchIndex(_ context.Context) ([]*model.Product, error) {
-	return []*model.Product{}, nil
-}
-
-func (r *fakeReviewServiceRepo) UpdateStock(_ context.Context, id string, quantity int) error {
+func (c *fakeProductReviewCache) SetFirstPage(_ context.Context, _ string, _ int, reviews []*model.ProductReview) error {
+	c.firstPage = reviews
+	c.firstPageHit = true
 	return nil
 }
 
-func (r *fakeReviewServiceRepo) RestoreStock(_ context.Context, id string, quantity int) error {
+func (c *fakeProductReviewCache) Invalidate(_ context.Context, _ string) error {
+	c.summary = nil
+	c.summaryHit = false
+	c.firstPage = nil
+	c.firstPageHit = false
 	return nil
 }
 
-func (r *fakeReviewServiceRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
-	return []*model.Product{}, nil
+type fakeReviewServiceRepo struct {
+	reviews map[string]*model.ProductReview
+}
+
+func newFakeReviewServiceRepo() *fakeReviewServiceRepo {
+	return &fakeReviewServiceRepo{
+		reviews: make(map[string]*model.ProductReview),
+	}
 }
 
 func (r *fakeReviewServiceRepo) CreateReview(_ context.Context, review *model.ProductReview) error {
 	key := review.ProductID + "::" + review.UserID
 	if _, exists := r.reviews[key]; exists {
-		return ErrProductReviewAlreadyExists
+		return model.ErrProductReviewAlreadyExists
 	}
 	copyReview := *review
 	r.reviews[key] = &copyReview
@@ -214,29 +305,38 @@ func (r *fakeReviewServiceRepo) CreateReview(_ context.Context, review *model.Pr
 func (r *fakeReviewServiceRepo) GetReviewByProductAndUser(_ context.Context, productID, userID string) (*model.ProductReview, error) {
 	review, ok := r.reviews[productID+"::"+userID]
 	if !ok {
-		return nil, nil
+		return nil, model.ErrProductReviewNotFound
 	}
 	copyReview := *review
 	return &copyReview, nil
 }
 
+func (r *fakeReviewServiceRepo) GetReviewByProductAndUserForUpdate(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
+	return r.GetReviewByProductAndUser(ctx, productID, userID)
+}
+
 func (r *fakeReviewServiceRepo) UpdateReview(_ context.Context, review *model.ProductReview) error {
 	key := review.ProductID + "::" + review.UserID
+	if _, exists := r.reviews[key]; !exists {
+		return model.ErrProductReviewNotFound
+	}
 	copyReview := *review
 	r.reviews[key] = &copyReview
 	return nil
 }
 
-func (r *fakeReviewServiceRepo) DeleteReviewByProductAndUser(_ context.Context, productID, userID string) (bool, error) {
+func (r *fakeReviewServiceRepo) DeleteReviewByProductAndUser(_ context.Context, productID, userID string) (*model.ProductReview, error) {
 	key := productID + "::" + userID
-	if _, exists := r.reviews[key]; !exists {
-		return false, nil
+	review, exists := r.reviews[key]
+	if !exists {
+		return nil, model.ErrProductReviewNotFound
 	}
 	delete(r.reviews, key)
-	return true, nil
+	copyReview := *review
+	return &copyReview, nil
 }
 
-func (r *fakeReviewServiceRepo) ListReviewsByProduct(_ context.Context, productID string, offset, limit int) ([]*model.ProductReview, int64, error) {
+func (r *fakeReviewServiceRepo) ListReviewsByProduct(_ context.Context, productID string, offset, limit int) ([]*model.ProductReview, error) {
 	items := make([]*model.ProductReview, 0)
 	for _, review := range r.reviews {
 		if review.ProductID != productID {
@@ -247,29 +347,34 @@ func (r *fakeReviewServiceRepo) ListReviewsByProduct(_ context.Context, productI
 	}
 
 	sort.Slice(items, func(left, right int) bool {
+		if items[left].CreatedAt.Equal(items[right].CreatedAt) {
+			return items[left].ID > items[right].ID
+		}
 		return items[left].CreatedAt.After(items[right].CreatedAt)
 	})
 
-	total := int64(len(items))
 	if offset >= len(items) {
-		return []*model.ProductReview{}, total, nil
+		return []*model.ProductReview{}, nil
 	}
 
 	end := offset + limit
 	if end > len(items) {
 		end = len(items)
 	}
-	return items[offset:end], total, nil
+
+	return items[offset:end], nil
 }
 
 func (r *fakeReviewServiceRepo) GetReviewSummary(_ context.Context, productID string) (*model.ProductReviewSummary, error) {
 	summary := &model.ProductReviewSummary{}
+	ratingTotal := 0
 	for _, review := range r.reviews {
 		if review.ProductID != productID {
 			continue
 		}
 		summary.ReviewCount++
-		summary.AverageRating += float64(review.Rating)
+		ratingTotal += review.Rating
+
 		switch review.Rating {
 		case 1:
 			summary.RatingBreakdown.One++
@@ -283,8 +388,14 @@ func (r *fakeReviewServiceRepo) GetReviewSummary(_ context.Context, productID st
 			summary.RatingBreakdown.Five++
 		}
 	}
+
 	if summary.ReviewCount > 0 {
-		summary.AverageRating = summary.AverageRating / float64(summary.ReviewCount)
+		summary.AverageRating = float64(ratingTotal) / float64(summary.ReviewCount)
 	}
+
 	return summary, nil
+}
+
+func (r *fakeReviewServiceRepo) ApplyReviewSummaryDelta(_ context.Context, _ string, _ model.ProductReviewSummaryDelta) error {
+	return nil
 }

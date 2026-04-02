@@ -12,6 +12,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 )
 
 // normalizePaymentMethod maps API aliases into the canonical internal payment
@@ -246,4 +247,37 @@ func roundMoney(value float64) float64 {
 func isUniqueViolation(err error) bool {
 	var pqErr *pq.Error
 	return errors.As(err, &pqErr) && pqErr.Code == "23505"
+}
+
+func replacePayment(payments []*model.Payment, updated *model.Payment) []*model.Payment {
+	replaced := make([]*model.Payment, 0, len(payments))
+	found := false
+	for _, payment := range payments {
+		if payment.ID == updated.ID {
+			copyValue := *updated
+			replaced = append(replaced, &copyValue)
+			found = true
+			continue
+		}
+		copyValue := *payment
+		replaced = append(replaced, &copyValue)
+	}
+	if !found {
+		copyValue := *updated
+		replaced = append([]*model.Payment{&copyValue}, replaced...)
+	}
+
+	return replaced
+}
+
+func momoWebhookMessageID(req dto.MomoWebhookRequest) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(req.PaymentID),
+		strings.TrimSpace(req.GatewayOrderID),
+		strings.TrimSpace(req.GatewayTransactionID),
+		formatMoney(req.Amount),
+		fmt.Sprintf("%d", req.ResultCode),
+		strings.TrimSpace(req.Signature),
+	}, "|")))
+	return hex.EncodeToString(sum[:])
 }

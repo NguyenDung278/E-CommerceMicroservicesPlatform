@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -24,7 +23,7 @@ func (h *ProductHandler) ListReviews(c echo.Context) error {
 		Limit: limit,
 	}
 
-	reviews, total, err := h.productService.ListReviews(c.Request().Context(), c.Param("id"), query)
+	reviews, total, err := h.reviewService.ListReviews(c.Request().Context(), c.Param("id"), query)
 	if err != nil {
 		if errors.Is(err, service.ErrProductNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "product not found")
@@ -52,7 +51,7 @@ func (h *ProductHandler) GetMyReview(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
 	}
 
-	review, err := h.productService.GetReviewByProductAndUser(c.Request().Context(), c.Param("id"), claims.UserID)
+	review, err := h.reviewService.GetReviewByProductAndUser(c.Request().Context(), c.Param("id"), claims.UserID)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProductNotFound):
@@ -81,8 +80,7 @@ func (h *ProductHandler) CreateReview(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	req.Comment = strings.TrimSpace(req.Comment)
-	review, err := h.productService.CreateReview(c.Request().Context(), c.Param("id"), claims.UserID, claims.Email, req)
+	review, err := h.reviewService.CreateReview(c.Request().Context(), c.Param("id"), claims.UserID, claims.Email, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProductNotFound):
@@ -111,8 +109,7 @@ func (h *ProductHandler) UpdateMyReview(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	req.Comment = strings.TrimSpace(req.Comment)
-	review, err := h.productService.UpdateReview(c.Request().Context(), c.Param("id"), claims.UserID, req)
+	review, err := h.reviewService.UpdateReview(c.Request().Context(), c.Param("id"), claims.UserID, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProductNotFound):
@@ -133,7 +130,7 @@ func (h *ProductHandler) DeleteMyReview(c echo.Context) error {
 		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
 	}
 
-	err := h.productService.DeleteReview(c.Request().Context(), c.Param("id"), claims.UserID)
+	err := h.reviewService.DeleteReview(c.Request().Context(), c.Param("id"), claims.UserID)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrProductNotFound):

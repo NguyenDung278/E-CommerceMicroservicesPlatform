@@ -1,11 +1,7 @@
 // Notification Service — Entry point
 //
-// This service is PURELY EVENT-DRIVEN. It has no HTTP endpoints (except health).
-// It consumes messages from RabbitMQ and processes notifications.
-//
-// ARCHITECTURE PATTERN: Consumer/Worker
-// Unlike other services that are request-driven, this service runs a worker
-// loop that waits for messages. It's the "subscribe" half of publish-subscribe.
+// This service is event-driven. It consumes RabbitMQ messages, applies bounded
+// retry/DLQ policy, and exposes health plus Prometheus metrics.
 package main
 
 import (
@@ -20,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
@@ -27,6 +24,8 @@ import (
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/handler"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/inbox"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/messaging"
 )
 
 func main() {
@@ -39,7 +38,10 @@ func main() {
 	log := logger.New("notification-service")
 	defer log.Sync()
 
-	tracingShutdown, err := appobs.SetupTracing(context.Background(), "notification-service", cfg.Tracing, log)
+	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	tracingShutdown, err := appobs.SetupTracing(rootCtx, "notification-service", cfg.Tracing, log)
 	if err != nil {
 		log.Warn("failed to initialize tracing", zap.Error(err))
 	} else {
@@ -52,118 +54,157 @@ func main() {
 		}()
 	}
 
-	// Connect to RabbitMQ.
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr(),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	defer redisClient.Close()
+
+	var inboxStore inbox.Store
+	if err := redisClient.Ping(rootCtx).Err(); err != nil {
+		log.Warn("redis not available, duplicate inbox protection is disabled", zap.Error(err))
+	} else {
+		inboxStore = inbox.NewRedisStore(redisClient, "notification-service:inbox")
+	}
+
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL())
 	if err != nil {
 		log.Fatal("failed to connect to RabbitMQ", zap.Error(err))
 	}
 	defer conn.Close()
 
-	ch, err := conn.Channel()
+	adminCh, err := conn.Channel()
 	if err != nil {
-		log.Fatal("failed to open channel", zap.Error(err))
+		log.Fatal("failed to open RabbitMQ admin channel", zap.Error(err))
 	}
-	defer ch.Close()
+	defer adminCh.Close()
 
-	// Declare the exchange (idempotent — safe to call even if it already exists).
-	err = ch.ExchangeDeclare("events", "topic", true, false, false, false, nil)
+	retryDelay := time.Duration(cfg.Notification.RetryDelaySeconds) * time.Second
+	if err := messaging.DeclareQueues(adminCh, retryDelay); err != nil {
+		log.Fatal("failed to declare notification queues", zap.Error(err))
+	}
+
+	consumerCh, err := conn.Channel()
 	if err != nil {
-		log.Fatal("failed to declare exchange", zap.Error(err))
+		log.Fatal("failed to open RabbitMQ consumer channel", zap.Error(err))
+	}
+	defer consumerCh.Close()
+
+	if err := consumerCh.Qos(cfg.Notification.PrefetchCount, 0, false); err != nil {
+		log.Fatal("failed to set RabbitMQ QoS", zap.Error(err))
 	}
 
-	// Declare a queue for notifications.
-	// WHY A NAMED QUEUE: Named queues survive broker restarts (durable=true).
-	// Anonymous queues would lose messages if the service restarts.
-	q, err := ch.QueueDeclare(
-		"notification-queue", // name
-		true,                 // durable
-		false,                // delete when unused
-		false,                // exclusive
-		false,                // no-wait
-		nil,                  // arguments
+	msgs, err := consumerCh.Consume(
+		messaging.MainQueue,
+		messaging.ConsumerTag,
+		false,
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
-		log.Fatal("failed to declare queue", zap.Error(err))
+		log.Fatal("failed to start consuming notification events", zap.Error(err))
 	}
 
-	// Bind the queue to multiple routing keys.
-	// This service receives events for: order.created, order.cancelled,
-	// payment.completed, payment.failed, payment.refunded.
-	routingKeys := []string{"order.created", "order.cancelled", "payment.completed", "payment.failed", "payment.refunded"}
-	for _, key := range routingKeys {
-		err = ch.QueueBind(q.Name, key, "events", false, nil)
-		if err != nil {
-			log.Fatal("failed to bind queue", zap.String("routing_key", key), zap.Error(err))
-		}
-		log.Info("bound queue to routing key", zap.String("routing_key", key))
-	}
-
-	// Set QoS (Quality of Service).
-	// prefetchCount=5 means the consumer will process 5 messages at a time.
-	// This provides backpressure — if the consumer is slow, it won't get overwhelmed.
-	err = ch.Qos(5, 0, false)
+	retryCh, err := conn.Channel()
 	if err != nil {
-		log.Fatal("failed to set QoS", zap.Error(err))
+		log.Fatal("failed to open RabbitMQ retry publisher channel", zap.Error(err))
 	}
+	defer retryCh.Close()
 
-	// Start consuming messages.
-	msgs, err := ch.Consume(
-		q.Name,                  // queue
-		"notification-consumer", // consumer tag
-		false,                   // auto-ack (false = manual ack for reliability)
-		false,                   // exclusive
-		false,                   // no-local
-		false,                   // no-wait
-		nil,                     // args
-	)
+	monitorCh, err := conn.Channel()
 	if err != nil {
-		log.Fatal("failed to start consuming", zap.Error(err))
+		log.Fatal("failed to open RabbitMQ monitor channel", zap.Error(err))
 	}
+	defer monitorCh.Close()
 
 	sender := email.NewSender(cfg.SMTP, log)
-	eventHandler := handler.NewEventHandler(log, sender)
+	retryPublisher := messaging.NewRetryPublisher(retryCh, messaging.RetryQueue)
+	eventHandler := handler.NewEventHandler(
+		log,
+		sender,
+		inboxStore,
+		retryPublisher,
+		cfg.Notification.MaxRetries,
+		time.Duration(cfg.Notification.InboxTTLHours)*time.Hour,
+		time.Duration(cfg.Notification.ProcessingTTLSeconds)*time.Second,
+	)
 
-	// Start the worker in a goroutine.
-	go func() {
-		log.Info("notification worker started, waiting for events...")
-		for msg := range msgs {
-			eventHandler.HandleMessage(msg)
-		}
-	}()
+	queueMonitor := messaging.NewQueueMonitor(monitorCh, log, messaging.MainQueue, messaging.RetryQueue, messaging.DLQQueue)
+	go queueMonitor.Start(rootCtx, time.Duration(cfg.Notification.QueueMetricsIntervalSeconds)*time.Second)
 
-	// Start a minimal health check server.
-	go func() {
-		e := echo.New()
-		e.HideBanner = true
-		e.Use(echomw.Secure())
-		e.Use(appobs.EchoMiddleware("notification-service"))
-		e.Use(echoprometheus.NewMiddleware("notification_service"))
-		e.GET("/metrics", echoprometheus.NewHandler())
-		e.GET("/health", func(c echo.Context) error {
-			return c.JSON(http.StatusOK, map[string]string{
-				"status":  "healthy",
-				"service": "notification-service",
-			})
+	workerCount := cfg.Notification.WorkerCount
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+	for workerID := 1; workerID <= workerCount; workerID++ {
+		go startWorker(rootCtx, workerID, log, eventHandler, msgs)
+	}
+
+	e := echo.New()
+	e.HideBanner = true
+	e.Use(echomw.Secure())
+	e.Use(appobs.EchoMiddleware("notification-service"))
+	e.Use(echoprometheus.NewMiddleware("notification_service"))
+	e.GET("/metrics", echoprometheus.NewHandler())
+	e.GET("/health", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{
+			"status":  "healthy",
+			"service": "notification-service",
 		})
-		addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-		server := &http.Server{
-			Addr:         addr,
-			Handler:      e,
-			ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
-			WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
-			IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
-		}
+	})
+
+	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
+	server := &http.Server{
+		Addr:         addr,
+		Handler:      e,
+		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.Server.ReadTimeout+cfg.Server.WriteTimeout) * time.Second,
+	}
+
+	go func() {
 		if err := e.StartServer(server); err != nil && err != http.ErrServerClosed {
-			log.Error("health check server error", zap.Error(err))
+			log.Error("notification health server error", zap.Error(err))
 		}
 	}()
 
-	log.Info("notification service is running")
+	log.Info("notification service is running",
+		zap.Int("worker_count", workerCount),
+		zap.Int("prefetch_count", cfg.Notification.PrefetchCount),
+		zap.Int("max_retries", cfg.Notification.MaxRetries),
+	)
 
-	// Wait for interrupt signal.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-	<-quit
+	<-rootCtx.Done()
+	log.Info("notification service shutting down")
 
-	log.Info("notification service shutting down...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.Shutdown(shutdownCtx); err != nil {
+		log.Warn("failed to shutdown notification health server gracefully", zap.Error(err))
+	}
+}
+
+func startWorker(ctx context.Context, workerID int, log *zap.Logger, eventHandler *handler.EventHandler, msgs <-chan amqp.Delivery) {
+	workerLog := log.With(zap.Int("worker_id", workerID))
+	workerLog.Info("notification worker started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			workerLog.Info("notification worker stopping")
+			return
+		case msg, ok := <-msgs:
+			if !ok {
+				workerLog.Info("notification worker stopping because consumer channel closed")
+				return
+			}
+
+			messageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			eventHandler.HandleMessage(messageCtx, msg)
+			cancel()
+		}
+	}
 }

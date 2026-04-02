@@ -14,6 +14,7 @@ import (
 	echoprometheus "github.com/labstack/echo-contrib/echoprometheus"
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
@@ -91,6 +92,54 @@ func main() {
 	}
 
 	productService := service.NewProductService(productRepo, productOptions...)
+	reviewRepo := repository.NewProductReviewRepository(db)
+	reviewOptions := []service.ProductReviewServiceOption{
+		service.WithProductReviewLogger(log),
+		service.WithProductReviewTxManager(newProductReviewTxManagerAdapter(repository.NewProductReviewTxManager(db))),
+	}
+
+	var reviewCache *repository.RedisProductReviewCache
+	var reviewCacheClient *redis.Client
+	if cfg.Reviews.CacheEnabled {
+		reviewCacheClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.Redis.Addr(),
+			Password: cfg.Redis.Password,
+			DB:       cfg.Redis.DB,
+		})
+
+		cacheCtx, cancelCache := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := reviewCacheClient.Ping(cacheCtx).Err(); err != nil {
+			log.Warn("product review cache disabled", zap.Error(err), zap.String("redis_addr", cfg.Redis.Addr()))
+			_ = reviewCacheClient.Close()
+			reviewCacheClient = nil
+		} else {
+			reviewCache = repository.NewRedisProductReviewCache(
+				reviewCacheClient,
+				time.Duration(cfg.Reviews.CacheTTLSeconds)*time.Second,
+			)
+			reviewOptions = append(reviewOptions, service.WithProductReviewCache(reviewCache))
+			reviewOptions = append(reviewOptions, service.WithProductReviewObserver(
+				service.NewProductReviewObserverChain(
+					service.NewProductReviewMetricsObserver(),
+					service.NewProductReviewCacheInvalidationObserver(reviewCache),
+				),
+			))
+		}
+		cancelCache()
+	}
+	defer func() {
+		if reviewCacheClient != nil {
+			_ = reviewCacheClient.Close()
+		}
+	}()
+
+	if reviewCache == nil {
+		reviewOptions = append(reviewOptions, service.WithProductReviewObserver(
+			service.NewProductReviewObserverChain(service.NewProductReviewMetricsObserver()),
+		))
+	}
+	reviewService := service.NewProductReviewService(productService, reviewRepo, reviewOptions...)
+
 	if searchIndex != nil {
 		searchCtx, cancelSearch := context.WithTimeout(context.Background(), 30*time.Second)
 		if err := ensureSearchReady(searchCtx, searchIndex, productService, cfg.Search.SyncOnStartup, log); err != nil {
@@ -98,7 +147,7 @@ func main() {
 		}
 		cancelSearch()
 	}
-	productHandler := handler.NewProductHandler(productService)
+	productHandler := handler.NewProductHandler(productService, reviewService)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
@@ -217,4 +266,21 @@ func ensureSearchReady(
 		case <-time.After(retryDelay):
 		}
 	}
+}
+
+type productReviewTxManagerAdapter struct {
+	inner repository.ProductReviewTxManager
+}
+
+func newProductReviewTxManagerAdapter(inner repository.ProductReviewTxManager) service.ProductReviewTxManager {
+	return productReviewTxManagerAdapter{inner: inner}
+}
+
+func (a productReviewTxManagerAdapter) RunInTx(
+	ctx context.Context,
+	fn func(service.ProductReviewTxRepositories) error,
+) error {
+	return a.inner.RunInTx(ctx, func(repos repository.ProductReviewTxRepositories) error {
+		return fn(service.ProductReviewTxRepositories{Reviews: repos.Reviews})
+	})
 }

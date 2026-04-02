@@ -16,13 +16,15 @@ import (
 )
 
 type fakeOrderRepo struct {
-	createdOrder *model.Order
-	coupons      map[string]*model.Coupon
-	userOrders   []*model.Order
+	createdOrder  *model.Order
+	createdOutbox *model.OutboxMessage
+	coupons       map[string]*model.Coupon
+	userOrders    []*model.Order
 }
 
-func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order) error {
+func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *model.OutboxMessage) error {
 	r.createdOrder = order
+	r.createdOutbox = outbox
 	return nil
 }
 
@@ -42,7 +44,7 @@ func (r *fakeOrderRepo) GetEventsByOrderID(_ context.Context, _ string) ([]*mode
 	return nil, nil
 }
 
-func (r *fakeOrderRepo) UpdateStatus(_ context.Context, _ string, _ model.OrderStatus, _, _, _ string) error {
+func (r *fakeOrderRepo) UpdateStatus(_ context.Context, _ string, _ model.OrderStatus, _, _, _ string, _ *model.OutboxMessage) error {
 	return nil
 }
 
@@ -79,6 +81,29 @@ func (r *fakeOrderRepo) ListPopularProducts(_ context.Context, _ int) ([]model.P
 
 func (r *fakeOrderRepo) CreateAuditEntry(_ context.Context, _ *model.AuditEntry) error {
 	return nil
+}
+
+func (r *fakeOrderRepo) ClaimPendingOutbox(_ context.Context, _ int, _ time.Duration) ([]*model.OutboxMessage, error) {
+	return nil, nil
+}
+
+func (r *fakeOrderRepo) MarkOutboxPublished(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+
+func (r *fakeOrderRepo) MarkOutboxFailed(_ context.Context, _ string, _ string, _ time.Time) error {
+	return nil
+}
+
+func (r *fakeOrderRepo) ApplyInboxStatusTransition(
+	_ context.Context,
+	_ *model.InboxMessage,
+	_ string,
+	_ model.OrderStatus,
+	_ model.OrderStatus,
+	_, _, _ string,
+) (*model.InboxTransitionResult, error) {
+	return &model.InboxTransitionResult{}, nil
 }
 
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
@@ -242,6 +267,9 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 
 	if repo.createdOrder == nil {
 		t.Fatal("expected repository Create to receive an order")
+	}
+	if repo.createdOutbox == nil {
+		t.Fatal("expected repository Create to receive an outbox message")
 	}
 	if order.SubtotalPrice != 160 {
 		t.Fatalf("expected subtotal 160, got %.2f", order.SubtotalPrice)

@@ -44,12 +44,6 @@ type ProductRepository interface {
 	UpdateStock(ctx context.Context, id string, quantity int) error
 	RestoreStock(ctx context.Context, id string, quantity int) error
 	ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error)
-	CreateReview(ctx context.Context, review *model.ProductReview) error
-	GetReviewByProductAndUser(ctx context.Context, productID, userID string) (*model.ProductReview, error)
-	UpdateReview(ctx context.Context, review *model.ProductReview) error
-	DeleteReviewByProductAndUser(ctx context.Context, productID, userID string) (bool, error)
-	ListReviewsByProduct(ctx context.Context, productID string, offset, limit int) ([]*model.ProductReview, int64, error)
-	GetReviewSummary(ctx context.Context, productID string) (*model.ProductReviewSummary, error)
 }
 
 type postgresProductRepository struct {

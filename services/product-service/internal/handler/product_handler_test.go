@@ -118,7 +118,7 @@ func (r *fakeProductRepo) CreateReview(_ context.Context, review *model.ProductR
 	}
 	key := fakeReviewKey(review.ProductID, review.UserID)
 	if _, exists := r.reviews[key]; exists {
-		return fmt.Errorf("duplicate product review")
+		return model.ErrProductReviewAlreadyExists
 	}
 	copyReview := *review
 	r.reviews[key] = &copyReview
@@ -127,14 +127,18 @@ func (r *fakeProductRepo) CreateReview(_ context.Context, review *model.ProductR
 
 func (r *fakeProductRepo) GetReviewByProductAndUser(_ context.Context, productID, userID string) (*model.ProductReview, error) {
 	if r.reviews == nil {
-		return nil, nil
+		return nil, model.ErrProductReviewNotFound
 	}
 	review, ok := r.reviews[fakeReviewKey(productID, userID)]
 	if !ok {
-		return nil, nil
+		return nil, model.ErrProductReviewNotFound
 	}
 	copyReview := *review
 	return &copyReview, nil
+}
+
+func (r *fakeProductRepo) GetReviewByProductAndUserForUpdate(ctx context.Context, productID, userID string) (*model.ProductReview, error) {
+	return r.GetReviewByProductAndUser(ctx, productID, userID)
 }
 
 func (r *fakeProductRepo) UpdateReview(_ context.Context, review *model.ProductReview) error {
@@ -142,24 +146,29 @@ func (r *fakeProductRepo) UpdateReview(_ context.Context, review *model.ProductR
 		r.reviews = make(map[string]*model.ProductReview)
 	}
 	key := fakeReviewKey(review.ProductID, review.UserID)
+	if _, exists := r.reviews[key]; !exists {
+		return model.ErrProductReviewNotFound
+	}
 	copyReview := *review
 	r.reviews[key] = &copyReview
 	return nil
 }
 
-func (r *fakeProductRepo) DeleteReviewByProductAndUser(_ context.Context, productID, userID string) (bool, error) {
+func (r *fakeProductRepo) DeleteReviewByProductAndUser(_ context.Context, productID, userID string) (*model.ProductReview, error) {
 	if r.reviews == nil {
-		return false, nil
+		return nil, model.ErrProductReviewNotFound
 	}
 	key := fakeReviewKey(productID, userID)
-	if _, exists := r.reviews[key]; !exists {
-		return false, nil
+	review, exists := r.reviews[key]
+	if !exists {
+		return nil, model.ErrProductReviewNotFound
 	}
 	delete(r.reviews, key)
-	return true, nil
+	copyReview := *review
+	return &copyReview, nil
 }
 
-func (r *fakeProductRepo) ListReviewsByProduct(_ context.Context, productID string, offset, limit int) ([]*model.ProductReview, int64, error) {
+func (r *fakeProductRepo) ListReviewsByProduct(_ context.Context, productID string, offset, limit int) ([]*model.ProductReview, error) {
 	reviews := make([]*model.ProductReview, 0)
 	for _, review := range r.reviews {
 		if review.ProductID != productID {
@@ -176,9 +185,8 @@ func (r *fakeProductRepo) ListReviewsByProduct(_ context.Context, productID stri
 		return reviews[left].CreatedAt.After(reviews[right].CreatedAt)
 	})
 
-	total := int64(len(reviews))
 	if offset >= len(reviews) {
-		return []*model.ProductReview{}, total, nil
+		return []*model.ProductReview{}, nil
 	}
 
 	end := offset + limit
@@ -186,7 +194,7 @@ func (r *fakeProductRepo) ListReviewsByProduct(_ context.Context, productID stri
 		end = len(reviews)
 	}
 
-	return reviews[offset:end], total, nil
+	return reviews[offset:end], nil
 }
 
 func (r *fakeProductRepo) GetReviewSummary(_ context.Context, productID string) (*model.ProductReviewSummary, error) {
@@ -219,6 +227,10 @@ func (r *fakeProductRepo) GetReviewSummary(_ context.Context, productID string) 
 	return summary, nil
 }
 
+func (r *fakeProductRepo) ApplyReviewSummaryDelta(_ context.Context, _ string, _ model.ProductReviewSummaryDelta) error {
+	return nil
+}
+
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
 
 func (s *fakeMediaStore) EnsureBucket(_ context.Context) error { return nil }
@@ -232,7 +244,7 @@ func TestCreateRequiresAdminRole(t *testing.T) {
 	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo)
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	secret := "super-secret-test-key-1234567890"
 	handler.RegisterRoutes(e, secret)
 
@@ -259,7 +271,7 @@ func TestCreateAllowsAdminRole(t *testing.T) {
 	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo)
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	secret := "super-secret-test-key-1234567890"
 	handler.RegisterRoutes(e, secret)
 
@@ -289,7 +301,7 @@ func TestCreateAllowsStaffRole(t *testing.T) {
 	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo)
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	secret := "super-secret-test-key-1234567890"
 	handler.RegisterRoutes(e, secret)
 
@@ -323,7 +335,7 @@ func TestListReturnsCursorMetadata(t *testing.T) {
 		{ID: "p3", Name: "Three", CreatedAt: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)},
 	}}
 	productService := service.NewProductService(repo)
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	handler.RegisterRoutes(e, "unused-secret")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products?limit=2", nil)
@@ -376,7 +388,7 @@ func TestListByIDsReturnsProductsInRequestedOrder(t *testing.T) {
 		{ID: "p3", Name: "Three"},
 	}}
 	productService := service.NewProductService(repo)
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	handler.RegisterRoutes(e, "unused-secret")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/batch?ids=p3,p1,p3", nil)
@@ -410,7 +422,7 @@ func TestListByIDsRequiresAtLeastOneID(t *testing.T) {
 	e := echo.New()
 	e.Validator = validation.New()
 	productService := service.NewProductService(&fakeProductRepo{})
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	handler.RegisterRoutes(e, "unused-secret")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/batch", nil)
@@ -427,7 +439,7 @@ func TestListByIDsRejectsLargeBatch(t *testing.T) {
 	e := echo.New()
 	e.Validator = validation.New()
 	productService := service.NewProductService(&fakeProductRepo{})
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	handler.RegisterRoutes(e, "unused-secret")
 
 	query := make([]string, 0, 101)
@@ -450,7 +462,7 @@ func TestUploadAllowsStaffRole(t *testing.T) {
 	e.Validator = validation.New()
 	repo := &fakeProductRepo{}
 	productService := service.NewProductService(repo, service.WithMediaStore(&fakeMediaStore{}))
-	handler := NewProductHandler(productService)
+	handler := NewProductHandler(productService, nil)
 	secret := "super-secret-test-key-1234567890"
 	handler.RegisterRoutes(e, secret)
 

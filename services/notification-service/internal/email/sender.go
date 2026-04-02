@@ -77,7 +77,7 @@ func (s *logSender) Send(message Message) error {
 	s.log.Info("email send simulated",
 		zap.Strings("to", message.To),
 		zap.String("subject", message.Subject),
-		zap.String("body", message.Body),
+		zap.Int("body_length", len(message.Body)),
 	)
 	return nil
 }

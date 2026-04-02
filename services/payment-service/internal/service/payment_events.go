@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -12,39 +15,40 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 )
 
-// publishPaymentEvent emits an asynchronous lifecycle event so order and
-// notification services stay in sync with payment state.
+const (
+	paymentOutboxPollInterval = time.Second
+	paymentOutboxLease        = 30 * time.Second
+	paymentOutboxClaimLimit   = 50
+	paymentWebhookConsumer    = "momo-webhook"
+)
+
+// buildPaymentOutboxMessage materializes the durable broker message that must
+// be committed with the authoritative payment state change.
 //
 // Inputs:
-//   - ctx carries request metadata and timeout budget.
+//   - ctx carries request metadata such as request id for trace propagation.
 //   - payment is the enriched payment state to publish.
 //   - userEmail is forwarded for downstream notification consumers.
 //
 // Returns:
-//   - none; publication failures are logged because payment persistence already
-//     succeeded.
+//   - a ready-to-persist outbox row.
+//   - an error when event serialization fails.
 //
 // Edge cases:
-//   - nil RabbitMQ channels degrade gracefully and skip publication.
+//   - callers may pass an empty email for system-driven callbacks.
 //
 // Side effects:
-//   - publishes one RabbitMQ message with up to three attempts.
-//   - emits observability metrics and logs.
+//   - none; this helper only builds an in-memory payload.
 //
 // Performance:
-//   - O(1) application work plus JSON marshaling and network I/O.
-func (s *PaymentService) publishPaymentEvent(ctx context.Context, payment *model.Payment, userEmail string) {
-	if s.amqpCh == nil {
-		return
-	}
-
-	startedAt := time.Now()
-	requestLog := appobs.LoggerWithContext(s.log, ctx,
-		zap.String("payment_id", payment.ID),
-		zap.String("order_id", payment.OrderID),
-	)
-
-	event := PaymentEvent{
+//   - O(1) application work plus JSON marshaling.
+func buildPaymentOutboxMessage(ctx context.Context, payment *model.Payment, userEmail string) (*model.OutboxMessage, error) {
+	eventID := uuid.NewString()
+	requestID := appobs.RequestIDFromContext(ctx)
+	now := time.Now()
+	routingKey := paymentEventRoutingKey(payment)
+	payload, err := json.Marshal(PaymentEvent{
+		EventID:            eventID,
 		PaymentID:          payment.ID,
 		OrderID:            payment.OrderID,
 		UserID:             payment.UserID,
@@ -58,47 +62,151 @@ func (s *PaymentService) publishPaymentEvent(ctx context.Context, payment *model
 		FullyRefunded:      payment.NetPaidAmount <= 0 && payment.TransactionType == model.PaymentTransactionTypeRefund && payment.Status == model.PaymentStatusRefunded,
 		GatewayProvider:    payment.GatewayProvider,
 		GatewayTransaction: payment.GatewayTransactionID,
-		RequestID:          appobs.RequestIDFromContext(ctx),
+		RequestID:          requestID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payment outbox payload: %w", err)
 	}
 
-	body, err := json.Marshal(event)
+	return &model.OutboxMessage{
+		ID:            eventID,
+		AggregateType: "payment",
+		AggregateID:   payment.ID,
+		EventType:     routingKey,
+		RoutingKey:    routingKey,
+		Payload:       payload,
+		RequestID:     requestID,
+		AvailableAt:   now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}, nil
+}
+
+// publishPaymentEvent keeps a direct broker publish helper for tests and
+// low-level diagnostics, while production flows enqueue the same payload via
+// the outbox table.
+func (s *PaymentService) publishPaymentEvent(ctx context.Context, payment *model.Payment, userEmail string) {
+	message, err := buildPaymentOutboxMessage(ctx, payment, userEmail)
 	if err != nil {
-		appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to marshal payment event", zap.Error(err))
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("payment_id", payment.ID),
+			zap.String("order_id", payment.OrderID),
+		).Error("failed to build direct payment event payload", zap.Error(err))
+		return
+	}
+	_ = s.publishOutboxMessage(ctx, message)
+}
+
+// StartOutboxRelay continuously drains durable outbox rows to RabbitMQ.
+//
+// Scalability:
+//   - the relay stays stateless and replica-safe because claims use
+//     `FOR UPDATE SKIP LOCKED` instead of in-process ownership.
+//
+// Failure mode:
+//   - broker outages delay publication but do not lose events because the row
+//     remains durable in PostgreSQL until a future relay attempt succeeds.
+func (s *PaymentService) StartOutboxRelay(ctx context.Context) {
+	if s.amqpCh == nil {
+		s.log.Warn("RabbitMQ channel not available, payment outbox relay is disabled")
 		return
 	}
 
-	publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	ticker := time.NewTicker(paymentOutboxPollInterval)
+	defer ticker.Stop()
 
-	routingKey := paymentEventRoutingKey(payment)
-	for attempt := 0; attempt < 3; attempt++ {
-		err = s.amqpCh.PublishWithContext(
-			publishCtx,
-			"events",
-			routingKey,
-			false,
-			false,
-			amqp.Publishing{
-				ContentType: "application/json",
-				Body:        body,
-				Timestamp:   time.Now(),
-			},
-		)
-		if err == nil {
-			appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSuccess, time.Since(startedAt))
-			requestLog.Info("published payment event",
-				zap.String("routing_key", routingKey),
-				zap.String("payment_status", string(payment.Status)),
-			)
-			return
+	for {
+		if err := s.flushOutboxBatch(ctx); err != nil && ctx.Err() == nil {
+			s.log.Warn("payment outbox relay batch failed", zap.Error(err))
 		}
 
-		time.Sleep(time.Duration(attempt+1) * 150 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *PaymentService) flushOutboxBatch(ctx context.Context) error {
+	for {
+		messages, err := s.repo.ClaimPendingOutbox(ctx, paymentOutboxClaimLimit, paymentOutboxLease)
+		if err != nil {
+			return err
+		}
+		if len(messages) == 0 {
+			return nil
+		}
+
+		for _, message := range messages {
+			publishCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := s.publishOutboxMessage(publishCtx, message)
+			cancel()
+			if err != nil {
+				backoff := time.Duration(minInt(message.Attempts, 5)) * time.Second
+				if markErr := s.repo.MarkOutboxFailed(ctx, message.ID, err.Error(), time.Now().Add(backoff)); markErr != nil {
+					s.log.Warn("failed to mark payment outbox message failed",
+						zap.String("outbox_id", message.ID),
+						zap.Error(markErr),
+					)
+				}
+				continue
+			}
+
+			if err := s.repo.MarkOutboxPublished(ctx, message.ID, time.Now()); err != nil {
+				s.log.Warn("failed to mark payment outbox message published",
+					zap.String("outbox_id", message.ID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+}
+
+func (s *PaymentService) publishOutboxMessage(ctx context.Context, message *model.OutboxMessage) error {
+	if s.amqpCh == nil {
+		return fmt.Errorf("rabbitmq channel not available")
 	}
 
-	appobs.ObserveOperation("payment-service", "publish_payment_event", appobs.OutcomeSystemError, time.Since(startedAt))
-	requestLog.Error("failed to publish payment event", zap.Error(err))
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("outbox_id", message.ID),
+		zap.String("aggregate_type", message.AggregateType),
+		zap.String("aggregate_id", message.AggregateID),
+		zap.String("routing_key", message.RoutingKey),
+	)
+
+	headers := amqp.Table{
+		"x-event-id": message.ID,
+	}
+	if message.RequestID != "" {
+		headers["x-request-id"] = message.RequestID
+	}
+
+	err := s.amqpCh.PublishWithContext(
+		ctx,
+		"events",
+		message.RoutingKey,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         message.Payload,
+			Timestamp:    time.Now(),
+			MessageId:    message.ID,
+			DeliveryMode: amqp.Persistent,
+			Headers:      headers,
+		},
+	)
+	if err != nil {
+		appobs.ObserveOperation("payment-service", "publish_payment_outbox_event", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to publish payment outbox event", zap.Error(err))
+		return err
+	}
+
+	appobs.ObserveOperation("payment-service", "publish_payment_outbox_event", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("published payment outbox event")
+	return nil
 }
 
 // paymentEventRoutingKey maps a payment state into the RabbitMQ routing key used
@@ -126,4 +234,11 @@ func paymentEventRoutingKey(payment *model.Payment) string {
 		return "payment.failed"
 	}
 	return "payment.completed"
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

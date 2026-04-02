@@ -21,6 +21,7 @@ type Config struct {
 	Server         ServerConfig         `mapstructure:"server"`
 	Database       DatabaseConfig       `mapstructure:"database"`
 	Redis          RedisConfig          `mapstructure:"redis"`
+	Reviews        ReviewsConfig        `mapstructure:"reviews"`
 	RabbitMQ       RabbitMQConfig       `mapstructure:"rabbitmq"`
 	JWT            JWTConfig            `mapstructure:"jwt"`
 	GRPC           GRPCConfig           `mapstructure:"grpc"`
@@ -28,6 +29,7 @@ type Config struct {
 	OAuth          OAuthConfig          `mapstructure:"oauth"`
 	Services       ServicesConfig       `mapstructure:"services"`
 	Frontend       FrontendConfig       `mapstructure:"frontend"`
+	Notification   NotificationConfig   `mapstructure:"notification"`
 	PaymentGateway PaymentGatewayConfig `mapstructure:"payment_gateway"`
 	ObjectStorage  ObjectStorageConfig  `mapstructure:"object_storage"`
 	Tracing        TracingConfig        `mapstructure:"tracing"`
@@ -94,6 +96,16 @@ type OAuthProviderConfig struct {
 
 type FrontendConfig struct {
 	BaseURL string `mapstructure:"base_url"`
+}
+
+type NotificationConfig struct {
+	WorkerCount                 int `mapstructure:"worker_count"`
+	PrefetchCount               int `mapstructure:"prefetch_count"`
+	MaxRetries                  int `mapstructure:"max_retries"`
+	RetryDelaySeconds           int `mapstructure:"retry_delay_seconds"`
+	InboxTTLHours               int `mapstructure:"inbox_ttl_hours"`
+	ProcessingTTLSeconds        int `mapstructure:"processing_ttl_seconds"`
+	QueueMetricsIntervalSeconds int `mapstructure:"queue_metrics_interval_seconds"`
 }
 
 type PaymentGatewayConfig struct {
@@ -163,6 +175,11 @@ type RedisConfig struct {
 	DB       int    `mapstructure:"db"`
 }
 
+type ReviewsConfig struct {
+	CacheEnabled    bool `mapstructure:"cache_enabled"`
+	CacheTTLSeconds int  `mapstructure:"cache_ttl_seconds"`
+}
+
 // Addr returns the Redis address in "host:port" format.
 func (r RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%s", r.Host, r.Port)
@@ -221,6 +238,8 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("redis.port", "6379")
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.db", 0)
+	v.SetDefault("reviews.cache_enabled", false)
+	v.SetDefault("reviews.cache_ttl_seconds", 60)
 	v.SetDefault("rabbitmq.host", "localhost")
 	v.SetDefault("rabbitmq.port", "5672")
 	v.SetDefault("rabbitmq.user", "guest")
@@ -244,6 +263,13 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("services.order_service", "order-service:8084")
 	v.SetDefault("services.payment_service", "payment-service:8085")
 	v.SetDefault("frontend.base_url", "http://localhost:3000")
+	v.SetDefault("notification.worker_count", 4)
+	v.SetDefault("notification.prefetch_count", 8)
+	v.SetDefault("notification.max_retries", 5)
+	v.SetDefault("notification.retry_delay_seconds", 30)
+	v.SetDefault("notification.inbox_ttl_hours", 168)
+	v.SetDefault("notification.processing_ttl_seconds", 300)
+	v.SetDefault("notification.queue_metrics_interval_seconds", 15)
 	v.SetDefault("payment_gateway.webhook_secret", "dev-momo-secret")
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:3000/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")

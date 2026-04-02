@@ -36,3 +36,39 @@ groups:
         annotations:
           summary: "P95 latency is high on {{ $labels.instance }}"
           description: "95th percentile latency is above 1 second for 10 minutes."
+
+      - alert: NotificationDLQBacklog
+        expr: ecommerce_notification_queue_messages{queue="notification-dlq"} > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notification DLQ has pending messages"
+          description: "notification-service has messages stuck in the dead-letter queue for more than 10 minutes."
+
+      - alert: NotificationRetryBacklogHigh
+        expr: ecommerce_notification_queue_messages{queue="notification-retry-queue"} > 25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification retry backlog is growing"
+          description: "The notification retry queue has more than 25 messages for at least 10 minutes."
+
+      - alert: NotificationRetryAgeHigh
+        expr: max(ecommerce_notification_retry_oldest_age_seconds) > 600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification retry age is too high"
+          description: "At least one notification routing key has observed retry age above 10 minutes for 10 minutes."
+
+      - alert: NotificationDuplicateInboxSpike
+        expr: sum(rate(ecommerce_notification_duplicate_inbox_total[10m])) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification duplicate inbox rate is elevated"
+          description: "notification-service is skipping more than 0.1 duplicate messages per second over 10 minutes."

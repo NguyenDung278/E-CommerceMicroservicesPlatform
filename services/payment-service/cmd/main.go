@@ -88,6 +88,11 @@ func main() {
 		cfg.PaymentGateway.MomoReturnURL,
 	)
 	paymentHandler := handler.NewPaymentHandler(paymentService)
+	relayCtx, relayCancel := context.WithCancel(context.Background())
+	defer relayCancel()
+	if amqpCh != nil {
+		go paymentService.StartOutboxRelay(relayCtx)
+	}
 
 	e := echo.New()
 	e.HideBanner = true
@@ -130,6 +135,7 @@ func main() {
 	<-quit
 
 	log.Info("shutting down server...")
+	relayCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {

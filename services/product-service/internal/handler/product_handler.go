@@ -20,10 +20,14 @@ import (
 // ProductHandler handles HTTP requests for product operations.
 type ProductHandler struct {
 	productService *service.ProductService
+	reviewService  *service.ProductReviewService
 }
 
-func NewProductHandler(productService *service.ProductService) *ProductHandler {
-	return &ProductHandler{productService: productService}
+func NewProductHandler(productService *service.ProductService, reviewService *service.ProductReviewService) *ProductHandler {
+	return &ProductHandler{
+		productService: productService,
+		reviewService:  reviewService,
+	}
 }
 
 // RegisterRoutes registers product routes.

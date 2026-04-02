@@ -14,6 +14,10 @@ redis:
   port: "6379"
   db: 0
 
+reviews:
+  cache_enabled: true
+  cache_ttl_seconds: 60
+
 tracing:
   enabled: true
   endpoint: "http://jaeger:4318"
