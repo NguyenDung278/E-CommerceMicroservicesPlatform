@@ -1,22 +1,14 @@
 package service
 
 import (
-	"context"
 	"errors"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 )
@@ -50,6 +42,8 @@ var (
 
 var vnPhoneRegex = regexp.MustCompile(`^0\d{9,10}$`)
 
+// UserService coordinates user account, profile, and token workflows across the
+// repositories and optional integration clients configured for this service.
 type UserService struct {
 	repo                  repository.UserRepository
 	oauthRepo             repository.OAuthAccountRepository
@@ -69,60 +63,233 @@ type UserService struct {
 
 type UserServiceOption func(*UserService)
 
+// WithEmailSender injects the outbound email sender used for verification and
+// recovery flows.
+//
+// Inputs:
+//   - sender is the email integration implementation.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil senders are allowed and cause email flows to degrade silently where
+//     those paths already tolerate missing senders.
+//
+// Side effects:
+//   - none until the option is applied by NewUserService.
+//
+// Performance:
+//   - O(1).
 func WithEmailSender(sender email.Sender) UserServiceOption {
 	return func(s *UserService) {
 		s.emailSender = sender
 	}
 }
 
+// WithOAuthAccountRepository injects the repository used by OAuth login flows.
+//
+// Inputs:
+//   - repo is the OAuth account persistence implementation.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil repositories are allowed until an OAuth flow requires them.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithOAuthAccountRepository(repo repository.OAuthAccountRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.oauthRepo = repo
 	}
 }
 
+// WithOAuthProviderClient injects the external OAuth identity client.
+//
+// Inputs:
+//   - client resolves provider redirects and exchanged identities.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil clients are allowed until OAuth flows are exercised.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithOAuthProviderClient(client OAuthProviderClient) UserServiceOption {
 	return func(s *UserService) {
 		s.oauthClient = client
 	}
 }
 
+// WithFrontendBaseURL configures the base URL used to construct links sent to
+// frontend clients.
+//
+// Inputs:
+//   - baseURL is the raw configured frontend origin.
+//
+// Returns:
+//   - an option that stores the normalized URL without trailing slashes.
+//
+// Edge cases:
+//   - blank values normalize to an empty string and let the service fall back to
+//     its default constructor value.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(n) over the URL length due to trimming.
 func WithFrontendBaseURL(baseURL string) UserServiceOption {
 	return func(s *UserService) {
 		s.frontendBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	}
 }
 
+// WithPhoneVerificationRepository injects the repository used by OTP-based phone
+// verification flows.
+//
+// Inputs:
+//   - repo persists phone verification challenges.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil repositories are allowed until phone verification is required.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneVerificationRepo = repo
 	}
 }
 
+// WithProfileTxManager injects the transaction coordinator used for profile
+// updates that span users, phone verification, and addresses.
+//
+// Inputs:
+//   - txManager is the transaction manager implementation.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil managers are allowed and make UpdateProfile fall back to best-effort
+//     non-transactional dependency calls.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithProfileTxManager(txManager repository.ProfileTxManager) UserServiceOption {
 	return func(s *UserService) {
 		s.profileTxManager = txManager
 	}
 }
 
+// WithAddressService injects the address domain service used by profile updates.
+//
+// Inputs:
+//   - addressService is the address service implementation.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil services are allowed and simply disable address-upsert behavior from
+//     profile updates.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithAddressService(addressService *AddressService) UserServiceOption {
 	return func(s *UserService) {
 		s.addressService = addressService
 	}
 }
 
+// WithTelegramSender injects the Telegram sender used by OTP flows.
+//
+// Inputs:
+//   - sender is the Telegram integration implementation.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - nil senders are allowed until phone verification is attempted.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithTelegramSender(sender telegramsender.Sender) UserServiceOption {
 	return func(s *UserService) {
 		s.telegramSender = sender
 	}
 }
 
+// WithTelegramConfig injects the OTP-related Telegram configuration used by
+// phone verification and rate limiting.
+//
+// Inputs:
+//   - cfg contains the Telegram and OTP limits.
+//
+// Returns:
+//   - an option that mutates the service during construction.
+//
+// Edge cases:
+//   - invalid zero or negative values are normalized later by helper methods.
+//
+// Side effects:
+//   - none until the option is applied.
+//
+// Performance:
+//   - O(1).
 func WithTelegramConfig(cfg config.TelegramConfig) UserServiceOption {
 	return func(s *UserService) {
 		s.telegramCfg = cfg
 	}
 }
 
+// NewUserService wires the dependencies and defaults used by the user domain.
+//
+// Inputs:
+//   - repo persists user state.
+//   - jwtSecret signs access and refresh tokens.
+//   - jwtExpiry controls access-token lifetime in hours.
+//   - options optionally inject integration dependencies and configuration.
+//
+// Returns:
+//   - a ready-to-use user service.
+//
+// Edge cases:
+//   - optional repositories and clients may remain nil until a flow requires
+//     them.
+//
+// Side effects:
+//   - allocates the in-memory OTP rate limiter state.
+//
+// Performance:
+//   - O(k) over the number of options, with O(1) work per option.
 func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry int, options ...UserServiceOption) *UserService {
 	service := &UserService{
 		repo:            repo,
@@ -145,644 +312,4 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 	}
 
 	return service
-}
-
-func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.AuthResponse, error) {
-	req.Email = normalizeEmail(req.Email)
-	req.Phone = normalizePhone(req.Phone)
-	req.FirstName = normalizeHumanName(req.FirstName)
-	req.LastName = normalizeHumanName(req.LastName)
-
-	existing, err := s.repo.GetByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, ErrEmailAlreadyExists
-	}
-	if req.Phone != "" {
-		if !isValidVNPhone(req.Phone) {
-			return nil, ErrInvalidPhoneNumber
-		}
-		existingByPhone, err := s.repo.GetByPhone(ctx, req.Phone)
-		if err != nil {
-			return nil, err
-		}
-		if existingByPhone != nil {
-			return nil, ErrPhoneAlreadyExists
-		}
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now()
-	user := &model.User{
-		ID:            uuid.New().String(),
-		Email:         req.Email,
-		Phone:         req.Phone,
-		PhoneVerified: false,
-		Password:      string(hashedPassword),
-		FirstName:     req.FirstName,
-		LastName:      req.LastName,
-		Role:          middleware.RoleUser,
-		EmailVerified: false,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-	}
-
-	verificationToken, verificationTokenHash, verificationTokenExpiry, err := issueTimeBoundToken(48 * time.Hour)
-	if err != nil {
-		return nil, err
-	}
-	user.EmailVerificationTokenHash = verificationTokenHash
-	user.EmailVerificationExpiresAt = &verificationTokenExpiry
-
-	if err := s.repo.Create(ctx, user); err != nil {
-		return nil, mapUserRepositoryError(err)
-	}
-
-	_ = s.sendVerificationEmail(user, verificationToken)
-
-	accessToken, refreshToken, err := s.generateTokenPair(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token:        accessToken,
-		RefreshToken: refreshToken,
-		User:         user,
-	}, nil
-}
-
-func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.AuthResponse, error) {
-	identifier := normalizeIdentifier(req)
-	if identifier == "" {
-		return nil, ErrInvalidCredentials
-	}
-
-	var user *model.User
-	var err error
-	if strings.Contains(identifier, "@") {
-		user, err = s.repo.GetByEmail(ctx, identifier)
-	} else {
-		user, err = s.repo.GetByPhone(ctx, identifier)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrInvalidCredentials
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
-	}
-
-	accessToken, refreshToken, err := s.generateTokenPair(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token:        accessToken,
-		RefreshToken: refreshToken,
-		User:         user,
-	}, nil
-}
-
-func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
-	user, err := s.repo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	return user, nil
-}
-
-func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*model.User, error) {
-	if s.profileTxManager == nil {
-		return s.updateProfileWithDependencies(ctx, userID, req, s.repo, s.phoneVerificationRepo, s.addressService)
-	}
-
-	var updatedUser *model.User
-	err := s.profileTxManager.RunInTx(ctx, func(repos repository.ProfileTxRepositories) error {
-		addressService := s.addressService
-		if repos.Addresses != nil {
-			addressService = NewAddressService(repos.Addresses)
-		}
-
-		user, err := s.updateProfileWithDependencies(ctx, userID, req, repos.Users, repos.PhoneVerifications, addressService)
-		if err != nil {
-			return err
-		}
-
-		updatedUser = user
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return updatedUser, nil
-}
-
-func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto.ChangePasswordRequest) error {
-	user, err := s.repo.GetByID(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if user == nil {
-		return ErrUserNotFound
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
-		return ErrInvalidCredentials
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 12)
-	if err != nil {
-		return err
-	}
-
-	user.Password = string(hashedPassword)
-	user.UpdatedAt = time.Now()
-
-	return s.repo.Update(ctx, user)
-}
-
-func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString string) (*dto.AuthResponse, error) {
-	claims := &middleware.JWTClaims{}
-	token, err := jwt.ParseWithClaims(refreshTokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, ErrInvalidToken
-		}
-		return []byte(s.jwtSecret), nil
-	})
-	if err != nil || !token.Valid {
-		return nil, ErrInvalidToken
-	}
-
-	user, err := s.repo.GetByID(ctx, claims.UserID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-
-	accessToken, newRefreshToken, err := s.generateTokenPair(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token:        accessToken,
-		RefreshToken: newRefreshToken,
-		User:         user,
-	}, nil
-}
-
-func (s *UserService) generateTokenPair(user *model.User) (string, string, error) {
-	accessClaims := middleware.JWTClaims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(s.jwtExpiry) * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	at := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessToken, err := at.SignedString([]byte(s.jwtSecret))
-	if err != nil {
-		return "", "", err
-	}
-
-	refreshClaims := middleware.JWTClaims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshToken, err := rt.SignedString([]byte(s.jwtSecret))
-	if err != nil {
-		return "", "", err
-	}
-
-	return accessToken, refreshToken, nil
-}
-
-func normalizeIdentifier(req dto.LoginRequest) string {
-	if strings.TrimSpace(req.Identifier) != "" {
-		identifier := strings.TrimSpace(req.Identifier)
-		if strings.Contains(identifier, "@") {
-			return normalizeEmail(identifier)
-		}
-		return normalizePhone(identifier)
-	}
-
-	return normalizeEmail(req.Email)
-}
-
-func normalizeEmail(value string) string {
-	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func normalizeHumanName(value string) string {
-	parts := strings.Fields(strings.TrimSpace(value))
-	return strings.Join(parts, " ")
-}
-
-func isValidHumanName(value string, maxLength int) bool {
-	normalized := normalizeHumanName(value)
-	return normalized != "" && len(normalized) <= maxLength
-}
-
-func normalizePhone(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-
-	var digits strings.Builder
-	for _, r := range trimmed {
-		if r >= '0' && r <= '9' {
-			digits.WriteRune(r)
-		}
-	}
-
-	normalized := digits.String()
-	if strings.HasPrefix(normalized, "84") && len(normalized) >= 11 {
-		normalized = "0" + normalized[2:]
-	}
-	if len(normalized) == 9 {
-		normalized = "0" + normalized
-	}
-
-	return normalized
-}
-
-func isValidVNPhone(value string) bool {
-	return vnPhoneRegex.MatchString(normalizePhone(value))
-}
-
-func normalizeTelegramChatID(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-
-	var digits strings.Builder
-	for _, r := range trimmed {
-		if r >= '0' && r <= '9' {
-			digits.WriteRune(r)
-		}
-	}
-
-	return digits.String()
-}
-
-func (s *UserService) updateProfileWithDependencies(
-	ctx context.Context,
-	userID string,
-	req dto.UpdateProfileRequest,
-	userRepo repository.UserRepository,
-	phoneRepo repository.PhoneVerificationRepository,
-	addressService *AddressService,
-) (*model.User, error) {
-	user, err := userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-	profilePhoneForAddress := user.Phone
-
-	userChanged := false
-	if firstName, changed, err := resolveOptionalHumanNameUpdate(user.FirstName, req.FirstName, 100); err != nil {
-		return nil, err
-	} else if changed {
-		user.FirstName = firstName
-		userChanged = true
-	}
-	if lastName, changed, err := resolveOptionalHumanNameUpdate(user.LastName, req.LastName, 100); err != nil {
-		return nil, err
-	} else if changed {
-		user.LastName = lastName
-		userChanged = true
-	}
-	currentPhone := normalizePhone(user.Phone)
-	requestedPhone, phoneProvided := resolveOptionalPhone(req.Phone)
-	phoneChanged := phoneProvided && requestedPhone != currentPhone
-	var verifiedChallenge *model.PhoneVerificationChallenge
-
-	if phoneChanged {
-		if !isValidVNPhone(requestedPhone) {
-			return nil, ErrInvalidPhoneNumber
-		}
-		if strings.TrimSpace(req.PhoneVerificationID) == "" || phoneRepo == nil {
-			return nil, ErrPhoneVerificationRequired
-		}
-
-		existingUser, err := userRepo.GetByPhone(ctx, requestedPhone)
-		if err != nil {
-			return nil, err
-		}
-		if existingUser != nil && existingUser.ID != userID {
-			return nil, ErrPhoneAlreadyExists
-		}
-
-		verifiedChallenge, err = phoneRepo.GetByID(ctx, strings.TrimSpace(req.PhoneVerificationID))
-		if err != nil {
-			return nil, err
-		}
-		if verifiedChallenge == nil || verifiedChallenge.UserID != userID {
-			return nil, ErrPhoneVerificationNotFound
-		}
-		if verifiedChallenge.Status == model.PhoneVerificationStatusConsumed || verifiedChallenge.ConsumedAt != nil {
-			return nil, ErrPhoneVerificationAlreadyUsed
-		}
-		if verifiedChallenge.Status != model.PhoneVerificationStatusVerified || verifiedChallenge.VerifiedAt == nil {
-			return nil, ErrPhoneVerificationRequired
-		}
-		if normalizePhone(verifiedChallenge.PhoneCandidate) != requestedPhone {
-			return nil, ErrPhoneVerificationRequired
-		}
-
-		now := time.Now()
-		user.Phone = requestedPhone
-		user.PhoneVerified = true
-		user.PhoneVerifiedAt = &now
-		user.PhoneLastChangedAt = &now
-		userChanged = true
-	}
-
-	var (
-		normalizedAddress *dto.ProfileAddressInput
-		addressChanged    bool
-	)
-	if req.DefaultAddress != nil && addressService != nil {
-		defaultAddress, err := addressService.GetDefaultAddress(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-
-		addressCopy, changed := mergeProfileAddressInput(defaultAddress, profilePhoneForAddress, *req.DefaultAddress)
-		if changed {
-			if !isValidProfileAddressInput(addressCopy) {
-				return nil, ErrInvalidProfileAddress
-			}
-			normalizedAddress = &addressCopy
-			addressChanged = true
-		}
-	}
-
-	if !userChanged && !addressChanged {
-		return user, nil
-	}
-
-	if normalizedAddress != nil && addressService != nil {
-		if _, err := addressService.UpsertDefaultAddress(ctx, userID, *normalizedAddress); err != nil {
-			return nil, err
-		}
-	}
-
-	if userChanged {
-		user.UpdatedAt = time.Now()
-		if err := userRepo.Update(ctx, user); err != nil {
-			return nil, mapUserRepositoryError(err)
-		}
-	}
-
-	if verifiedChallenge != nil {
-		now := time.Now()
-		verifiedChallenge.Status = model.PhoneVerificationStatusConsumed
-		verifiedChallenge.ConsumedAt = &now
-		verifiedChallenge.UpdatedAt = now
-		if err := phoneRepo.Update(ctx, verifiedChallenge); err != nil {
-			return nil, err
-		}
-	}
-
-	return user, nil
-}
-
-func resolveOptionalHumanNameUpdate(current string, input *string, maxLength int) (string, bool, error) {
-	if input == nil {
-		return current, false, nil
-	}
-
-	normalized := normalizeHumanName(*input)
-	if normalized == "" {
-		return current, false, nil
-	}
-	if !isValidHumanName(normalized, maxLength) {
-		return current, false, ErrInvalidProfileName
-	}
-	if normalized == current {
-		return current, false, nil
-	}
-
-	return normalized, true, nil
-}
-
-func resolveOptionalPhone(input *string) (string, bool) {
-	if input == nil {
-		return "", false
-	}
-
-	normalized := normalizePhone(*input)
-	if normalized == "" {
-		return "", false
-	}
-
-	return normalized, true
-}
-
-func resolveOptionalHumanName(input *string) (string, bool) {
-	if input == nil {
-		return "", false
-	}
-
-	normalized := normalizeHumanName(*input)
-	if normalized == "" {
-		return "", false
-	}
-
-	return normalized, true
-}
-
-func resolveOptionalTrimmedText(input *string) (string, bool) {
-	if input == nil {
-		return "", false
-	}
-
-	trimmed := strings.TrimSpace(*input)
-	if trimmed == "" {
-		return "", false
-	}
-
-	return trimmed, true
-}
-
-func mergeProfileAddressInput(current *model.Address, fallbackPhone string, input dto.UpdateProfileAddressInput) (dto.ProfileAddressInput, bool) {
-	merged := dto.ProfileAddressInput{}
-	if current != nil {
-		merged.RecipientName = current.RecipientName
-		merged.Phone = current.Phone
-		merged.Street = current.Street
-		merged.Ward = current.Ward
-		merged.District = current.District
-		merged.City = current.City
-	} else {
-		merged.Phone = normalizePhone(fallbackPhone)
-	}
-
-	hasPatch := false
-	if recipientName, ok := resolveOptionalHumanName(input.RecipientName); ok {
-		merged.RecipientName = recipientName
-		hasPatch = true
-	}
-	if phone, ok := resolveOptionalPhone(input.Phone); ok {
-		merged.Phone = phone
-		hasPatch = true
-	}
-	if street, ok := resolveOptionalTrimmedText(input.Street); ok {
-		merged.Street = street
-		hasPatch = true
-	}
-	if ward, ok := resolveOptionalTrimmedText(input.Ward); ok {
-		merged.Ward = ward
-		hasPatch = true
-	}
-	if district, ok := resolveOptionalTrimmedText(input.District); ok {
-		merged.District = district
-		hasPatch = true
-	}
-	if city, ok := resolveOptionalTrimmedText(input.City); ok {
-		merged.City = city
-		hasPatch = true
-	}
-
-	if !hasPatch {
-		return merged, false
-	}
-	if current == nil {
-		return merged, true
-	}
-
-	changed := merged.RecipientName != current.RecipientName ||
-		merged.Phone != current.Phone ||
-		merged.Street != current.Street ||
-		merged.Ward != current.Ward ||
-		merged.District != current.District ||
-		merged.City != current.City
-
-	return merged, changed
-}
-
-func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddressInput {
-	return dto.ProfileAddressInput{
-		RecipientName: normalizeHumanName(input.RecipientName),
-		Phone:         normalizePhone(input.Phone),
-		Street:        strings.TrimSpace(input.Street),
-		Ward:          strings.TrimSpace(input.Ward),
-		District:      strings.TrimSpace(input.District),
-		City:          strings.TrimSpace(input.City),
-	}
-}
-
-func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
-	if !isValidHumanName(input.RecipientName, 100) {
-		return false
-	}
-	if !isValidVNPhone(input.Phone) {
-		return false
-	}
-	if len(input.Street) < 5 || len(input.Street) > 255 {
-		return false
-	}
-	if len(input.Ward) > 100 {
-		return false
-	}
-	if len(input.District) < 2 || len(input.District) > 100 {
-		return false
-	}
-	if len(input.City) < 2 || len(input.City) > 100 {
-		return false
-	}
-
-	return true
-}
-
-func mapUserRepositoryError(err error) error {
-	switch {
-	case errors.Is(err, repository.ErrUserEmailAlreadyExists):
-		return ErrEmailAlreadyExists
-	case errors.Is(err, repository.ErrUserPhoneAlreadyExists):
-		return ErrPhoneAlreadyExists
-	default:
-		return err
-	}
-}
-
-func (s *UserService) telegramOTPConfigTTL() time.Duration {
-	seconds := s.telegramCfg.OTPMessageTTLSeconds
-	if seconds <= 0 {
-		seconds = 300
-	}
-	return time.Duration(seconds) * time.Second
-}
-
-func (s *UserService) telegramOTPCooldown() time.Duration {
-	seconds := s.telegramCfg.OTPResendCooldownSeconds
-	if seconds <= 0 {
-		seconds = 60
-	}
-	return time.Duration(seconds) * time.Second
-}
-
-func (s *UserService) telegramOTPMaxAttempts() int {
-	if s.telegramCfg.OTPMaxAttempts <= 0 {
-		return 5
-	}
-	return s.telegramCfg.OTPMaxAttempts
-}
-
-func (s *UserService) allowOTPEvent(key string, limit int, window time.Duration, now time.Time) bool {
-	if limit <= 0 {
-		return true
-	}
-
-	s.otpLimiterMu.Lock()
-	defer s.otpLimiterMu.Unlock()
-
-	entries := s.otpLimiterState[key]
-	cutoff := now.Add(-window)
-	filtered := entries[:0]
-	for _, ts := range entries {
-		if ts.After(cutoff) {
-			filtered = append(filtered, ts)
-		}
-	}
-	if len(filtered) >= limit {
-		s.otpLimiterState[key] = filtered
-		return false
-	}
-
-	filtered = append(filtered, now)
-	s.otpLimiterState[key] = filtered
-	return true
 }

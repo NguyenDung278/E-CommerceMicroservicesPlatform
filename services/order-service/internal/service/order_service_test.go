@@ -85,9 +85,14 @@ var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {
 	products map[string]*pb.Product
+	calls    map[string]int
 }
 
 func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*pb.Product, error) {
+	if c.calls == nil {
+		c.calls = map[string]int{}
+	}
+	c.calls[productID]++
 	if product, ok := c.products[productID]; ok {
 		return product, nil
 	}
@@ -369,6 +374,39 @@ func TestGetUserOrderSummaryReturnsEmptyPaymentsWhenNoOrders(t *testing.T) {
 	}
 	if len(summary.PaymentsByOrder) != 0 {
 		t.Fatalf("expected no grouped payments, got %d", len(summary.PaymentsByOrder))
+	}
+}
+
+func TestPreviewOrderReusesProductLookupWithinSingleQuote(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Portable SSD",
+				Price:         75,
+				StockQuantity: 10,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+			{ProductID: "product-1", Quantity: 2},
+		},
+		ShippingMethod: "pickup",
+	})
+	if err != nil {
+		t.Fatalf("PreviewOrder returned error: %v", err)
+	}
+
+	if preview.TotalPrice != 225 {
+		t.Fatalf("expected total 225, got %.2f", preview.TotalPrice)
+	}
+	if catalog.calls["product-1"] != 1 {
+		t.Fatalf("expected one product lookup for cached quote, got %d", catalog.calls["product-1"])
 	}
 }
 

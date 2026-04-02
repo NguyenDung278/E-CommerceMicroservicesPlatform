@@ -16,7 +16,8 @@ type fakePhoneVerificationRepo struct {
 }
 
 type fakeAddressRepo struct {
-	addresses map[string]*model.Address
+	addresses        map[string]*model.Address
+	getByUserIDCalls int
 }
 
 type fakeTelegramSender struct {
@@ -88,6 +89,7 @@ func (r *fakeAddressRepo) GetByID(_ context.Context, id string) (*model.Address,
 }
 
 func (r *fakeAddressRepo) GetByUserID(_ context.Context, userID string) ([]*model.Address, error) {
+	r.getByUserIDCalls++
 	addresses := make([]*model.Address, 0)
 	for _, address := range r.addresses {
 		if address.UserID == userID {
@@ -206,6 +208,39 @@ func TestStartPhoneVerificationAndVerifyOTP(t *testing.T) {
 	}
 	if verified.VerifiedAt == nil {
 		t.Fatal("expected verified_at to be populated")
+	}
+}
+
+func TestUpdateProfileSkipsAddressLookupForEmptyAddressPatch(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	phoneRepo := newFakePhoneVerificationRepo()
+	addressRepo := newFakeAddressRepo()
+	sender := newFakeTelegramSender()
+	svc := newPhoneVerificationTestService(userRepo, phoneRepo, addressRepo, sender)
+
+	user := &model.User{
+		ID:        "user-empty-address",
+		Email:     "empty-address@example.com",
+		Phone:     "0912345678",
+		FirstName: "Empty",
+		LastName:  "Patch",
+	}
+	seedUser(userRepo, user)
+
+	empty := "   "
+	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+		DefaultAddress: &dto.UpdateProfileAddressInput{
+			Street: &empty,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if updatedUser.ID != user.ID {
+		t.Fatalf("expected the same user to be returned, got %#v", updatedUser)
+	}
+	if addressRepo.getByUserIDCalls != 0 {
+		t.Fatalf("expected empty address patch to skip address lookup, got %d lookup(s)", addressRepo.getByUserIDCalls)
 	}
 }
 
