@@ -475,11 +475,11 @@ Trước khi kết luận PR “ổn”, hãy tự check:
 
 Từ code hiện tại, các hướng cải thiện có giá trị thực tế cao là:
 
-- chuẩn hoá transaction helper cho các write flow nhiều bước
+- tiếp tục chuẩn hoá transaction helper cho các write flow nhiều bước (đã bắt đầu ở các luồng như product review)
 - giảm phụ thuộc vào `COUNT(*) + OFFSET` ở các list endpoint lớn
 - bổ sung idempotency cho payment/webhook path
-- áp dụng outbox cho event publish quan trọng thay vì publish sau commit rồi chấp nhận mất event
-- thêm benchmark/pprof cho hot path thay vì tối ưu cảm tính
+- mở rộng áp dụng outbox/inbox pattern cho tất cả các event publish quan trọng (đã có bước đầu ở order/notification service)
+- mở rộng thêm benchmark/pprof cho các hot path thay vì tối ưu cảm tính (đã bắt đầu có ở phần review service)
 - giữ tài liệu khớp với path thật của source code
 
 Mọi tài liệu hoặc roadmap mới phải ưu tiên những việc này trước các chủ đề “oách” nhưng xa thực tế hơn như saga choreography hoặc tách thêm service.

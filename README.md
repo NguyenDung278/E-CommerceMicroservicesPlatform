@@ -17,7 +17,7 @@ Hệ thống đang được tổ chức theo hướng microservices vừa đủ 
 - `user-service`, `product-service`, `order-service`, `payment-service` dùng PostgreSQL riêng theo database.
 - `cart-service` dùng Redis làm storage chính cho giỏ hàng.
 - `product-service` cung cấp gRPC cho `cart-service` và `order-service` để kiểm tra thông tin sản phẩm, giá và tồn kho.
-- `order-service` và `payment-service` phát event qua RabbitMQ; `notification-service` consume event để gửi email.
+- `order-service` và `payment-service` phát event qua RabbitMQ sử dụng outbox pattern bảo đảm tính bền vững. `notification-service` sử dụng Redis store và inbox pattern để consume event trước khi gửi email báo cáo tình trạng.
 - `product-service` có tích hợp MinIO cho media và Elasticsearch cho search, nhưng cả hai được code theo hướng optional/degrade gracefully.
 
 ```mermaid
@@ -47,16 +47,16 @@ flowchart LR
 | Thành phần | Vai trò thực tế trong source |
 | --- | --- |
 | `api-gateway/` | Reverse proxy HTTP dùng Echo, có tracing, metrics, Redis-backed rate limiter, request logging, retry có chọn lọc cho method an toàn và circuit breaker trong proxy layer. |
-| `services/user-service/` | Đăng ký, đăng nhập, refresh token, verify email, forgot/reset password, Google OAuth, profile, đổi role user từ admin, quản lý địa chỉ, xác minh số điện thoại qua Telegram OTP, bootstrap tài khoản dev. |
-| `services/product-service/` | CRUD sản phẩm, upload ảnh, review, listing có cursor pagination và filter, gRPC product lookup, optional Elasticsearch sync, optional MinIO bucket, low-stock monitor chạy nền. |
+| `services/user-service/` | Đăng ký, đăng nhập, chuẩn hoá thông tin, profile, đổi role admin, quản lý địa chỉ, cấp refresh token ảo, bảo mật OTP qua Telegram kèm rate limiting, bootstrap tài khoản dev. |
+| `services/product-service/` | CRUD sản phẩm, upload ảnh, product review (caching qua Redis, có benchmark đi kèm), listing có cursor pagination và filter, gRPC product lookup, optional Elasticsearch sync, optional MinIO. |
 | `services/cart-service/` | Giỏ hàng trên Redis, xác thực dữ liệu sản phẩm qua gRPC product-service, hỗ trợ get/add/update/remove/clear cart cho user đã đăng nhập. |
 | `services/order-service/` | Preview order, tạo đơn, lấy lịch sử đơn, timeline/event, hủy đơn, báo cáo admin, coupon, cập nhật trạng thái admin, consume payment event để đồng bộ trạng thái đơn. |
 | `services/payment-service/` | Tạo payment, lấy lịch sử/detail, refund, webhook MoMo, publish payment event, gọi `order-service` qua HTTP để lấy dữ liệu đơn. |
-| `services/notification-service/` | Worker consume RabbitMQ và gửi email cho `order.created`, `order.cancelled`, `payment.completed`, `payment.failed`, `payment.refunded`. |
+| `services/notification-service/` | Worker consume RabbitMQ ứng dụng Redis store vào Inbox pattern, hỗ trợ tính năng retry publisher và đo lường metrics, gửi email cho `order` và `payment` event. |
 | `pkg/` | Shared packages cho config, database, logger, middleware, observability, response, validation. |
 | `proto/` | Contract gRPC dùng giữa service, hiện rõ nhất ở product gRPC và user gRPC definitions. |
-| `frontend/` | Frontend React + Vite, có storefront, account area, checkout, admin UI và là entrypoint local chính. |
-| `client/` | Frontend Next.js App Router cho storefront/account flow; hỗ trợ standalone runtime trên host nhưng chưa nằm trong compose mặc định. |
+| `frontend/` | Frontend React + Vite được tổ chức kiến trúc theo feature-based modular design, kèm codebase API quy hoạch gọn gàng, và là entrypoint local chính. |
+| `client/` | Frontend Next.js App Router cho storefront/account flow, hỗ trợ standalone scripts + chia sẻ API types, chạy độc lập trên host nhưng chưa nằm trong compose mặc định. |
 | `deployments/docker/` | Docker Compose, config YAML cho từng service, Prometheus, Grafana provisioning, Nginx edge config, Postgres init script. |
 
 ## Hạ tầng, dữ liệu và trạng thái runtime
@@ -186,7 +186,7 @@ Hiện trạng:
 - có Dockerfile riêng trong `client/Dockerfile`
 - không có service `client` trong `deployments/docker/docker-compose.yml`
 - workflow CI hiện build `frontend/`, chưa build `client/`
-- `npm run build` và `npm run start` đã tự chuẩn bị `.next/standalone` với `.next/static` và `public`, nên không còn bước copy tay trước smoke test
+- đã có tool chuẩn bị standalone chạy độc lập trên production với API types chung
 - host-based runtime mặc định của `client` là `http://localhost:3000`
 
 Khi cần verify OAuth redirect, email link hoặc payment return với `client/`, hãy dùng:
@@ -319,8 +319,8 @@ Khi debug end-to-end, hãy bám flow:
 - `frontend/` vẫn là UI Compose mặc định nên ưu tiên đọc trước khi debug local stack
 - `client/` đã hỗ trợ runtime standalone ổn định trên host, nhưng vẫn chưa được đưa vào Compose mặc định
 - `product-service` đã có cursor pagination cho catalog, nhưng `order-service` admin listing vẫn theo offset/count
-- frontend hiện có một số khu vực đang ở trạng thái partial hoặc thiên về UI nhiều hơn backend, nhất là security/preferences/notifications và một phần flow quản lý địa chỉ
-- trong `frontend/`, có 4 category page theo kiểu editorial/static data: `Shop Men`, `Shop Women`, `Footwear`, `Accessories`; các category khác mới đi qua API product thật
+- frontend account section đã có backend thật ở phía authentication/profile (ví dụ: đổi mật khẩu và verify rate-limiting), một số tính năng preference phụ trợ vẫn còn theo hướng UI.
+- `frontend` có các trang editorial (Shop Men, Shop Women, Footwear, Accessories) sở hữu thiết kế layout khác biệt và filtering logic riêng so với API list mặc định.
 - đừng assume `http://localhost` là frontend chính; trong compose hiện tại frontend chính là `http://localhost:4173`
 - đừng assume Postgres ở `localhost:5432` khi chỉ dùng compose mặc định; database nằm trong network nội bộ compose
 
