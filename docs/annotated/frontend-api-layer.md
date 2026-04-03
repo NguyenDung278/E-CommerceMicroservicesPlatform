@@ -178,7 +178,6 @@ Repo tránh “big bang rewrite”. Thay vào đó:
 ### `cartApi`
 
 - get/add/update/remove/clear cart
-- có helper `mergeCart`
 
 ### `orderApi`
 
@@ -189,7 +188,6 @@ Repo tránh “big bang rewrite”. Thay vào đó:
 
 - process payment
 - history/detail/by order
-- verify payment signature helper
 
 ### `adminApi`
 
@@ -218,13 +216,14 @@ Nếu thấy một module import từ `../http/client` hoặc `../../types/api`,
 
 ### Lệch contract backend
 
-- `cartApi.mergeCart` gọi `/api/v1/cart/merge`, nhưng backend hiện không có route này
-- `orderApi.cancelOrder` dùng `POST`, trong khi backend route thật hiện tại là `PUT /api/v1/orders/:id/cancel`
-- `paymentApi.verifyPaymentSignature` trỏ tới endpoint verify mà backend route tương ứng chưa thấy xuất hiện
+- merge guest cart vẫn được xử lý ở provider thay vì qua một endpoint `/api/v1/cart/merge`
+- `orderApi.cancelOrder` đã được đồng bộ về `PUT /api/v1/orders/:id/cancel`
+- các helper compatibility từng trỏ tới contract không tồn tại như `mergeCart` và `verifyPaymentSignature` đã được loại bỏ khỏi API layer
 
 ### Điều nên học từ các điểm lệch này
 
 - frontend helper tồn tại không đồng nghĩa backend đã sẵn route thật
+- khi backend chưa có contract thật, xóa helper giả là tốt hơn giữ API surface gây hiểu lầm
 - docs tốt phải nêu đúng hiện trạng, không giả định mọi helper đều production-ready
 - compatibility layer giúp refactor an toàn, nhưng cũng có thể che bớt technical debt nếu không đọc kỹ
 

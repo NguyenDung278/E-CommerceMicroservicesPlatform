@@ -20,6 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         image:
+          # Keep the Next.js client out of the publish pipeline for now.
+          # We only expose it via an optional Compose profile until the team
+          # finishes choosing the long-term storefront entrypoint and admin path.
           - name: api-gateway
             dockerfile: api-gateway/Dockerfile
           - name: user-service

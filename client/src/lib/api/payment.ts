@@ -1,48 +1,18 @@
 import { request } from "@/lib/api/http-client";
 import { normalizePayment, normalizePaymentList } from "@/lib/api/normalizers";
-import type { ApiEnvelope, Payment } from "@/types/api";
+import {
+  createPaymentApi,
+  type SharedProcessPaymentData,
+} from "../../../../shared/web-sdk/api/payment";
 
-export interface ProcessPaymentData {
-  order_id: string;
-  payment_method: "manual" | "momo" | "credit_card" | "digital_wallet" | "demo";
-  amount?: number;
-}
+export type ProcessPaymentData = SharedProcessPaymentData<
+  "manual" | "momo" | "credit_card" | "digital_wallet" | "demo"
+>;
 
-export const paymentApi = {
-  processPayment(token: string, body: ProcessPaymentData): Promise<ApiEnvelope<Payment>> {
-    return request<unknown>("/api/v1/payments", {
-      method: "POST",
-      token,
-      body,
-    }).then((response) => ({
-      ...response,
-      data: normalizePayment(response.data),
-    }));
-  },
-
-  listPaymentHistory(token: string): Promise<ApiEnvelope<Payment[]>> {
-    return request<unknown>("/api/v1/payments/history", { token }).then((response) => ({
-      ...response,
-      data: normalizePaymentList(response.data),
-    }));
-  },
-
-  getPaymentById(token: string, paymentId: string): Promise<ApiEnvelope<Payment>> {
-    return request<unknown>(`/api/v1/payments/${encodeURIComponent(paymentId)}`, {
-      token,
-    }).then((response) => ({
-      ...response,
-      data: normalizePayment(response.data),
-    }));
-  },
-
-  listPaymentsByOrder(token: string, orderId: string): Promise<ApiEnvelope<Payment[]>> {
-    return request<unknown>(`/api/v1/payments/order/${encodeURIComponent(orderId)}/history`, {
-      token,
-    }).then((response) => ({
-      ...response,
-      data: normalizePaymentList(response.data),
-    }));
-  },
-};
-
+export const paymentApi = createPaymentApi<
+  "manual" | "momo" | "credit_card" | "digital_wallet" | "demo"
+>({
+  request,
+  normalizePayment,
+  normalizePaymentList,
+});

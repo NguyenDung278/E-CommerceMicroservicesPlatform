@@ -224,8 +224,8 @@ Nó che giấu hai protocol khác nhau dưới cùng một API UI:
 
 Trong source hiện tại:
 
-- `cartApi` có helper `mergeCart`
-- nhưng backend không có route `/api/v1/cart/merge`
+- không còn helper `mergeCart` trong API layer
+- backend không có route `/api/v1/cart/merge`
 - merge thật đang được thực hiện trong `CartProvider` bằng cách replay `addToCart` từng item
 
 ### Vì sao hiện trạng này vẫn chấp nhận được
@@ -295,7 +295,7 @@ Không cần quá nặng nếu app cực nhỏ và gần như không có shared 
 
 - chỉ clear access token mà quên refresh token
 - cho rằng `Boolean(token)` là đủ để coi như authenticated
-- nghĩ helper `mergeCart` trong API layer đã được backend hỗ trợ thật
+- giả định mọi helper frontend đều đã được backend hỗ trợ thật
 - gọi `useAuth` hoặc `useCart` ngoài provider tree
 - sửa file re-export mà không trace đến provider implementation thật
 

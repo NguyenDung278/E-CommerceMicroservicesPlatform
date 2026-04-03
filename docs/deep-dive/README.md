@@ -11,14 +11,15 @@ Thư mục `deep-dive/` dành cho việc hiểu repo ở mức kiến trúc và 
 
 1. [system-overview.md](./system-overview.md)
 2. [frontend-architecture.md](./frontend-architecture.md)
-3. [technology-stack.md](./technology-stack.md)
-4. [api-gateway.md](./api-gateway.md)
-5. [user-service.md](./user-service.md)
-6. [product-service.md](./product-service.md)
-7. [cart-service.md](./cart-service.md)
-8. [order-service.md](./order-service.md)
-9. [payment-service.md](./payment-service.md)
-10. [notification-service.md](./notification-service.md)
+3. [frontend-backend-alignment-modernization-guide.md](./frontend-backend-alignment-modernization-guide.md)
+4. [technology-stack.md](./technology-stack.md)
+5. [api-gateway.md](./api-gateway.md)
+6. [user-service.md](./user-service.md)
+7. [product-service.md](./product-service.md)
+8. [cart-service.md](./cart-service.md)
+9. [order-service.md](./order-service.md)
+10. [payment-service.md](./payment-service.md)
+11. [notification-service.md](./notification-service.md)
 
 ## Mục tiêu của tầng tài liệu này
 

@@ -291,13 +291,13 @@ Dùng tốt khi app:
 - có nhiều page dùng chung cùng contract type
 - muốn refactor dần từ cấu trúc cũ sang cấu trúc mới
 
-## 8. Những điểm lệch contract đáng nhớ khi học
+## 8. Những điểm contract từng lệch và bài học còn lại
 
 Tài liệu nên nói rõ những chỗ này vì đây là bài học thực tế về “source code đang ở đâu trên hành trình refactor”.
 
-- `cartApi.mergeCart()` có helper ở frontend, nhưng backend hiện không có route `/api/v1/cart/merge`; merge thật đang nằm trong `CartProvider`
-- `orderApi.cancelOrder()` hiện gọi `POST`, trong khi backend route thật là `PUT /api/v1/orders/:id/cancel`
-- `paymentApi.verifyPaymentSignature()` đang trỏ tới endpoint verify không thấy route backend tương ứng
+- merge guest cart hiện vẫn nằm trong `CartProvider`; helper `cartApi.mergeCart()` đã bị xoá để tránh gợi ý sai rằng backend có route `/api/v1/cart/merge`
+- `orderApi.cancelOrder()` đã được đồng bộ về `PUT /api/v1/orders/:id/cancel`
+- helper `paymentApi.verifyPaymentSignature()` đã bị xoá vì backend hiện không có route verify tương ứng
 - copy trên `AuthCallbackPage` còn nhắc “Google/Facebook”, nhưng provider type ở source frontend và backend hiện là Google-only
 
 Những điểm này không có nghĩa là kiến trúc sai. Chúng chỉ cho thấy:

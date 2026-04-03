@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "test": "npm exec --cache ./.npm-cache --yes --package=vitest@3.2.4 --package=jsdom@26.1.0 vitest",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },

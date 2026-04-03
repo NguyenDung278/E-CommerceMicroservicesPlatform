@@ -58,6 +58,7 @@ Ba lớp tài liệu chính:
 - [README.md](./deep-dive/README.md): bản đồ của tầng kiến trúc
 - [system-overview.md](./deep-dive/system-overview.md): flow HTTP, gRPC, RabbitMQ, source of truth và runtime Compose
 - [frontend-architecture.md](./deep-dive/frontend-architecture.md): kiến trúc frontend hiện tại, import map sau refactor và dependency flow
+- [frontend-backend-alignment-modernization-guide.md](./deep-dive/frontend-backend-alignment-modernization-guide.md): đánh giá đồng bộ FE/BE, cleanup plan, roadmap UI/UX và hướng import Excel/CSV
 - [api-gateway.md](./deep-dive/api-gateway.md): gateway và logic proxy
 - [user-service.md](./deep-dive/user-service.md): auth, email flow, Google OAuth, phone verification, address
 - [product-service.md](./deep-dive/product-service.md): catalog, media, search, gRPC

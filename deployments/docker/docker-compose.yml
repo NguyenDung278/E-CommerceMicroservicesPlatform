@@ -186,6 +186,27 @@ services:
     networks:
       - ecommerce-network
 
+  # Optional storefront/account smoke-test runtime. This is intentionally kept
+  # behind a profile until the repo finishes choosing the long-term storefront
+  # entrypoint and admin remains on the Vite frontend.
+  client:
+    profiles: ["client"]
+    build:
+      context: ../..
+      dockerfile: client/Dockerfile
+    container_name: ecommerce-client
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      API_GATEWAY_URL: http://api-gateway:8080
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    networks:
+      - ecommerce-network
+    depends_on:
+      api-gateway:
+        condition: service_started
+
   # API Gateway (Go)
   api-gateway:
     build:

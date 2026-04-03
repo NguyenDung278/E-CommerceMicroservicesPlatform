@@ -127,7 +127,7 @@ export const orderApi = {
    */
   cancelOrder(token: string, orderId: string): Promise<ApiEnvelope<Order>> {
     return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}/cancel`, {
-      method: "POST",
+      method: "PUT",
       token,
     }).then((response) => ({
       ...response,
