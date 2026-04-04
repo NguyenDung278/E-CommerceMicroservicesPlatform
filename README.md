@@ -165,6 +165,23 @@ Vì vậy, khi bạn đổi giữa Vite dev và frontend Docker, hãy chỉnh `F
 
 Điểm này ảnh hưởng trực tiếp tới verify email, reset password và redirect sau OAuth.
 
+Nếu HomePage hiện dòng:
+
+```text
+Storefront categories chưa sẵn sàng cho HomePage.
+```
+
+thì thường không phải lỗi route/frontend, mà là database `ecommerce_product` đang chưa có dữ liệu cho `categories`, `editorial_sections`, `featured_products`.
+
+Repo đã có sẵn workbook mẫu và importer cho local dev. Sau khi `api-gateway` + `product-service` + PostgreSQL đang chạy, bạn có thể chạy:
+
+```bash
+make storefront-import-dry-run
+make storefront-import-sample
+```
+
+Lệnh này sẽ import workbook mẫu ở `artifacts/import-templates/catalog-import-sample-workbook.xlsx` vào `product-service`, và HomePage/editorial category pages sẽ có dữ liệu để render ngay.
+
 ## Phạm vi UI được chốt hiện tại
 
 - `client/` là hướng ưu tiên cho storefront/account trong trung hạn.
@@ -258,6 +275,8 @@ Có sẵn Make target cho migration:
 make migrate-up
 make migrate-down
 make migrate-force
+make storefront-import-dry-run
+make storefront-import-sample
 ```
 
 Nhưng cần lưu ý:

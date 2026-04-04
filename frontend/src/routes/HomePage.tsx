@@ -1,244 +1,372 @@
-import { useEffect, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 
-import { api, getErrorMessage } from "../shared/api";
-import type { Product } from "../shared/types/api";
+import {
+  type HomeWorkbookProduct,
+  type HomeWorkbookSegment,
+} from "../features/home/workbook";
+import { useHomeWorkbook } from "../features/home/useHomeWorkbook";
 import { formatCurrency } from "../shared/utils/format";
 import "./HomePage.css";
 
-const fallbackEditorialImages = {
-  hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuCPKv1CtBwPM413euox0uKnxmUXjsuyZFpFIvDMoW9tfefpHVd_8BFtHSEnUjm5XAQu4WMkS8vgS56v7kIQYWar2OBBpzOurqNCin2KoM1hYEZHvbpagIiz8m2nCidCAiRbDaeJLBNHxra37cwt7QEG3UlOcKbs-W6WuTDZj3qjg9hWIs2YR26l-ijHVnj8ck1-5NDhyVXXQECwDKQJs1i-nYT93ubM2EFutXuxPWxUHWH2o2Zhbz_naP2SXRRL50t8HcB8sUf5LXiX",
-  studio: "https://lh3.googleusercontent.com/aida-public/AB6AXuA-QCiHmdCOxRlVT1rixfgiaLjtOyUpf_qCwS4N8rEMGTTVyJxqkHxQ1iiUeTIIjM9C_MgASpIzwLXa8wLI7ck0F5p1lc6AA6MfKkb3aN_Nbw5AhWsU9lBPxRcNlN7vOcvcId55iSoZRYNe8TCXUI_PC9zSeiPi6-O2ojrYX1RkopzPM8W9xTFEi3rS1s2qZ8IvVBPlgiJak9SR8Bp7wD71RSztHJCzs3MKTW0TNUGEn5sxJF68kLn8MLi1Kcp6ODrKfOGHNtCZKygx",
-  men: "https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW",
-  women: "https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n",
-  footwear: "https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w",
-  accessories: "https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI"
-};
+const fallbackHeroImage =
+  "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1800&q=80";
+const fallbackTileImage =
+  "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1400&q=80";
+const fallbackCalloutImage =
+  "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?auto=format&fit=crop&w=1400&q=80";
 
-const categoryDefinitions = [
-  {
-    label: "Shop Men",
-    navLabel: "Men",
-    aliases: ["Shop Men", "Men"],
-    imageUrl: fallbackEditorialImages.men,
-    cta: "Discover the tailoring"
-  },
-  {
-    label: "Shop Women",
-    navLabel: "Women",
-    aliases: ["Shop Women", "Women"],
-    imageUrl: fallbackEditorialImages.women,
-    cta: "View the edit"
-  },
-  {
-    label: "The Footwear Edit",
-    navLabel: "Footwear",
-    aliases: ["Footwear", "Shoes"],
-    imageUrl: fallbackEditorialImages.footwear,
-    cta: "Shop shoes"
-  },
-  {
-    label: "Curated Accessories",
-    navLabel: "Accessories",
-    aliases: ["Accessories"],
-    imageUrl: fallbackEditorialImages.accessories,
-    cta: "Explore"
+function isExternalHref(href: string) {
+  return /^https?:\/\//i.test(href);
+}
+
+function resolveHref(href: string, fallbackHref: string) {
+  const trimmed = href.trim();
+  return trimmed || fallbackHref;
+}
+
+function ActionLink({
+  href,
+  fallbackHref,
+  className,
+  children,
+}: {
+  href: string;
+  fallbackHref: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const finalHref = resolveHref(href, fallbackHref);
+
+  if (isExternalHref(finalHref)) {
+    return (
+      <a className={className} href={finalHref} rel="noreferrer" target="_blank">
+        {children}
+      </a>
+    );
   }
-];
 
-function matchesCategory(product: Product, aliases: string[]) {
-  const productCategory = product.category.trim().toLowerCase();
-  return aliases.some((alias) => productCategory === alias.trim().toLowerCase());
+  return (
+    <Link className={className} to={finalHref}>
+      {children}
+    </Link>
+  );
+}
+
+function buildPageStyle(segment: HomeWorkbookSegment | null): CSSProperties {
+  return {
+    "--home-stitch-accent": segment?.hero.accent || "#946246",
+  } as CSSProperties;
+}
+
+function buildTileHref(segment: HomeWorkbookSegment | null, href: string) {
+  return resolveHref(href, segment?.href || "/products");
+}
+
+function buildProductHref(product: HomeWorkbookProduct) {
+  return resolveHref(product.href, "/products");
+}
+
+function EmptyState({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="home-stitch-empty-card">
+      <strong>{title}</strong>
+      <span>{body}</span>
+    </div>
+  );
 }
 
 export function HomePage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [feedback, setFeedback] = useState("");
+  const productRailRef = useRef<HTMLDivElement | null>(null);
+  const {
+    content,
+    error,
+  } = useHomeWorkbook();
+
+  const navItems = content?.navItems ?? [];
+  const segments = content?.segments ?? [];
+  const [activeSegmentSlug, setActiveSegmentSlug] = useState("");
 
   useEffect(() => {
-    let active = true;
+    const defaultSegmentSlug =
+      navItems.find((item) => item.isDefault)?.slug ?? segments[0]?.slug ?? "";
 
-    void api
-      .listProducts({ status: "active", limit: 24 })
-      .then((response) => {
-        if (!active) {
-          return;
-        }
-
-        setProducts(response.data);
-        setFeedback("");
-      })
-      .catch((reason) => {
-        if (active) {
-          setFeedback(getErrorMessage(reason));
-        }
+    if (!segments.some((segment) => segment.slug === activeSegmentSlug)) {
+      startTransition(() => {
+        setActiveSegmentSlug(defaultSegmentSlug);
       });
+    }
+  }, [activeSegmentSlug, navItems, segments]);
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  const activeSegment = useMemo(
+    () =>
+      segments.find((segment) => segment.slug === activeSegmentSlug) ??
+      segments.find((segment) => segment.isDefault) ??
+      segments[0] ??
+      null,
+    [activeSegmentSlug, segments]
+  );
 
-  const heroProduct = products[0] ?? null;
-  const heroImage = fallbackEditorialImages.hero;
-  const featuredProducts = [
-    products.find((product) => product.name === "Forest Wool Overcoat"),
-    products.find((product) => product.name === "Alpine Commando Boot") ??
-      products.find((product) => product.name === "Explorer Leather Boots"),
-    products.find((product) => product.name === "Stone Compass Scarf") ??
-      products.find((product) => product.name === "Indigo Utility Belt"),
-    products.find((product) => product.name === "Softlight Merino Cardigan") ??
-      products.find((product) => product.name === "Warm Cream Knit Dress")
-  ].filter(Boolean) as Product[];
-  const categoryCards = categoryDefinitions.map((category, index) => {
-    const categoryProducts = products.filter((product) => matchesCategory(product, category.aliases));
-    const featuredProduct = categoryProducts[0] ?? null;
+  const activeTiles = activeSegment?.tiles.slice(0, 4) ?? [];
+  const activeMetrics = activeSegment?.metrics.slice(0, 4) ?? [];
+  const activeProducts = activeSegment?.products.slice(0, 8) ?? [];
+  const footerLinks = content?.footerLinks ?? [];
+  const footer = content?.footer ?? {
+    brandName: "ND Shop",
+    caption: "Crafted for the Discerning",
+    note: "Workbook-driven editorial homepage.",
+  };
+  const pageStyle = buildPageStyle(activeSegment);
 
-    return {
-      ...category,
-      href: `/categories/${encodeURIComponent(category.aliases[0])}`,
-      count: categoryProducts.length,
-      featuredProduct,
-      imageUrl: category.imageUrl,
-      subtitle:
-        featuredProduct?.name ??
-        [
-          "Sophisticated tailoring in deep forest tones.",
-          "Fluid silhouettes and warm cream layers.",
-          "Handcrafted performance for the modern explorer.",
-          "Finishing pieces for the atelier wardrobe."
-        ][index]
-    };
-  });
-  const metrics = [
-    { value: "0.4s", label: "Inventory Latency" },
-    { value: "100%", label: "Atelier Sourcing" }
-  ];
+  function scrollProductRail(direction: "prev" | "next") {
+    const rail = productRailRef.current;
+    if (!rail) {
+      return;
+    }
+
+    const distance = Math.max(rail.clientWidth * 0.82, 280);
+    rail.scrollBy({
+      left: direction === "prev" ? -distance : distance,
+      behavior: "smooth",
+    });
+  }
 
   return (
-    <div className="page-stack home-editorial-page">
-      <section className="home-editorial-hero">
-        <div className="home-editorial-hero-media">
-          <img alt={heroProduct?.name || "Forest editorial backdrop"} src={heroImage} />
-        </div>
-        <div className="home-editorial-hero-overlay" />
+    <div className="home-stitch-page" style={pageStyle}>
+      {error ? <div className="feedback feedback-info home-stitch-feedback">{error}</div> : null}
 
-        <div className="home-editorial-hero-inner">
-          <div className="home-editorial-hero-copy">
-            <span className="home-editorial-section-label">Winter 2024 Collection</span>
-            <h1>Forest &amp; Hearth</h1>
-            <p>
-              A tactile study of survival and comfort. Rooted in deep forest textures and the warmth of a mountain
-              refuge.
-            </p>
+      <section className="home-stitch-hero">
+        <img
+          alt={activeSegment?.hero.title || "Workbook hero"}
+          className="home-stitch-hero-image"
+          src={activeSegment?.hero.backgroundImage || fallbackHeroImage}
+        />
+        <div className="home-stitch-hero-scrim" />
 
-            <div className="hero-actions">
-              <Link className="primary-link" to="/products">
-                Explore Collection
-              </Link>
-              <Link className="secondary-link" to="/products">
-                View Lookbook
-              </Link>
-            </div>
+        <div className="home-stitch-hero-inner">
+          <div className="home-stitch-tab-row" role="tablist" aria-label="Archive tabs">
+            {navItems.map((item) => {
+              const isActive = item.slug === activeSegment?.slug;
+
+              return (
+                <button
+                  aria-selected={isActive}
+                  className={`home-stitch-tab ${isActive ? "is-active" : ""}`}
+                  key={item.slug}
+                  onClick={() => {
+                    startTransition(() => {
+                      setActiveSegmentSlug(item.slug);
+                    });
+                  }}
+                  role="tab"
+                  type="button"
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
 
-          <aside className="home-editorial-hero-quote">
-            <span>The Technical Edge</span>
-            <p>"Microservice-driven inventory ensures real-time availability of limited atelier pieces."</p>
-          </aside>
-        </div>
-      </section>
+          <div className="home-stitch-hero-grid">
+            <div className="home-stitch-hero-copy">
+              <span className="home-stitch-kicker">
+                {activeSegment?.hero.collectionKicker || "Seasonal Edit"}
+              </span>
+              <h1>{activeSegment?.hero.title || "Forest & Hearth"}</h1>
+              <p>{activeSegment?.hero.description}</p>
 
-      <section className="home-editorial-category-section">
-        <div className="home-editorial-category-grid">
-          {categoryCards.map((item, index) => (
-            <Link className={`home-editorial-category-card home-editorial-category-card-${index + 1}`} key={item.label} to={item.href}>
-              <img alt={item.label} src={item.imageUrl} />
-              <div className="home-editorial-category-scrim" />
-              <div className="home-editorial-category-content">
-                <h2>{item.label}</h2>
-                {index === 2 ? <p>{item.subtitle}</p> : null}
-                <span>{item.cta}</span>
+              <div className="home-stitch-action-row">
+                <ActionLink
+                  className="home-stitch-primary-button"
+                  fallbackHref={activeSegment?.href || "/products"}
+                  href={activeSegment?.hero.primaryCtaHref || "/products"}
+                >
+                  {activeSegment?.hero.primaryCtaLabel || "Explore Collection"}
+                </ActionLink>
+                <ActionLink
+                  className="home-stitch-secondary-button"
+                  fallbackHref={activeSegment?.href || "/products"}
+                  href={activeSegment?.hero.secondaryCtaHref || activeSegment?.href || "/products"}
+                >
+                  {activeSegment?.hero.secondaryCtaLabel || "View Lookbook"}
+                </ActionLink>
               </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="home-editorial-callout">
-        <div className="home-editorial-callout-inner">
-          <div className="home-editorial-callout-copy">
-            <span className="home-editorial-section-label">ND Atelier</span>
-            <h2>
-              Digital Precision,
-              <br />
-              Analogue Soul.
-            </h2>
-            <p>
-              Beyond the silhouette lies a sophisticated technological core. Our inventory architecture keeps each
-              piece in the Digital Atelier synced in real time, connecting backend precision with the quieter visual
-              rhythm from Stitch.
-            </p>
-
-            <div className="home-editorial-callout-metrics">
-              {metrics.map((item) => (
-                <article className="home-editorial-callout-metric" key={item.label}>
-                  <strong>{item.value}</strong>
-                  <span>{item.label}</span>
-                </article>
-              ))}
             </div>
-          </div>
 
-          <div className="home-editorial-callout-media">
-            <img alt="Studio atelier process" src={fallbackEditorialImages.studio} />
+            <aside className="home-stitch-quote-card">
+              <span>{activeSegment?.hero.quoteKicker || "Editorial Note"}</span>
+              <p>
+                {activeSegment?.hero.quoteBody ||
+                  "Update the workbook to change hero, tiles, metrics, and arrivals without touching the UI code."}
+              </p>
+            </aside>
           </div>
         </div>
       </section>
 
-      <section className="home-editorial-featured-section">
-        <div className="home-editorial-featured-head">
-          <div>
-            <span className="home-editorial-section-label home-editorial-section-label-accent">New Arrivals</span>
-            <h2>Seasonal Essentials</h2>
-          </div>
-          <div className="home-editorial-arrow-group" aria-hidden="true">
-            <span className="home-editorial-arrow-button">‹</span>
-            <span className="home-editorial-arrow-button">›</span>
-          </div>
-        </div>
-
-        {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
-
-        {featuredProducts.length > 0 ? (
-          <div className="home-editorial-product-grid">
-            {featuredProducts.map((product) => (
-              <article className="home-editorial-product-card" key={product.id}>
-                <Link className="home-editorial-product-link" to={`/products/${product.id}`}>
-                  <div className="home-editorial-product-media">
-                    <img
-                      alt={product.name}
-                      src={product.image_urls[0] ?? product.image_url ?? fallbackEditorialImages.hero}
-                    />
-                  </div>
-                  <div className="home-editorial-product-copy">
-                    <p>{product.category || product.brand || "Archive"}</p>
-                    <div className="home-editorial-product-row">
-                      <h3>{product.name}</h3>
-                      <span>{formatCurrency(product.price)}</span>
-                    </div>
-                  </div>
-                </Link>
-              </article>
+      <section className="home-stitch-bento-section">
+        {activeTiles.length > 0 ? (
+          <div className="home-stitch-bento-grid">
+            {activeTiles.map((tile, index) => (
+              <ActionLink
+                className={`home-stitch-bento-card home-stitch-bento-card-${index + 1}`}
+                fallbackHref={activeSegment?.href || "/products"}
+                href={buildTileHref(activeSegment, tile.ctaHref)}
+                key={`${tile.segmentSlug}-${tile.position}-${tile.title}`}
+              >
+                <img alt={tile.title} src={tile.imageUrl || fallbackTileImage} />
+                <div className="home-stitch-bento-scrim" />
+                <div className="home-stitch-bento-copy">
+                  <span>{tile.eyebrow || activeSegment?.label}</span>
+                  <h2>{tile.title}</h2>
+                  <p>{tile.subtitle}</p>
+                  <strong>{tile.ctaLabel || "Explore"}</strong>
+                </div>
+              </ActionLink>
             ))}
           </div>
         ) : (
-          <div className="empty-card">
-            <strong>Danh mục đang chờ sản phẩm active.</strong>
-            <span>Mình đã giữ sẵn đúng bố cục home-editorial, chỉ cần backend có thêm dữ liệu để lấp đầy product rail.</span>
-          </div>
+          <EmptyState
+            body="Thêm các dòng vào sheet category_tiles để lấp đầy editorial grid cho tab này."
+            title="Tab hiện tại chưa có category tile."
+          />
         )}
       </section>
+
+      <section className="home-stitch-callout-section">
+        <div className="home-stitch-callout-copy">
+          <span className="home-stitch-section-label">
+            {activeSegment?.callout?.eyebrow || "Technical Editorial"}
+          </span>
+          <h2>{activeSegment?.callout?.title || "Digital Precision, Analogue Soul."}</h2>
+          <p>
+            {activeSegment?.callout?.body ||
+              "Workbook-driven sections let the team update imagery and copy without hardcoded homepage data."}
+          </p>
+
+          {activeMetrics.length > 0 ? (
+            <div className="home-stitch-metric-row">
+              {activeMetrics.map((metric) => (
+                <article
+                  className="home-stitch-metric-card"
+                  key={`${metric.segmentSlug}-${metric.position}-${metric.label}`}
+                >
+                  <strong>{metric.value}</strong>
+                  <span>{metric.label}</span>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="home-stitch-callout-media">
+          <img
+            alt={activeSegment?.callout?.title || "Editorial callout"}
+            src={activeSegment?.callout?.imageUrl || fallbackCalloutImage}
+          />
+        </div>
+      </section>
+
+      <section className="home-stitch-arrivals-section">
+        <div className="home-stitch-arrivals-head">
+          <div>
+            <span className="home-stitch-section-label">
+              {activeSegment?.hero.arrivalsKicker || "New Arrivals"}
+            </span>
+            <h2>{activeSegment?.hero.arrivalsTitle || "Seasonal Essentials"}</h2>
+          </div>
+
+          <div className="home-stitch-arrivals-controls">
+            <button
+              aria-label="Scroll arrivals left"
+              className="home-stitch-rail-button"
+              onClick={() => scrollProductRail("prev")}
+              type="button"
+            >
+              Prev
+            </button>
+            <button
+              aria-label="Scroll arrivals right"
+              className="home-stitch-rail-button"
+              onClick={() => scrollProductRail("next")}
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        {activeProducts.length > 0 ? (
+          <div className="home-stitch-product-rail" ref={productRailRef}>
+            {activeProducts.map((product) => (
+              <ActionLink
+                className="home-stitch-product-card"
+                fallbackHref="/products"
+                href={buildProductHref(product)}
+                key={`${product.segmentSlug}-${product.position}-${product.name}`}
+              >
+                <div className="home-stitch-product-media">
+                  <img alt={product.name} src={product.imageUrl || fallbackTileImage} />
+                </div>
+                <div className="home-stitch-product-copy">
+                  <p>{product.eyebrow || product.brand || activeSegment?.label}</p>
+                  <h3>{product.name}</h3>
+                  <div className="home-stitch-product-meta">
+                    <span>{product.sizeTag || product.brand || "Archive edit"}</span>
+                    <span>{formatCurrency(product.price)}</span>
+                  </div>
+                  <small>{product.fitNote || "Workbook-controlled product story."}</small>
+                </div>
+              </ActionLink>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            body="Sheet products đang trống cho tab này. Chỉ cần thêm dòng cùng segment_slug là rail sẽ tự hiển thị."
+            title="Tab hiện tại chưa có arrivals."
+          />
+        )}
+      </section>
+
+      <footer className="home-stitch-footer">
+        <div className="home-stitch-footer-brand">
+          <strong>{footer.brandName}</strong>
+          <p>{footer.caption}</p>
+        </div>
+
+        <nav aria-label="Footer" className="home-stitch-footer-links">
+          {footerLinks.length > 0 ? (
+            footerLinks.map((link) => (
+              <ActionLink
+                className="home-stitch-footer-link"
+                fallbackHref="/products"
+                href={link.href}
+                key={`${link.position}-${link.label}`}
+              >
+                {link.label}
+              </ActionLink>
+            ))
+          ) : (
+            <span className="home-stitch-footer-link is-muted">No footer links in workbook</span>
+          )}
+        </nav>
+
+        <div className="home-stitch-footer-note">{footer.note}</div>
+      </footer>
     </div>
   );
 }

@@ -187,11 +187,13 @@ Kết luận:
 
 - dead API surface đã được dọn
 - nhưng merge cart vẫn đang là business glue một phần ở UI thay vì có contract backend rõ ràng
+- đây chưa hẳn là sai trong ngắn hạn, nhưng hiện vẫn thiếu quyết định chính thức và test khóa hành vi
 
 Việc nên làm:
 
-- nếu guest cart merge là capability dài hạn: thiết kế endpoint/backend flow thật, có idempotency và test rõ ràng
-- nếu vẫn giữ merge ở provider trong 1-2 sprint tới: ghi rõ đây là quyết định có chủ đích và bổ sung test cho flow login-merge
+- ngắn hạn: ghi rõ trong docs rằng guest cart merge hiện chủ đích nằm ở `CartProvider`, rồi bổ sung test cho flow login-merge
+- trung hạn: chỉ nâng thành endpoint/backend flow thật nếu đây là capability dài hạn hoặc đã thấy bottleneck ở cart lớn, retry, hoặc multi-device merge
+- nếu nâng lên backend: phải có idempotency, conflict strategy rõ ràng và test đầy đủ từ gateway đến service
 
 ### 4.4. Repo đang duy trì hai app UI với hai stack khác nhau
 
@@ -203,8 +205,8 @@ Evidence:
 
 Tác động:
 
-- trùng logic API client
-- trùng normalizer
+- trùng logic API client đã bắt đầu giảm sau khi tách `shared/web-sdk/http-core.ts` và các factory `cart/payment`
+- trùng normalizer vẫn còn đáng kể
 - trùng auth/cart/account flows
 - rất dễ drift UX, route, validation và behavior
 
@@ -404,29 +406,32 @@ Nếu chưa muốn chọn `client` ngay:
 
 Hiện trạng:
 
-- hai app đang có HTTP client, normalizer và API modules gần giống nhau
-- tổng số dòng ở nhóm file API/normalizer của hai app là rất lớn và duy trì song song
+- đã bắt đầu có `shared/web-sdk/` dùng chung cho HTTP core và factory `cart/payment`
+- hai app vẫn còn nhiều normalizer và API modules lớn đang duy trì song song, đặc biệt ở `auth`, `user`, `product`, `order`
+- tổng số dòng ở nhóm file API/normalizer của hai app vẫn còn lớn nếu tính toàn bộ surface
 
 Khuyến nghị:
 
-- tạo một package dùng chung, ví dụ `shared/web-sdk/`
+- tiếp tục đi theo hướng `shared/web-sdk/`, nhưng theo lát cắt nhỏ thay vì big bang
 
 Nội dung nên đưa vào:
 
-- `http-client.ts`
-- `normalizers.ts`
-- `modules/auth.ts`
-- `modules/user.ts`
-- `modules/product.ts`
-- `modules/cart.ts`
-- `modules/order.ts`
-- `modules/payment.ts`
-- `modules/admin.ts`
+- [x] `http-core.ts`
+- [ ] `normalizers.ts`
+- [ ] `modules/auth.ts`
+- [ ] `modules/user.ts`
+- [ ] `modules/product.ts`
+- [ ] `modules/cart.ts`
+- [ ] `modules/order.ts`
+- [ ] `modules/payment.ts`
+- [ ] `modules/admin.ts`
 
 Nguyên tắc:
 
 - app chỉ giữ lại phần environment-specific như storage, SSR fetch wrapper, redirect handling
 - mọi route/path/normalizer nên có một nguồn sự thật
+- ưu tiên gom module nào giống nhau thật trước, ví dụ `cart`, `payment`, rồi mới đến `order` và `auth`
+- tránh chạm đồng thời vào toàn bộ API layer của hai app trong một commit lớn
 
 Lý do:
 
@@ -829,14 +834,14 @@ Theo mức độ ưu tiên:
 ### Sprint 1
 
 - [x] fix route parity cho flow hủy đơn
-- [ ] xóa artefact/scaffold thừa
+- [x] xóa artefact/scaffold thừa
 - [x] thêm `client` vào CI
 - [x] thêm `client` vào Compose profile riêng
 - [x] dọn dead API surface
 
 ### Sprint 2
 
-- [ ] gom shared web SDK
+- [~] bắt đầu gom shared web SDK với `http-core`, `cart`, `payment`
 - [ ] chốt app UI chính
 - [ ] bắt đầu chuẩn hóa design tokens
 
@@ -901,6 +906,8 @@ Trong lần chỉnh file này và các thay đổi code đi kèm gần nhất, t
 11. chốt quyết định tạm thời rằng `client` chưa vào docker-publish cho đến khi storefront entrypoint được quyết định dứt điểm
 12. cập nhật lại các phần trong tài liệu này để phân biệt rõ mục nào đã xong, mục nào mới xong một phần, và mục nào còn nợ
 13. cập nhật `README.md` để phản ánh đúng việc `client` đã vào CI, có Compose profile riêng, và chưa vào docker publish pipeline theo chủ đích
+14. dọn artefact/scaffold thừa khỏi git để repo gọn hơn và giảm khả năng sửa nhầm file sinh ra
+15. bắt đầu `shared/web-sdk/` bằng HTTP core và các factory `cart/payment` để giảm drift thật giữa hai app UI
 
 ## 13. Nên làm gì tiếp theo ngay sau file này
 
@@ -917,7 +924,14 @@ Thứ tự nên làm tiếp theo:
 3. đồng bộ tài liệu và runtime theo trạng thái mới:
    - giữ `client` ngoài docker publish pipeline cho đến khi storefront source of truth được chốt
    - làm rõ phạm vi `client` cho storefront/account và kế hoạch admin
-4. chỉ sau khi ba việc trên xong mới bắt đầu redesign lớn hoặc import center
+4. tiếp tục shared web SDK theo thứ tự ít rủi ro nhất:
+   - gom `order` API dùng chung
+   - gom `auth/user` phần không phụ thuộc storage
+   - chuẩn hóa normalizer dùng chung
+5. chốt số phận của guest cart merge:
+   - hoặc giữ ở provider và thêm test rõ ràng
+   - hoặc đưa thành backend capability có idempotency
+6. chỉ sau các việc trên mới bắt đầu redesign lớn hoặc import center
 
 Nếu muốn làm tiếp ngay trong repo theo hướng ít rủi ro nhất, thứ tự commit nên là:
 

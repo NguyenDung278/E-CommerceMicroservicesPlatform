@@ -1,6 +1,13 @@
 import "server-only";
 
-import { normalizeProduct, normalizeProductList, normalizeProductPopularity, normalizeProductReviewList } from "@/lib/api/normalizers";
+import {
+  normalizeProduct,
+  normalizeProductList,
+  normalizeProductPopularity,
+  normalizeProductReviewList,
+  normalizeStorefrontCategoryList,
+  normalizeStorefrontCategoryPageData,
+} from "@/lib/api/normalizers";
 import type { ProductListOptions } from "@/lib/api/product";
 import { getErrorMessage } from "@/lib/errors/handler";
 import type {
@@ -9,7 +16,14 @@ import type {
   HomePageInitialData,
   ProductPageInitialData,
 } from "@/lib/storefront/initial-data";
-import type { ApiEnvelope, Product, ProductPopularity, ProductReviewList } from "@/types/api";
+import type {
+  ApiEnvelope,
+  Product,
+  ProductPopularity,
+  ProductReviewList,
+  StorefrontCategory,
+  StorefrontCategoryPageData,
+} from "@/types/api";
 
 const emptyReviewList: ProductReviewList = {
   summary: {
@@ -129,6 +143,42 @@ async function fetchProductReviewList(productId: string, page = 1, limit = 8) {
     `/api/v1/products/${encodeURIComponent(productId)}/reviews?page=${page}&limit=${limit}`,
   );
   return normalizeProductReviewList(response.data);
+}
+
+async function fetchStorefrontCategories() {
+  const response = await requestServer<unknown>("/api/v1/storefront/categories");
+  return normalizeStorefrontCategoryList(response.data);
+}
+
+async function fetchStorefrontCategoryPage(identifier: string) {
+  const response = await requestServer<unknown>(
+    `/api/v1/storefront/categories/${encodeURIComponent(identifier)}`,
+  );
+  return normalizeStorefrontCategoryPageData(response.data);
+}
+
+export function isServerHttpStatus(reason: unknown, status: number) {
+  return (
+    typeof reason === "object" &&
+    reason !== null &&
+    "status" in reason &&
+    (reason as { status?: unknown }).status === status
+  );
+}
+
+export async function getEditorialPageInitialData(identifier: string): Promise<{
+  pageData: StorefrontCategoryPageData;
+  categories: StorefrontCategory[];
+}> {
+  const [pageData, categories] = await Promise.all([
+    fetchStorefrontCategoryPage(identifier),
+    fetchStorefrontCategories().catch(() => []),
+  ]);
+
+  return {
+    pageData,
+    categories: categories.length > 0 ? categories : [pageData.category],
+  };
 }
 
 export async function getHomePageInitialData(): Promise<HomePageInitialData> {

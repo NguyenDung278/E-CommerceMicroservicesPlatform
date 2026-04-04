@@ -1,6 +1,6 @@
 export default {
   test: {
     environment: "jsdom",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
   },
 };

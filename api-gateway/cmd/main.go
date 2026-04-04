@@ -65,6 +65,7 @@ func main() {
 	// 4. Create handlers.
 	userHandler := handler.NewUserHandler(userProxy)
 	productHandler := handler.NewProductHandler(productProxy)
+	storefrontHandler := handler.NewStorefrontHandler(productProxy)
 	cartHandler := handler.NewCartHandler(cartProxy)
 	orderHandler := handler.NewOrderHandler(orderProxy)
 	paymentHandler := handler.NewPaymentHandler(paymentProxy)
@@ -94,6 +95,7 @@ func main() {
 	// gateway stays a thin, predictable layer.
 	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	productHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	storefrontHandler.RegisterRoutes(e)
 	cartHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	orderHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	paymentHandler.RegisterRoutes(e, cfg.JWT.Secret)

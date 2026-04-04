@@ -38,6 +38,13 @@ import {
   normalizeCoupon,
   normalizeProductPopularity,
   normalizeProductPopularityList,
+  normalizeStorefrontCategory,
+  normalizeStorefrontCategoryList,
+  normalizeStorefrontCategoryPageData,
+  normalizeStorefrontEditorialSection,
+  normalizeStorefrontFeaturedProduct,
+  normalizeStorefrontHomeData,
+  normalizeStorefrontProduct,
 } from "./normalizers";
 export {
   normalizeProduct,
@@ -63,6 +70,13 @@ export {
   normalizeCoupon,
   normalizeProductPopularity,
   normalizeProductPopularityList,
+  normalizeStorefrontCategory,
+  normalizeStorefrontCategoryList,
+  normalizeStorefrontCategoryPageData,
+  normalizeStorefrontEditorialSection,
+  normalizeStorefrontFeaturedProduct,
+  normalizeStorefrontHomeData,
+  normalizeStorefrontProduct,
 };
 
 // Re-export API modules
@@ -73,8 +87,9 @@ import { cartApi } from "./modules/cartApi";
 import { orderApi } from "./modules/orderApi";
 import { paymentApi } from "./modules/paymentApi";
 import { adminApi } from "./modules/adminApi";
+import { storefrontApi } from "./modules/storefrontApi";
 
-export { authApi, userApi, productApi, cartApi, orderApi, paymentApi, adminApi };
+export { authApi, userApi, productApi, cartApi, orderApi, paymentApi, adminApi, storefrontApi };
 
 // Backward compatibility unified api object
 import { authApi as _authApi } from "./modules/authApi";
@@ -84,6 +99,7 @@ import { paymentApi as _paymentApi } from "./modules/paymentApi";
 import { productApi as _productApi } from "./modules/productApi";
 import { userApi as _userApi } from "./modules/userApi";
 import { adminApi as _adminApi } from "./modules/adminApi";
+import { storefrontApi as _storefrontApi } from "./modules/storefrontApi";
 import { getErrorMessage as _getErrorMessage } from "./error-handler";
 
 export const api = {
@@ -109,6 +125,9 @@ export const api = {
   updateMyProductReview: _productApi.updateMyProductReview,
   deleteMyProductReview: _productApi.deleteMyProductReview,
   getProductPopularity: _productApi.getProductPopularity,
+  listStorefrontCategories: _storefrontApi.listCategories,
+  getStorefrontHome: _storefrontApi.getHome,
+  getStorefrontCategoryPage: _storefrontApi.getCategoryPage,
   createProduct: _productApi.createProduct,
   uploadProductImages: _productApi.uploadProductImages,
   updateProduct: _productApi.updateProduct,

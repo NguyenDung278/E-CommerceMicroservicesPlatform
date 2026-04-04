@@ -42,11 +42,11 @@ export function useOrderPayments(token: string) {
       .then(async (response) => {
         const orders = (Array.isArray(response.data) ? response.data : [])
           .slice()
-          .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+          .sort((left: Order, right: Order) => Date.parse(right.created_at) - Date.parse(left.created_at));
 
         const paymentHistoryResponse = await paymentApi.listPaymentHistory(token);
         const paymentsByOrder: Record<string, Payment[]> = {};
-        (Array.isArray(paymentHistoryResponse.data) ? paymentHistoryResponse.data : []).forEach((payment) => {
+        (Array.isArray(paymentHistoryResponse.data) ? paymentHistoryResponse.data : []).forEach((payment: Payment) => {
           if (!paymentsByOrder[payment.order_id]) {
             paymentsByOrder[payment.order_id] = [];
           }

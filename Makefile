@@ -7,6 +7,10 @@ COMPOSE_DIR := deployments/docker
 COMPOSE_ENV_FILE ?= $(if $(wildcard $(CURDIR)/.env.local),$(CURDIR)/.env.local,$(CURDIR)/.env.example)
 COMPOSE_PROFILE_ARGS := $(if $(strip $(COMPOSE_PROFILES)),--profile $(COMPOSE_PROFILES),)
 SERVICES ?=
+COMPOSE_NETWORK ?= ecommerce-network
+POSTGRES_CONTAINER ?= ecommerce-postgres
+GO_DOCKER_IMAGE ?= golang:1.25-alpine
+POSTGRES_CLIENT_IMAGE ?= postgres:15-alpine
 
 # Database connection details for migrations.
 # Keep migration targets aligned with the per-service databases created by Docker Compose.
@@ -20,7 +24,13 @@ PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HO
 ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
 PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build client-start k8s-apply k8s-delete migrate-up migrate-down migrate-force
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build client-start k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
+
+CATALOG_WORKBOOK ?= $(CURDIR)/artifacts/import-templates/catalog-import-sample-workbook.xlsx
+CATALOG_WORKBOOK_CONTAINER ?= /workspace/artifacts/import-templates/catalog-import-sample-workbook.xlsx
+PRODUCT_CONFIG_CONTAINER ?= /workspace/deployments/docker/config/product-service.yaml
+STOREFRONT_RESET_SQL ?= /workspace/artifacts/sql/storefront-reset-sample.sql
+STOREFRONT_EXPLAIN_SQL ?= /workspace/artifacts/sql/storefront-explain-home.sql
 
 fmt:
 	@find api-gateway services pkg proto -name '*.go' -print0 | xargs -0 gofmt -w
@@ -104,3 +114,68 @@ migrate-force:
 	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" force 1
 	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" force 1
 	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" force 1
+
+storefront-import-dry-run:
+	@echo "==> Dry-run importing storefront workbook into product-service"
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace/services/product-service \
+		-e CONFIG_PATH="$(PRODUCT_CONFIG_CONTAINER)" \
+		-e DATABASE_HOST="postgres" \
+		-e DATABASE_PORT="5432" \
+		-e DATABASE_USER="$$POSTGRES_USER" \
+		-e DATABASE_PASSWORD="$$POSTGRES_PASSWORD" \
+		-e DATABASE_DBNAME="ecommerce_product" \
+		-e DATABASE_SSLMODE="disable" \
+		"$(GO_DOCKER_IMAGE)" \
+		sh -lc 'export PATH=/usr/local/go/bin:$$PATH; go run ./cmd/catalog-importer -workbook "$(CATALOG_WORKBOOK_CONTAINER)" -mode dry-run'
+
+storefront-import-sample:
+	@echo "==> Importing sample storefront workbook into product-service"
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace/services/product-service \
+		-e CONFIG_PATH="$(PRODUCT_CONFIG_CONTAINER)" \
+		-e DATABASE_HOST="postgres" \
+		-e DATABASE_PORT="5432" \
+		-e DATABASE_USER="$$POSTGRES_USER" \
+		-e DATABASE_PASSWORD="$$POSTGRES_PASSWORD" \
+		-e DATABASE_DBNAME="ecommerce_product" \
+		-e DATABASE_SSLMODE="disable" \
+		"$(GO_DOCKER_IMAGE)" \
+		sh -lc 'export PATH=/usr/local/go/bin:$$PATH; go run ./cmd/catalog-importer -workbook "$(CATALOG_WORKBOOK_CONTAINER)" -mode commit'
+
+storefront-reset-sample:
+	@echo "==> Repairing product-service storefront schema, rebuilding service, and re-importing sample workbook"
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-e PGPASSWORD="$$POSTGRES_PASSWORD" \
+		"$(POSTGRES_CLIENT_IMAGE)" \
+		psql -v ON_ERROR_STOP=1 -h postgres -U "$$POSTGRES_USER" -d ecommerce_product -f "$(STOREFRONT_RESET_SQL)"
+	@cd "$(COMPOSE_DIR)" && DOCKER_BUILDKIT="$(DOCKER_BUILDKIT)" COMPOSE_DOCKER_CLI_BUILD="$(COMPOSE_DOCKER_CLI_BUILD)" \
+		docker compose --env-file "$(COMPOSE_ENV_FILE)" up -d --build product-service api-gateway
+	@$(MAKE) storefront-import-sample
+
+storefront-explain-home:
+	@echo "==> Running EXPLAIN ANALYZE for storefront/home queries"
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-e PGPASSWORD="$$POSTGRES_PASSWORD" \
+		"$(POSTGRES_CLIENT_IMAGE)" \
+		psql -v ON_ERROR_STOP=1 -h postgres -U "$$POSTGRES_USER" -d ecommerce_product -f "$(STOREFRONT_EXPLAIN_SQL)"

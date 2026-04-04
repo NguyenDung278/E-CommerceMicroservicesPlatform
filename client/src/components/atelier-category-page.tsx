@@ -5,15 +5,16 @@ import { ArrowUpRight, ChevronDown, Plus, ShoppingBag, UserRound } from "lucide-
 import type { ReactNode } from "react";
 
 import {
-  atelierFooterLinks,
-  atelierNavItems,
+  type AtelierFooterLink,
+  type AtelierNavItem,
   type AtelierBadgeTone,
   type AtelierBottomSection,
   type AtelierCatalogItem,
   type AtelierCategoryId,
   type AtelierFilterGroup,
   type AtelierPageConfig,
-} from "@/components/atelier-page-data";
+} from "@/components/atelier-page-types";
+import { atelierFooterLinks } from "@/components/atelier-page-chrome";
 import { StorefrontImage } from "@/components/storefront-image";
 import { useAuthState } from "@/hooks/useAuth";
 import { useCartState } from "@/hooks/useCart";
@@ -28,15 +29,26 @@ const badgeToneClasses: Record<AtelierBadgeTone, string> = {
 
 type AtelierCategoryPageProps = {
   config: AtelierPageConfig;
+  navItems: AtelierNavItem[];
+  footerLinks?: AtelierFooterLink[];
 };
 
-export function AtelierCategoryPage({ config }: AtelierCategoryPageProps) {
+export function AtelierCategoryPage({
+  config,
+  navItems,
+  footerLinks = atelierFooterLinks,
+}: AtelierCategoryPageProps) {
   const { isAuthenticated } = useAuthState();
   const { itemCount } = useCartState();
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
-      <AtelierHeader activeCategory={config.id} isAuthenticated={isAuthenticated} itemCount={itemCount} />
+      <AtelierHeader
+        activeCategory={config.id}
+        navItems={navItems}
+        isAuthenticated={isAuthenticated}
+        itemCount={itemCount}
+      />
 
       <main>
         <AtelierHero hero={config.hero} />
@@ -60,17 +72,19 @@ export function AtelierCategoryPage({ config }: AtelierCategoryPageProps) {
         {config.bottomSection ? <AtelierBottomSectionPanel section={config.bottomSection} /> : null}
       </main>
 
-      <AtelierFooter />
+      <AtelierFooter footerLinks={footerLinks} />
     </div>
   );
 }
 
 function AtelierHeader({
   activeCategory,
+  navItems,
   isAuthenticated,
   itemCount,
 }: {
   activeCategory: AtelierCategoryId;
+  navItems: AtelierNavItem[];
   isAuthenticated: boolean;
   itemCount: number;
 }) {
@@ -95,7 +109,7 @@ function AtelierHeader({
             aria-label="Atelier categories"
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-center md:flex-nowrap md:gap-x-9"
           >
-            {atelierNavItems.map((item) => {
+            {navItems.map((item) => {
               const isActive = item.id === activeCategory;
 
               return (
@@ -695,7 +709,7 @@ function AtelierBottomSectionPanel({ section }: { section: AtelierBottomSection 
   );
 }
 
-function AtelierFooter() {
+function AtelierFooter({ footerLinks }: { footerLinks: AtelierFooterLink[] }) {
   return (
     <footer className="mt-20 border-t border-black/6 bg-[#f5f3ee]">
       <div className="shell flex flex-col items-center py-16 text-center md:py-20">
@@ -704,7 +718,7 @@ function AtelierFooter() {
         </Link>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
-          {atelierFooterLinks.map((link) => (
+          {footerLinks.map((link) => (
             <Link
               key={link.label}
               href={link.href}

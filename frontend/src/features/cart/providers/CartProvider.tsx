@@ -9,7 +9,7 @@ import { createContext, startTransition, useEffect, useState, type ReactNode } f
 import { productApi } from "../../../shared/api/modules/productApi";
 import { cartApi } from "../../../shared/api/modules/cartApi";
 import { getErrorMessage } from "../../../shared/api/error-handler";
-import type { Cart } from "../../../shared/types/api";
+import type { Cart, CartItem } from "../../../shared/types/api";
 import { useAuth } from "../../auth/hooks/useAuth";
 import { createEmptyGuestCart, readGuestCart, saveGuestCart, clearGuestCart } from "../storage/guestCartStorage";
 
@@ -81,13 +81,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
             nextCart = response.data;
             fallbackCart = nextCart;
             remainingGuestItems = remainingGuestItems.filter(
-              (guestItem) => guestItem.product_id !== item.product_id
+              (guestItem: CartItem) => guestItem.product_id !== item.product_id
             );
             saveGuestCart({
               user_id: "",
               items: remainingGuestItems,
               total: remainingGuestItems.reduce(
-                (sum, guestItem) => sum + guestItem.price * guestItem.quantity,
+                (sum: number, guestItem: CartItem) => sum + guestItem.price * guestItem.quantity,
                 0
               ),
             });
@@ -160,7 +160,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         items: [...cart.items],
       };
       const existingItem = nextCart.items.find(
-        (cartItem) => cartItem.product_id === item.product_id
+        (cartItem: CartItem) => cartItem.product_id === item.product_id
       );
 
       if (existingItem) {
@@ -188,7 +188,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
 
       nextCart.total = nextCart.items.reduce(
-        (sum, cartItem) => sum + cartItem.price * cartItem.quantity,
+        (sum: number, cartItem: CartItem) => sum + cartItem.price * cartItem.quantity,
         0
       );
       saveGuestCart(nextCart);
@@ -220,7 +220,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       };
       const product = (await productApi.getProductById(productId)).data;
       const item = nextCart.items.find(
-        (cartItem) => cartItem.product_id === productId
+        (cartItem: CartItem) => cartItem.product_id === productId
       );
 
       if (!item) {
@@ -236,7 +236,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       item.price = product.price;
       item.name = product.name;
       nextCart.total = nextCart.items.reduce(
-        (sum, cartItem) => sum + cartItem.price * cartItem.quantity,
+        (sum: number, cartItem: CartItem) => sum + cartItem.price * cartItem.quantity,
         0
       );
       saveGuestCart(nextCart);
@@ -264,10 +264,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // Guest cart - remove locally
       const nextCart = {
         ...cart,
-        items: cart.items.filter((item) => item.product_id !== productId),
+        items: cart.items.filter((item: CartItem) => item.product_id !== productId),
       };
       nextCart.total = nextCart.items.reduce(
-        (sum, cartItem) => sum + cartItem.price * cartItem.quantity,
+        (sum: number, cartItem: CartItem) => sum + cartItem.price * cartItem.quantity,
         0
       );
       saveGuestCart(nextCart);
@@ -311,7 +311,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider
       value={{
         cart,
-        itemCount: cart.items.reduce((sum, item) => sum + item.quantity, 0),
+        itemCount: cart.items.reduce((sum: number, item: CartItem) => sum + item.quantity, 0),
         isLoading,
         error,
         refreshCart,

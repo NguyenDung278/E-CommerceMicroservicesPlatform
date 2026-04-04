@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { AtelierCategoryPage } from "@/components/atelier-category-page";
-import { getAtelierPageConfig } from "@/components/atelier-page-data";
+import { getEditorialPageInitialData, isServerHttpStatus } from "@/lib/server/storefront";
+import { buildAtelierNavItems, buildAtelierPageConfig } from "@/lib/storefront/editorial-adapter";
 
 export default async function Page({
   params,
@@ -9,11 +10,20 @@ export default async function Page({
   params: Promise<{ categoryName: string }>;
 }) {
   const { categoryName } = await params;
-  const config = getAtelierPageConfig(decodeURIComponent(categoryName));
+  const identifier = decodeURIComponent(categoryName);
 
-  if (!config) {
-    notFound();
+  try {
+    const { pageData, categories } = await getEditorialPageInitialData(identifier);
+    return (
+      <AtelierCategoryPage
+        config={buildAtelierPageConfig(pageData)}
+        navItems={buildAtelierNavItems(categories)}
+      />
+    );
+  } catch (reason) {
+    if (isServerHttpStatus(reason, 404)) {
+      notFound();
+    }
+    throw reason;
   }
-
-  return <AtelierCategoryPage config={config} />;
 }

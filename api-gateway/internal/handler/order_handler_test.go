@@ -97,6 +97,25 @@ func TestPaymentHandlerRegisterRoutesParity(t *testing.T) {
 	)
 }
 
+func TestStorefrontHandlerRegisterRoutesParity(t *testing.T) {
+	e := echo.New()
+	handler := &StorefrontHandler{forward: testForwardHandler()}
+
+	handler.RegisterRoutes(e)
+
+	assertRoutesPresent(t, e,
+		routeExpectation{method: http.MethodGet, path: "/api/v1/storefront/home"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/storefront/categories"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/storefront/categories/:identifier"},
+	)
+
+	assertRoutesAbsent(t, e,
+		routeExpectation{method: http.MethodPost, path: "/api/v1/storefront/home"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/storefront/categories"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/storefront/categories/:identifier"},
+	)
+}
+
 type routeExpectation struct {
 	method string
 	path   string

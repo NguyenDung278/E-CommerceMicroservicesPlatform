@@ -3,7 +3,7 @@
  * Persists a local cart for anonymous shoppers.
  */
 
-import type { Cart } from "../../../shared/types/api";
+import type { Cart, CartItem } from "../../../shared/types/api";
 
 const GUEST_CART_STORAGE_KEY = "nd-shop-guest-cart";
 
@@ -41,7 +41,7 @@ export function readGuestCart(): Cart {
       user_id: "",
       items: parsed.items,
       total: parsed.items.reduce(
-        (sum, item) => sum + item.price * item.quantity,
+        (sum: number, item: CartItem) => sum + item.price * item.quantity,
         0
       ),
     };
@@ -64,7 +64,7 @@ export function saveGuestCart(cart: Cart): void {
       user_id: "",
       items: cart.items,
       total: cart.items.reduce(
-        (sum, item) => sum + item.price * item.quantity,
+        (sum: number, item: CartItem) => sum + item.price * item.quantity,
         0
       ),
     })

@@ -92,6 +92,8 @@ func main() {
 	}
 
 	productService := service.NewProductService(productRepo, productOptions...)
+	storefrontRepo := repository.NewStorefrontRepository(db)
+	storefrontService := service.NewStorefrontService(storefrontRepo)
 	reviewRepo := repository.NewProductReviewRepository(db)
 	reviewOptions := []service.ProductReviewServiceOption{
 		service.WithProductReviewLogger(log),
@@ -148,6 +150,7 @@ func main() {
 		cancelSearch()
 	}
 	productHandler := handler.NewProductHandler(productService, reviewService)
+	storefrontHandler := handler.NewStorefrontHandler(storefrontService)
 	workerCtx, workerCancel := context.WithCancel(context.Background())
 	defer workerCancel()
 
@@ -175,6 +178,7 @@ func main() {
 	})
 
 	productHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	storefrontHandler.RegisterRoutes(e)
 
 	// Set up gRPC server.
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("product-service")))

@@ -19,6 +19,8 @@ import type {
   Payment,
   PhoneVerificationChallenge,
   Product,
+  JsonObject,
+  JsonValue,
   ProductRatingBreakdown,
   ProductPopularity,
   ProductReview,
@@ -26,6 +28,12 @@ import type {
   ProductReviewSummary,
   ProductVariant,
   ShippingAddress,
+  StorefrontCategory,
+  StorefrontCategoryPageData,
+  StorefrontEditorialSection,
+  StorefrontFeaturedProduct,
+  StorefrontHomeData,
+  StorefrontProduct,
   UserProfile,
 } from "../types/api";
 
@@ -55,6 +63,38 @@ function normalizeNumber(value: unknown): number {
  */
 function normalizeBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
+}
+
+function normalizeJsonValue(value: unknown): JsonValue {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeJsonValue(entry));
+  }
+
+  if (isRecord(value)) {
+    return normalizeJsonObject(value);
+  }
+
+  return null;
+}
+
+function normalizeJsonObject(value: unknown): JsonObject {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<JsonObject>((result, [key, entry]) => {
+    result[key] = normalizeJsonValue(entry);
+    return result;
+  }, {});
 }
 
 /**
@@ -112,6 +152,19 @@ export function normalizeProduct(value: unknown): Product {
   };
 }
 
+export function normalizeStorefrontProduct(value: unknown): StorefrontProduct {
+  const product = isRecord(value) ? value : {};
+  const normalizedProduct = normalizeProduct(product);
+
+  return {
+    ...normalizedProduct,
+    external_id: normalizeString(product.external_id),
+    category_slug: normalizeString(product.category_slug) || undefined,
+    material: normalizeString(product.material),
+    merchandising_rank: normalizeNumber(product.merchandising_rank),
+  };
+}
+
 /**
  * Normalize product list
  */
@@ -119,6 +172,104 @@ export function normalizeProductList(value: unknown): Product[] {
   return Array.isArray(value)
     ? value.map((item) => normalizeProduct(item))
     : [];
+}
+
+export function normalizeStorefrontCategory(value: unknown): StorefrontCategory {
+  const category = isRecord(value) ? value : {};
+
+  return {
+    slug: normalizeString(category.slug),
+    display_name: normalizeString(category.display_name),
+    nav_label: normalizeString(category.nav_label),
+    status: normalizeString(category.status),
+    hero: normalizeJsonObject(category.hero),
+    filter_config: Array.isArray(category.filter_config)
+      ? category.filter_config.map((entry) => normalizeJsonValue(entry))
+      : [],
+    seo: normalizeJsonObject(category.seo),
+    aliases: Array.isArray(category.aliases)
+      ? category.aliases.filter(
+          (alias): alias is string =>
+            typeof alias === "string" && alias.trim().length > 0
+        )
+      : [],
+    created_at: normalizeString(category.created_at),
+    updated_at: normalizeString(category.updated_at),
+  };
+}
+
+export function normalizeStorefrontCategoryList(
+  value: unknown
+): StorefrontCategory[] {
+  return Array.isArray(value)
+    ? value.map((item) => normalizeStorefrontCategory(item))
+    : [];
+}
+
+export function normalizeStorefrontEditorialSection(
+  value: unknown
+): StorefrontEditorialSection {
+  const section = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(section.id),
+    category_slug: normalizeString(section.category_slug),
+    section_type: normalizeString(section.section_type),
+    position: normalizeNumber(section.position),
+    payload: normalizeJsonObject(section.payload),
+    published: normalizeBoolean(section.published),
+  };
+}
+
+export function normalizeStorefrontFeaturedProduct(
+  value: unknown
+): StorefrontFeaturedProduct {
+  const product = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(product.id),
+    product_external_id: normalizeString(product.product_external_id),
+    category_slug: normalizeString(product.category_slug),
+    position: normalizeNumber(product.position),
+    product: normalizeStorefrontProduct(product.product),
+  };
+}
+
+export function normalizeStorefrontCategoryPageData(
+  value: unknown
+): StorefrontCategoryPageData {
+  const pageData = isRecord(value) ? value : {};
+
+  return {
+    category: normalizeStorefrontCategory(pageData.category),
+    sections: Array.isArray(pageData.sections)
+      ? pageData.sections.map((item) =>
+          normalizeStorefrontEditorialSection(item)
+        )
+      : [],
+    featured_products: Array.isArray(pageData.featured_products)
+      ? pageData.featured_products.map((item) =>
+          normalizeStorefrontFeaturedProduct(item)
+        )
+      : [],
+  };
+}
+
+export function normalizeStorefrontHomeData(
+  value: unknown
+): StorefrontHomeData {
+  const homeData = isRecord(value) ? value : {};
+
+  return {
+    categories: Array.isArray(homeData.categories)
+      ? homeData.categories.map((item) => normalizeStorefrontCategory(item))
+      : [],
+    category_pages: Array.isArray(homeData.category_pages)
+      ? homeData.category_pages.map((item) =>
+          normalizeStorefrontCategoryPageData(item)
+        )
+      : [],
+  };
 }
 
 function normalizeProductRatingBreakdown(value: unknown): ProductRatingBreakdown {

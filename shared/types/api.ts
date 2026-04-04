@@ -14,6 +14,18 @@ export type ApiEnvelope<T> = {
   meta?: ApiMeta;
 };
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export type JsonObject = {
+  [key: string]: JsonValue;
+};
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -91,6 +103,54 @@ export type Product = {
   image_urls: string[];
   created_at: string;
   updated_at: string;
+};
+
+export type StorefrontProduct = Product & {
+  external_id: string;
+  category_slug?: string;
+  material: string;
+  merchandising_rank: number;
+};
+
+export type StorefrontCategory = {
+  slug: string;
+  display_name: string;
+  nav_label: string;
+  status: string;
+  hero: JsonObject;
+  filter_config: JsonValue[];
+  seo: JsonObject;
+  aliases: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type StorefrontEditorialSection = {
+  id: string;
+  category_slug: string;
+  section_type: string;
+  position: number;
+  payload: JsonObject;
+  published: boolean;
+};
+
+export type StorefrontFeaturedProduct = {
+  id: string;
+  product_external_id: string;
+  category_slug: string;
+  position: number;
+  product: StorefrontProduct;
+};
+
+export type StorefrontCategoryPageData = {
+  category: StorefrontCategory;
+  sections: StorefrontEditorialSection[];
+  featured_products: StorefrontFeaturedProduct[];
+};
+
+export type StorefrontHomeData = {
+  categories: StorefrontCategory[];
+  category_pages: StorefrontCategoryPageData[];
 };
 
 export type ProductRatingBreakdown = {
