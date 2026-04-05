@@ -45,50 +45,12 @@
   padding: 28px;
 }
 
-.atelier-category-pill-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.atelier-category-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 84px;
-  padding: 0 30px;
-  border: 1px solid rgba(244, 241, 233, 0.26);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 251, 244, 0.92);
-  font-size: clamp(1.05rem, 2vw, 1.45rem);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  text-decoration: none;
-  backdrop-filter: blur(8px);
-  transition:
-    background-color 180ms ease,
-    border-color 180ms ease,
-    transform 180ms ease;
-}
-
-.atelier-category-pill:hover,
-.atelier-category-pill:focus-visible {
-  transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.44);
-}
-
-.atelier-category-pill-active {
-  background: #f6efe8;
-  color: #1b2c22;
-  border-color: rgba(246, 239, 232, 0.8);
-}
-
 .atelier-category-hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.52fr);
   align-items: end;
   gap: 28px;
+  padding-top: 42px;
 }
 
 .atelier-category-hero-copy {

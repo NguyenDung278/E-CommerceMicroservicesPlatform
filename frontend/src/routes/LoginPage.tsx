@@ -5,6 +5,7 @@ import { useAuth } from "../features/auth/hooks/useAuth";
 import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "../features/auth/storage/rememberedLoginStorage";
 import { getVisibleErrors, inputClassName, normalizeIdentifier, type TouchedFields } from "../features/auth/utils/authForm";
 import { NotificationStack, type NotificationItem } from "../shared/components/feedback/NotificationStack";
+import { StorefrontOverlayHeader } from "../shared/components/navigation/StorefrontOverlayHeader";
 import { FormField } from "../shared/components/form/FormField";
 import { getErrorMessage } from "../shared/api";
 import { type LoginFormValues, validateLoginFields } from "../shared/utils/validation";
@@ -63,10 +64,6 @@ export function LoginPage() {
 
     pushNotification("error", "Có lỗi xác thực", error);
   }, [error]);
-
-  if (isAuthenticated && !delayRedirect) {
-    return <Navigate replace to={redirectTo} />;
-  }
 
   function pushNotification(tone: NotificationItem["tone"], title: string, message: string) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -153,127 +150,135 @@ export function LoginPage() {
     <div className="auth-page auth-page-login">
       <NotificationStack items={notifications} onDismiss={dismissNotification} />
 
-      <main className="auth-login-shell">
-        <section className="auth-login-visual">
-          <div className="auth-login-visual-backdrop" />
-          <div className="auth-login-visual-overlay" />
+      <header className="auth-shared-header">
+        <div className="auth-shared-header-inner">
+          <StorefrontOverlayHeader tone="light" />
+        </div>
+      </header>
 
-          <div className="auth-login-visual-content">
-            <div className="auth-login-brand">ND Shop</div>
-            <div className="auth-login-copy">
-              <h1>Curated items for the modern hearth.</h1>
-              <p>Connecting ancestral quality with contemporary living through sustainably sourced forest-inspired goods.</p>
-            </div>
+      {isAuthenticated && !delayRedirect ? (
+        <Navigate replace to={redirectTo} />
+      ) : (
+        <main className="auth-login-shell">
+          <section className="auth-login-visual">
+            <div className="auth-login-visual-backdrop" />
+            <div className="auth-login-visual-overlay" />
 
-            <div className="auth-login-visual-list">
-              {loginVisualHighlights.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          </div>
-
-          <div className="auth-login-featured-note">
-            <span>Featured Collection</span>
-            <strong>The Evergreen Series</strong>
-          </div>
-        </section>
-
-        <section className="auth-login-form-panel">
-          <div className="auth-mobile-brand">ND Shop</div>
-
-          <div className="auth-login-form-card">
-            <header className="auth-login-form-head">
-              <h2>Welcome Back</h2>
-              <p>Enter your details to access your atelier.</p>
-            </header>
-
-            <form className="auth-login-form" noValidate onSubmit={handleLogin}>
-              <FormField error={visibleErrors.identifier} htmlFor="login-identifier" label="Email Address" required>
-                <input
-                  aria-invalid={Boolean(visibleErrors.identifier)}
-                  autoComplete="username"
-                  className={inputClassName(Boolean(visibleErrors.identifier))}
-                  id="login-identifier"
-                  inputMode={loginForm.identifier.includes("@") ? "email" : "text"}
-                  placeholder="name@example.com"
-                  value={loginForm.identifier}
-                  onBlur={() => markTouched("identifier")}
-                  onChange={(event) => updateField("identifier", event.target.value)}
-                />
-              </FormField>
-
-              <FormField
-                action={
-                  <button
-                    className="auth-inline-action"
-                    type="button"
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                }
-                error={visibleErrors.password}
-                htmlFor="login-password"
-                label="Password"
-                required
-              >
-                <input
-                  aria-invalid={Boolean(visibleErrors.password)}
-                  autoComplete="current-password"
-                  className={inputClassName(Boolean(visibleErrors.password))}
-                  id="login-password"
-                  placeholder="••••••••"
-                  type={showPassword ? "text" : "password"}
-                  value={loginForm.password}
-                  onBlur={() => markTouched("password")}
-                  onChange={(event) => updateField("password", event.target.value)}
-                />
-              </FormField>
-
-              <div className="auth-login-options">
-                <label className="auth-checkbox-row" htmlFor="login-remember">
-                  <input
-                    checked={loginForm.rememberMe}
-                    id="login-remember"
-                    type="checkbox"
-                    onChange={(event) => updateField("rememberMe", event.target.checked)}
-                  />
-                  <span>Remember me</span>
-                </label>
-
-                <Link className="auth-forgot-link" to="/forgot-password">
-                  Forgot password?
-                </Link>
+            <div className="auth-login-visual-content">
+              <div className="auth-login-brand">ND Shop</div>
+              <div className="auth-login-copy">
+                <h1>Curated items for the modern hearth.</h1>
+                <p>Connecting ancestral quality with contemporary living through sustainably sourced forest-inspired goods.</p>
               </div>
 
-              <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
-                <span>{isBusy ? "Đang đăng nhập..." : "Login"}</span>
-                <span aria-hidden="true">→</span>
-              </button>
-            </form>
-
-            <div className="auth-login-separator">
-              <span>Or continue with</span>
+              <div className="auth-login-visual-list">
+                {loginVisualHighlights.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
             </div>
 
-            <div className="auth-social-grid">
-              <button className="auth-social-button" type="button" onClick={() => handleOAuthLogin("google")}>
-                <span>G</span>
-                <span>Continue with Google</span>
-              </button>
+            <div className="auth-login-featured-note">
+              <span>Featured Collection</span>
+              <strong>The Evergreen Series</strong>
             </div>
+          </section>
 
-            <footer className="auth-login-footer">
-              <p>
-                Don&apos;t have an account?
-                <Link state={location.state} to="/register">
-                  Register
-                </Link>
-              </p>
-            </footer>
-          </div>
-        </section>
-      </main>
+          <section className="auth-login-form-panel">
+            <div className="auth-login-form-card">
+              <header className="auth-login-form-head">
+                <h2>Welcome Back</h2>
+                <p>Enter your details to access your atelier.</p>
+              </header>
+
+              <form className="auth-login-form" noValidate onSubmit={handleLogin}>
+                <FormField error={visibleErrors.identifier} htmlFor="login-identifier" label="Email Address" required>
+                  <input
+                    aria-invalid={Boolean(visibleErrors.identifier)}
+                    autoComplete="username"
+                    className={inputClassName(Boolean(visibleErrors.identifier))}
+                    id="login-identifier"
+                    inputMode={loginForm.identifier.includes("@") ? "email" : "text"}
+                    placeholder="name@example.com"
+                    value={loginForm.identifier}
+                    onBlur={() => markTouched("identifier")}
+                    onChange={(event) => updateField("identifier", event.target.value)}
+                  />
+                </FormField>
+
+                <FormField
+                  action={
+                    <button
+                      className="auth-inline-action"
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  }
+                  error={visibleErrors.password}
+                  htmlFor="login-password"
+                  label="Password"
+                  required
+                >
+                  <input
+                    aria-invalid={Boolean(visibleErrors.password)}
+                    autoComplete="current-password"
+                    className={inputClassName(Boolean(visibleErrors.password))}
+                    id="login-password"
+                    placeholder="••••••••"
+                    type={showPassword ? "text" : "password"}
+                    value={loginForm.password}
+                    onBlur={() => markTouched("password")}
+                    onChange={(event) => updateField("password", event.target.value)}
+                  />
+                </FormField>
+
+                <div className="auth-login-options">
+                  <label className="auth-checkbox-row" htmlFor="login-remember">
+                    <input
+                      checked={loginForm.rememberMe}
+                      id="login-remember"
+                      type="checkbox"
+                      onChange={(event) => updateField("rememberMe", event.target.checked)}
+                    />
+                    <span>Remember me</span>
+                  </label>
+
+                  <Link className="auth-forgot-link" to="/forgot-password">
+                    Forgot password?
+                  </Link>
+                </div>
+
+                <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
+                  <span>{isBusy ? "Đang đăng nhập..." : "Login"}</span>
+                  <span aria-hidden="true">→</span>
+                </button>
+              </form>
+
+              <div className="auth-login-separator">
+                <span>Or continue with</span>
+              </div>
+
+              <div className="auth-social-grid">
+                <button className="auth-social-button" type="button" onClick={() => handleOAuthLogin("google")}>
+                  <span>G</span>
+                  <span>Continue with Google</span>
+                </button>
+              </div>
+
+              <footer className="auth-login-footer">
+                <p>
+                  Don&apos;t have an account?
+                  <Link state={location.state} to="/register">
+                    Register
+                  </Link>
+                </p>
+              </footer>
+            </div>
+          </section>
+        </main>
+      )}
 
       <footer className="auth-global-footer">
         <div className="auth-global-footer-inner">

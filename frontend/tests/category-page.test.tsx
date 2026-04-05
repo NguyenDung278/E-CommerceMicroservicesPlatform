@@ -9,7 +9,14 @@ vi.mock("../src/features/home/useHomeWorkbook", () => ({
 
 vi.mock("../src/features/cart/hooks/useCart", () => ({
   useCart: vi.fn(() => ({
+    itemCount: 2,
     addItem: vi.fn(),
+  })),
+}));
+
+vi.mock("../src/features/auth/hooks/useAuth", () => ({
+  useAuth: vi.fn(() => ({
+    isAuthenticated: false,
   })),
 }));
 
@@ -192,8 +199,30 @@ describe("CategoryPage workbook mode", () => {
     expect(container.textContent).toContain("Structured Atelier Jacket");
     expect(container.textContent).toContain("The Obsidian Overcoat");
     expect(container.textContent).toContain("Journal");
+    expect(container.textContent).toContain("All Archive");
+    expect(container.textContent).toContain("Women");
+    expect(container.textContent).toContain("Footwear");
+    expect(container.textContent).toContain("Accessories");
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
     expect(apiMocks.listProducts).not.toHaveBeenCalled();
+
+    const categoryLinks = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>(".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill")
+    );
+    const bagLink = container.querySelector<HTMLAnchorElement>(".storefront-overlay-bag-link");
+    const hrefByLabel = Object.fromEntries(
+      categoryLinks.map((link) => [link.textContent?.trim() || "", link.getAttribute("href")])
+    );
+
+    expect(hrefByLabel["ND Shop"]).toBe("/");
+    expect(hrefByLabel["All Archive"]).toBe("/products");
+    expect(hrefByLabel["Men"]).toBe("/categories/Shop%20Men");
+    expect(hrefByLabel["Women"]).toBe("/categories/Shop%20Women");
+    expect(hrefByLabel["Footwear"]).toBe("/categories/Footwear");
+    expect(hrefByLabel["Accessories"]).toBe("/categories/Accessories");
+    expect(hrefByLabel["Login"]).toBe("/login");
+    expect(bagLink?.getAttribute("href")).toBe("/login");
+    expect(bagLink?.textContent).toContain("2");
 
     const outerwearButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button")

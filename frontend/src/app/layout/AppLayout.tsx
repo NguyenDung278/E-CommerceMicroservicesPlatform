@@ -4,58 +4,26 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useCart } from "../../features/cart/hooks/useCart";
 import { api } from "../../shared/api";
+import {
+  mergeWithStorefrontNavigation,
+  normalizeStorefrontNavigationToken,
+  storefrontArchiveHref,
+  storefrontBrandHref,
+  storefrontCartHref,
+  storefrontFallbackNavigation,
+  type StorefrontNavigationItem,
+} from "../../shared/navigation/storefront";
 import type { StorefrontCategory } from "../../shared/types/api";
 import { getUserDisplayName, isDevelopmentAccount } from "../../shared/utils/devAccounts";
 import "./AppLayout.css";
 
-type NavigationItem = {
-  label: string;
-  to: string;
-  aliases: string[];
-  identifier?: string;
-};
+type NavigationItem = StorefrontNavigationItem;
 
 function isVisibleNavigationValue(value: string) {
   return !value.trim().toLowerCase().includes("smoke");
 }
 
-const archiveNavigationItem: NavigationItem = {
-  label: "All Archive",
-  to: "/products",
-  aliases: [],
-};
-
-const fallbackCategoryNavigation: NavigationItem[] = [
-  archiveNavigationItem,
-  {
-    label: "Men",
-    identifier: "Shop Men",
-    aliases: ["Shop Men", "shop-men", "Men"],
-    to: `/categories/${encodeURIComponent("Shop Men")}`,
-  },
-  {
-    label: "Women",
-    identifier: "Shop Women",
-    aliases: ["Shop Women", "shop-women", "Women"],
-    to: `/categories/${encodeURIComponent("Shop Women")}`,
-  },
-  {
-    label: "Footwear",
-    identifier: "Footwear",
-    aliases: ["Footwear", "footwear"],
-    to: `/categories/${encodeURIComponent("Footwear")}`,
-  },
-  {
-    label: "Accessories",
-    identifier: "Accessories",
-    aliases: ["Accessories", "accessories"],
-    to: `/categories/${encodeURIComponent("Accessories")}`,
-  },
-];
-
-function normalizeNavigationToken(value: string) {
-  return value.trim().toLowerCase();
-}
+const fallbackCategoryNavigation: NavigationItem[] = storefrontFallbackNavigation;
 
 const atelierCategoryTokens = new Set([
   "shop men",
@@ -110,12 +78,22 @@ export function AppLayout() {
   );
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const accountLabel = isAuthenticated ? "Account" : "Login";
+  const cartHref = isAuthenticated ? storefrontCartHref : "/login";
+  const cartState = isAuthenticated
+    ? undefined
+    : {
+        from: {
+          pathname: storefrontCartHref,
+          search: "",
+          hash: "",
+        },
+      };
   const profileDisplayName = getUserDisplayName(user);
   const showDevBadge = isAuthenticated && isDevelopmentAccount(user);
   const isHomeSurface = location.pathname === "/";
   const currentCategory =
     location.pathname.startsWith("/categories/") ? decodeURIComponent(location.pathname.replace("/categories/", "")) : "";
-  const normalizedCurrentCategory = normalizeNavigationToken(currentCategory);
+  const normalizedCurrentCategory = normalizeStorefrontNavigationToken(currentCategory);
   const isAtelierCategorySurface =
     location.pathname.startsWith("/categories/") &&
     atelierCategoryTokens.has(normalizedCurrentCategory);
@@ -131,16 +109,15 @@ export function AppLayout() {
           return;
         }
 
-        setCategoryNavigation([
-          archiveNavigationItem,
-          ...response.data
-            .filter((category) =>
-              [category.slug, category.display_name, category.nav_label, ...category.aliases]
-                .filter(Boolean)
-                .every((value) => isVisibleNavigationValue(value))
-            )
-            .map((category) => buildNavigationItem(category)),
-        ]);
+        const mappedCategories = response.data
+          .filter((category) =>
+            [category.slug, category.display_name, category.nav_label, ...category.aliases]
+              .filter(Boolean)
+              .every((value) => isVisibleNavigationValue(value))
+          )
+          .map((category) => buildNavigationItem(category));
+
+        setCategoryNavigation(mergeWithStorefrontNavigation(mappedCategories));
       })
       .catch(() => {
         if (active) {
@@ -171,7 +148,7 @@ export function AppLayout() {
             <div className="editorial-header-brand-slot">
               <NavLink
                 className={isTransactionalSurface ? "editorial-brand-mark editorial-brand-mark-transactional" : "editorial-brand-mark"}
-                to="/"
+                to={storefrontBrandHref}
               >
                 ND Shop
               </NavLink>
@@ -188,9 +165,9 @@ export function AppLayout() {
                     const isActive = item.identifier
                       ? item.aliases.some(
                           (alias) =>
-                            normalizeNavigationToken(alias) === normalizedCurrentCategory
+                            normalizeStorefrontNavigationToken(alias) === normalizedCurrentCategory
                         )
-                      : location.pathname === "/products";
+                      : location.pathname === storefrontArchiveHref;
 
                     return (
                       <Link
@@ -207,7 +184,7 @@ export function AppLayout() {
             <div className="editorial-header-actions">
               {isTransactionalSurface ? (
                 <div className="editorial-account-area editorial-account-area-transactional">
-                  <NavLink aria-label="Cart" className="editorial-bag-link" to="/cart">
+                  <NavLink aria-label="Cart" className="editorial-bag-link" state={cartState} to={cartHref}>
                     <span className="editorial-bag-icon" aria-hidden="true" />
                     <span className="editorial-bag-count">{itemCount}</span>
                   </NavLink>
@@ -221,7 +198,7 @@ export function AppLayout() {
                     <span>{profileDisplayName}</span>
                     <span className="editorial-profile-pill-dot" aria-hidden="true" />
                   </NavLink>
-                  <NavLink aria-label="Cart" className="editorial-bag-link" to="/cart">
+                  <NavLink aria-label="Cart" className="editorial-bag-link" state={cartState} to={cartHref}>
                     <span className="editorial-bag-icon" aria-hidden="true" />
                     <span className="editorial-bag-count">{itemCount}</span>
                   </NavLink>
@@ -250,7 +227,7 @@ export function AppLayout() {
                     <span>{accountLabel}</span>
                     {showDevBadge ? <span className="editorial-account-badge">Dev Only</span> : null}
                   </NavLink>
-                  <NavLink className="editorial-bag-link" to="/cart">
+                  <NavLink className="editorial-bag-link" state={cartState} to={cartHref}>
                     <span className="editorial-bag-icon" aria-hidden="true" />
                     <span className="editorial-bag-count">{itemCount}</span>
                   </NavLink>
@@ -288,7 +265,7 @@ export function AppLayout() {
               ) : (
                 <>
                   <NavLink to="/">Home</NavLink>
-                  <NavLink to="/products">Archive</NavLink>
+                  <NavLink to={storefrontArchiveHref}>Archive</NavLink>
                   <NavLink to="/cart">Bag</NavLink>
                   <NavLink to={accountHref}>{accountLabel}</NavLink>
                   {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}

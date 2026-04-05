@@ -14,6 +14,7 @@ import {
   type HomeWorkbookSegment,
 } from "../features/home/workbook";
 import { useHomeWorkbook } from "../features/home/useHomeWorkbook";
+import { StorefrontOverlayHeader } from "../shared/components/navigation/StorefrontOverlayHeader";
 import { formatCurrency } from "../shared/utils/format";
 import "./HomePage.css";
 
@@ -158,28 +159,7 @@ export function HomePage() {
         <div className="home-stitch-hero-scrim" />
 
         <div className="home-stitch-hero-inner">
-          <div className="home-stitch-tab-row" role="tablist" aria-label="Archive tabs">
-            {navItems.map((item) => {
-              const isActive = item.slug === activeSegment?.slug;
-
-              return (
-                <button
-                  aria-selected={isActive}
-                  className={`home-stitch-tab ${isActive ? "is-active" : ""}`}
-                  key={item.slug}
-                  onClick={() => {
-                    startTransition(() => {
-                      setActiveSegmentSlug(item.slug);
-                    });
-                  }}
-                  role="tab"
-                  type="button"
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+          <StorefrontOverlayHeader />
 
           <div className="home-stitch-hero-grid">
             <div className="home-stitch-hero-copy">

@@ -1,0 +1,216 @@
+.storefront-overlay-header {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+}
+
+.storefront-overlay-brand,
+.storefront-overlay-nav,
+.storefront-overlay-actions {
+  display: flex;
+  align-items: center;
+}
+
+.storefront-overlay-brand {
+  color: #fff9f3;
+  font-size: 1.28rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.storefront-overlay-nav {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 34px;
+  min-width: 0;
+}
+
+.storefront-overlay-link {
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease;
+}
+
+.storefront-overlay-link:hover,
+.storefront-overlay-link:focus-visible {
+  color: #ffffff;
+}
+
+.storefront-overlay-link-active {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.storefront-overlay-actions {
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.storefront-overlay-bag-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #fff9f3;
+  text-decoration: none;
+}
+
+.storefront-overlay-bag-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 2px 2px 4px 4px;
+}
+
+.storefront-overlay-bag-icon::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: -6px;
+  height: 7px;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+}
+
+.storefront-overlay-bag-count {
+  position: absolute;
+  top: -6px;
+  right: -10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #501a07;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.storefront-overlay-account-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff9f3;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.storefront-overlay-account-pill:hover,
+.storefront-overlay-account-pill:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.storefront-overlay-header-light .storefront-overlay-brand {
+  color: #061b0e;
+}
+
+.storefront-overlay-header-light .storefront-overlay-link {
+  color: rgba(6, 27, 14, 0.72);
+}
+
+.storefront-overlay-header-light .storefront-overlay-link:hover,
+.storefront-overlay-header-light .storefront-overlay-link:focus-visible {
+  color: #061b0e;
+}
+
+.storefront-overlay-header-light .storefront-overlay-link-active {
+  border-color: #061b0e;
+  color: #061b0e;
+}
+
+.storefront-overlay-header-light .storefront-overlay-bag-link {
+  color: #061b0e;
+}
+
+.storefront-overlay-header-light .storefront-overlay-account-pill {
+  border-color: rgba(6, 27, 14, 0.1);
+  background: rgba(6, 27, 14, 0.06);
+  color: #061b0e;
+}
+
+.storefront-overlay-header-light .storefront-overlay-account-pill:hover,
+.storefront-overlay-header-light .storefront-overlay-account-pill:focus-visible {
+  border-color: rgba(6, 27, 14, 0.18);
+  background: rgba(6, 27, 14, 0.1);
+  color: #061b0e;
+}
+
+@media (max-width: 1100px) {
+  .storefront-overlay-header {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    row-gap: 18px;
+  }
+
+  .storefront-overlay-nav {
+    grid-column: 1 / -1;
+    order: 3;
+    justify-content: flex-start;
+    gap: 22px;
+  }
+
+  .storefront-overlay-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .storefront-overlay-header {
+    gap: 14px;
+  }
+
+  .storefront-overlay-brand {
+    font-size: 1.08rem;
+  }
+
+  .storefront-overlay-link {
+    font-size: 0.9rem;
+  }
+
+  .storefront-overlay-account-pill {
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 0.68rem;
+  }
+}

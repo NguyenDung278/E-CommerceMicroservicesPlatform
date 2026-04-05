@@ -29,8 +29,9 @@ type fakeOAuthAccountRepo struct {
 }
 
 type fakeOAuthProviderClient struct {
-	redirects  map[string]string
-	identities map[string]*OAuthIdentity
+	redirects                    map[string]string
+	identities                   map[string]*OAuthIdentity
+	lastAuthorizationRedirectURL string
 }
 
 func (s *fakeEmailSender) Send(_ email.Message) error {
@@ -137,11 +138,12 @@ func (r *fakeOAuthAccountRepo) GetByUserIDAndProvider(_ context.Context, userID,
 	return r.accountsByUser[userID+":"+provider], nil
 }
 
-func (c *fakeOAuthProviderClient) AuthorizationURL(provider, state, _ string) (string, error) {
+func (c *fakeOAuthProviderClient) AuthorizationURL(provider, state, redirectURL string) (string, error) {
 	baseURL, ok := c.redirects[provider]
 	if !ok {
 		return "", ErrOAuthProviderNotConfigured
 	}
+	c.lastAuthorizationRedirectURL = redirectURL
 
 	return baseURL + "?state=" + url.QueryEscape(state), nil
 }
@@ -590,6 +592,36 @@ func TestCompleteOAuthCallbackCreatesNewUserAndExchangeTicket(t *testing.T) {
 	}
 	if oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-1"] == nil {
 		t.Fatal("expected oauth account link to be stored")
+	}
+}
+
+func TestBeginOAuthUsesConfiguredCallbackURLForLoopbackFrontend(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+	}
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://127.0.0.1:5174"),
+	)
+
+	if _, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://127.0.0.1:5174"); err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+
+	if oauthClient.lastAuthorizationRedirectURL != "http://localhost:8080/api/v1/auth/oauth/google/callback" {
+		t.Fatalf(
+			"expected configured oauth callback URL to be preserved, got %q",
+			oauthClient.lastAuthorizationRedirectURL,
+		)
 	}
 }
 

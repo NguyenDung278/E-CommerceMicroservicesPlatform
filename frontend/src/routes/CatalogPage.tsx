@@ -1,16 +1,190 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { useAuth } from "../features/auth/hooks/useAuth";
 import { useCart } from "../features/cart/hooks/useCart";
+import {
+  getStorefrontArchiveCategoryLabel,
+  isStorefrontArchiveCategory,
+  isStorefrontAutoAddCategory,
+  storefrontArchiveCategoryLabels,
+} from "../shared/navigation/storefront";
 import { api, getErrorMessage } from "../shared/api";
 import { ProductCard } from "../shared/components/product/ProductCard";
 import type { Product } from "../shared/types/api";
 import { formatCurrency } from "../shared/utils/format";
 import "./CatalogPage.css";
 
+const archivePageSize = 100;
+
+function normalizeArchiveText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function compareProductsByLatest(left: Product, right: Product) {
+  const leftTimestamp = Date.parse(left.created_at || "") || 0;
+  const rightTimestamp = Date.parse(right.created_at || "") || 0;
+
+  if (leftTimestamp !== rightTimestamp) {
+    return rightTimestamp - leftTimestamp;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+function sortArchiveProducts(
+  products: Product[],
+  sortBy: "latest" | "price_asc" | "price_desc" | "popular",
+  popularityRank = new Map<string, number>()
+) {
+  const nextProducts = products.slice();
+
+  switch (sortBy) {
+    case "price_asc":
+      return nextProducts.sort((left, right) => left.price - right.price);
+    case "price_desc":
+      return nextProducts.sort((left, right) => right.price - left.price);
+    case "popular":
+      return nextProducts.sort((left, right) => {
+        const popularityDelta =
+          (popularityRank.get(right.id) ?? -1) - (popularityRank.get(left.id) ?? -1);
+
+        if (popularityDelta !== 0) {
+          return popularityDelta;
+        }
+
+        return compareProductsByLatest(left, right);
+      });
+    default:
+      return nextProducts.sort(compareProductsByLatest);
+  }
+}
+
+function matchesArchiveSearch(product: Product, search: string) {
+  if (!search) {
+    return true;
+  }
+
+  const searchableText = [
+    product.name,
+    product.description,
+    product.brand,
+    product.category,
+    ...product.tags,
+    ...product.variants.flatMap((variant) => [
+      variant.label,
+      variant.size ?? "",
+      variant.color ?? "",
+    ]),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return searchableText.includes(search);
+}
+
+function matchesArchiveFilters(
+  product: Product,
+  filters: {
+    search: string;
+    category: string;
+    brand: string;
+    tag: string;
+    size: string;
+    color: string;
+    minPrice?: number;
+    maxPrice?: number;
+  }
+) {
+  const categoryLabel = getStorefrontArchiveCategoryLabel(product.category || "");
+
+  if (!categoryLabel) {
+    return false;
+  }
+
+  if (filters.category && categoryLabel !== filters.category) {
+    return false;
+  }
+
+  if (
+    filters.brand &&
+    normalizeArchiveText(product.brand || "") !== normalizeArchiveText(filters.brand)
+  ) {
+    return false;
+  }
+
+  if (
+    filters.tag &&
+    !product.tags.some((tag) => normalizeArchiveText(tag) === normalizeArchiveText(filters.tag))
+  ) {
+    return false;
+  }
+
+  if (
+    filters.size &&
+    !product.variants.some(
+      (variant) => normalizeArchiveText(variant.size ?? "") === normalizeArchiveText(filters.size)
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    filters.color &&
+    !product.variants.some(
+      (variant) => normalizeArchiveText(variant.color ?? "") === normalizeArchiveText(filters.color)
+    )
+  ) {
+    return false;
+  }
+
+  if (typeof filters.minPrice === "number" && product.price < filters.minPrice) {
+    return false;
+  }
+
+  if (typeof filters.maxPrice === "number" && product.price > filters.maxPrice) {
+    return false;
+  }
+
+  return matchesArchiveSearch(product, filters.search);
+}
+
+async function loadStorefrontArchiveProducts() {
+  const allProducts: Product[] = [];
+  const seenProductIds = new Set<string>();
+  let cursor: string | undefined;
+
+  while (true) {
+    const response = await api.listProducts({
+      status: "active",
+      limit: archivePageSize,
+      cursor,
+    });
+
+    for (const product of response.data) {
+      if (
+        !seenProductIds.has(product.id) &&
+        isStorefrontArchiveCategory(product.category || "")
+      ) {
+        seenProductIds.add(product.id);
+        allProducts.push(product);
+      }
+    }
+
+    const nextCursor = response.meta?.next_cursor;
+
+    if (!response.meta?.has_next || !nextCursor) {
+      return allProducts;
+    }
+
+    cursor = nextCursor;
+  }
+}
+
 export function CatalogPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
   const [catalogIndex, setCatalogIndex] = useState<Product[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -26,13 +200,11 @@ export function CatalogPage() {
   const [busyProductId, setBusyProductId] = useState("");
 
   const categories = useMemo(() => {
-    return Array.from(
-      new Set(
-        catalogIndex
-          .map((product) => product.category)
-          .filter((category): category is string => Boolean(category))
+    return storefrontArchiveCategoryLabels.filter((label) =>
+      catalogIndex.some(
+        (product) => getStorefrontArchiveCategoryLabel(product.category || "") === label
       )
-    ).sort();
+    );
   }, [catalogIndex]);
 
   const brands = useMemo(() => {
@@ -75,11 +247,11 @@ export function CatalogPage() {
   useEffect(() => {
     let active = true;
 
-    void api
-      .listProducts({ status: "active" })
+    void loadStorefrontArchiveProducts()
       .then((response) => {
         if (active) {
-          setCatalogIndex(response.data);
+          setCatalogIndex(response);
+          setFeedback("");
         }
       })
       .catch((reason) => {
@@ -98,50 +270,59 @@ export function CatalogPage() {
     const minPrice = Number.parseFloat(priceRange.min);
     const maxPrice = Number.parseFloat(priceRange.max);
 
-    void api
-      .listProducts({
-        search: submittedSearch,
-        category: selectedCategory || undefined,
-        brand: selectedBrand || undefined,
-        tag: selectedTag || undefined,
-        status: "active",
+    if (catalogIndex.length === 0) {
+      setProducts([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    const filteredProducts = catalogIndex.filter((product) =>
+      matchesArchiveFilters(product, {
+        search: normalizeArchiveText(submittedSearch),
+        category: selectedCategory,
+        brand: selectedBrand,
+        tag: selectedTag,
+        size: selectedSize,
+        color: selectedColor,
         minPrice: Number.isFinite(minPrice) && minPrice > 0 ? minPrice : undefined,
         maxPrice: Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : undefined,
-        size: selectedSize || undefined,
-        color: selectedColor || undefined,
-        sort: sortBy === "popular" ? "latest" : sortBy
       })
-      .then(async (response) => {
-        let nextProducts = response.data;
-        if (sortBy === "popular") {
-          try {
-            const popularityResponse = await api.getProductPopularity(response.data.length || 100);
-            const popularityRank = new Map(
-              popularityResponse.data.map((item, index) => [item.product_id, item.quantity * 1000 - index])
-            );
-            nextProducts = response.data
-              .slice()
-              .sort((left, right) => (popularityRank.get(right.id) ?? -1) - (popularityRank.get(left.id) ?? -1));
-          } catch {
-            nextProducts = response.data;
-          }
-        }
+    );
 
-        if (active) {
-          setProducts(nextProducts);
-          setFeedback("");
+    async function applyProducts() {
+      let nextProducts = sortArchiveProducts(filteredProducts, sortBy);
+
+      if (sortBy === "popular" && filteredProducts.length > 1) {
+        try {
+          const popularityResponse = await api.getProductPopularity(
+            Math.max(filteredProducts.length, archivePageSize)
+          );
+          const popularityRank = new Map(
+            popularityResponse.data.map((item, index) => [
+              item.product_id,
+              item.quantity * archivePageSize - index,
+            ])
+          );
+          nextProducts = sortArchiveProducts(filteredProducts, sortBy, popularityRank);
+        } catch {
+          nextProducts = sortArchiveProducts(filteredProducts, "latest");
         }
-      })
-      .catch((reason) => {
-        if (active) {
-          setFeedback(getErrorMessage(reason));
-        }
-      });
+      }
+
+      if (active) {
+        setProducts(nextProducts);
+        setFeedback("");
+      }
+    }
+
+    void applyProducts();
 
     return () => {
       active = false;
     };
   }, [
+    catalogIndex,
     submittedSearch,
     selectedCategory,
     selectedBrand,
@@ -165,6 +346,38 @@ export function CatalogPage() {
       setFeedback(getErrorMessage(reason));
     } finally {
       setBusyProductId("");
+    }
+  }
+
+  async function handleBuyNow(product: Product) {
+    const shouldSyncCart =
+      isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
+
+    try {
+      if (shouldSyncCart) {
+        setBusyProductId(product.id);
+        await addItem({
+          product_id: product.id,
+          quantity: 1,
+        });
+      }
+
+      navigate("/checkout", {
+        state: {
+          directProduct: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: 1,
+          },
+        },
+      });
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      if (shouldSyncCart) {
+        setBusyProductId("");
+      }
     }
   }
 
@@ -418,18 +631,7 @@ export function CatalogPage() {
                   key={product.id}
                   busy={busyProductId === product.id}
                   onAddToCart={handleAddToCart}
-                  onBuyNow={(selected) =>
-                    navigate("/checkout", {
-                      state: {
-                        directProduct: {
-                          id: selected.id,
-                          name: selected.name,
-                          price: selected.price,
-                          quantity: 1
-                        }
-                      }
-                    })
-                  }
+                  onBuyNow={handleBuyNow}
                   product={product}
                   variant="archive"
                 />

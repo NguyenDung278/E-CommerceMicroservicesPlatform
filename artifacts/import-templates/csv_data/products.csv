@@ -1,0 +1,4 @@
+id,external_id,name,category_slug,category,price,stock,material,merchandising_rank,updated_at
+550e8400-e29b-41d4-a716-446655440000,SM-001,Linen Shirt,shop-men,shop-men,129.99,18,Italian Linen,1,2025-09-26 10:00:00
+550e8400-e29b-41d4-a716-446655440001,SM-002,Cotton Tee,shop-men,shop-men,49.99,42,Organic Cotton,2,2025-09-26 10:00:00
+550e8400-e29b-41d4-a716-446655440002,AW-001,Silk Dress,atelier-women,atelier-women,229.0,7,Mulberry Silk,1,2025-09-26 10:05:00

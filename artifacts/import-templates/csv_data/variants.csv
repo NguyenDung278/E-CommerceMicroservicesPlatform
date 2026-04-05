@@ -1,0 +1,4 @@
+id,product_external_id,sku,size,color,stock,price,image_url
+660e8400-e29b-41d4-a716-446655440000,SM-001,SM-001-M,M,White,10,129.99,https://example.com/images/sm001-m.jpg
+660e8400-e29b-41d4-a716-446655440001,SM-001,SM-001-L,L,White,8,129.99,https://example.com/images/sm001-l.jpg
+660e8400-e29b-41d4-a716-446655440002,SM-002,SM-002-S,S,Navy,42,49.99,https://example.com/images/sm002-s.jpg

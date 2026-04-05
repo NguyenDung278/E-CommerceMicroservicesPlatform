@@ -1,0 +1,4 @@
+id,category_slug,section_type,position,payload,published
+770e8400-e29b-41d4-a716-446655440000,shop-men,hero-banner,1,"{""variant"":""dark-immersive"",""title"":""Spring Drop"",""subtitle"":""New arrivals""}",True
+770e8400-e29b-41d4-a716-446655440001,shop-men,product-grid,2,"{""columns"":3,""productIds"":[""SM-001"",""SM-002""]}",True
+770e8400-e29b-41d4-a716-446655440002,atelier-women,story-block,1,"{""heading"":""Craftsmanship"",""body"":""Hand-stitched details""}",True

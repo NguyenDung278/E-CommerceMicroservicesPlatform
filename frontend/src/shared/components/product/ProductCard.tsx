@@ -7,7 +7,7 @@ import "./ProductCard.css";
 type ProductCardProps = {
   product: Product;
   onAddToCart?: (product: Product) => void | Promise<void>;
-  onBuyNow?: (product: Product) => void;
+  onBuyNow?: (product: Product) => void | Promise<void>;
   busy?: boolean;
   variant?: "default" | "archive";
   adminAction?: {
@@ -103,7 +103,7 @@ export function ProductCard({
               <Link className="text-link" to={`/products/${product.id}`}>
                 Xem chi tiết
               </Link>
-              <button className="catalog-archive-buy-link" type="button" onClick={() => onBuyNow(product)}>
+              <button className="catalog-archive-buy-link" type="button" onClick={() => void onBuyNow(product)}>
                 Mua ngay
               </button>
             </div>
@@ -195,7 +195,7 @@ export function ProductCard({
           <button
             className="ghost-button"
             disabled={product.stock === 0}
-            onClick={() => onBuyNow(product)}
+            onClick={() => void onBuyNow(product)}
             type="button"
           >
             Mua ngay

@@ -421,21 +421,6 @@ func (s *UserService) resolveOAuthCallbackURL(provider, requestOrigin string) (s
 		return "", ErrOAuthProviderNotConfigured
 	}
 
-	requestOrigin = strings.TrimSpace(requestOrigin)
-	if requestOrigin == "" {
-		return parsedRedirect.String(), nil
-	}
-
-	parsedOrigin, err := url.Parse(requestOrigin)
-	if err != nil || parsedOrigin.Scheme == "" || parsedOrigin.Host == "" {
-		return parsedRedirect.String(), nil
-	}
-
-	if isLocalHostname(parsedOrigin.Hostname()) && isLocalHostname(parsedRedirect.Hostname()) {
-		parsedRedirect.Scheme = parsedOrigin.Scheme
-		parsedRedirect.Host = joinHostPort(parsedOrigin.Hostname(), parsedRedirect.Port())
-	}
-
 	return parsedRedirect.String(), nil
 }
 

@@ -20,7 +20,7 @@ describe("home workbook parser", () => {
         position: 1,
         slug: "all-archive",
         label: "All Archive",
-        href: "/",
+        href: "/products",
         is_default: true,
       },
       {

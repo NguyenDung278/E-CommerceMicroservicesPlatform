@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../features/auth/hooks/useAuth";
 import { useCart } from "../features/cart/hooks/useCart";
 import { api, getErrorMessage, isHttpError } from "../shared/api";
+import { isStorefrontAutoAddCategory } from "../shared/navigation/storefront";
 import type {
   Product,
   ProductReview,
@@ -207,17 +208,62 @@ export function ProductDetailPage() {
       return;
     }
 
+    const shouldUseDefaultCartQuantity =
+      isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
+    const nextQuantity = shouldUseDefaultCartQuantity ? 1 : quantity;
+
     try {
       setIsBusy(true);
       await addItem({
         product_id: product.id,
-        quantity
+        quantity: nextQuantity
       });
-      setFeedback("Sản phẩm đã được thêm vào giỏ hàng.");
+      setFeedback(
+        shouldUseDefaultCartQuantity
+          ? "Sản phẩm đã được thêm vào giỏ hàng với số lượng mặc định là 1."
+          : "Sản phẩm đã được thêm vào giỏ hàng."
+      );
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
       setIsBusy(false);
+    }
+  }
+
+  async function handleBuyNow() {
+    if (!product) {
+      return;
+    }
+
+    const shouldSyncCart =
+      isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
+    const checkoutQuantity = shouldSyncCart ? 1 : quantity;
+
+    try {
+      if (shouldSyncCart) {
+        setIsBusy(true);
+        await addItem({
+          product_id: product.id,
+          quantity: 1,
+        });
+      }
+
+      navigate("/checkout", {
+        state: {
+          directProduct: {
+            id: product.id,
+            name: product.name,
+            price: activePrice,
+            quantity: checkoutQuantity,
+          },
+        },
+      });
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      if (shouldSyncCart) {
+        setIsBusy(false);
+      }
     }
   }
 
@@ -599,19 +645,8 @@ export function ProductDetailPage() {
                     </button>
                     <button
                       className="secondary-button"
-                      disabled={activeStock === 0}
-                      onClick={() =>
-                        navigate("/checkout", {
-                          state: {
-                            directProduct: {
-                              id: product.id,
-                              name: product.name,
-                              price: product.price,
-                              quantity
-                            }
-                          }
-                        })
-                      }
+                      disabled={isBusy || activeStock === 0}
+                      onClick={() => void handleBuyNow()}
                       type="button"
                     >
                       Mua ngay

@@ -530,6 +530,18 @@
   background: var(--color-surface);
 }
 
+.auth-shared-header {
+  border-bottom: 1px solid rgba(87, 93, 121, 0.08);
+  background: rgba(251, 249, 244, 0.88);
+  backdrop-filter: blur(20px);
+}
+
+.auth-shared-header-inner {
+  width: min(100%, 1536px);
+  margin: 0 auto;
+  padding: 24px 48px;
+}
+
 .auth-login-shell,
 .auth-register-shell {
   min-height: calc(100vh - 96px);
@@ -1015,4 +1027,10 @@
   letter-spacing: -0.04em;
   text-transform: none;
   color: var(--color-primary);
+}
+
+@media (max-width: 760px) {
+  .auth-shared-header-inner {
+    padding: 18px 20px;
+  }
 }

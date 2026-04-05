@@ -7,6 +7,18 @@ vi.mock("../src/features/home/useHomeWorkbook", () => ({
   useHomeWorkbook: vi.fn(),
 }));
 
+vi.mock("../src/features/auth/hooks/useAuth", () => ({
+  useAuth: vi.fn(() => ({
+    isAuthenticated: false,
+  })),
+}));
+
+vi.mock("../src/features/cart/hooks/useCart", () => ({
+  useCart: vi.fn(() => ({
+    itemCount: 2,
+  })),
+}));
+
 import { useHomeWorkbook } from "../src/features/home/useHomeWorkbook";
 import { HomePage } from "../src/routes/HomePage";
 
@@ -168,7 +180,7 @@ describe("HomePage workbook mode", () => {
             position: 1,
             slug: "all-archive",
             label: "All Archive",
-            href: "/",
+            href: "/products",
             isDefault: true,
           },
           {
@@ -200,7 +212,7 @@ describe("HomePage workbook mode", () => {
     });
   });
 
-  it("switches tabs when the user selects another segment", async () => {
+  it("renders unified storefront navigation links with the required routes", async () => {
     vi.mocked(useHomeWorkbook).mockReturnValue({
       content: {
         sourceName: "stitchfix-home.xlsx",
@@ -218,18 +230,18 @@ describe("HomePage workbook mode", () => {
             position: 1,
             slug: "all-archive",
             label: "All Archive",
-            href: "/",
+            href: "/products",
             isDefault: true,
           },
           {
             position: 2,
             slug: "nu",
-            label: "Nữ",
+            label: "Women",
             href: "/categories/Shop%20Women",
             isDefault: false,
           },
         ],
-        segments: [createSegment("all-archive", "All Archive"), createSegment("nu", "Nữ")],
+        segments: [createSegment("all-archive", "All Archive"), createSegment("nu", "Women")],
       },
       status: "ready",
       error: "",
@@ -245,18 +257,27 @@ describe("HomePage workbook mode", () => {
       expect(container.textContent).toContain("Forest & Hearth");
     });
 
-    const womenTab = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "Nữ"
+    const navigationLinks = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>(
+        ".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill"
+      )
+    );
+    const bagLink = container.querySelector<HTMLAnchorElement>(".storefront-overlay-bag-link");
+
+    const hrefByLabel = Object.fromEntries(
+      navigationLinks.map((link) => [link.textContent?.trim() || "", link.getAttribute("href")])
     );
 
-    await act(async () => {
-      womenTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
     await waitFor(() => {
-      expect(container.textContent).toContain("Soft Structure, Warm Finish");
-      expect(container.textContent).toContain("Fluid Dresses");
-      expect(container.textContent).toContain("Rose Drape Blazer");
+      expect(hrefByLabel["ND Shop"]).toBe("/");
+      expect(hrefByLabel["All Archive"]).toBe("/products");
+      expect(hrefByLabel["Men"]).toBe("/categories/Shop%20Men");
+      expect(hrefByLabel["Women"]).toBe("/categories/Shop%20Women");
+      expect(hrefByLabel["Footwear"]).toBe("/categories/Footwear");
+      expect(hrefByLabel["Accessories"]).toBe("/categories/Accessories");
+      expect(hrefByLabel["Login"]).toBe("/login");
+      expect(bagLink?.getAttribute("href")).toBe("/login");
+      expect(bagLink?.textContent).toContain("2");
     });
   });
 });

@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useCart } from "../features/cart/hooks/useCart";
+import { useAuth } from "../features/auth/hooks/useAuth";
 import {
   findHomeWorkbookCategoryPage,
   type HomeWorkbookCategoryPage,
@@ -10,6 +11,11 @@ import {
 } from "../features/home/workbook";
 import { useHomeWorkbook } from "../features/home/useHomeWorkbook";
 import { api, getErrorMessage, isHttpError } from "../shared/api";
+import { StorefrontOverlayHeader } from "../shared/components/navigation/StorefrontOverlayHeader";
+import {
+  isStorefrontAutoAddCategory,
+  normalizeStorefrontNavigationToken,
+} from "../shared/navigation/storefront";
 import { ProductCard } from "../shared/components/product/ProductCard";
 import { formatCurrency } from "../shared/utils/format";
 import type {
@@ -54,10 +60,6 @@ function readStringFromRecord(record: JsonObject, ...keys: string[]) {
   return "";
 }
 
-function normalizeCategoryToken(value: string) {
-  return value.trim().toLowerCase();
-}
-
 function getFallbackCategoryImage(
   slug: string,
   displayName: string,
@@ -67,7 +69,7 @@ function getFallbackCategoryImage(
     return featuredImage;
   }
 
-  const normalizedSlug = normalizeCategoryToken(slug);
+  const normalizedSlug = normalizeStorefrontNavigationToken(slug);
   if (fallbackCategoryImages[normalizedSlug]) {
     return fallbackCategoryImages[normalizedSlug];
   }
@@ -186,6 +188,7 @@ export function CategoryPage() {
 function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
   const navigate = useNavigate();
   const { addItem } = useCart();
+  const { isAuthenticated } = useAuth();
   const { content, status: workbookStatus } = useHomeWorkbook();
 
   const [storefrontPage, setStorefrontPage] =
@@ -284,6 +287,39 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
     }
   }
 
+  async function handleBuyNow(product: Product) {
+    const shouldSyncCart =
+      isAuthenticated &&
+      isStorefrontAutoAddCategory(product.category || identifier);
+
+    try {
+      if (shouldSyncCart) {
+        setBusyProductId(product.id);
+        await addItem({
+          product_id: product.id,
+          quantity: 1,
+        });
+      }
+
+      navigate("/checkout", {
+        state: {
+          directProduct: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: 1,
+          },
+        },
+      });
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      if (shouldSyncCart) {
+        setBusyProductId("");
+      }
+    }
+  }
+
   if (workbookCategoryPage && content) {
     return (
       <WorkbookCategoryPage
@@ -301,6 +337,7 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
         isLoading={isLoading}
         navigate={navigate}
         onAddToCart={handleAddToCart}
+        onBuyNow={handleBuyNow}
         pageData={storefrontPage}
         products={products}
       />
@@ -333,18 +370,7 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
                 key={product.id}
                 busy={busyProductId === product.id}
                 onAddToCart={handleAddToCart}
-                onBuyNow={(selected) =>
-                  navigate("/checkout", {
-                    state: {
-                      directProduct: {
-                        id: selected.id,
-                        name: selected.name,
-                        price: selected.price,
-                        quantity: 1,
-                      },
-                    },
-                  })
-                }
+                onBuyNow={handleBuyNow}
                 product={product}
               />
             ))}
@@ -383,18 +409,6 @@ function WorkbookCategoryPage({
     matchesWorkbookProductFilters(product, activeFilters)
   );
   const primaryCategoryRoute = buildCategoryRoute(pageData);
-  const categoryNavigation = [
-    {
-      label: "All Archive",
-      href: "/",
-      isActive: false,
-    },
-    ...content.categoryPages.map((page) => ({
-      label: page.navLabel,
-      href: buildCategoryRoute(page),
-      isActive: page.slug === pageData.slug,
-    })),
-  ];
 
   return (
     <div className="atelier-category-page">
@@ -407,22 +421,7 @@ function WorkbookCategoryPage({
         <div className="atelier-category-hero-scrim" />
 
         <div className="atelier-category-hero-inner">
-          <nav className="atelier-category-pill-row" aria-label="Atelier navigation">
-            {categoryNavigation.map((item) => (
-              <CategoryActionLink
-                className={
-                  item.isActive
-                    ? "atelier-category-pill atelier-category-pill-active"
-                    : "atelier-category-pill"
-                }
-                fallbackHref="/"
-                href={item.href}
-                key={item.label}
-              >
-                {item.label}
-              </CategoryActionLink>
-            ))}
-          </nav>
+          <StorefrontOverlayHeader />
 
           <div className="atelier-category-hero-grid">
             <div className="atelier-category-hero-copy">
@@ -586,6 +585,7 @@ function EditorialCategoryPage({
   isLoading,
   busyProductId,
   onAddToCart,
+  onBuyNow,
   navigate,
 }: {
   pageData: StorefrontCategoryPageData;
@@ -594,6 +594,7 @@ function EditorialCategoryPage({
   isLoading: boolean;
   busyProductId: string;
   onAddToCart: (product: Product) => Promise<void>;
+  onBuyNow: (product: Product) => Promise<void>;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const heroSource = buildHeroSource(pageData);
@@ -671,6 +672,8 @@ function EditorialCategoryPage({
     <div className="page-stack category-page">
       <section className="category-hero">
         <article className="category-hero-panel">
+          <StorefrontOverlayHeader />
+
           <div className="category-hero-copy">
             <span className="section-kicker">{heroBadge || "Storefront category"}</span>
             <h1>{heroTitle}</h1>
@@ -763,18 +766,7 @@ function EditorialCategoryPage({
                 key={product.id}
                 busy={busyProductId === product.id}
                 onAddToCart={onAddToCart}
-                onBuyNow={(selected) =>
-                  navigate("/checkout", {
-                    state: {
-                      directProduct: {
-                        id: selected.id,
-                        name: selected.name,
-                        price: selected.price,
-                        quantity: 1,
-                      },
-                    },
-                  })
-                }
+                onBuyNow={onBuyNow}
                 product={product}
                 variant="archive"
               />
