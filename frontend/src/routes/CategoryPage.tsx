@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useCart } from "../features/cart/hooks/useCart";
@@ -142,12 +149,45 @@ function matchesWorkbookProductFilters(
   });
 }
 
+function sortWorkbookCategoryProducts(
+  products: HomeWorkbookCategoryProduct[],
+  sortBy: "latest" | "price_asc" | "price_desc"
+) {
+  const nextProducts = products.slice();
+
+  switch (sortBy) {
+    case "price_asc":
+      return nextProducts.sort((left, right) => left.price - right.price);
+    case "price_desc":
+      return nextProducts.sort((left, right) => right.price - left.price);
+    default:
+      return nextProducts.sort((left, right) => left.position - right.position);
+  }
+}
+
 function formatResultsLabel(template: string, count: number) {
   if (!template.trim()) {
     return `Showing ${count} results`;
   }
 
   return template.replace("%count%", String(count));
+}
+
+function buildWorkbookProductSearchIndex(product: HomeWorkbookCategoryProduct) {
+  return [
+    product.badge,
+    product.name,
+    product.material,
+    product.imageAlt,
+    ...product.filterTags,
+  ]
+    .join(" ")
+    .trim()
+    .toLowerCase();
+}
+
+function buildInitialWorkbookSectionState(page: HomeWorkbookCategoryPage) {
+  return Object.fromEntries(page.filters.map((filter) => [filter.filterKey, true]));
 }
 
 function CategoryActionLink({
@@ -400,15 +440,70 @@ function WorkbookCategoryPage({
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>(
     () => buildInitialFilterState(pageData)
   );
+  const [searchInput, setSearchInput] = useState("");
+  const deferredSearchInput = useDeferredValue(searchInput);
+  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<"latest" | "price_asc" | "price_desc">(
+    "latest"
+  );
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(
+    () => buildInitialWorkbookSectionState(pageData)
+  );
 
   useEffect(() => {
     setActiveFilters(buildInitialFilterState(pageData));
+    setSearchInput("");
+    setIsFiltersPanelOpen(false);
+    setSortBy("latest");
+    setOpenSections(buildInitialWorkbookSectionState(pageData));
   }, [pageData]);
 
-  const filteredProducts = pageData.products.filter((product) =>
-    matchesWorkbookProductFilters(product, activeFilters)
-  );
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = deferredSearchInput.trim().toLowerCase();
+
+    const nextProducts = pageData.products.filter((product) => {
+      if (!matchesWorkbookProductFilters(product, activeFilters)) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return buildWorkbookProductSearchIndex(product).includes(normalizedSearch);
+    });
+
+    return sortWorkbookCategoryProducts(nextProducts, sortBy);
+  }, [activeFilters, deferredSearchInput, pageData.products, sortBy]);
   const primaryCategoryRoute = buildCategoryRoute(pageData);
+  const activeFilterCount =
+    Object.values(activeFilters).filter(Boolean).length + (searchInput ? 1 : 0);
+  const activeFilterSummary = [
+    searchInput ? `Search: ${searchInput}` : "",
+    ...pageData.filters
+      .map((filter) =>
+        activeFilters[filter.filterKey]
+          ? `${filter.label}: ${activeFilters[filter.filterKey]}`
+          : ""
+      )
+      .filter(Boolean),
+  ].join(" / ");
+
+  function clearWorkbookFilters() {
+    startTransition(() => {
+      setSearchInput("");
+      setActiveFilters(buildInitialFilterState(pageData));
+    });
+  }
+
+  function toggleWorkbookSection(filterKey: string) {
+    startTransition(() => {
+      setOpenSections((current) => ({
+        ...current,
+        [filterKey]: !current[filterKey],
+      }));
+    });
+  }
 
   return (
     <div className="atelier-category-page">
@@ -442,83 +537,191 @@ function WorkbookCategoryPage({
         </div>
       </section>
 
-      {pageData.filters.length > 0 ? (
-        <section className="atelier-category-filter-surface">
-          {pageData.filters.map((filter) => (
-            <article className="atelier-category-filter-card" key={filter.filterKey}>
-              <span className="atelier-category-filter-label">{filter.label}</span>
-              <div className="atelier-category-filter-options">
-                {filter.options.map((option) => {
-                  const isActive = activeFilters[filter.filterKey] === option;
-                  const isResetOption = option.trim().toLowerCase().startsWith("all");
+      <section className="atelier-category-results-layout">
+        <aside
+          className={
+            isFiltersPanelOpen
+              ? "atelier-category-sidebar atelier-category-sidebar-open"
+              : "atelier-category-sidebar"
+          }
+          id={`atelier-category-filters-${pageData.slug}`}
+        >
+          {pageData.filters.length > 0 ? (
+            pageData.filters.map((filter) => (
+              <article className="atelier-category-sidebar-group" key={filter.filterKey}>
+                <button
+                  aria-expanded={openSections[filter.filterKey] ?? true}
+                  className="atelier-category-sidebar-toggle"
+                  type="button"
+                  onClick={() => toggleWorkbookSection(filter.filterKey)}
+                >
+                  <span className="atelier-category-sidebar-toggle-copy">
+                    <strong>{filter.label.toUpperCase()}</strong>
+                    <small>{activeFilters[filter.filterKey] || `All ${filter.label}`}</small>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="atelier-category-sidebar-toggle-icon"
+                  >
+                    {openSections[filter.filterKey] ?? true ? "-" : "+"}
+                  </span>
+                </button>
 
-                  return (
-                    <button
-                      className={
-                        isActive
-                          ? "atelier-category-filter-chip atelier-category-filter-chip-active"
-                          : "atelier-category-filter-chip"
-                      }
-                      key={`${filter.filterKey}-${option}`}
-                      onClick={() => {
-                        setActiveFilters((current) => {
-                          const nextFilters = { ...current };
+                {openSections[filter.filterKey] ?? true ? (
+                  <div className="atelier-category-filter-options">
+                    {filter.options.map((option) => {
+                      const isActive = activeFilters[filter.filterKey] === option;
+                      const isResetOption = option.trim().toLowerCase().startsWith("all");
 
-                          if (current[filter.filterKey] === option || isResetOption) {
-                            delete nextFilters[filter.filterKey];
-                            return nextFilters;
+                      return (
+                        <button
+                          className={
+                            isActive
+                              ? "atelier-category-filter-chip atelier-category-filter-chip-active"
+                              : "atelier-category-filter-chip"
                           }
+                          key={`${filter.filterKey}-${option}`}
+                          onClick={() => {
+                            startTransition(() => {
+                              setActiveFilters((current) => {
+                                const nextFilters = { ...current };
 
-                          nextFilters[filter.filterKey] = option;
-                          return nextFilters;
-                        });
-                      }}
-                      type="button"
+                                if (current[filter.filterKey] === option || isResetOption) {
+                                  delete nextFilters[filter.filterKey];
+                                  return nextFilters;
+                                }
+
+                                nextFilters[filter.filterKey] = option;
+                                return nextFilters;
+                              });
+                            });
+                          }}
+                          type="button"
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </article>
+            ))
+          ) : (
+            <div className="atelier-category-sidebar-note">
+              <span className="atelier-category-filter-label">Collection Note</span>
+              <p>
+                This category is currently driven by editorial search only. Add workbook
+                filters if you want more facets here.
+              </p>
+            </div>
+          )}
+
+          <button
+            className="atelier-category-reset-button"
+            type="button"
+            onClick={clearWorkbookFilters}
+          >
+            Reset Filters
+          </button>
+        </aside>
+
+        <div className="atelier-category-results-pane">
+          <section className="atelier-category-results-surface">
+            <div className="atelier-category-results-head">
+              <span>{formatResultsLabel(pageData.resultsLabel, filteredProducts.length)}</span>
+              <div className="atelier-category-results-controls">
+                <label
+                  className="atelier-category-inline-search"
+                  htmlFor={`category-search-${pageData.slug}`}
+                >
+                  <input
+                    id={`category-search-${pageData.slug}`}
+                    placeholder={`Search within ${pageData.navLabel || pageData.heroTitle}`}
+                    type="search"
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                  />
+                </label>
+
+                {searchInput ? (
+                  <button
+                    className="atelier-category-search-clear"
+                    type="button"
+                    onClick={() => setSearchInput("")}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+
+                <div className="atelier-category-toolbar-sort">
+                  <span className="atelier-category-toolbar-sort-label">
+                    <span>Sort</span>
+                    <span>By</span>
+                  </span>
+                  <label
+                    className="atelier-category-toolbar-sort-field"
+                    htmlFor={`category-sort-${pageData.slug}`}
+                  >
+                    <select
+                      id={`category-sort-${pageData.slug}`}
+                      value={sortBy}
+                      onChange={(event) =>
+                        setSortBy(event.target.value as typeof sortBy)
+                      }
                     >
-                      {option}
-                    </button>
-                  );
-                })}
+                      <option value="latest">Category Order</option>
+                      <option value="price_asc">Price: Low to High</option>
+                      <option value="price_desc">Price: High to Low</option>
+                    </select>
+                  </label>
+                </div>
+
+                <button
+                  aria-controls={`atelier-category-filters-${pageData.slug}`}
+                  aria-expanded={isFiltersPanelOpen}
+                  className="atelier-category-filters-toggle"
+                  type="button"
+                  onClick={() => setIsFiltersPanelOpen((current) => !current)}
+                >
+                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+                </button>
               </div>
-            </article>
-          ))}
-        </section>
-      ) : null}
+            </div>
 
-      <section className="atelier-category-results-surface">
-        <div className="atelier-category-results-head">
-          <span>{formatResultsLabel(pageData.resultsLabel, filteredProducts.length)}</span>
-          <span>{pageData.sortLabel || "Sort by: Relevance"}</span>
+            {activeFilterSummary ? (
+              <p className="atelier-category-results-summary">{activeFilterSummary}</p>
+            ) : null}
+
+            {filteredProducts.length > 0 ? (
+              <div className="atelier-category-product-grid">
+                {filteredProducts.map((product) => (
+                  <CategoryActionLink
+                    className="atelier-category-product-card"
+                    fallbackHref={primaryCategoryRoute}
+                    href={product.href || primaryCategoryRoute}
+                    key={`${pageData.slug}-${product.position}-${product.name}`}
+                  >
+                    <div className="atelier-category-product-media">
+                      <img alt={product.imageAlt || product.name} src={product.imageUrl} />
+                    </div>
+                    <div className="atelier-category-product-copy">
+                      <span>{product.badge}</span>
+                      <strong>{product.name}</strong>
+                      <p>{product.material}</p>
+                      <em>{formatCurrency(product.price)}</em>
+                    </div>
+                  </CategoryActionLink>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-card category-empty-state">
+                <span className="section-kicker">Filtered Empty State</span>
+                <strong>No pieces match the current search or filter combination.</strong>
+                <span>Clear one of the active filters or search terms to bring the grid back.</span>
+              </div>
+            )}
+          </section>
         </div>
-
-        {filteredProducts.length > 0 ? (
-          <div className="atelier-category-product-grid">
-            {filteredProducts.map((product) => (
-              <CategoryActionLink
-                className="atelier-category-product-card"
-                fallbackHref={primaryCategoryRoute}
-                href={product.href || primaryCategoryRoute}
-                key={`${pageData.slug}-${product.position}-${product.name}`}
-              >
-                <div className="atelier-category-product-media">
-                  <img alt={product.imageAlt || product.name} src={product.imageUrl} />
-                </div>
-                <div className="atelier-category-product-copy">
-                  <span>{product.badge}</span>
-                  <strong>{product.name}</strong>
-                  <p>{product.material}</p>
-                  <em>{formatCurrency(product.price)}</em>
-                </div>
-              </CategoryActionLink>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-card category-empty-state">
-            <span className="section-kicker">Filtered Empty State</span>
-            <strong>No pieces match the current filter combination.</strong>
-            <span>Clear one of the active filter chips to bring the editorial grid back.</span>
-          </div>
-        )}
       </section>
 
       {(pageData.storyTitle || pageData.storyImageUrl) && (
@@ -776,10 +979,6 @@ function EditorialCategoryPage({
           <div className="empty-card category-empty-state">
             <span className="section-kicker">Editorial category</span>
             <strong>Category này đã có cấu trúc storefront nhưng chưa có curated products.</strong>
-            <span>
-              Hãy import thêm `featured_products` hoặc bổ sung product active vào
-              category này để lấp đầy grid.
-            </span>
             <Link className="text-link" to="/products">
               Quay lại catalog
             </Link>

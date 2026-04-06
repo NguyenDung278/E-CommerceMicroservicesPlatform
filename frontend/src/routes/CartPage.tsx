@@ -319,9 +319,7 @@ export function CartPage() {
                 <div>
                   <strong>Secure encrypted payment processing</strong>
                 </div>
-                <div>
-                  <strong>Shipping và tax được tính chính xác ở bước checkout</strong>
-                </div>
+      
               </div>
 
               <button className="danger-button cart-editorial-clear" type="button" onClick={() => void handleClearCart()}>

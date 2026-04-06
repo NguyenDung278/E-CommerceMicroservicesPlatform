@@ -129,6 +129,14 @@ describe("CategoryPage workbook mode", () => {
                 options: ["Shirts", "Outerwear", "Trousers"],
                 defaultValue: "",
               },
+              {
+                pageSlug: "men-atelier",
+                position: 2,
+                filterKey: "size",
+                label: "Size",
+                options: ["S", "M", "L"],
+                defaultValue: "",
+              },
             ],
             products: [
               {
@@ -141,7 +149,7 @@ describe("CategoryPage workbook mode", () => {
                 imageUrl: "https://example.com/shirt.jpg",
                 imageAlt: "Shirt",
                 href: "/categories/Shop%20Men",
-                filterTags: ["category:shirts"],
+                filterTags: ["category:shirts", "size:M"],
               },
               {
                 pageSlug: "men-atelier",
@@ -153,7 +161,7 @@ describe("CategoryPage workbook mode", () => {
                 imageUrl: "https://example.com/jacket.jpg",
                 imageAlt: "Jacket",
                 href: "/categories/Shop%20Men",
-                filterTags: ["category:outerwear"],
+                filterTags: ["category:outerwear", "size:L"],
               },
             ],
           },
@@ -203,8 +211,16 @@ describe("CategoryPage workbook mode", () => {
     expect(container.textContent).toContain("Women");
     expect(container.textContent).toContain("Footwear");
     expect(container.textContent).toContain("Accessories");
+    expect(container.textContent).toContain("CATEGORY");
+    expect(container.textContent).toContain("SIZE");
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
     expect(apiMocks.listProducts).not.toHaveBeenCalled();
+
+    const searchInput = container.querySelector<HTMLInputElement>(
+      "#category-search-men-atelier"
+    );
+
+    expect(searchInput?.getAttribute("placeholder")).toContain("Men");
 
     const categoryLinks = Array.from(
       container.querySelectorAll<HTMLAnchorElement>(".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill")
@@ -223,6 +239,35 @@ describe("CategoryPage workbook mode", () => {
     expect(hrefByLabel["Login"]).toBe("/login");
     expect(bagLink?.getAttribute("href")).toBe("/login");
     expect(bagLink?.textContent).toContain("2");
+
+    act(() => {
+      if (!searchInput) {
+        return;
+      }
+
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      valueSetter?.call(searchInput, "Merino");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      searchInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(container.textContent).not.toContain("Sculpted Linen Shirt");
+    expect(container.textContent).toContain("Structured Atelier Jacket");
+    expect(container.textContent).toContain("Showing 1 results");
+
+    const clearButton = container.querySelector<HTMLButtonElement>(
+      ".atelier-category-search-clear"
+    );
+
+    act(() => {
+      clearButton?.click();
+    });
+
+    expect(container.textContent).toContain("Sculpted Linen Shirt");
+    expect(container.textContent).toContain("Structured Atelier Jacket");
 
     const outerwearButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>("button")

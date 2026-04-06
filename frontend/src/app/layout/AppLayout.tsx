@@ -1,29 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "../../features/auth/hooks/useAuth";
 import { useCart } from "../../features/cart/hooks/useCart";
-import { api } from "../../shared/api";
 import {
-  mergeWithStorefrontNavigation,
   normalizeStorefrontNavigationToken,
   storefrontArchiveHref,
   storefrontBrandHref,
   storefrontCartHref,
   storefrontFallbackNavigation,
-  type StorefrontNavigationItem,
 } from "../../shared/navigation/storefront";
-import type { StorefrontCategory } from "../../shared/types/api";
 import { getUserDisplayName, isDevelopmentAccount } from "../../shared/utils/devAccounts";
 import "./AppLayout.css";
-
-type NavigationItem = StorefrontNavigationItem;
-
-function isVisibleNavigationValue(value: string) {
-  return !value.trim().toLowerCase().includes("smoke");
-}
-
-const fallbackCategoryNavigation: NavigationItem[] = storefrontFallbackNavigation;
 
 const atelierCategoryTokens = new Set([
   "shop men",
@@ -36,32 +24,11 @@ const atelierCategoryTokens = new Set([
   "accessories",
 ]);
 
-function buildNavigationItem(category: StorefrontCategory): NavigationItem {
-  const identifier =
-    category.aliases[0] || category.display_name || category.slug;
-
-  return {
-    label: category.nav_label || category.display_name || identifier,
-    identifier,
-    aliases: [
-      category.slug,
-      category.display_name,
-      category.nav_label,
-      ...category.aliases,
-    ]
-      .map((item) => item.trim())
-      .filter(Boolean),
-    to: `/categories/${encodeURIComponent(identifier)}`,
-  };
-}
-
 export function AppLayout() {
   const location = useLocation();
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
-  const [categoryNavigation, setCategoryNavigation] = useState<NavigationItem[]>(
-    fallbackCategoryNavigation
-  );
+  const categoryNavigation = storefrontFallbackNavigation;
   const isTransactionalSurface = location.pathname === "/checkout" || location.pathname.startsWith("/orders/");
   const isAccountSurface = ["/profile", "/myorders", "/addresses", "/payments", "/security", "/notifications"].some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`)
@@ -97,38 +64,9 @@ export function AppLayout() {
   const isAtelierCategorySurface =
     location.pathname.startsWith("/categories/") &&
     atelierCategoryTokens.has(normalizedCurrentCategory);
-  const isChromelessEditorialSurface = isHomeSurface || isAtelierCategorySurface;
-
-  useEffect(() => {
-    let active = true;
-
-    void api
-      .listStorefrontCategories()
-      .then((response) => {
-        if (!active || response.data.length === 0) {
-          return;
-        }
-
-        const mappedCategories = response.data
-          .filter((category) =>
-            [category.slug, category.display_name, category.nav_label, ...category.aliases]
-              .filter(Boolean)
-              .every((value) => isVisibleNavigationValue(value))
-          )
-          .map((category) => buildNavigationItem(category));
-
-        setCategoryNavigation(mergeWithStorefrontNavigation(mappedCategories));
-      })
-      .catch(() => {
-        if (active) {
-          setCategoryNavigation(fallbackCategoryNavigation);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const isArchiveSurface = location.pathname === storefrontArchiveHref;
+  const isChromelessEditorialSurface =
+    isHomeSurface || isAtelierCategorySurface || isArchiveSurface;
 
   const shellClassName = isTransactionalSurface
     ? "editorial-app-shell editorial-app-shell-transactional"

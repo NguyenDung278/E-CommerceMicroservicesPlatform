@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../src/features/home/useHomeWorkbook", () => ({
+  useHomeWorkbook: vi.fn(),
+}));
+
 vi.mock("../src/features/auth/hooks/useAuth", () => ({
   useAuth: vi.fn(() => ({
     isAuthenticated: false,
@@ -11,67 +15,31 @@ vi.mock("../src/features/auth/hooks/useAuth", () => ({
 
 vi.mock("../src/features/cart/hooks/useCart", () => ({
   useCart: vi.fn(() => ({
-    itemCount: 0,
-    addItem: vi.fn(),
+    itemCount: 2,
   })),
 }));
 
 const apiMocks = vi.hoisted(() => ({
-  getProductPopularity: vi.fn(),
+  getStorefrontCategoryPage: vi.fn(),
   listProducts: vi.fn(),
 }));
 
 vi.mock("../src/shared/api", () => ({
   api: {
-    getProductPopularity: apiMocks.getProductPopularity,
+    getStorefrontCategoryPage: apiMocks.getStorefrontCategoryPage,
     listProducts: apiMocks.listProducts,
   },
   getErrorMessage: (reason: unknown) =>
     reason instanceof Error ? reason.message : String(reason),
+  isHttpError: () => false,
 }));
 
+import { useHomeWorkbook } from "../src/features/home/useHomeWorkbook";
 import { CatalogPage } from "../src/routes/CatalogPage";
-import type { Product } from "../src/shared/types/api";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
-
-function createProduct(
-  id: string,
-  name: string,
-  category: string,
-  price: number,
-  overrides: Partial<Product> = {}
-): Product {
-  return {
-    id,
-    name,
-    description: `${name} description`,
-    price,
-    stock: 8,
-    category,
-    brand: "ND Atelier",
-    tags: ["atelier"],
-    status: "active",
-    sku: `${id}-sku`,
-    variants: [
-      {
-        sku: `${id}-variant`,
-        label: "Default",
-        size: "M",
-        color: "Forest",
-        price,
-        stock: 8,
-      },
-    ],
-    image_url: "https://example.com/product.jpg",
-    image_urls: ["https://example.com/product.jpg"],
-    created_at: "2026-04-05T10:00:00.000Z",
-    updated_at: "2026-04-05T10:00:00.000Z",
-    ...overrides,
-  };
-}
 
 function renderCatalogPage(initialEntry = "/products") {
   const container = document.createElement("div");
@@ -128,64 +96,219 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("CatalogPage storefront archive", () => {
-  it("loads every storefront product across cursor pages and keeps only archive categories", async () => {
-    apiMocks.listProducts
-      .mockResolvedValueOnce({
-        success: true,
-        message: "ok",
-        data: [
-          createProduct("men-1", "Men Field Coat", "Shop Men", 480),
-          createProduct("women-1", "Women Drape Dress", "Shop Women", 520, {
-            created_at: "2026-04-05T09:00:00.000Z",
-          }),
-        ],
-        meta: {
-          has_next: true,
-          next_cursor: "page-2",
+describe("CatalogPage category aggregation", () => {
+  it("combines product cards from the 4 category pages and filters them by category", async () => {
+    vi.mocked(useHomeWorkbook).mockReturnValue({
+      content: {
+        sourceName: "stitchfix-home.xlsx",
+        sourceKind: "xlsx",
+        loadedAt: "2026-04-05T10:00:00.000Z",
+        footer: {
+          brandName: "ND Shop",
+          caption: "Crafted for the Discerning",
+          note: "Workbook-driven editorial homepage.",
         },
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        message: "ok",
-        data: [
-          createProduct("footwear-1", "Archive Derby", "Footwear", 390, {
-            created_at: "2026-04-05T08:00:00.000Z",
-          }),
-          createProduct("accessories-1", "Vault Scarf", "Accessories", 190, {
-            created_at: "2026-04-05T07:00:00.000Z",
-          }),
-          createProduct("other-1", "Lifestyle Candle", "Homeware", 90, {
-            created_at: "2026-04-05T06:00:00.000Z",
-          }),
+        footerLinks: [],
+        navItems: [],
+        segments: [],
+        categoryPages: [
+          {
+            slug: "men-atelier",
+            navLabel: "Men",
+            routeAliases: ["Shop Men", "shop-men", "Men"],
+            heroEyebrow: "",
+            heroTitle: "Men's Atelier",
+            heroDescription: "",
+            heroImageUrl: "",
+            heroImageAlt: "",
+            quoteBody: "",
+            quoteAuthor: "",
+            storyEyebrow: "",
+            storyTitle: "",
+            storyBody: "",
+            storyImageUrl: "",
+            storyImageAlt: "",
+            storyCtaLabel: "",
+            storyCtaHref: "",
+            resultsLabel: "",
+            sortLabel: "",
+            footerNote: "",
+            filters: [],
+            products: [
+              {
+                pageSlug: "men-atelier",
+                position: 1,
+                badge: "Tailoring",
+                name: "Structured Atelier Jacket",
+                material: "100% Merino Wool",
+                price: 1250,
+                imageUrl: "https://example.com/men.jpg",
+                imageAlt: "Men",
+                href: "/categories/Shop%20Men",
+                filterTags: ["category:outerwear", "size:L", "price:$1000+"],
+              },
+            ],
+          },
+          {
+            slug: "women-atelier",
+            navLabel: "Women",
+            routeAliases: ["Shop Women", "shop-women", "Women"],
+            heroEyebrow: "",
+            heroTitle: "Women's Atelier",
+            heroDescription: "",
+            heroImageUrl: "",
+            heroImageAlt: "",
+            quoteBody: "",
+            quoteAuthor: "",
+            storyEyebrow: "",
+            storyTitle: "",
+            storyBody: "",
+            storyImageUrl: "",
+            storyImageAlt: "",
+            storyCtaLabel: "",
+            storyCtaHref: "",
+            resultsLabel: "",
+            sortLabel: "",
+            footerNote: "",
+            filters: [],
+            products: [
+              {
+                pageSlug: "women-atelier",
+                position: 1,
+                badge: "Draped",
+                name: "Cloud Cashmere Crew",
+                material: "Cashmere",
+                price: 280,
+                imageUrl: "https://example.com/women.jpg",
+                imageAlt: "Women",
+                href: "/categories/Shop%20Women",
+                filterTags: ["category:knitwear", "size:M", "palette:Stone"],
+              },
+            ],
+          },
+          {
+            slug: "footwear-atelier",
+            navLabel: "Footwear",
+            routeAliases: ["Footwear", "footwear"],
+            heroEyebrow: "",
+            heroTitle: "Footwear Atelier",
+            heroDescription: "",
+            heroImageUrl: "",
+            heroImageAlt: "",
+            quoteBody: "",
+            quoteAuthor: "",
+            storyEyebrow: "",
+            storyTitle: "",
+            storyBody: "",
+            storyImageUrl: "",
+            storyImageAlt: "",
+            storyCtaLabel: "",
+            storyCtaHref: "",
+            resultsLabel: "",
+            sortLabel: "",
+            footerNote: "",
+            filters: [],
+            products: [
+              {
+                pageSlug: "footwear-atelier",
+                position: 1,
+                badge: "Workshop Build",
+                name: "Moc Toe Service Boot",
+                material: "English Bridle Leather",
+                price: 560,
+                imageUrl: "https://example.com/footwear.jpg",
+                imageAlt: "Footwear",
+                href: "/categories/Footwear",
+                filterTags: ["type:Boots", "size:43", "material:Bridle Leather"],
+              },
+            ],
+          },
+          {
+            slug: "accessories-atelier",
+            navLabel: "Accessories",
+            routeAliases: ["Accessories", "accessories"],
+            heroEyebrow: "",
+            heroTitle: "Accessories Atelier",
+            heroDescription: "",
+            heroImageUrl: "",
+            heroImageAlt: "",
+            quoteBody: "",
+            quoteAuthor: "",
+            storyEyebrow: "",
+            storyTitle: "",
+            storyBody: "",
+            storyImageUrl: "",
+            storyImageAlt: "",
+            storyCtaLabel: "",
+            storyCtaHref: "",
+            resultsLabel: "",
+            sortLabel: "",
+            footerNote: "",
+            filters: [],
+            products: [
+              {
+                pageSlug: "accessories-atelier",
+                position: 1,
+                badge: "Limited Edition",
+                name: "Atelier Tote",
+                material: "Vegetable Tanned Leather",
+                price: 840,
+                imageUrl: "https://example.com/accessories.jpg",
+                imageAlt: "Accessories",
+                href: "/categories/Accessories",
+                filterTags: ["category:Bags"],
+              },
+            ],
+          },
         ],
-        meta: {
-          has_next: false,
-        },
-      });
+      },
+      status: "ready",
+      error: "",
+      isUsingLocalFile: false,
+      uploadFile: vi.fn(),
+      resetToLiveSource: vi.fn(),
+      reloadLiveSource: vi.fn(),
+    });
 
     const { container } = renderCatalogPage();
 
     await waitFor(() => {
-      expect(container.textContent).toContain("Men Field Coat");
-      expect(container.textContent).toContain("Women Drape Dress");
-      expect(container.textContent).toContain("Archive Derby");
-      expect(container.textContent).toContain("Vault Scarf");
-      expect(container.textContent).not.toContain("Lifestyle Candle");
-      expect(container.textContent).toContain("Showing 4 of 4 Objects");
+      expect(container.textContent).toContain("Structured Atelier Jacket");
+      expect(container.textContent).toContain("Cloud Cashmere Crew");
+      expect(container.textContent).toContain("Moc Toe Service Boot");
+      expect(container.textContent).toContain("Atelier Tote");
+      expect(container.textContent).toContain("Showing 4 of 4 Products");
     });
 
-    expect(apiMocks.listProducts).toHaveBeenCalledTimes(2);
-    expect(apiMocks.listProducts).toHaveBeenNthCalledWith(1, {
-      status: "active",
-      limit: 100,
-      cursor: undefined,
-    });
-    expect(apiMocks.listProducts).toHaveBeenNthCalledWith(2, {
-      status: "active",
-      limit: 100,
-      cursor: "page-2",
-    });
+    expect(container.textContent).toContain("CATEGORY");
+    expect(container.textContent).toContain("SIZE");
+    expect(container.textContent).toContain("PRICE RANGE");
+
+    const searchInput =
+      container.querySelector<HTMLInputElement>("#archive-search");
+    expect(searchInput?.getAttribute("placeholder")).toContain(
+      "All Archive, Men, Women, Footwear and Accessories"
+    );
+
+    const navigationLinks = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>(
+        ".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill"
+      )
+    );
+    const hrefByLabel = Object.fromEntries(
+      navigationLinks.map((link) => [link.textContent?.trim() || "", link.getAttribute("href")])
+    );
+
+    expect(hrefByLabel["ND Shop"]).toBe("/");
+    expect(hrefByLabel["All Archive"]).toBe("/products");
+    expect(hrefByLabel["Men"]).toBe("/categories/Shop%20Men");
+    expect(hrefByLabel["Women"]).toBe("/categories/Shop%20Women");
+    expect(hrefByLabel["Footwear"]).toBe("/categories/Footwear");
+    expect(hrefByLabel["Accessories"]).toBe("/categories/Accessories");
+    expect(hrefByLabel["Login"]).toBe("/login");
+
+    expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
+    expect(apiMocks.listProducts).not.toHaveBeenCalled();
 
     const collectionButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".archive-collection-link")
@@ -206,11 +329,79 @@ describe("CatalogPage storefront archive", () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("Men Field Coat");
-      expect(container.textContent).not.toContain("Women Drape Dress");
-      expect(container.textContent).not.toContain("Archive Derby");
-      expect(container.textContent).not.toContain("Vault Scarf");
-      expect(container.textContent).toContain("Showing 1 of 4 Objects");
+      expect(container.textContent).toContain("Structured Atelier Jacket");
+      expect(container.textContent).not.toContain("Cloud Cashmere Crew");
+      expect(container.textContent).not.toContain("Moc Toe Service Boot");
+      expect(container.textContent).not.toContain("Atelier Tote");
+      expect(container.textContent).toContain("Showing 1 of 4 Products");
+    });
+
+    const allArchiveButton = collectionButtons.find(
+      (button) => button.textContent === "All Archive"
+    );
+
+    act(() => {
+      allArchiveButton?.click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Showing 4 of 4 Products");
+    });
+
+    act(() => {
+      if (!searchInput) {
+        return;
+      }
+
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      valueSetter?.call(searchInput, "Cashmere");
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      searchInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("Structured Atelier Jacket");
+      expect(container.textContent).toContain("Cloud Cashmere Crew");
+      expect(container.textContent).not.toContain("Moc Toe Service Boot");
+      expect(container.textContent).not.toContain("Atelier Tote");
+      expect(container.textContent).toContain("Showing 1 of 4 Products");
+    });
+
+    const clearSearchButton = container.querySelector<HTMLButtonElement>(
+      ".archive-search-clear"
+    );
+
+    act(() => {
+      clearSearchButton?.click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("Showing 4 of 4 Products");
+    });
+
+    const sizeButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".archive-size-button")
+    );
+    const footwearSizeButton = sizeButtons.find((button) => button.textContent === "43");
+
+    expect(sizeButtons.map((button) => button.textContent?.trim())).toEqual(
+      expect.arrayContaining(["L", "M", "43"])
+    );
+    expect(footwearSizeButton).toBeDefined();
+
+    act(() => {
+      footwearSizeButton?.click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).not.toContain("Structured Atelier Jacket");
+      expect(container.textContent).not.toContain("Cloud Cashmere Crew");
+      expect(container.textContent).toContain("Moc Toe Service Boot");
+      expect(container.textContent).not.toContain("Atelier Tote");
+      expect(container.textContent).toContain("Showing 1 of 4 Products");
     });
   });
 });

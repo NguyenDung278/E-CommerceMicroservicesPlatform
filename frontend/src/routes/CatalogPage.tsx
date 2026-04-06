@@ -1,599 +1,714 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-
-import { useAuth } from "../features/auth/hooks/useAuth";
-import { useCart } from "../features/cart/hooks/useCart";
 import {
-  getStorefrontArchiveCategoryLabel,
-  isStorefrontArchiveCategory,
-  isStorefrontAutoAddCategory,
-  storefrontArchiveCategoryLabels,
-} from "../shared/navigation/storefront";
-import { api, getErrorMessage } from "../shared/api";
-import { ProductCard } from "../shared/components/product/ProductCard";
-import type { Product } from "../shared/types/api";
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
+import { Link, useSearchParams } from "react-router-dom";
+
+import {
+  findHomeWorkbookCategoryPage,
+  type HomeWorkbookCategoryPage,
+  type HomeWorkbookCategoryProduct,
+} from "../features/home/workbook";
+import { useHomeWorkbook } from "../features/home/useHomeWorkbook";
+import { api, getErrorMessage, isHttpError } from "../shared/api";
+import { StorefrontOverlayHeader } from "../shared/components/navigation/StorefrontOverlayHeader";
 import { formatCurrency } from "../shared/utils/format";
+import type { Product } from "../shared/types/api";
 import "./CatalogPage.css";
 
-const archivePageSize = 100;
+type ArchiveCategorySource = {
+  label: string;
+  identifier: string;
+};
+
+type ArchiveFilterSection = "category" | "size" | "price";
+
+type ArchiveFilterMap = Record<string, string[]>;
+
+type ArchiveItem = {
+  id: string;
+  name: string;
+  price: number;
+  imageUrl: string;
+  imageAlt: string;
+  href: string;
+  categoryLabel: string;
+  badge: string;
+  subtitle: string;
+  searchIndex: string;
+  sequence: number;
+  filterMap: ArchiveFilterMap;
+};
+
+const archiveCategorySources: ArchiveCategorySource[] = [
+  {
+    label: "Men",
+    identifier: "Shop Men",
+  },
+  {
+    label: "Women",
+    identifier: "Shop Women",
+  },
+  {
+    label: "Footwear",
+    identifier: "Footwear",
+  },
+  {
+    label: "Accessories",
+    identifier: "Accessories",
+  },
+];
+
+const archiveAlphaSizeScale = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 
 function normalizeArchiveText(value: string) {
   return value.trim().toLowerCase();
 }
 
-function compareProductsByLatest(left: Product, right: Product) {
-  const leftTimestamp = Date.parse(left.created_at || "") || 0;
-  const rightTimestamp = Date.parse(right.created_at || "") || 0;
-
-  if (leftTimestamp !== rightTimestamp) {
-    return rightTimestamp - leftTimestamp;
-  }
-
-  return left.name.localeCompare(right.name);
+function isExternalHref(href: string) {
+  return /^https?:\/\//i.test(href);
 }
 
-function sortArchiveProducts(
-  products: Product[],
-  sortBy: "latest" | "price_asc" | "price_desc" | "popular",
-  popularityRank = new Map<string, number>()
+function resolveHref(href: string, fallbackHref: string) {
+  const trimmedHref = href.trim();
+  return trimmedHref || fallbackHref;
+}
+
+function buildCategoryRoute(categoryPage: HomeWorkbookCategoryPage) {
+  const identifier = categoryPage.routeAliases[0] || categoryPage.slug;
+  return `/categories/${encodeURIComponent(identifier)}`;
+}
+
+function buildArchiveFilterMap(filterTags: string[]): ArchiveFilterMap {
+  const nextFilterMap: ArchiveFilterMap = {};
+
+  filterTags.forEach((filterTag) => {
+    const trimmedTag = filterTag.trim();
+    if (!trimmedTag) {
+      return;
+    }
+
+    const separatorIndex = trimmedTag.indexOf(":");
+    if (separatorIndex < 0) {
+      return;
+    }
+
+    const key = normalizeArchiveText(trimmedTag.slice(0, separatorIndex));
+    const value = trimmedTag.slice(separatorIndex + 1).trim();
+
+    if (!key || !value) {
+      return;
+    }
+
+    const existingValues = nextFilterMap[key] ?? [];
+
+    if (
+      existingValues.some(
+        (existingValue) => normalizeArchiveText(existingValue) === normalizeArchiveText(value)
+      )
+    ) {
+      return;
+    }
+
+    nextFilterMap[key] = [...existingValues, value];
+  });
+
+  return nextFilterMap;
+}
+
+function getArchiveFilterValues(filterMap: ArchiveFilterMap, key: string) {
+  return filterMap[normalizeArchiveText(key)] ?? [];
+}
+
+function hasArchiveFilterValue(filterMap: ArchiveFilterMap, key: string, expected: string) {
+  const normalizedExpected = normalizeArchiveText(expected);
+
+  return getArchiveFilterValues(filterMap, key).some(
+    (value) => normalizeArchiveText(value) === normalizedExpected
+  );
+}
+
+function compareArchiveFacetValue(left: string, right: string) {
+  const normalizedLeft = left.trim().toUpperCase();
+  const normalizedRight = right.trim().toUpperCase();
+  const leftAlphaIndex = archiveAlphaSizeScale.indexOf(normalizedLeft);
+  const rightAlphaIndex = archiveAlphaSizeScale.indexOf(normalizedRight);
+
+  if (leftAlphaIndex >= 0 || rightAlphaIndex >= 0) {
+    if (leftAlphaIndex === -1) {
+      return 1;
+    }
+
+    if (rightAlphaIndex === -1) {
+      return -1;
+    }
+
+    return leftAlphaIndex - rightAlphaIndex;
+  }
+
+  const leftNumeric = Number.parseFloat(left);
+  const rightNumeric = Number.parseFloat(right);
+
+  if (Number.isFinite(leftNumeric) && Number.isFinite(rightNumeric)) {
+    return leftNumeric - rightNumeric;
+  }
+
+  return left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function buildWorkbookArchiveItem(
+  categoryPage: HomeWorkbookCategoryPage,
+  product: HomeWorkbookCategoryProduct,
+  categoryLabel: string,
+  sequence: number
+): ArchiveItem {
+  const fallbackHref = buildCategoryRoute(categoryPage);
+  const finalHref = resolveHref(product.href, fallbackHref);
+  const filterMap = buildArchiveFilterMap(product.filterTags);
+
+  return {
+    id: `workbook-${categoryPage.slug}-${product.position}-${product.name}`,
+    name: product.name,
+    price: product.price,
+    imageUrl: product.imageUrl,
+    imageAlt: product.imageAlt || product.name,
+    href: finalHref,
+    categoryLabel,
+    badge: product.badge,
+    subtitle: product.material || categoryPage.heroTitle || categoryLabel,
+    searchIndex: normalizeArchiveText(
+      [
+        product.name,
+        product.material,
+        product.badge,
+        categoryLabel,
+        ...product.filterTags,
+      ].join(" ")
+    ),
+    sequence,
+    filterMap,
+  };
+}
+
+function buildApiArchiveItem(
+  product: Product,
+  categoryLabel: string,
+  sequence: number
+): ArchiveItem {
+  const filterTags = product.tags.filter((tag) => tag.trim().includes(":"));
+  const filterMap = buildArchiveFilterMap(filterTags);
+
+  return {
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    imageUrl: product.image_urls[0] || product.image_url,
+    imageAlt: product.name,
+    href: `/products/${product.id}`,
+    categoryLabel,
+    badge: product.tags[0] ? `#${product.tags[0]}` : "",
+    subtitle: product.brand || product.category || categoryLabel,
+    searchIndex: normalizeArchiveText(
+      [
+        product.name,
+        product.description,
+        product.brand,
+        product.category,
+        categoryLabel,
+        ...product.tags,
+      ].join(" ")
+    ),
+    sequence,
+    filterMap,
+  };
+}
+
+async function loadCategoryArchiveItems(
+  source: ArchiveCategorySource,
+  sequenceOffset: number
 ) {
-  const nextProducts = products.slice();
+  try {
+    const storefrontResponse = await api.getStorefrontCategoryPage(source.identifier);
+
+    return storefrontResponse.data.featured_products.map((item, index) =>
+      buildApiArchiveItem(item.product, source.label, sequenceOffset + index)
+    );
+  } catch (reason) {
+    if (!isHttpError(reason) || reason.status !== 404) {
+      throw reason;
+    }
+
+    const productResponse = await api.listProducts({
+      category: source.identifier,
+      limit: 48,
+      status: "active",
+    });
+
+    return productResponse.data.map((product, index) =>
+      buildApiArchiveItem(product, source.label, sequenceOffset + index)
+    );
+  }
+}
+
+function sortArchiveItems(
+  items: ArchiveItem[],
+  sortBy: "latest" | "price_asc" | "price_desc"
+) {
+  const nextItems = items.slice();
 
   switch (sortBy) {
     case "price_asc":
-      return nextProducts.sort((left, right) => left.price - right.price);
+      return nextItems.sort((left, right) => left.price - right.price);
     case "price_desc":
-      return nextProducts.sort((left, right) => right.price - left.price);
-    case "popular":
-      return nextProducts.sort((left, right) => {
-        const popularityDelta =
-          (popularityRank.get(right.id) ?? -1) - (popularityRank.get(left.id) ?? -1);
-
-        if (popularityDelta !== 0) {
-          return popularityDelta;
-        }
-
-        return compareProductsByLatest(left, right);
-      });
+      return nextItems.sort((left, right) => right.price - left.price);
     default:
-      return nextProducts.sort(compareProductsByLatest);
+      return nextItems.sort((left, right) => left.sequence - right.sequence);
   }
 }
 
-function matchesArchiveSearch(product: Product, search: string) {
-  if (!search) {
-    return true;
+function ArchiveActionLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className: string;
+  children: ReactNode;
+}) {
+  if (isExternalHref(href)) {
+    return (
+      <a className={className} href={href} rel="noreferrer" target="_blank">
+        {children}
+      </a>
+    );
   }
 
-  const searchableText = [
-    product.name,
-    product.description,
-    product.brand,
-    product.category,
-    ...product.tags,
-    ...product.variants.flatMap((variant) => [
-      variant.label,
-      variant.size ?? "",
-      variant.color ?? "",
-    ]),
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return searchableText.includes(search);
-}
-
-function matchesArchiveFilters(
-  product: Product,
-  filters: {
-    search: string;
-    category: string;
-    brand: string;
-    tag: string;
-    size: string;
-    color: string;
-    minPrice?: number;
-    maxPrice?: number;
-  }
-) {
-  const categoryLabel = getStorefrontArchiveCategoryLabel(product.category || "");
-
-  if (!categoryLabel) {
-    return false;
-  }
-
-  if (filters.category && categoryLabel !== filters.category) {
-    return false;
-  }
-
-  if (
-    filters.brand &&
-    normalizeArchiveText(product.brand || "") !== normalizeArchiveText(filters.brand)
-  ) {
-    return false;
-  }
-
-  if (
-    filters.tag &&
-    !product.tags.some((tag) => normalizeArchiveText(tag) === normalizeArchiveText(filters.tag))
-  ) {
-    return false;
-  }
-
-  if (
-    filters.size &&
-    !product.variants.some(
-      (variant) => normalizeArchiveText(variant.size ?? "") === normalizeArchiveText(filters.size)
-    )
-  ) {
-    return false;
-  }
-
-  if (
-    filters.color &&
-    !product.variants.some(
-      (variant) => normalizeArchiveText(variant.color ?? "") === normalizeArchiveText(filters.color)
-    )
-  ) {
-    return false;
-  }
-
-  if (typeof filters.minPrice === "number" && product.price < filters.minPrice) {
-    return false;
-  }
-
-  if (typeof filters.maxPrice === "number" && product.price > filters.maxPrice) {
-    return false;
-  }
-
-  return matchesArchiveSearch(product, filters.search);
-}
-
-async function loadStorefrontArchiveProducts() {
-  const allProducts: Product[] = [];
-  const seenProductIds = new Set<string>();
-  let cursor: string | undefined;
-
-  while (true) {
-    const response = await api.listProducts({
-      status: "active",
-      limit: archivePageSize,
-      cursor,
-    });
-
-    for (const product of response.data) {
-      if (
-        !seenProductIds.has(product.id) &&
-        isStorefrontArchiveCategory(product.category || "")
-      ) {
-        seenProductIds.add(product.id);
-        allProducts.push(product);
-      }
-    }
-
-    const nextCursor = response.meta?.next_cursor;
-
-    if (!response.meta?.has_next || !nextCursor) {
-      return allProducts;
-    }
-
-    cursor = nextCursor;
-  }
+  return (
+    <Link className={className} to={href}>
+      {children}
+    </Link>
+  );
 }
 
 export function CatalogPage() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated } = useAuth();
-  const { addItem } = useCart();
-  const [catalogIndex, setCatalogIndex] = useState<Product[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [submittedSearch, setSubmittedSearch] = useState(searchParams.get("search") ?? "");
+  const { content, status: workbookStatus } = useHomeWorkbook();
+  const [archiveIndex, setArchiveIndex] = useState<ArchiveItem[]>([]);
+  const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+  const deferredSearchInput = useDeferredValue(searchInput);
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedBrand, setSelectedBrand] = useState("");
-  const [selectedTag, setSelectedTag] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState("");
-  const [sortBy, setSortBy] = useState<"latest" | "price_asc" | "price_desc" | "popular">("latest");
+  const [sortBy, setSortBy] = useState<"latest" | "price_asc" | "price_desc">(
+    "latest"
+  );
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
   const [feedback, setFeedback] = useState("");
-  const [busyProductId, setBusyProductId] = useState("");
-
-  const categories = useMemo(() => {
-    return storefrontArchiveCategoryLabels.filter((label) =>
-      catalogIndex.some(
-        (product) => getStorefrontArchiveCategoryLabel(product.category || "") === label
-      )
-    );
-  }, [catalogIndex]);
-
-  const brands = useMemo(() => {
-    return Array.from(
-      new Set(catalogIndex.map((product) => product.brand).filter((brand): brand is string => Boolean(brand)))
-    ).sort();
-  }, [catalogIndex]);
-
-  const tags = useMemo(() => {
-    return Array.from(
-      new Set(catalogIndex.flatMap((product) => product.tags).filter((tag): tag is string => Boolean(tag)))
-    ).sort();
-  }, [catalogIndex]);
-
-  const sizes = useMemo(() => {
-    return Array.from(
-      new Set(
-        catalogIndex.flatMap((product) =>
-          product.variants.map((variant) => variant.size).filter((size): size is string => Boolean(size))
-        )
-      )
-    ).sort();
-  }, [catalogIndex]);
-
-  const colors = useMemo(() => {
-    return Array.from(
-      new Set(
-        catalogIndex.flatMap((product) =>
-          product.variants.map((variant) => variant.color).filter((color): color is string => Boolean(color))
-        )
-      )
-    ).sort();
-  }, [catalogIndex]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<
+    Record<ArchiveFilterSection, boolean>
+  >({
+    category: true,
+    size: true,
+    price: true,
+  });
 
   useEffect(() => {
-    const searchFromQuery = searchParams.get("search") ?? "";
-    setSubmittedSearch(searchFromQuery);
+    setSearchInput(searchParams.get("search") ?? "");
   }, [searchParams]);
 
   useEffect(() => {
+    if (!content && (workbookStatus === "loading" || workbookStatus === "refreshing")) {
+      setIsLoading(true);
+      return undefined;
+    }
+
     let active = true;
 
-    void loadStorefrontArchiveProducts()
-      .then((response) => {
-        if (active) {
-          setCatalogIndex(response);
-          setFeedback("");
+    async function loadArchive() {
+      setIsLoading(true);
+      setFeedback("");
+
+      const workbookItems: ArchiveItem[] = [];
+      const missingSources: ArchiveCategorySource[] = [];
+
+      archiveCategorySources.forEach((source, sourceIndex) => {
+        const categoryPage = content
+          ? findHomeWorkbookCategoryPage(content, source.identifier)
+          : null;
+
+        if (!categoryPage) {
+          missingSources.push(source);
+          return;
         }
-      })
-      .catch((reason) => {
-        if (active) {
-          setFeedback(getErrorMessage(reason));
-        }
+
+        workbookItems.push(
+          ...categoryPage.products.map((product, productIndex) =>
+            buildWorkbookArchiveItem(
+              categoryPage,
+              product,
+              source.label,
+              sourceIndex * 100 + productIndex
+            )
+          )
+        );
       });
+
+      const fallbackItemGroups = await Promise.all(
+        missingSources.map((source, sourceIndex) =>
+          loadCategoryArchiveItems(
+            source,
+            (archiveCategorySources.length + sourceIndex) * 100
+          )
+        )
+      );
+
+      if (!active) {
+        return;
+      }
+
+      setArchiveIndex([...workbookItems, ...fallbackItemGroups.flat()]);
+      setFeedback("");
+      setIsLoading(false);
+    }
+
+    void loadArchive().catch((reason) => {
+      if (!active) {
+        return;
+      }
+
+      setArchiveIndex([]);
+      setFeedback(getErrorMessage(reason));
+      setIsLoading(false);
+    });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [content, workbookStatus]);
 
-  useEffect(() => {
-    let active = true;
-    const minPrice = Number.parseFloat(priceRange.min);
-    const maxPrice = Number.parseFloat(priceRange.max);
-
-    if (catalogIndex.length === 0) {
-      setProducts([]);
-      return () => {
-        active = false;
-      };
-    }
-
-    const filteredProducts = catalogIndex.filter((product) =>
-      matchesArchiveFilters(product, {
-        search: normalizeArchiveText(submittedSearch),
-        category: selectedCategory,
-        brand: selectedBrand,
-        tag: selectedTag,
-        size: selectedSize,
-        color: selectedColor,
-        minPrice: Number.isFinite(minPrice) && minPrice > 0 ? minPrice : undefined,
-        maxPrice: Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : undefined,
-      })
-    );
-
-    async function applyProducts() {
-      let nextProducts = sortArchiveProducts(filteredProducts, sortBy);
-
-      if (sortBy === "popular" && filteredProducts.length > 1) {
-        try {
-          const popularityResponse = await api.getProductPopularity(
-            Math.max(filteredProducts.length, archivePageSize)
-          );
-          const popularityRank = new Map(
-            popularityResponse.data.map((item, index) => [
-              item.product_id,
-              item.quantity * archivePageSize - index,
-            ])
-          );
-          nextProducts = sortArchiveProducts(filteredProducts, sortBy, popularityRank);
-        } catch {
-          nextProducts = sortArchiveProducts(filteredProducts, "latest");
-        }
-      }
-
-      if (active) {
-        setProducts(nextProducts);
-        setFeedback("");
-      }
-    }
-
-    void applyProducts();
-
-    return () => {
-      active = false;
-    };
-  }, [
-    catalogIndex,
-    submittedSearch,
-    selectedCategory,
-    selectedBrand,
-    selectedTag,
-    selectedSize,
-    selectedColor,
-    sortBy,
-    priceRange.min,
-    priceRange.max
-  ]);
-
-  async function handleAddToCart(product: Product) {
-    try {
-      setBusyProductId(product.id);
-      await addItem({
-        product_id: product.id,
-        quantity: 1
-      });
-      setFeedback(`${product.name} đã được thêm vào giỏ hàng.`);
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setBusyProductId("");
-    }
+  function toggleFilterSection(section: ArchiveFilterSection) {
+    startTransition(() => {
+      setOpenSections((current) => ({
+        ...current,
+        [section]: !current[section],
+      }));
+    });
   }
 
-  async function handleBuyNow(product: Product) {
-    const shouldSyncCart =
-      isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
-
-    try {
-      if (shouldSyncCart) {
-        setBusyProductId(product.id);
-        await addItem({
-          product_id: product.id,
-          quantity: 1,
-        });
-      }
-
-      navigate("/checkout", {
-        state: {
-          directProduct: {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            quantity: 1,
-          },
-        },
-      });
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      if (shouldSyncCart) {
-        setBusyProductId("");
-      }
-    }
+  function handleCategorySelection(nextCategory: string) {
+    startTransition(() => {
+      setSelectedCategory(nextCategory);
+    });
   }
 
-  function handlePriceChange(field: "min" | "max", event: ChangeEvent<HTMLInputElement>) {
+  function handleSizeSelection(nextSize: string) {
+    startTransition(() => {
+      setSelectedSize((current) => (current === nextSize ? "" : nextSize));
+    });
+  }
+
+  function handlePriceChange(
+    field: "min" | "max",
+    event: ChangeEvent<HTMLInputElement>
+  ) {
     const value = event.target.value.replace(/[^\d.]/g, "");
     setPriceRange((current) => ({ ...current, [field]: value }));
   }
 
   function clearFilters() {
-    setSubmittedSearch("");
-    setSelectedCategory("");
-    setSelectedBrand("");
-    setSelectedTag("");
-    setSelectedSize("");
-    setSelectedColor("");
-    setSortBy("latest");
-    setPriceRange({ min: "", max: "" });
+    startTransition(() => {
+      setSearchInput("");
+      setSelectedCategory("");
+      setSelectedSize("");
+      setSortBy("latest");
+      setPriceRange({ min: "", max: "" });
+    });
   }
 
-  const activeFilterCount = [
-    submittedSearch,
+  const availableSizeOptions = useMemo(() => {
+    const sizeOptions = new Map<string, string>();
+
+    archiveCategorySources.forEach((source) => {
+      const categoryPage = content
+        ? findHomeWorkbookCategoryPage(content, source.identifier)
+        : null;
+
+      if (!categoryPage) {
+        return;
+      }
+
+      categoryPage.filters.forEach((filter) => {
+        if (normalizeArchiveText(filter.filterKey) !== "size") {
+          return;
+        }
+
+        filter.options.forEach((option) => {
+          const trimmedOption = option.trim();
+          if (!trimmedOption) {
+            return;
+          }
+
+          sizeOptions.set(normalizeArchiveText(trimmedOption), trimmedOption);
+        });
+      });
+    });
+
+    archiveIndex.forEach((item) => {
+      getArchiveFilterValues(item.filterMap, "size").forEach((size) => {
+        const trimmedSize = size.trim();
+        if (!trimmedSize) {
+          return;
+        }
+
+        sizeOptions.set(normalizeArchiveText(trimmedSize), trimmedSize);
+      });
+    });
+
+    return Array.from(sizeOptions.values()).sort(compareArchiveFacetValue);
+  }, [archiveIndex, content]);
+
+  const filteredItems = useMemo(() => {
+    const normalizedSearch = normalizeArchiveText(deferredSearchInput);
+    const minPrice = Number.parseFloat(priceRange.min);
+    const maxPrice = Number.parseFloat(priceRange.max);
+
+    const nextItems = archiveIndex.filter((item) => {
+      if (selectedCategory && item.categoryLabel !== selectedCategory) {
+        return false;
+      }
+
+      if (selectedSize && !hasArchiveFilterValue(item.filterMap, "size", selectedSize)) {
+        return false;
+      }
+
+      if (normalizedSearch && !item.searchIndex.includes(normalizedSearch)) {
+        return false;
+      }
+
+      if (Number.isFinite(minPrice) && minPrice > 0 && item.price < minPrice) {
+        return false;
+      }
+
+      if (Number.isFinite(maxPrice) && maxPrice > 0 && item.price > maxPrice) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return sortArchiveItems(nextItems, sortBy);
+  }, [
+    archiveIndex,
+    deferredSearchInput,
+    priceRange.max,
+    priceRange.min,
     selectedCategory,
-    selectedBrand,
-    selectedTag,
     selectedSize,
-    selectedColor,
+    sortBy,
+  ]);
+
+  const activeFilterCount = [
+    searchInput,
+    selectedCategory,
+    selectedSize,
     priceRange.min,
     priceRange.max,
-    sortBy !== "latest" ? sortBy : ""
+    sortBy !== "latest" ? sortBy : "",
   ].filter(Boolean).length;
-  const resultCountLabel = `Showing ${products.length} of ${catalogIndex.length || products.length} Objects`;
-  const statusCopy = catalogIndex.length > 0
-    ? `Kho dữ liệu đang online với khoảng giá ${formatCurrency(
-        Math.min(...catalogIndex.map((product) => product.price))
-      )} - ${formatCurrency(Math.max(...catalogIndex.map((product) => product.price)))}`
-    : "Đang chờ đồng bộ danh mục từ backend";
+  const resultCountLabel = `Showing ${filteredItems.length} of ${
+    archiveIndex.length || filteredItems.length
+  } Products`;
+  const statusCopy =
+    archiveIndex.length > 0
+      ? `Nguon du lieu dang dong bo truc tiep tu 4 trang category voi khoang gia ${formatCurrency(
+          Math.min(...archiveIndex.map((item) => item.price))
+        )} - ${formatCurrency(Math.max(...archiveIndex.map((item) => item.price)))}`
+      : "Dang cho dong bo du lieu tu cac category pages";
   const selectedSummary = [
-    submittedSearch ? `Search: ${submittedSearch}` : "",
-    selectedCategory || "",
-    selectedBrand || "",
-    selectedTag ? `#${selectedTag}` : "",
-    selectedSize ? `Size ${selectedSize}` : "",
-    selectedColor || ""
+    searchInput ? `Search: ${searchInput}` : "",
+    selectedCategory ? `Category: ${selectedCategory}` : "",
+    selectedSize ? `Size: ${selectedSize}` : "",
+    priceRange.min ? `Min: ${formatCurrency(Number(priceRange.min) || 0)}` : "",
+    priceRange.max ? `Max: ${formatCurrency(Number(priceRange.max) || 0)}` : "",
   ]
     .filter(Boolean)
     .join(" / ");
-  const colorOptions = colors.length > 0 ? colors : ["forest", "cream", "terracotta", "slate", "sage"];
 
   return (
     <div className="archive-shell">
-      <header className="archive-editorial-header">
-        <div className="archive-editorial-copy">
-          <h1>The Curated Archive</h1>
-          <p>
-            A dialogue between traditional craftsmanship and modern silhouette. Explore our latest seasonal arrivals
-            from the Digital Atelier.
-          </p>
+      <section className="archive-hero">
+        <div className="archive-hero-surface">
+          <StorefrontOverlayHeader tone="light" />
+
+          <header className="archive-editorial-header">
+            <div className="archive-editorial-copy">
+              <span className="archive-editorial-kicker">Curated Navigation</span>
+              <h1>The Curated Archive</h1>
+            </div>
+          </header>
         </div>
-      </header>
+      </section>
 
       <div className="archive-layout">
-        <aside className="archive-sidebar">
+        <aside
+          className={
+            isFiltersPanelOpen ? "archive-sidebar archive-sidebar-open" : "archive-sidebar"
+          }
+          id="archive-filters-panel"
+        >
           <section className="archive-filter-section">
-            <h3>Collections</h3>
-            <div className="archive-collection-list">
-              <button
-                className={!selectedCategory ? "archive-collection-link archive-collection-link-active" : "archive-collection-link"}
-                type="button"
-                onClick={() => setSelectedCategory("")}
-              >
-                All Archive
-              </button>
-              {categories.map((category) => (
+            <button
+              aria-expanded={openSections.category}
+              className="archive-filter-toggle"
+              type="button"
+              onClick={() => toggleFilterSection("category")}
+            >
+              <span className="archive-filter-toggle-copy">
+                <strong>CATEGORY</strong>
+                <small>{selectedCategory || "All Archive"}</small>
+              </span>
+              <span aria-hidden="true" className="archive-filter-toggle-icon">
+                {openSections.category ? "-" : "+"}
+              </span>
+            </button>
+
+            {openSections.category ? (
+              <div className="archive-collection-list">
                 <button
                   className={
-                    selectedCategory === category
+                    !selectedCategory
                       ? "archive-collection-link archive-collection-link-active"
                       : "archive-collection-link"
                   }
-                  key={category}
                   type="button"
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => handleCategorySelection("")}
                 >
-                  {category}
+                  All Archive
                 </button>
-              ))}
-            </div>
-          </section>
-
-          {sizes.length > 0 ? (
-            <section className="archive-filter-section">
-              <h3>Size</h3>
-              <div className="archive-size-grid">
-                <button
-                  className={!selectedSize ? "archive-size-button archive-size-button-active" : "archive-size-button"}
-                  type="button"
-                  onClick={() => setSelectedSize("")}
-                >
-                  All
-                </button>
-                {sizes.map((size) => (
+                {archiveCategorySources.map((source) => (
                   <button
-                    className={selectedSize === size ? "archive-size-button archive-size-button-active" : "archive-size-button"}
-                    key={size}
+                    className={
+                      selectedCategory === source.label
+                        ? "archive-collection-link archive-collection-link-active"
+                        : "archive-collection-link"
+                    }
+                    key={source.label}
                     type="button"
-                    onClick={() => setSelectedSize(size ?? "")}
+                    onClick={() => handleCategorySelection(source.label)}
                   >
-                    {size}
+                    {source.label}
                   </button>
                 ))}
               </div>
-            </section>
-          ) : null}
-
-          <section className="archive-filter-section">
-            <h3>Tonal Palette</h3>
-            <div className="archive-color-row">
-              <button
-                className={!selectedColor ? "archive-color-chip archive-color-chip-active" : "archive-color-chip"}
-                style={swatchStyle("forest")}
-                title="Tất cả màu"
-                type="button"
-                onClick={() => setSelectedColor("")}
-              />
-              {colorOptions.map((color) => (
-                <button
-                  className={selectedColor === color ? "archive-color-chip archive-color-chip-active" : "archive-color-chip"}
-                  key={color}
-                  style={swatchStyle(color)}
-                  title={color}
-                  type="button"
-                  onClick={() => setSelectedColor(color ?? "")}
-                />
-              ))}
-            </div>
+            ) : null}
           </section>
 
           <section className="archive-filter-section">
-            <h3>Value</h3>
-            <div className="archive-value-grid">
-              <label className="archive-value-field">
-                <span>Min</span>
-                <input
-                  inputMode="decimal"
-                  placeholder="150"
-                  value={priceRange.min}
-                  onChange={(event) => handlePriceChange("min", event)}
-                />
-              </label>
-              <label className="archive-value-field">
-                <span>Max</span>
-                <input
-                  inputMode="decimal"
-                  placeholder="2500"
-                  value={priceRange.max}
-                  onChange={(event) => handlePriceChange("max", event)}
-                />
-              </label>
-            </div>
+            <button
+              aria-expanded={openSections.size}
+              className="archive-filter-toggle"
+              type="button"
+              onClick={() => toggleFilterSection("size")}
+            >
+              <span className="archive-filter-toggle-copy">
+                <strong>SIZE</strong>
+                <small>{selectedSize || "All sizes"}</small>
+              </span>
+              <span aria-hidden="true" className="archive-filter-toggle-icon">
+                {openSections.size ? "-" : "+"}
+              </span>
+            </button>
+
+            {openSections.size ? (
+              availableSizeOptions.length > 0 ? (
+                <div className="archive-size-grid">
+                  {availableSizeOptions.map((size) => (
+                    <button
+                      className={
+                        selectedSize === size
+                          ? "archive-size-button archive-size-button-active"
+                          : "archive-size-button"
+                      }
+                      key={size}
+                      type="button"
+                      onClick={() => handleSizeSelection(size)}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="archive-filter-empty">
+                  No size metadata has arrived from the category pages yet.
+                </p>
+              )
+            ) : null}
           </section>
 
           <section className="archive-filter-section">
-            <h3>The Atelier</h3>
-            <div className="archive-brand-list">
-              <button
-                className={!selectedBrand ? "archive-brand-option archive-brand-option-active" : "archive-brand-option"}
-                type="button"
-                onClick={() => setSelectedBrand("")}
-              >
-                All Houses
-              </button>
-              {brands.map((brand) => (
-                <button
-                  className={selectedBrand === brand ? "archive-brand-option archive-brand-option-active" : "archive-brand-option"}
-                  key={brand}
-                  type="button"
-                  onClick={() => setSelectedBrand(brand)}
-                >
-                  {brand}
-                </button>
-              ))}
-            </div>
-          </section>
+            <button
+              aria-expanded={openSections.price}
+              className="archive-filter-toggle"
+              type="button"
+              onClick={() => toggleFilterSection("price")}
+            >
+              <span className="archive-filter-toggle-copy">
+                <strong>PRICE RANGE</strong>
+                <small>
+                  {priceRange.min || priceRange.max
+                    ? `${priceRange.min || "0"} - ${priceRange.max || "Any"}`
+                    : "Any price"}
+                </small>
+              </span>
+              <span aria-hidden="true" className="archive-filter-toggle-icon">
+                {openSections.price ? "-" : "+"}
+              </span>
+            </button>
 
-          {tags.length > 0 ? (
-            <section className="archive-filter-section">
-              <h3>Signals</h3>
-              <div className="archive-tag-list">
-                <button
-                  className={!selectedTag ? "archive-tag-button archive-tag-button-active" : "archive-tag-button"}
-                  type="button"
-                  onClick={() => setSelectedTag("")}
-                >
-                  All
-                </button>
-                {tags.map((tag) => (
-                  <button
-                    className={selectedTag === tag ? "archive-tag-button archive-tag-button-active" : "archive-tag-button"}
-                    key={tag}
-                    type="button"
-                    onClick={() => setSelectedTag(tag)}
-                  >
-                    #{tag}
-                  </button>
-                ))}
+            {openSections.price ? (
+              <div className="archive-value-grid">
+                <label className="archive-value-field">
+                  <span>Min</span>
+                  <input
+                    inputMode="decimal"
+                    placeholder="150"
+                    value={priceRange.min}
+                    onChange={(event) => handlePriceChange("min", event)}
+                  />
+                </label>
+                <label className="archive-value-field">
+                  <span>Max</span>
+                  <input
+                    inputMode="decimal"
+                    placeholder="2500"
+                    value={priceRange.max}
+                    onChange={(event) => handlePriceChange("max", event)}
+                  />
+                </label>
               </div>
-            </section>
-          ) : null}
+            ) : null}
+          </section>
 
           <button className="archive-reset-button" type="button" onClick={clearFilters}>
             Reset Filters
           </button>
 
           <div className="archive-service-note">
-            <span>Inventory Service</span>
-            <strong>{catalogIndex.length > 0 ? "Online & synchronized" : "Waiting for sync"}</strong>
+            <span>Category Pages</span>
+            <strong>
+              {archiveIndex.length > 0
+                ? "Synced from /categories routes"
+                : "Waiting for category data"}
+            </strong>
             <p>{statusCopy}</p>
           </div>
         </aside>
@@ -601,18 +716,57 @@ export function CatalogPage() {
         <section className="archive-results">
           <div className="archive-results-toolbar">
             <span>{resultCountLabel}</span>
-            <div className="archive-sort-row">
-              <label htmlFor="archive-sort">Sort By</label>
-              <select
-                id="archive-sort"
-                value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+            <div className="archive-results-controls">
+              <label className="archive-inline-search" htmlFor="archive-search">
+                <input
+                  id="archive-search"
+                  name="search"
+                  placeholder="Search across All Archive, Men, Women, Footwear and Accessories"
+                  type="search"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                />
+              </label>
+
+              {searchInput ? (
+                <button
+                  className="archive-reset-button archive-search-clear"
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                >
+                  Clear
+                </button>
+              ) : null}
+
+              <div className="archive-toolbar-sort">
+                <span className="archive-toolbar-sort-label">
+                  <span>Sort</span>
+                  <span>By</span>
+                </span>
+                <label className="archive-toolbar-sort-field" htmlFor="archive-sort">
+                  <select
+                    id="archive-sort"
+                    value={sortBy}
+                    onChange={(event) =>
+                      setSortBy(event.target.value as typeof sortBy)
+                    }
+                  >
+                    <option value="latest">Category Order</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                  </select>
+                </label>
+              </div>
+
+              <button
+                aria-controls="archive-filters-panel"
+                aria-expanded={isFiltersPanelOpen}
+                className="archive-filters-toggle"
+                type="button"
+                onClick={() => setIsFiltersPanelOpen((current) => !current)}
               >
-                <option value="latest">Newest Arrivals</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-                <option value="popular">Popular</option>
-              </select>
+                Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+              </button>
             </div>
           </div>
 
@@ -624,25 +778,48 @@ export function CatalogPage() {
 
           {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
-          {products.length > 0 ? (
+          {isLoading ? (
+            <div className="page-state">Dang tai du lieu tu cac category pages...</div>
+          ) : filteredItems.length > 0 ? (
             <div className="archive-product-grid">
-              {products.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  busy={busyProductId === product.id}
-                  onAddToCart={handleAddToCart}
-                  onBuyNow={handleBuyNow}
-                  product={product}
-                  variant="archive"
-                />
+              {filteredItems.map((item) => (
+                <ArchiveActionLink
+                  className="archive-editorial-card"
+                  href={item.href}
+                  key={item.id}
+                >
+                  <div className="archive-editorial-card-media">
+                    {item.imageUrl ? (
+                      <img alt={item.imageAlt || item.name} src={item.imageUrl} />
+                    ) : (
+                      <div className="archive-editorial-card-fallback">
+                        {item.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+
+                    {item.badge ? (
+                      <span className="archive-editorial-card-badge">{item.badge}</span>
+                    ) : null}
+                  </div>
+
+                  <div className="archive-editorial-card-copy">
+                    <span>{item.badge || item.categoryLabel}</span>
+                    <strong>{item.name}</strong>
+                    <p>{item.subtitle}</p>
+                    <em>{formatCurrency(item.price)}</em>
+                  </div>
+                </ArchiveActionLink>
               ))}
             </div>
           ) : feedback ? null : (
             <div className="empty-card catalog-empty-state archive-empty-state">
-              <strong>Chưa có sản phẩm khớp bộ lọc hiện tại.</strong>
-              <span>Hãy nới bộ lọc hoặc thử từ khóa khác để xem lại toàn bộ curated archive.</span>
+              <strong>Chua co san pham khop bo loc hien tai.</strong>
+              <span>
+                Hay no gioi han muc gia hoac quay lai All Archive de xem toan bo noi dung
+                tu 4 trang category.
+              </span>
               <button className="ghost-button" type="button" onClick={clearFilters}>
-                Đặt lại bộ lọc
+                Dat lai bo loc
               </button>
             </div>
           )}
@@ -650,35 +827,4 @@ export function CatalogPage() {
       </div>
     </div>
   );
-}
-
-function swatchStyle(color: string): CSSProperties {
-  const normalized = color.trim().toLowerCase();
-  const palette: Record<string, string> = {
-    forest: "#061b0e",
-    green: "#364c3c",
-    sage: "#7d9483",
-    cream: "#f5f3ee",
-    white: "#fbf9f4",
-    ivory: "#f5f3ee",
-    beige: "#d8cab7",
-    tan: "#b99572",
-    brown: "#7b5b47",
-    terracotta: "#d07d63",
-    orange: "#d07d63",
-    red: "#9b4731",
-    slate: "#5b617d",
-    blue: "#5b617d",
-    black: "#1b1c19",
-    gray: "#8f8f87",
-    grey: "#8f8f87"
-  };
-
-  return {
-    background: palette[normalized] ?? "#364c3c",
-    border:
-      normalized === "cream" || normalized === "white" || normalized === "ivory"
-        ? "1px solid rgba(115, 121, 115, 0.25)"
-        : undefined
-  };
 }

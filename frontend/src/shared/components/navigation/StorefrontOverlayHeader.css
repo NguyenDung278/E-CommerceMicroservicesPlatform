@@ -2,9 +2,9 @@
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr) minmax(140px, auto);
   align-items: center;
-  gap: 28px;
+  gap: 24px;
   width: 100%;
 }
 
@@ -17,7 +17,7 @@
 
 .storefront-overlay-brand {
   color: #fff9f3;
-  font-size: 1.28rem;
+  font-size: 1.34rem;
   font-weight: 800;
   letter-spacing: -0.04em;
   text-decoration: none;
@@ -26,17 +26,23 @@
 
 .storefront-overlay-nav {
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 34px;
+  flex-wrap: nowrap;
+  gap: clamp(18px, 2vw, 34px);
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.storefront-overlay-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .storefront-overlay-link {
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   border-bottom: 2px solid transparent;
   color: rgba(255, 255, 255, 0.74);
-  font-size: 0.94rem;
-  font-weight: 600;
+  font-size: 0.98rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1;
   text-decoration: none;
@@ -59,6 +65,7 @@
 .storefront-overlay-actions {
   justify-content: flex-end;
   gap: 14px;
+  min-width: fit-content;
 }
 
 .storefront-overlay-bag-link {
@@ -146,7 +153,7 @@
 }
 
 .storefront-overlay-header-light .storefront-overlay-link {
-  color: rgba(6, 27, 14, 0.72);
+  color: rgba(6, 27, 14, 0.76);
 }
 
 .storefront-overlay-header-light .storefront-overlay-link:hover,
@@ -165,7 +172,7 @@
 
 .storefront-overlay-header-light .storefront-overlay-account-pill {
   border-color: rgba(6, 27, 14, 0.1);
-  background: rgba(6, 27, 14, 0.06);
+  background: rgba(255, 255, 255, 0.74);
   color: #061b0e;
 }
 
@@ -187,7 +194,9 @@
     grid-column: 1 / -1;
     order: 3;
     justify-content: flex-start;
+    flex-wrap: wrap;
     gap: 22px;
+    overflow-x: visible;
   }
 
   .storefront-overlay-actions {
