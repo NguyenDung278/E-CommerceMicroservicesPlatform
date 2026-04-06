@@ -3,17 +3,17 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/features/home/useHomeWorkbook", () => ({
+vi.mock("../src/features/home/use-home-workbook", () => ({
   useHomeWorkbook: vi.fn(),
 }));
 
-vi.mock("../src/features/auth/hooks/useAuth", () => ({
+vi.mock("../src/features/auth/hooks/use-auth", () => ({
   useAuth: vi.fn(() => ({
     isAuthenticated: false,
   })),
 }));
 
-vi.mock("../src/features/cart/hooks/useCart", () => ({
+vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: vi.fn(() => ({
     itemCount: 2,
   })),
@@ -24,18 +24,17 @@ const apiMocks = vi.hoisted(() => ({
   listProducts: vi.fn(),
 }));
 
-vi.mock("../src/shared/api", () => ({
+vi.mock("@/services/api", () => ({
   api: {
     getStorefrontCategoryPage: apiMocks.getStorefrontCategoryPage,
     listProducts: apiMocks.listProducts,
   },
-  getErrorMessage: (reason: unknown) =>
-    reason instanceof Error ? reason.message : String(reason),
+  getErrorMessage: (reason: unknown) => (reason instanceof Error ? reason.message : String(reason)),
   isHttpError: () => false,
 }));
 
-import { useHomeWorkbook } from "../src/features/home/useHomeWorkbook";
-import { CatalogPage } from "../src/routes/CatalogPage";
+import { useHomeWorkbook } from "../src/features/home/use-home-workbook";
+import { CatalogPage } from "@/pages/storefront";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -284,8 +283,7 @@ describe("CatalogPage category aggregation", () => {
     expect(container.textContent).toContain("SIZE");
     expect(container.textContent).toContain("PRICE RANGE");
 
-    const searchInput =
-      container.querySelector<HTMLInputElement>("#archive-search");
+    const searchInput = container.querySelector<HTMLInputElement>("#archive-search");
     expect(searchInput?.getAttribute("placeholder")).toContain(
       "All Archive, Men, Women, Footwear and Accessories"
     );
@@ -353,10 +351,7 @@ describe("CatalogPage category aggregation", () => {
         return;
       }
 
-      const valueSetter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )?.set;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
       valueSetter?.call(searchInput, "Cashmere");
       searchInput.dispatchEvent(new Event("input", { bubbles: true }));
       searchInput.dispatchEvent(new Event("change", { bubbles: true }));
@@ -370,9 +365,7 @@ describe("CatalogPage category aggregation", () => {
       expect(container.textContent).toContain("Showing 1 of 4 Products");
     });
 
-    const clearSearchButton = container.querySelector<HTMLButtonElement>(
-      ".archive-search-clear"
-    );
+    const clearSearchButton = container.querySelector<HTMLButtonElement>(".archive-search-clear");
 
     act(() => {
       clearSearchButton?.click();

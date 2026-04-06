@@ -1,17 +1,23 @@
 const homeImages = {
   hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuCPKv1CtBwPM413euox0uKnxmUXjsuyZFpFIvDMoW9tfefpHVd_8BFtHSEnUjm5XAQu4WMkS8vgS56v7kIQYWar2OBBpzOurqNCin2KoM1hYEZHvbpagIiz8m2nCidCAiRbDaeJLBNHxra37cwt7QEG3UlOcKbs-W6WuTDZj3qjg9hWIs2YR26l-ijHVnj8ck1-5NDhyVXXQECwDKQJs1i-nYT93ubM2EFutXuxPWxUHWH2o2Zhbz_naP2SXRRL50t8HcB8sUf5LXiX",
-  menTile: "https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW",
-  womenTile: "https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n",
-  footwearTile: "https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w",
-  accessoriesTile: "https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI",
-  callout: "https://lh3.googleusercontent.com/aida-public/AB6AXuA-QCiHmdCOxRlVT1rixfgiaLjtOyUpf_qCwS4N8rEMGTTVyJxqkHxQ1iiUeTIIjM9C_MgASpIzwLXa8wLI7ck0F5p1lc6AA6MfKkb3aN_Nbw5AhWsU9lBPxRcNlN7vOcvcId55iSoZRYNe8TCXUI_PC9zSeiPi6-O2ojrYX1RkopzPM8W9xTFEi3rS1s2qZ8IvVBPlgiJak9SR8Bp7wD71RSztHJCzs3MKTW0TNUGEn5sxJF68kLn8MLi1Kcp6ODrKfOGHNtCZKygx",
+  menTile:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW",
+  womenTile:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n",
+  footwearTile:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w",
+  accessoriesTile:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI",
+  callout:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuA-QCiHmdCOxRlVT1rixfgiaLjtOyUpf_qCwS4N8rEMGTTVyJxqkHxQ1iiUeTIIjM9C_MgASpIzwLXa8wLI7ck0F5p1lc6AA6MfKkb3aN_Nbw5AhWsU9lBPxRcNlN7vOcvcId55iSoZRYNe8TCXUI_PC9zSeiPi6-O2ojrYX1RkopzPM8W9xTFEi3rS1s2qZ8IvVBPlgiJak9SR8Bp7wD71RSztHJCzs3MKTW0TNUGEn5sxJF68kLn8MLi1Kcp6ODrKfOGHNtCZKygx",
 };
 
 const menImages = {
   hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuACWMir-mH0L8UXbUXQWypp-pFR6ldBwMeB_P57xJ4h6lF91JgCYYyEJ27pPIbRuST3wzOd8tibscQ-NbIurAXAyGOUWfZstI5mdT9d5_jh6VLXet-x-y-OPWmMV69qNvZALg2WhY1PVY_SFZnR1pxtNpFxR9lsyyLR7XmqRbJ_dhy0WQE2rK_YiUzI2TXstgAkQ537sWLyCCgyHe5Z2QW16TODc2jAY392leqTD0jFdmPyw689W_PhHTFoOURRakfD2ODeVuxVtb-u",
   one: "https://lh3.googleusercontent.com/aida-public/AB6AXuBRTlahnsv0f7ya3xU5YTERBeygNv3B_6MEExHsUzTI3uGv3gn9RVVaVkXFHJAQIYeO-NnQ-n51wqkjA-oml_uoLI96mxp1piJxtPHA5ofpE_9tSdHTMa8lNfjCgdbUOSRi__Y4J8VFSz5HhI5ZB9C5Vl5zl-6FxNxhAYwEDNV_XOP2dGsj5rTUtGDd1a59qGSue1hdS28wAOq4_SpG152HGpLir9kJsPtGA9trmPt5raubxkNMY1AI1cI7Qs5-pnKuSFT_JrLZrEaz",
   two: "https://lh3.googleusercontent.com/aida-public/AB6AXuA004mNLReNQb9OI2U6JwpX4idr5HiAL2OAqj-X2r60qRDaMIYLE7YAWWdvJ6_uvkh1jgDweWN2QRC0Z6CnAXNS54x6M_Qkf8uPtTr4G6Cl5-Y5z8iuGvbIv1u_DCawCRbkf01JSFMi_iZ2APFb_m56yIPq8-_Ap7HY-QbhgAL2tc-tsE4VsnyibszwQjgYBz28AGgGUIIQ7EDmY1bXGdkXyNQI991VG2ouIlVK-wOCqK_Lq8GNj4h27eldl1LjnR6Wt903BlKnHCVn",
-  three: "https://lh3.googleusercontent.com/aida-public/AB6AXuBXRSWOWcHtCNyaMDYLCJzvRD_aYObkVBkIHPoz_HZOOuihWxPKo82MAX7anUmfBqHwOgx_6YthGokOn-aqEtAkMya3di9RNTlqqA2-zqT6x85Yh0CGWy5_gOTjOOMYxnRJ7B8A9ihZaMR-PzIAILb7T5rSMUCiZ-3CZRTX_u3XxJpOlXlYjWEZj4aFLaV_mamuWkKjkhTxSRpw7LyICx9lPITcKUuGOxJ0NkpKweDI4rMjqFkSSGZJssErigmmpbKq5Z6kLPVUehXg",
+  three:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBXRSWOWcHtCNyaMDYLCJzvRD_aYObkVBkIHPoz_HZOOuihWxPKo82MAX7anUmfBqHwOgx_6YthGokOn-aqEtAkMya3di9RNTlqqA2-zqT6x85Yh0CGWy5_gOTjOOMYxnRJ7B8A9ihZaMR-PzIAILb7T5rSMUCiZ-3CZRTX_u3XxJpOlXlYjWEZj4aFLaV_mamuWkKjkhTxSRpw7LyICx9lPITcKUuGOxJ0NkpKweDI4rMjqFkSSGZJssErigmmpbKq5Z6kLPVUehXg",
   four: "https://lh3.googleusercontent.com/aida-public/AB6AXuDBowt2AR0QGkZ_teHLK0qG2iUl8fGSUuNTrZHreU_s95xtmrbnCTB8LYOShnHaraaNDqoUnziBnVe2Rh6OAlJpU9ZSpF84L0-k23aokXc6aJdWswRdyGowycFswnENPgO9tfnUyUaMa2VjW8lGJYkmhPbnJhSE0zC0BdoSTdae8pmGnQwaAXzVlJJRhWYysiO1yf2n_lREj8nVxarkGub1OLnfLI4QrhAiAGV-AZTWnZg1MCqdpNi1pBSjb6RIPFAzXw0h_iTQCqrp",
   five: "https://lh3.googleusercontent.com/aida-public/AB6AXuDb4HgZThk-i_juM7LnHT28IvYp6L3O-BYlcwDKgfj8NoIfTFFhOF2Ole0eBVsqpYg3jj_0TeLOFVAlmWeCOqcLhMrp0WOXtTgYUke-t7sj7lC-e4jEl3lE8aZs01lCVJenptBJf3Fh0f1sdTVQ9W0cWZD8hEtVjX-LK-Bsqoc2UzdzkTUWeVjp7hrhjMGZhuTtvQ56nTXVelw9_F3p1d8ryVxqAzayeUimjbfSI8FHukDr7r45A4VjAJ3lpymfXulGrEM83TxdK6Sj",
 };
@@ -20,7 +26,8 @@ const womenImages = {
   hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuCCHjHHNBD0bZoSfUrXMIUsusvSJpfmxcJRzVyGEWriuKDCynB8NOcLil0MHJfUCfgjmGv_IMPAfbmEm73hz3s6Y6ycMQrKq1qnMzNHz4QbDczvsSfdf8SaL9vw3qoSEt36Xm52OFG4ej1BLs2XxqsJW_tPT1C2xruIyndF6i4KCKATXFKExblf5UqEURDlAYRnWNDYbLXe8GGoCndX4q2IeRKAuk6Etam3vFkW85HI4vZvrHKCLYN63hA-DGdTKTpY9k-VBO3aY4le",
   one: "https://lh3.googleusercontent.com/aida-public/AB6AXuA2sL_3eVTxv8pTPhQFFFpSQH6Kaq9or00Ox__PprWsxnH4iFcdyvkF6yE_uLy_crNRWln5sUDsqQmSo-iayh_0MyCYYTR20XSGjWAB-uNe6duE69pSu714RVSt74tQMEIF3fuTduw02xllANi1JDAtn12UeUh9ljLf8hz3xi6jPfnSdYWCX7w9y3IwSDyovmYmtsxb0x9P-3bKU5qLNiMw7cc4_t2zNEpT8QLPRQLTFIXGR2WRSQbgpFitN5ZgjO-BIsY_4Wyg7jRS",
   two: "https://lh3.googleusercontent.com/aida-public/AB6AXuBmKXEwtGPg000dRd0DYpkc78_z_0z7Q60H3fju2rnkDAllnKGSFzesSqKvn2OqncI_k-QRIvUyfVSm75I-UKw3DhxiM5eOINn4C-vJnvj2z8uKIL2AqGnXgvmqeYEEzJ5-il3zT3BTGt9iPabLxhcPbK9AwTzCM3Z9Fo3vrhfReTlHCTZ3EIgs7_JxhOFfmrNerCamtXr0QKPKlok1p5W71S8CFoXMlgrk9yrqe55hyi8oG24OwLIfOD6sAGZDuAtdrYmvQ0QD-hzg",
-  three: "https://lh3.googleusercontent.com/aida-public/AB6AXuBEKFEZ7Xk7Fyqc9Uf8Rr7JfhPIghhY7j0HO6bqSglckdRAUU1XFK1Vy_uPXAbpLqczXmCH41FFfT4QIgBtt7oBHhaEojRqYoMhEeW0zN9yDlgFxnnAhZfa_FjmfnZNakXUp-HAT6D2gb_BUeHA5TXBmMVsObd_AHQfOwPuMZTKrAqSkXnJe60KUnlOWajJ6btQ5zyNadwls33tVZNcDlHyJ8_EUlUAhHRtQ90ZhEzMNN5Mzjf_Hr7Onn7MZF-hkz45XkPrdm6pngSw",
+  three:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBEKFEZ7Xk7Fyqc9Uf8Rr7JfhPIghhY7j0HO6bqSglckdRAUU1XFK1Vy_uPXAbpLqczXmCH41FFfT4QIgBtt7oBHhaEojRqYoMhEeW0zN9yDlgFxnnAhZfa_FjmfnZNakXUp-HAT6D2gb_BUeHA5TXBmMVsObd_AHQfOwPuMZTKrAqSkXnJe60KUnlOWajJ6btQ5zyNadwls33tVZNcDlHyJ8_EUlUAhHRtQ90ZhEzMNN5Mzjf_Hr7Onn7MZF-hkz45XkPrdm6pngSw",
   four: "https://lh3.googleusercontent.com/aida-public/AB6AXuAULIeOGtZd7vXZH0gSJHWiv3w1w4d6Tz7E7Y55Pp0wpbrudgRPkQEUxLNJ7z1iX2ofjNS4KSwbIFdzRgJR2rZEzslEi02TskRTUycOtweLNiBcTRv0RAiCUncTPXaXvHGzovAfwglQIxRlDavgkG0kp9z1__77ZtFulQa4AVlvR_muVhFSILTRpDDYMIgzrzsCEPjKJNyVc0k_NtV_qrK021aTU5RlI_Mg4TBu8JIzJLGkLHTEGfvWBezAYGbi6wNp_bgFRdeYEwST",
   five: "https://lh3.googleusercontent.com/aida-public/AB6AXuAaOoy5mPR6kERrz2pjB05mC0JlxtRtsf2hinDbaZYFD7RKSJI_OTZn_SVo1D7JP85uSvsIZaQ5ebu77UNrwEjYJZhP6gfcKLOHkl-z5NFjTzCwUsmsvv1WbILS5HtKtmz6D5YPmeIASNcfDev_nsQcB5Odi4O5svKDuTAkJyHAlgm2j2VUKiwX_XzxOMsMjnnzRdyJcj-olztbGq4uYqe6FRhYp04lXvSqa4dkOjD9RZ1tB8UYpCw_Jj4C-Vwk4eokTl5ETem6rnWz",
 };
@@ -29,7 +36,8 @@ const footwearImages = {
   hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuAFXvDME4hl86EBAExrs0TPuPyrDnhtwEb8MCDCvjzu2OS-kjWnUF7XkqwYs0MGf5WGZS6B5xPKLv0OXCG5ZrDjkm-McNkALLC0DCYp5LC9beGhY0SnzFUMFF998AElRWMoxze_NVDcZ1jJ4qerfPiE1xI5Xjc0Euy-lzfbdQzjbDW9gtsemGrCxPBq4MDAxVn_PdqcdHWaZ05cl7EMLinkvr6U9D8RGxe-UFtVaee5Q6n-Ohev-vr9h8DwExyawlWEZa9kUKDqsxlQ",
   one: "https://lh3.googleusercontent.com/aida-public/AB6AXuAMYKBjYQhfEPiX1rrzGJqP-bZ3N-za3aIYrq4ZJ7iHUOBBELUJUpvBk3Ms1bHaAXBuEZwTIczKGpjLz2AbAXSyAma0h_FRPa4MA_RgE9EO-SCavieX4XPDLcnuloZs8tAGD5FGHlcBtSszlVWYz-FA-hca0gi-xkAC4k_vrZmULdCAPQNXUhSbE3wrhj8_XgthXU6Aso4ltg4ME3nEgOsgEaBDUB6hKvQ_Ere_31vsZ98zkTq0zGrgjNqUJHCDPBUQPmqG9Q702KKw",
   two: "https://lh3.googleusercontent.com/aida-public/AB6AXuD5KVhgLop51bisay_zrsW8YVtKdD2et-udRx64dbQtp0xYp4CE38R94dLqJO460aolSqy9UdPhfvdjSyjzz7Bbh4MOeBkHbehqlMCTvPNv4PLXn3wFu6XqNIM_5UyUXX71NRni2ntQt4twbRrDvUPUi5cDXb-939ibHoOeSHMsDghYNOy7kZp5gd14kjIf6WUveYq0O9RFsuf5oY9RK1U9jhhlcJ_HJPXAwSBdNK2y67FH0n0MdcVNPoEwpIxvSAkUOZdh9YgdL7FA",
-  three: "https://lh3.googleusercontent.com/aida-public/AB6AXuAAhJretAaN4nn0hwa-S3geRVjspqi5Iysp4o9wJ6Umsp05BfiGqmXjoyIkxI-iO9bJQHh6aFW1ByRoH4hP6tAQ1ifpRkG88XfFjHc7Tu8bEt310kgkBdS8l4wXyGN477geZFXoBXA7tpLWEx-ySFm69csgvDnFB-DbTmu1Va59aScYOFNkVt4WimRi19ZpDNf2YvhkDC8ETmf7ZpivWgg0fG1e-5cX386ZaOUDjcQ35GqrXeknlGJ-ig73LknVdiR_VbQ_rfBrjtto",
+  three:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuAAhJretAaN4nn0hwa-S3geRVjspqi5Iysp4o9wJ6Umsp05BfiGqmXjoyIkxI-iO9bJQHh6aFW1ByRoH4hP6tAQ1ifpRkG88XfFjHc7Tu8bEt310kgkBdS8l4wXyGN477geZFXoBXA7tpLWEx-ySFm69csgvDnFB-DbTmu1Va59aScYOFNkVt4WimRi19ZpDNf2YvhkDC8ETmf7ZpivWgg0fG1e-5cX386ZaOUDjcQ35GqrXeknlGJ-ig73LknVdiR_VbQ_rfBrjtto",
   four: "https://lh3.googleusercontent.com/aida-public/AB6AXuD4G3y0ZNdrqZS0ATojfSYa5t42Vrrx476FUX5qzvdCm_CCtF0C5yrINsDw4_G71jrBcMmaoueccHcMXO1xws91KQPeOyvLKzB9nAJZ70r7sO7YUn_u5DMqM93aUESLHoGVqBzejgzYA6j31SfDmrQl3IeBeL-xTBwhgq4AG_zSgROd0lwpbM9okRm26Hm2PbSk7bsL6aFYLo561VTjxiVDA_m28FuAt2wvBZpwLQNP23z7cESJyuNoMgdIyfHRBsZerL9BQbZ5D2p1",
 };
 
@@ -37,7 +45,8 @@ const accessoriesImages = {
   hero: "https://lh3.googleusercontent.com/aida-public/AB6AXuBlb713Ad1ZqSwci4xtZudIi3pLSP2LntjrYOZbjlMC3NLKbFllzQBjpelA2EcNqh24qXtAEpJDAyVB3yIDQIFXvkmKD86_5kVoAVPrMjID1bCAWG7fccKmwcS9kJ41ohvAPtYZJCMl2fOWYpy8JLZLlE7ksjMmFK7UnFdxUeGvbhsRltWVAsAFxPv7hkz1uizaDdvr0s5HWGulhxwsX6bDRakqRxoA2bYrvMeQA0Nta95LkdO9PMTmAYDvvqhCUeQTFYjDd4sXr9q0",
   one: "https://lh3.googleusercontent.com/aida-public/AB6AXuBBESdqWOWSR5qEzSZhDSiYksfl92Z2-nXfieKv7zls3FB-7JuZVx-N6rXRCgkpMkJyxFCIzvAJAfUETLq2m7IDhOFmOtlLXZ9qEspJxSM3dIgXBbd3dzVswFhn3Y0MqayyDJYGSylH-MIjZnLLMaswkecd7-JUIltIP_szY3CTjkboRukxyb0Hicjh_fTS7Q8NRXCPfvyi2Gd8UjbveWvWIIUauI-d4h0ra0W790prCr-I9666OBdQ8zWwoQM8OSo6iYMbifIvLw2n",
   two: "https://lh3.googleusercontent.com/aida-public/AB6AXuCJ_mIoxtuOYX0UmZ6fp1vpG_etnXOkuxN0sOW8aXUVddHj5eDEGxKoK_oij-8jI8EDqrG_IXPuR5HXX_5FgjnVIMXKR3rvffkz_2hI2uHpAzMIbNZASVlBgA47Ecvrg53PTIsx8zim-xN9ZKFMoR3ivhIQDQ1jUJ0fFx2scgrGApYeeDOx-irk-VfW38VMHIZ4QMUtn6sXwUjEJRXtZ8dTLBnKQVPGxBzf7oOFEbYGY_2P__2xLjofQjJvPkwrIzkn9OjMEUgKEC2O",
-  three: "https://lh3.googleusercontent.com/aida-public/AB6AXuDclyoI7lW_Aez2lBayMz4ES5BVdH-wo43IL4ZwpD4HLQkaJqfV3eDM-qMUs4V8Uyl6BTZ9FSNg7ExFisE6J-TMxcflCy5mFritcP54bDT49eqwGnwGnsOeheOgbCmpdtfGvnHaqpfmRpU4zQvBD7B4tmigGgv7hCDEHWLojIzOlAfe5p-0cCnzLjktClPIw5lG6h2qfT0buVNcsY57FFriSrjdMpV_jPcwn3Dwsz1C-8IS20dhOYE1-Kak6Hi0R-OiEeULdIqMBj2c",
+  three:
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDclyoI7lW_Aez2lBayMz4ES5BVdH-wo43IL4ZwpD4HLQkaJqfV3eDM-qMUs4V8Uyl6BTZ9FSNg7ExFisE6J-TMxcflCy5mFritcP54bDT49eqwGnwGnsOeheOgbCmpdtfGvnHaqpfmRpU4zQvBD7B4tmigGgv7hCDEHWLojIzOlAfe5p-0cCnzLjktClPIw5lG6h2qfT0buVNcsY57FFriSrjdMpV_jPcwn3Dwsz1C-8IS20dhOYE1-Kak6Hi0R-OiEeULdIqMBj2c",
   four: "https://lh3.googleusercontent.com/aida-public/AB6AXuAc-xgefZmjRHW4tYawNPs3ljWfgQ66YMBuFgX39XflOo-rQyjbJ2Ju2V0nLkyj2SVuz2BKsp1ucM74P4Gg2Q-TiJKsqrjsQRpxYORvaVExN0KFMkAU9KQFmWEmtNZHK5dm7iBBb1zYMTsluHO4Em5IwIi3lS3JGSUeU_unqmYgh-Fw65tcUaH2Ywxl8ag7h1znu1rGefQrkuDTARLHNwtQdpiGPKWCCp8JpO_yLO4kKGzLmwj8g3VfRzxs02GzkmBt2St6l1zyFYZU",
   five: "https://lh3.googleusercontent.com/aida-public/AB6AXuDwib-yVKWuTMsi4heheiLMLuw3Aukcrj4t8F5TLsWcUDULrkliTF_b5hFcyekqcaoBOrRCOob6yU3tV5aJCQChHBAggBedojt1THWZ_F-1GiBclBPJw389BrO0MvSA5xrOo1ssievm9rXO2UiIT0Ix_tHvr6rnGAPSAVNt1DYmLJVg_7vuvdan2zI6d3Z7JsuFwAqcipqjdi0FbCpFwqD4d7bZrq5JeL4i4aGx5NsOkOBZScx3UPHkR_rmJldHJi3Cb4MoiZaIoNsN",
 };
@@ -169,7 +178,8 @@ export const categoryTiles = [
     position: 1,
     eyebrow: "Editorial Category",
     title: "Men's Atelier",
-    subtitle: "Architectural tailoring, knit structure, and grounded outerwear for the modern artisan.",
+    subtitle:
+      "Architectural tailoring, knit structure, and grounded outerwear for the modern artisan.",
     image_url: homeImages.menTile,
     cta_label: "Open Men's Atelier",
     cta_href: "/categories/Shop%20Men",
@@ -331,32 +341,28 @@ export const callout = [
     segment_slug: "all-archive",
     eyebrow: "Editorial System",
     title: "Digital Precision, Analogue Soul.",
-    body:
-      "Beyond the silhouette lies a sophisticated technological core. Our microservice-driven inventory architecture ensures that every piece in our Digital Atelier is accounted for in real time.",
+    body: "Beyond the silhouette lies a sophisticated technological core. Our microservice-driven inventory architecture ensures that every piece in our Digital Atelier is accounted for in real time.",
     image_url: homeImages.callout,
   },
   {
     segment_slug: "nam",
     eyebrow: "Men's Atelier",
     title: "Structure, material depth, and quieter authority.",
-    body:
-      "This tab reuses the home layout while pulling imagery and copy from the Men's Atelier direction in Stitch, so the UI stays fixed and the editorial content stays fluid.",
+    body: "This tab reuses the home layout while pulling imagery and copy from the Men's Atelier direction in Stitch, so the UI stays fixed and the editorial content stays fluid.",
     image_url: menImages.five,
   },
   {
     segment_slug: "nu",
     eyebrow: "Women's Atelier",
     title: "Quiet luxury, defined by purpose.",
-    body:
-      "The women's story leans into sculptural softness and natural textiles, while the workbook keeps the copy and images easy to refresh without reworking the layout.",
+    body: "The women's story leans into sculptural softness and natural textiles, while the workbook keeps the copy and images easy to refresh without reworking the layout.",
     image_url: womenImages.five,
   },
   {
     segment_slug: "accessories",
     eyebrow: "Accessories Atelier",
     title: "Objects defined by hidden detail and material clarity.",
-    body:
-      "Every card and image on this tab can be swapped by editing the workbook, while the page keeps the same spacious editorial rhythm as the Stitch reference.",
+    body: "Every card and image on this tab can be swapped by editing the workbook, while the page keeps the same spacious editorial rhythm as the Stitch reference.",
     image_url: accessoriesImages.five,
   },
 ];
@@ -633,10 +639,8 @@ export const categoryPages = [
     hero_description:
       "An architectural study in silhouette and structure. Crafted for the modern artisan with a steadier, darker editorial tone.",
     hero_image_url: menImages.hero,
-    hero_image_alt:
-      "Close-up of dark wool fabric and tailored structure in the Men's Atelier",
-    quote_body:
-      "Structure, restraint, and material depth staged with a quieter editorial rhythm.",
+    hero_image_alt: "Close-up of dark wool fabric and tailored structure in the Men's Atelier",
+    quote_body: "Structure, restraint, and material depth staged with a quieter editorial rhythm.",
     quote_author: "ND Atelier",
     story_eyebrow: "Material Study",
     story_title: "The Obsidian Overcoat",
@@ -648,8 +652,7 @@ export const categoryPages = [
     story_cta_href: "/categories/Shop%20Men",
     results_label: "Showing %count% results",
     sort_label: "Sort by: Relevance",
-    footer_note:
-      "Workbook-driven category page aligned to the Men's Atelier screen in Stitch.",
+    footer_note: "Workbook-driven category page aligned to the Men's Atelier screen in Stitch.",
   },
   {
     slug: "women-atelier",
@@ -660,8 +663,7 @@ export const categoryPages = [
     hero_description:
       "Quiet luxury, sculptural drape, and natural fibers arranged with more room to breathe and a calmer editorial pace.",
     hero_image_url: womenImages.hero,
-    hero_image_alt:
-      "Close-up of ethereal cream silk fabric draping in a softly lit atelier",
+    hero_image_alt: "Close-up of ethereal cream silk fabric draping in a softly lit atelier",
     quote_body: "Quiet luxury, defined by purpose.",
     quote_author: "ND Atelier",
     story_eyebrow: "The Craftsmanship",
@@ -674,8 +676,7 @@ export const categoryPages = [
     story_cta_href: "/categories/Shop%20Women",
     results_label: "Showing %count% pieces",
     sort_label: "Sort By",
-    footer_note:
-      "Workbook-driven category page aligned to the Women's Atelier screen in Stitch.",
+    footer_note: "Workbook-driven category page aligned to the Women's Atelier screen in Stitch.",
   },
   {
     slug: "footwear-atelier",
@@ -688,8 +689,7 @@ export const categoryPages = [
     hero_image_url: footwearImages.hero,
     hero_image_alt:
       "Premium leather shoemaking tools and footwear materials in a bright artisan workshop",
-    quote_body:
-      "\"Luxury is not the absence of imperfection, but the presence of character.\"",
+    quote_body: '"Luxury is not the absence of imperfection, but the presence of character."',
     quote_author: "Master Shoemaker, ND Atelier",
     story_eyebrow: "The Heritage Series",
     story_title: "Heritage craft, modern proportion.",
@@ -701,8 +701,7 @@ export const categoryPages = [
     story_cta_href: "/categories/Footwear",
     results_label: "Showing %count% results",
     sort_label: "Sort by: Relevance",
-    footer_note:
-      "Workbook-driven category page aligned to the Footwear Atelier screen in Stitch.",
+    footer_note: "Workbook-driven category page aligned to the Footwear Atelier screen in Stitch.",
   },
   {
     slug: "accessories-atelier",
@@ -713,8 +712,7 @@ export const categoryPages = [
     hero_description:
       "Objects, bags, and finishing pieces shaped by material integrity and quieter architectural form.",
     hero_image_url: accessoriesImages.hero,
-    hero_image_alt:
-      "Close-up of vegetable tanned leather and fine stitching tools in warm light",
+    hero_image_alt: "Close-up of vegetable tanned leather and fine stitching tools in warm light",
     quote_body: "True luxury is found in the hidden details of the stitch.",
     quote_author: "The Master Artisan",
     story_eyebrow: "Material Focus",

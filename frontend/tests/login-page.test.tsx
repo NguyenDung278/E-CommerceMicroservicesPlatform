@@ -7,23 +7,23 @@ const authMocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock("../src/features/auth/hooks/useAuth", () => ({
+vi.mock("../src/features/auth/hooks/use-auth", () => ({
   useAuth: authMocks.useAuth,
 }));
 
-vi.mock("../src/features/auth/storage/rememberedLoginStorage", () => ({
+vi.mock("../src/features/auth/storage/remembered-login-storage", () => ({
   clearRememberedLogin: vi.fn(),
   readRememberedLogin: vi.fn(() => null),
   saveRememberedLogin: vi.fn(),
 }));
 
-vi.mock("../src/features/cart/hooks/useCart", () => ({
+vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: vi.fn(() => ({
     itemCount: 2,
   })),
 }));
 
-import { LoginPage } from "../src/routes/LoginPage";
+import { LoginPage } from "@/pages/auth";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 

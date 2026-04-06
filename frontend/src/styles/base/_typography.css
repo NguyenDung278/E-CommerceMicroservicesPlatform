@@ -24,7 +24,8 @@ small {
 }
 
 /* Strong text */
-strong, b {
+strong,
+b {
   font-weight: 600;
 }
 

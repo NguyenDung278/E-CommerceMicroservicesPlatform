@@ -3,34 +3,30 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/features/home/useHomeWorkbook", () => ({
+vi.mock("../src/features/home/use-home-workbook", () => ({
   useHomeWorkbook: vi.fn(),
 }));
 
-vi.mock("../src/features/auth/hooks/useAuth", () => ({
+vi.mock("../src/features/auth/hooks/use-auth", () => ({
   useAuth: vi.fn(() => ({
     isAuthenticated: false,
   })),
 }));
 
-vi.mock("../src/features/cart/hooks/useCart", () => ({
+vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: vi.fn(() => ({
     itemCount: 2,
   })),
 }));
 
-import { useHomeWorkbook } from "../src/features/home/useHomeWorkbook";
-import { HomePage } from "../src/routes/HomePage";
+import { useHomeWorkbook } from "../src/features/home/use-home-workbook";
+import { HomePage } from "@/pages/storefront";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
-function createSegment(
-  slug: string,
-  label: string,
-  overrides: Record<string, unknown> = {}
-) {
+function createSegment(slug: string, label: string, overrides: Record<string, unknown> = {}) {
   return {
     slug,
     label,

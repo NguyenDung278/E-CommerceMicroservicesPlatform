@@ -50,46 +50,18 @@ function buildFlatCsvRows() {
 function writeWorkbook() {
   const workbook = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(siteMeta),
-    "site_meta"
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(navItems),
-    "nav_items"
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(hero),
-    "hero"
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(categoryTiles),
-    "category_tiles"
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(callout),
-    "callout"
-  );
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(siteMeta), "site_meta");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(navItems), "nav_items");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(hero), "hero");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(categoryTiles), "category_tiles");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(callout), "callout");
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(calloutMetrics),
     "callout_metrics"
   );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(products),
-    "products"
-  );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(categoryPages),
-    "category_pages"
-  );
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(products), "products");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(categoryPages), "category_pages");
   XLSX.utils.book_append_sheet(
     workbook,
     XLSX.utils.json_to_sheet(categoryFilters),
@@ -100,11 +72,7 @@ function writeWorkbook() {
     XLSX.utils.json_to_sheet(categoryPageProducts),
     "category_page_products"
   );
-  XLSX.utils.book_append_sheet(
-    workbook,
-    XLSX.utils.json_to_sheet(footerLinks),
-    "footer_links"
-  );
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(footerLinks), "footer_links");
 
   XLSX.writeFile(workbook, workbookPath);
 }

@@ -13,20 +13,20 @@ module.exports = {
           low: "#f5f3ee",
           line: "#e4e2dd",
           muted: "#737973",
-          accent: "#d07d63"
-        }
+          accent: "#d07d63",
+        },
       },
       fontFamily: {
         body: ["Inter", "Segoe UI", "sans-serif"],
-        display: ["Noto Serif", "Georgia", "serif"]
+        display: ["Noto Serif", "Georgia", "serif"],
       },
       boxShadow: {
-        editorial: "0 24px 50px rgba(27, 28, 25, 0.08)"
+        editorial: "0 24px 50px rgba(27, 28, 25, 0.08)",
       },
       maxWidth: {
-        "screen-2xl": "1536px"
-      }
-    }
+        "screen-2xl": "1536px",
+      },
+    },
   },
-  plugins: [require("@tailwindcss/forms")]
+  plugins: [require("@tailwindcss/forms")],
 };

@@ -3,18 +3,18 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/features/home/useHomeWorkbook", () => ({
+vi.mock("../src/features/home/use-home-workbook", () => ({
   useHomeWorkbook: vi.fn(),
 }));
 
-vi.mock("../src/features/cart/hooks/useCart", () => ({
+vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: vi.fn(() => ({
     itemCount: 2,
     addItem: vi.fn(),
   })),
 }));
 
-vi.mock("../src/features/auth/hooks/useAuth", () => ({
+vi.mock("../src/features/auth/hooks/use-auth", () => ({
   useAuth: vi.fn(() => ({
     isAuthenticated: false,
   })),
@@ -25,18 +25,17 @@ const apiMocks = vi.hoisted(() => ({
   listProducts: vi.fn(),
 }));
 
-vi.mock("../src/shared/api", () => ({
+vi.mock("@/services/api", () => ({
   api: {
     getStorefrontCategoryPage: apiMocks.getStorefrontCategoryPage,
     listProducts: apiMocks.listProducts,
   },
-  getErrorMessage: (reason: unknown) =>
-    reason instanceof Error ? reason.message : String(reason),
+  getErrorMessage: (reason: unknown) => (reason instanceof Error ? reason.message : String(reason)),
   isHttpError: () => false,
 }));
 
-import { useHomeWorkbook } from "../src/features/home/useHomeWorkbook";
-import { CategoryPage } from "../src/routes/CategoryPage";
+import { useHomeWorkbook } from "../src/features/home/use-home-workbook";
+import { CategoryPage } from "@/pages/storefront";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -216,14 +215,14 @@ describe("CategoryPage workbook mode", () => {
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
     expect(apiMocks.listProducts).not.toHaveBeenCalled();
 
-    const searchInput = container.querySelector<HTMLInputElement>(
-      "#category-search-men-atelier"
-    );
+    const searchInput = container.querySelector<HTMLInputElement>("#category-search-men-atelier");
 
     expect(searchInput?.getAttribute("placeholder")).toContain("Men");
 
     const categoryLinks = Array.from(
-      container.querySelectorAll<HTMLAnchorElement>(".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill")
+      container.querySelectorAll<HTMLAnchorElement>(
+        ".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill"
+      )
     );
     const bagLink = container.querySelector<HTMLAnchorElement>(".storefront-overlay-bag-link");
     const hrefByLabel = Object.fromEntries(
@@ -245,10 +244,7 @@ describe("CategoryPage workbook mode", () => {
         return;
       }
 
-      const valueSetter = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )?.set;
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
       valueSetter?.call(searchInput, "Merino");
       searchInput.dispatchEvent(new Event("input", { bubbles: true }));
       searchInput.dispatchEvent(new Event("change", { bubbles: true }));

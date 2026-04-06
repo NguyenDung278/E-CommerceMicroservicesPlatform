@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from "../src/shared/api";
-import { authApi } from "../src/shared/api/modules/authApi";
-import { cartApi } from "../src/shared/api/modules/cartApi";
-import { orderApi } from "../src/shared/api/modules/orderApi";
-import { paymentApi } from "../src/shared/api/modules/paymentApi";
+import { api } from "@/services/api";
+import { authApi } from "@/services/api/modules/auth-api";
+import { cartApi } from "@/services/api/modules/cart-api";
+import { orderApi } from "@/services/api/modules/order-api";
+import { paymentApi } from "@/services/api/modules/payment-api";
 
 type MockResponseOptions = {
   data?: unknown;

@@ -10,14 +10,28 @@
 
 /* Reset margins and paddings */
 body,
-h1, h2, h3, h4, h5, h6,
-p, ul, ol, li,
-dl, dt, dd,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+ul,
+ol,
+li,
+dl,
+dt,
+dd,
 figure,
 blockquote,
 pre,
-form, fieldset, legend,
-input, textarea, select,
+form,
+fieldset,
+legend,
+input,
+textarea,
+select,
 button {
   margin: 0;
   padding: 0;
@@ -45,7 +59,11 @@ a {
 }
 
 /* Image reset */
-img, picture, video, canvas, svg {
+img,
+picture,
+video,
+canvas,
+svg {
   display: block;
   max-width: 100%;
 }
@@ -64,12 +82,14 @@ table {
 }
 
 /* Remove default list styles */
-ul, ol {
+ul,
+ol {
   list-style: none;
 }
 
 /* Remove default quotes */
-blockquote, q {
+blockquote,
+q {
   quotes: none;
 }
 
@@ -77,7 +97,7 @@ blockquote::before,
 blockquote::after,
 q::before,
 q::after {
-  content: '';
+  content: "";
   content: none;
 }
 

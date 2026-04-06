@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import {
   findHomeWorkbookCategoryPage,
   loadHomeWorkbookFromFile,
-} from "../src/features/home/workbook";
+} from "../src/features/home/home-workbook";
 
 describe("home workbook parser", () => {
   it("parses flat csv rows using the homepage workbook schema", async () => {
