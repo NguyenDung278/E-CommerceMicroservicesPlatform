@@ -141,6 +141,7 @@ describe("CategoryPage workbook mode", () => {
               {
                 pageSlug: "men-atelier",
                 position: 1,
+                productId: "men-001",
                 badge: "New Arrival",
                 name: "Sculpted Linen Shirt",
                 material: "Italian Linen Blend",
@@ -153,6 +154,7 @@ describe("CategoryPage workbook mode", () => {
               {
                 pageSlug: "men-atelier",
                 position: 2,
+                productId: "men-002",
                 badge: "Limited Edition",
                 name: "Structured Atelier Jacket",
                 material: "100% Merino Wool",
@@ -238,6 +240,10 @@ describe("CategoryPage workbook mode", () => {
     expect(hrefByLabel["Login"]).toBe("/login");
     expect(bagLink?.getAttribute("href")).toBe("/login");
     expect(bagLink?.textContent).toContain("2");
+
+    const productLink = container.querySelector<HTMLAnchorElement>(".atelier-category-product-card");
+
+    expect(productLink?.getAttribute("href")).toBe("/products/men-001");
 
     act(() => {
       if (!searchInput) {

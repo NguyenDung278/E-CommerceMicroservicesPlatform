@@ -62,6 +62,11 @@ export interface ResetPasswordData {
   new_password: string;
 }
 
+export interface ChangePasswordData {
+  current_password: string;
+  new_password: string;
+}
+
 /**
  * Update profile data
  */
@@ -154,6 +159,14 @@ export const authApi = {
   resetPassword(body: ResetPasswordData): Promise<ApiEnvelope<null>> {
     return request<null>("/api/v1/auth/reset-password", {
       method: "POST",
+      body,
+    });
+  },
+
+  changePassword(token: string, body: ChangePasswordData): Promise<ApiEnvelope<null>> {
+    return request<null>("/api/v1/users/password", {
+      method: "PUT",
+      token,
       body,
     });
   },

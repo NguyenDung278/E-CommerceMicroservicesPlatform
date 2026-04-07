@@ -119,6 +119,9 @@ function getUserFriendlyMessage(error: HttpError): string {
     if (detail.includes("invalid email/phone or password")) {
       return "Thông tin đăng nhập hoặc mật khẩu chưa chính xác.";
     }
+    if (detail.includes("current password is incorrect")) {
+      return "Mật khẩu hiện tại chưa chính xác.";
+    }
     if (detail.includes("invalid or expired verification token")) {
       return "Liên kết xác minh email không hợp lệ hoặc đã hết hạn.";
     }

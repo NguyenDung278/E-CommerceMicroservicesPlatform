@@ -4,6 +4,8 @@ import { AccountPageLayout } from "@/features/account/components/account-page-la
 import { useOrderPayments } from "@/features/account/hooks/use-order-payments";
 import { formatShortDate } from "@/features/account/utils/account-presentation";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { getErrorMessage } from "@/services/api";
+import { isStrongPassword } from "@/utils/validation";
 import "@/styles/pages/account/security-page.css";
 
 type PasswordFormState = {
@@ -19,11 +21,12 @@ const emptyForm: PasswordFormState = {
 };
 
 export function SecurityPage() {
-  const { token, user, resendVerificationEmail } = useAuth();
+  const { token, user, resendVerificationEmail, changePassword } = useAuth();
   const { orders, paymentsByOrder } = useOrderPayments(token);
   const [passwordForm, setPasswordForm] = useState<PasswordFormState>(emptyForm);
   const [feedback, setFeedback] = useState("");
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const latestPayment = useMemo(
     () =>
@@ -34,22 +37,44 @@ export function SecurityPage() {
     [paymentsByOrder]
   );
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (passwordForm.newPassword.length < 8) {
-      setFeedback("New password must be at least 8 characters.");
+    const currentPassword = passwordForm.currentPassword.trim();
+    const newPassword = passwordForm.newPassword.trim();
+    const confirmPassword = passwordForm.confirmPassword.trim();
+
+    if (!currentPassword) {
+      setFeedback("Enter your current password before updating it.");
       return;
     }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    if (!isStrongPassword(newPassword)) {
+      setFeedback("New password must be at least 8 characters and include both letters and numbers.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
       setFeedback("New password and confirmation do not match.");
       return;
     }
+    if (newPassword === currentPassword) {
+      setFeedback("Choose a new password that is different from the current one.");
+      return;
+    }
 
-    setFeedback(
-      "Password update UI is ready. The current backend flow still uses reset-password email for execution."
-    );
-    setPasswordForm(emptyForm);
+    try {
+      setIsUpdatingPassword(true);
+      setFeedback("");
+      await changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setFeedback("Password updated successfully. Your current session stays active.");
+      setPasswordForm(emptyForm);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsUpdatingPassword(false);
+    }
   }
 
   async function handleVerifyEmail() {
@@ -80,6 +105,11 @@ export function SecurityPage() {
               <div className="security-route-panel-icon" aria-hidden="true" />
               <h2>Change Password</h2>
             </div>
+
+            <p>
+              Update your password directly inside the authenticated session without falling back to
+              the email recovery flow.
+            </p>
 
             <form className="security-route-form" onSubmit={handleSubmit}>
               <label className="security-route-field">
@@ -126,8 +156,8 @@ export function SecurityPage() {
                 </label>
               </div>
 
-              <button className="security-route-primary" type="submit">
-                Update Password
+              <button className="security-route-primary" disabled={isUpdatingPassword} type="submit">
+                {isUpdatingPassword ? "Updating..." : "Update Password"}
               </button>
             </form>
           </section>

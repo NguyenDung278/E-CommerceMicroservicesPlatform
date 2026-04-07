@@ -137,6 +137,7 @@ describe("CatalogPage category aggregation", () => {
               {
                 pageSlug: "men-atelier",
                 position: 1,
+                productId: "men-001",
                 badge: "Tailoring",
                 name: "Structured Atelier Jacket",
                 material: "100% Merino Wool",
@@ -174,6 +175,7 @@ describe("CatalogPage category aggregation", () => {
               {
                 pageSlug: "women-atelier",
                 position: 1,
+                productId: "women-001",
                 badge: "Draped",
                 name: "Cloud Cashmere Crew",
                 material: "Cashmere",
@@ -211,6 +213,7 @@ describe("CatalogPage category aggregation", () => {
               {
                 pageSlug: "footwear-atelier",
                 position: 1,
+                productId: "footwear-001",
                 badge: "Workshop Build",
                 name: "Moc Toe Service Boot",
                 material: "English Bridle Leather",
@@ -248,6 +251,7 @@ describe("CatalogPage category aggregation", () => {
               {
                 pageSlug: "accessories-atelier",
                 position: 1,
+                productId: "accessories-001",
                 badge: "Limited Edition",
                 name: "Atelier Tote",
                 material: "Vegetable Tanned Leather",
@@ -304,6 +308,10 @@ describe("CatalogPage category aggregation", () => {
     expect(hrefByLabel["Footwear"]).toBe("/categories/Footwear");
     expect(hrefByLabel["Accessories"]).toBe("/categories/Accessories");
     expect(hrefByLabel["Login"]).toBe("/login");
+
+    const archiveLink = container.querySelector<HTMLAnchorElement>(".archive-editorial-card");
+
+    expect(archiveLink?.getAttribute("href")).toBe("/products/men-001");
 
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
     expect(apiMocks.listProducts).not.toHaveBeenCalled();

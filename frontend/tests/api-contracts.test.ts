@@ -59,6 +59,21 @@ describe("frontend api contracts", () => {
     expect(init?.method).toBe("POST");
   });
 
+  it("keeps password change on PUT /api/v1/users/password with bearer auth", async () => {
+    fetchMock.mockResolvedValue(createResponse());
+
+    await authApi.changePassword("jwt-token", {
+      current_password: "oldPass123",
+      new_password: "newPass456",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const headers = init?.headers as Headers;
+    expect(url).toBe("/api/v1/users/password");
+    expect(init?.method).toBe("PUT");
+    expect(headers.get("Authorization")).toBe("Bearer jwt-token");
+  });
+
   it("keeps cart add item on POST /api/v1/cart/items with bearer auth", async () => {
     fetchMock.mockResolvedValue(
       createResponse({

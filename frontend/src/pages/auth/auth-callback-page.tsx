@@ -3,9 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import {
+  appendAuthFlowLog,
+  clearPendingPostLoginAction,
   clearPendingOAuthRemember,
   readPendingOAuthRemember,
-} from "@/features/auth/storage/oauth-session-storage";
+} from "@/features/auth/storage";
 import { getErrorMessage } from "@/services/api/error-handler";
 import "@/styles/pages/auth/auth-pages.css";
 
@@ -29,18 +31,33 @@ export function AuthCallbackPage() {
     const next = normalizeClientRedirect(hashParams.get("next"));
 
     setNextPath(next);
+    appendAuthFlowLog("oauth_callback_received", {
+      hasTicket: Boolean(ticket),
+      error,
+      next,
+    });
 
     if (error) {
       clearPendingOAuthRemember();
+      clearPendingPostLoginAction();
       setStatus("error");
       setMessage(errorMessage || "Đăng nhập mạng xã hội không thành công.");
+      appendAuthFlowLog("oauth_callback_rejected", {
+        error,
+        message: errorMessage || "Đăng nhập mạng xã hội không thành công.",
+        next,
+      });
       return;
     }
 
     if (!ticket) {
       clearPendingOAuthRemember();
+      clearPendingPostLoginAction();
       setStatus("error");
       setMessage("Thiếu mã đăng nhập từ backend. Hãy thử lại từ màn hình đăng nhập.");
+      appendAuthFlowLog("oauth_callback_missing_ticket", {
+        next,
+      });
       return;
     }
 
@@ -54,7 +71,15 @@ export function AuthCallbackPage() {
 
         setStatus("success");
         setMessage("Đăng nhập thành công. Đang đưa bạn quay lại trải nghiệm mua sắm...");
-        window.setTimeout(() => navigate(next, { replace: true }), 500);
+        appendAuthFlowLog("oauth_exchange_succeeded", {
+          next,
+        });
+        window.setTimeout(() => {
+          appendAuthFlowLog("oauth_redirect_back_to_storefront", {
+            next,
+          });
+          navigate(next, { replace: true });
+        }, 500);
       })
       .catch((reason) => {
         if (!active) {
@@ -62,8 +87,13 @@ export function AuthCallbackPage() {
         }
 
         clearPendingOAuthRemember();
+        clearPendingPostLoginAction();
         setStatus("error");
         setMessage(getErrorMessage(reason));
+        appendAuthFlowLog("oauth_exchange_failed", {
+          next,
+          error: getErrorMessage(reason),
+        });
       });
 
     return () => {

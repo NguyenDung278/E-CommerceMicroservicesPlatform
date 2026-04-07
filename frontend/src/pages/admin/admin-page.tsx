@@ -18,6 +18,7 @@ import {
   validateSelectedImageFiles,
 } from "@/features/admin/utils/product-form";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { syncWorkbookProductMutation } from "@/features/home/workbook-sync-client";
 import { FormField } from "@/components/form/form-field";
 import "@/styles/pages/admin/admin-order-history.css";
 import { ProductCard } from "@/components/product/product-card";
@@ -56,6 +57,21 @@ export function AdminPage() {
   const [couponForm, setCouponForm] = useState<CouponFormState>(createDefaultCouponForm);
   const isDevelopmentOperator = isDevelopmentAccount(user);
   const currentRoleLabel = formatRoleLabel(user?.role);
+
+  async function syncWorkbookFeedback(
+    operation: "upsert" | "delete",
+    product: Product,
+    baseMessage: string
+  ) {
+    try {
+      const result = await syncWorkbookProductMutation(operation, product);
+      setFeedback(`${baseMessage} ${result.message}`);
+    } catch (reason) {
+      setFeedback(
+        `${baseMessage} Tuy nhien workbook CSV/XLSX chua dong bo duoc: ${getErrorMessage(reason)}`
+      );
+    }
+  }
 
   const loadProducts = useCallback(async () => {
     try {
@@ -225,11 +241,15 @@ export function AdminPage() {
         setProducts((current) =>
           current.map((product) => (product.id === editingProductId ? response.data : product))
         );
-        setFeedback(`Đã cập nhật sản phẩm ${response.data.name}.`);
+        await syncWorkbookFeedback(
+          "upsert",
+          response.data,
+          `Đã cập nhật sản phẩm ${response.data.name}.`
+        );
       } else {
         const response = await api.createProduct(token, payload);
         setProducts((current) => [response.data, ...current]);
-        setFeedback(`Đã tạo sản phẩm ${response.data.name}.`);
+        await syncWorkbookFeedback("upsert", response.data, `Đã tạo sản phẩm ${response.data.name}.`);
       }
 
       resetForm();
@@ -352,7 +372,7 @@ export function AdminPage() {
       setBusyProductId(product.id);
       await api.deleteProduct(token, product.id);
       setProducts((current) => current.filter((item) => item.id !== product.id));
-      setFeedback(`Đã xóa sản phẩm ${product.name}.`);
+      await syncWorkbookFeedback("delete", product, `Đã xóa sản phẩm ${product.name}.`);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {

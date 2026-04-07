@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 
 import {
+  buildWorkbookFallbackProduct,
   findHomeWorkbookCategoryPage,
+  findHomeWorkbookProductReference,
   loadHomeWorkbookFromFile,
+  resolveHomeWorkbookProductHref,
 } from "../src/features/home/home-workbook";
 
 describe("home workbook parser", () => {
@@ -115,6 +118,7 @@ describe("home workbook parser", () => {
         record_type: "category_page_product",
         page_slug: "men-atelier",
         position: 1,
+        product_id: "men-001",
         badge: "New Arrival",
         name: "Sculpted Linen Shirt",
         material: "Italian Linen Blend",
@@ -150,6 +154,20 @@ describe("home workbook parser", () => {
       "Trousers",
     ]);
     expect(content.categoryPages[0]?.products[0]?.name).toBe("Sculpted Linen Shirt");
+    expect(content.categoryPages[0]?.products[0]?.productId).toBe("men-001");
     expect(findHomeWorkbookCategoryPage(content, "Shop Men")?.slug).toBe("men-atelier");
+    expect(
+      resolveHomeWorkbookProductHref({
+        productId: content.categoryPages[0]?.products[0]?.productId,
+        productName: content.categoryPages[0]?.products[0]?.name,
+        href: content.categoryPages[0]?.products[0]?.href || "",
+        fallbackHref: "/categories/Shop%20Men",
+      })
+    ).toBe("/products/men-001");
+
+    const productReference = findHomeWorkbookProductReference(content, "men-001");
+
+    expect(productReference?.name).toBe("Sculpted Linen Shirt");
+    expect(buildWorkbookFallbackProduct(productReference!).status).toBe("workbook-preview");
   });
 });

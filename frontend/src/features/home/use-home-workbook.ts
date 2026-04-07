@@ -33,6 +33,9 @@ export type HomeWorkbookState = {
 
 const LIVE_SYNC_INTERVAL_MS = 12000; // Auto-refresh interval (12 seconds)
 const LIVE_WORKBOOK_REUSE_WINDOW_MS = 30000; // How long cache is considered fresh (30 seconds)
+const HOME_WORKBOOK_SYNC_EVENT = "home-workbook-sync";
+const HOME_WORKBOOK_SYNC_CHANNEL = "home-workbook-sync";
+const HOME_WORKBOOK_SYNC_STORAGE_KEY = "__home_workbook_sync__";
 
 type LiveWorkbookCache = {
   content: HomeWorkbookContent | null;
@@ -87,6 +90,30 @@ function readCachedWorkbookStatus(): WorkbookStatus {
   return liveWorkbookCache.status;
 }
 
+function markLiveWorkbookCacheStale() {
+  liveWorkbookCache.loadedAt = 0;
+}
+
+export function publishHomeWorkbookSyncSignal() {
+  const payload = {
+    triggeredAt: Date.now(),
+  };
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(HOME_WORKBOOK_SYNC_EVENT, { detail: payload }));
+  }
+
+  if (typeof BroadcastChannel !== "undefined") {
+    const channel = new BroadcastChannel(HOME_WORKBOOK_SYNC_CHANNEL);
+    channel.postMessage(payload);
+    channel.close();
+  }
+
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(HOME_WORKBOOK_SYNC_STORAGE_KEY, String(payload.triggeredAt));
+  }
+}
+
 /**
  * Shared fetch function. If a fetch is already in-flight, it returns the existing Promise.
  * This ensures multiple consumers won't spam the server at the exact same time.
@@ -125,6 +152,44 @@ export function useHomeWorkbook(): HomeWorkbookState {
   // Tokens used to force a reload from the server (bypassing the freshness cache)
   const reloadTokenRef = useRef(0);
   const [reloadToken, setReloadToken] = useState(0);
+
+  const requestLiveReload = useCallback(() => {
+    markLiveWorkbookCacheStale();
+    reloadTokenRef.current += 1;
+    setReloadToken(reloadTokenRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (isUsingLocalFile || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleSyncEvent = () => {
+      requestLiveReload();
+    };
+    const handleStorageEvent = (event: StorageEvent) => {
+      if (event.key === HOME_WORKBOOK_SYNC_STORAGE_KEY) {
+        requestLiveReload();
+      }
+    };
+    let channel: BroadcastChannel | null = null;
+
+    window.addEventListener(HOME_WORKBOOK_SYNC_EVENT, handleSyncEvent);
+    window.addEventListener("storage", handleStorageEvent);
+
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel(HOME_WORKBOOK_SYNC_CHANNEL);
+      channel.onmessage = () => {
+        requestLiveReload();
+      };
+    }
+
+    return () => {
+      window.removeEventListener(HOME_WORKBOOK_SYNC_EVENT, handleSyncEvent);
+      window.removeEventListener("storage", handleStorageEvent);
+      channel?.close();
+    };
+  }, [isUsingLocalFile, requestLiveReload]);
 
   // Sync logic for the live workbook
   useEffect(() => {
@@ -284,9 +349,8 @@ export function useHomeWorkbook(): HomeWorkbookState {
     });
 
     // Bump token to trigger a live sync
-    reloadTokenRef.current += 1;
-    setReloadToken(reloadTokenRef.current);
-  }, [isUsingLocalFile]);
+    requestLiveReload();
+  }, [isUsingLocalFile, requestLiveReload]);
 
   // Force refresh live data manually
   // Wrapped in useCallback to maintain a stable reference
@@ -295,10 +359,8 @@ export function useHomeWorkbook(): HomeWorkbookState {
       return;
     }
 
-    // Bump token to trigger a live sync in the useEffect
-    reloadTokenRef.current += 1;
-    setReloadToken(reloadTokenRef.current);
-  }, [isUsingLocalFile]);
+    requestLiveReload();
+  }, [isUsingLocalFile, requestLiveReload]);
 
   return {
     content,

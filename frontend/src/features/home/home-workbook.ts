@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import type { Product } from "@/types/api";
 
 export type HomeWorkbookNavItem = {
   position: number;
@@ -89,6 +90,7 @@ export type HomeWorkbookCategoryPageFilter = {
 export type HomeWorkbookCategoryProduct = {
   pageSlug: string;
   position: number;
+  productId: string;
   badge: string;
   name: string;
   material: string;
@@ -145,6 +147,22 @@ export type HomeWorkbookContent = {
   navItems: HomeWorkbookNavItem[];
   segments: HomeWorkbookSegment[];
   categoryPages: HomeWorkbookCategoryPage[];
+};
+
+export type HomeWorkbookProductReference = {
+  productId: string;
+  slug: string;
+  name: string;
+  price: number;
+  imageUrl: string;
+  imageAlt: string;
+  brand: string;
+  categoryLabel: string;
+  description: string;
+  tags: string[];
+  href: string;
+  sourceType: "segment" | "category_page";
+  sourceSlug: string;
 };
 
 type WorkbookRow = Record<string, unknown>;
@@ -463,6 +481,11 @@ function parseWorkbookRows(
       }))
       .filter((product) => product.segmentSlug && product.name)
   );
+  const productIdsByName = new Map(
+    products
+      .map((product) => [normalizeLookupToken(product.name), product.productId] as const)
+      .filter((entry) => Boolean(entry[1]))
+  );
 
   const footerLinks = sortByPosition(
     rows.footerLinks
@@ -489,18 +512,24 @@ function parseWorkbookRows(
 
   const categoryPageProducts = sortByPosition(
     rows.categoryPageProducts
-      .map((row) => ({
-        pageSlug: readString(row, "page_slug", "slug"),
-        position: readNumber(row, "position"),
-        badge: readString(row, "badge", "eyebrow"),
-        name: readString(row, "name", "title"),
-        material: readString(row, "material", "size_tag"),
-        price: readNumber(row, "price"),
-        imageUrl: readString(row, "image_url"),
-        imageAlt: readString(row, "image_alt", "alt"),
-        href: readString(row, "href", "cta_href"),
-        filterTags: readList(row, "filter_tags"),
-      }))
+      .map((row) => {
+        const name = readString(row, "name", "title");
+
+        return {
+          pageSlug: readString(row, "page_slug", "slug"),
+          position: readNumber(row, "position"),
+          productId:
+            readString(row, "product_id", "id") || productIdsByName.get(normalizeLookupToken(name)) || "",
+          badge: readString(row, "badge", "eyebrow"),
+          name,
+          material: readString(row, "material", "size_tag"),
+          price: readNumber(row, "price"),
+          imageUrl: readString(row, "image_url"),
+          imageAlt: readString(row, "image_alt", "alt"),
+          href: readString(row, "href", "cta_href"),
+          filterTags: readList(row, "filter_tags"),
+        };
+      })
       .filter((product) => product.pageSlug && product.name)
   );
 
@@ -662,6 +691,91 @@ function normalizeLookupToken(value: string) {
   return value.trim().toLowerCase();
 }
 
+function slugifyWorkbookProductName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function isExternalHref(href: string) {
+  return /^https?:\/\//i.test(href);
+}
+
+function isGenericWorkbookProductHref(href: string) {
+  const trimmedHref = href.trim();
+
+  return (
+    !trimmedHref ||
+    trimmedHref === "/products" ||
+    trimmedHref.startsWith("/categories/")
+  );
+}
+
+function buildCategoryRoute(page: HomeWorkbookCategoryPage) {
+  const identifier = page.routeAliases[0] || page.slug;
+  return `/categories/${encodeURIComponent(identifier)}`;
+}
+
+function doesWorkbookProductMatchIdentifier(
+  identifier: string,
+  productId: string,
+  name: string,
+  href: string
+) {
+  if (!identifier) {
+    return false;
+  }
+
+  const normalizedId = normalizeLookupToken(productId);
+  const normalizedName = normalizeLookupToken(name);
+  const nameSlug = slugifyWorkbookProductName(name);
+  const resolvedProductId = href.startsWith("/products/") ? href.slice("/products/".length) : "";
+
+  return (
+    normalizedId === identifier ||
+    normalizedName === identifier ||
+    nameSlug === identifier ||
+    normalizeLookupToken(resolvedProductId) === identifier
+  );
+}
+
+function buildWorkbookReferenceTags(tags: string[]) {
+  return Array.from(
+    new Set(
+      tags
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+export function resolveHomeWorkbookProductHref(options: {
+  productId?: string;
+  productName?: string;
+  href: string;
+  fallbackHref: string;
+}) {
+  const trimmedHref = options.href.trim();
+
+  if (trimmedHref && isExternalHref(trimmedHref)) {
+    return trimmedHref;
+  }
+
+  if (isGenericWorkbookProductHref(trimmedHref)) {
+    if (options.productId?.trim()) {
+      return `/products/${encodeURIComponent(options.productId.trim())}`;
+    }
+
+    if (options.productName?.trim()) {
+      return `/products/${encodeURIComponent(slugifyWorkbookProductName(options.productName))}`;
+    }
+  }
+
+  return trimmedHref || options.fallbackHref;
+}
+
 export function findHomeWorkbookCategoryPage(content: HomeWorkbookContent, identifier: string) {
   const target = normalizeLookupToken(identifier);
 
@@ -670,8 +784,119 @@ export function findHomeWorkbookCategoryPage(content: HomeWorkbookContent, ident
       (page) =>
         normalizeLookupToken(page.slug) === target ||
         page.routeAliases.some((alias) => normalizeLookupToken(alias) === target)
-    ) ?? null
+      ) ?? null
   );
+}
+
+export function findHomeWorkbookProductReference(
+  content: HomeWorkbookContent,
+  identifier: string
+) {
+  const target = normalizeLookupToken(identifier);
+
+  for (const segment of content.segments) {
+    for (const product of segment.products) {
+      const href = resolveHomeWorkbookProductHref({
+        productId: product.productId,
+        productName: product.name,
+        href: product.href,
+        fallbackHref: segment.href || "/products",
+      });
+
+      if (!doesWorkbookProductMatchIdentifier(target, product.productId, product.name, href)) {
+        continue;
+      }
+
+      return {
+        productId: product.productId,
+        slug: slugifyWorkbookProductName(product.name),
+        name: product.name,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        imageAlt: product.name,
+        brand: product.brand,
+        categoryLabel: segment.label,
+        description: product.fitNote,
+        tags: buildWorkbookReferenceTags([product.eyebrow, product.sizeTag]),
+        href,
+        sourceType: "segment",
+        sourceSlug: segment.slug,
+      } satisfies HomeWorkbookProductReference;
+    }
+  }
+
+  for (const page of content.categoryPages) {
+    const fallbackHref = buildCategoryRoute(page);
+
+    for (const product of page.products) {
+      const href = resolveHomeWorkbookProductHref({
+        productId: product.productId,
+        productName: product.name,
+        href: product.href,
+        fallbackHref,
+      });
+
+      if (!doesWorkbookProductMatchIdentifier(target, product.productId, product.name, href)) {
+        continue;
+      }
+
+      return {
+        productId: product.productId,
+        slug: slugifyWorkbookProductName(product.name),
+        name: product.name,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        imageAlt: product.imageAlt || product.name,
+        brand: page.navLabel,
+        categoryLabel: page.navLabel,
+        description: product.material,
+        tags: buildWorkbookReferenceTags([product.badge, ...product.filterTags]),
+        href,
+        sourceType: "category_page",
+        sourceSlug: page.slug,
+      } satisfies HomeWorkbookProductReference;
+    }
+  }
+
+  return null;
+}
+
+export function buildWorkbookFallbackProduct(
+  reference: HomeWorkbookProductReference,
+  fallbackId = ""
+): Product {
+  const variantSizes = reference.tags
+    .filter((tag) => tag.toLowerCase().startsWith("size:"))
+    .map((tag) => tag.split(":").slice(1).join(":").trim())
+    .filter(Boolean);
+  const variants = Array.from(new Set(variantSizes)).map((size, index) => ({
+    sku: `${reference.productId || reference.slug || fallbackId || "workbook"}-${index + 1}`,
+    label: size,
+    size,
+    price: reference.price,
+    stock: 0,
+  }));
+  const productId = reference.productId || fallbackId || reference.slug || "workbook-product";
+
+  return {
+    id: productId,
+    name: reference.name,
+    description:
+      reference.description ||
+      `San pham nay dang duoc hien thi tu workbook cho section ${reference.categoryLabel}.`,
+    price: reference.price,
+    stock: 0,
+    category: reference.categoryLabel,
+    brand: reference.brand || "ND Atelier",
+    tags: reference.tags,
+    status: "workbook-preview",
+    sku: productId,
+    variants,
+    image_url: reference.imageUrl,
+    image_urls: reference.imageUrl ? [reference.imageUrl] : [],
+    created_at: "",
+    updated_at: "",
+  };
 }
 
 export async function loadHomeWorkbookFromUrl(

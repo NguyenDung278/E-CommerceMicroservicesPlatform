@@ -206,6 +206,10 @@ describe("HomePage workbook mode", () => {
       expect(container.textContent).toContain("Merino Field Overshirt");
       expect(container.textContent).toContain("Sustainability");
     });
+
+    const arrivalLink = container.querySelector<HTMLAnchorElement>(".home-stitch-product-card");
+
+    expect(arrivalLink?.getAttribute("href")).toBe("/products/all-archive-001");
   });
 
   it("renders unified storefront navigation links with the required routes", async () => {

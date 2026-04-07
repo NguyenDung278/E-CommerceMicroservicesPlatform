@@ -11,6 +11,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import {
   findHomeWorkbookCategoryPage,
+  resolveHomeWorkbookProductHref,
   type HomeWorkbookCategoryPage,
   type HomeWorkbookCategoryProduct,
 } from "@/features/home/home-workbook";
@@ -72,11 +73,6 @@ function normalizeArchiveText(value: string) {
 
 function isExternalHref(href: string) {
   return /^https?:\/\//i.test(href);
-}
-
-function resolveHref(href: string, fallbackHref: string) {
-  const trimmedHref = href.trim();
-  return trimmedHref || fallbackHref;
 }
 
 function buildCategoryRoute(categoryPage: HomeWorkbookCategoryPage) {
@@ -171,7 +167,12 @@ function buildWorkbookArchiveItem(
   sequence: number
 ): ArchiveItem {
   const fallbackHref = buildCategoryRoute(categoryPage);
-  const finalHref = resolveHref(product.href, fallbackHref);
+  const finalHref = resolveHomeWorkbookProductHref({
+    productId: product.productId,
+    productName: product.name,
+    href: product.href,
+    fallbackHref,
+  });
   const filterMap = buildArchiveFilterMap(product.filterTags);
 
   return {

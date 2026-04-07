@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useCart } from "@/features/cart/hooks/use-cart";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import {
+  resolveHomeWorkbookProductHref,
   findHomeWorkbookCategoryPage,
   type HomeWorkbookCategoryPage,
   type HomeWorkbookCategoryProduct,
@@ -669,7 +670,12 @@ function WorkbookCategoryPage({
                   <CategoryActionLink
                     className="atelier-category-product-card"
                     fallbackHref={primaryCategoryRoute}
-                    href={product.href || primaryCategoryRoute}
+                    href={resolveHomeWorkbookProductHref({
+                      productId: product.productId,
+                      productName: product.name,
+                      href: product.href,
+                      fallbackHref: primaryCategoryRoute,
+                    })}
                     key={`${pageData.slug}-${product.position}-${product.name}`}
                   >
                     <div className="atelier-category-product-media">

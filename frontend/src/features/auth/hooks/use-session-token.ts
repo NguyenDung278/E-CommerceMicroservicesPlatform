@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  clearTokens,
+  clearTokens as clearStoredTokens,
   readInitialTokens,
   saveTokens,
   type TokenState,
@@ -22,6 +22,7 @@ export function useSessionToken(): UseSessionTokenResult {
     setState({ token, refreshToken, remember });
   }, []);
   const clearAllTokens = useCallback(() => {
+    clearStoredTokens();
     setState({
       token: "",
       refreshToken: "",
@@ -39,7 +40,7 @@ export function useSessionToken(): UseSessionTokenResult {
       return;
     }
 
-    clearTokens();
+    clearStoredTokens();
   }, [state]);
 
   return {

@@ -125,6 +125,7 @@ export const api = {
   verifyEmail: _authApi.verifyEmail,
   forgotPassword: _authApi.forgotPassword,
   resetPassword: _authApi.resetPassword,
+  changePassword: _authApi.changePassword,
   exchangeOAuthTicket: _authApi.exchangeOAuthTicket,
   getProfile: _authApi.getProfile,
   updateProfile: _authApi.updateProfile,

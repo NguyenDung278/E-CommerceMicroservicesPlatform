@@ -26,6 +26,7 @@ import {
   clearPendingOAuthRemember,
   savePendingOAuthRemember,
 } from "../storage/oauth-session-storage";
+import { clearPendingPostLoginAction } from "../storage/post-login-action-storage";
 
 type RegisterInput = {
   email: string;
@@ -58,6 +59,11 @@ type UpdateProfileInput = {
   default_address?: ProfileAddressPatch;
 };
 
+type ChangePasswordInput = {
+  current_password: string;
+  new_password: string;
+};
+
 type AuthContextValue = {
   token: string;
   refreshToken: string;
@@ -75,6 +81,7 @@ type AuthContextValue = {
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
+  changePassword: (input: ChangePasswordInput) => Promise<void>;
   getPhoneVerificationStatus: () => Promise<PhoneVerificationChallenge | null>;
   sendPhoneOtp: (phone: string) => Promise<PhoneVerificationChallenge>;
   verifyPhoneOtp: (verificationId: string, otpCode: string) => Promise<PhoneVerificationChallenge>;
@@ -103,6 +110,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
     [setTokens]
+  );
+
+  const shouldInvalidateSession = useCallback((reason: unknown) => {
+    if (reason instanceof Error && reason.message === "Missing refresh token") {
+      return true;
+    }
+
+    if (!isHttpError(reason) || reason.status !== 401) {
+      return false;
+    }
+
+    const detail = reason.detail.trim().toLowerCase();
+    return (
+      detail.includes("invalid or expired token") ||
+      detail.includes("invalid or expired refresh token") ||
+      detail.includes("missing user claims") ||
+      detail.includes("user no longer exists")
+    );
+  }, []);
+
+  const resetSession = useCallback(
+    (nextError = "") => {
+      clearTokens();
+      clearPendingOAuthRemember();
+      clearPendingPostLoginAction();
+      startTransition(() => {
+        setUser(null);
+        setError(nextError);
+      });
+    },
+    [clearTokens]
   );
 
   const refreshSession = useCallback(
@@ -175,12 +213,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        clearTokens();
-        clearPendingOAuthRemember();
-        startTransition(() => {
-          setUser(null);
-          setError(getErrorMessage(reason));
-        });
+        const nextError = getErrorMessage(reason);
+
+        if (shouldInvalidateSession(reason)) {
+          resetSession(nextError);
+        } else {
+          startTransition(() => {
+            setError(nextError);
+          });
+        }
       } finally {
         if (active) {
           setIsBootstrapping(false);
@@ -193,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [token, refreshToken, user, hasSession, withFreshToken, clearTokens]);
+  }, [token, refreshToken, user, hasSession, withFreshToken, resetSession, shouldInvalidateSession]);
 
   async function register(input: RegisterInput, options?: AuthOptions) {
     setError("");
@@ -223,12 +264,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
-    clearTokens();
-    clearPendingOAuthRemember();
-    startTransition(() => {
-      setUser(null);
-      setError("");
-    });
+    resetSession("");
   }
 
   async function refreshProfile() {
@@ -251,6 +287,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError("");
     });
     return response.data;
+  }
+
+  async function changePassword(input: ChangePasswordInput) {
+    setError("");
+
+    try {
+      const activeToken = token || (refreshToken ? await refreshSession() : "");
+      if (!activeToken) {
+        throw new Error("Missing access token");
+      }
+
+      await authApi.changePassword(activeToken, input);
+      startTransition(() => {
+        setError("");
+      });
+    } catch (reason) {
+      if (shouldInvalidateSession(reason)) {
+        resetSession(getErrorMessage(reason));
+      }
+      throw reason;
+    }
   }
 
   const getPhoneVerificationStatus = useCallback(async () => {
@@ -320,6 +377,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         refreshProfile,
         updateProfile,
+        changePassword,
         getPhoneVerificationStatus,
         sendPhoneOtp,
         verifyPhoneOtp,

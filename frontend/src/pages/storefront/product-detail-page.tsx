@@ -1,7 +1,19 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
+import {
+  buildWorkbookFallbackProduct,
+  findHomeWorkbookProductReference,
+} from "@/features/home/home-workbook";
+import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { appendAuthFlowLog } from "@/features/auth/storage/auth-flow-log-storage";
+import {
+  clearPendingPostLoginAction,
+  readPendingProductDetailAction,
+  savePendingProductDetailAction,
+  type PendingProductDetailActionIntent,
+} from "@/features/auth/storage/post-login-action-storage";
 import { useCart } from "@/features/cart/hooks/use-cart";
 import { api, getErrorMessage, isHttpError } from "@/services/api";
 import { isStorefrontAutoAddCategory } from "@/constants/storefront-navigation";
@@ -48,8 +60,10 @@ export function ProductDetailPage() {
   const { productId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { token, isAuthenticated } = useAuth();
+  const { content } = useHomeWorkbook();
+  const { token, isAuthenticated, isBootstrapping, beginOAuthLogin } = useAuth();
   const { addItem } = useCart();
+  const resumedActionRef = useRef("");
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -64,9 +78,29 @@ export function ProductDetailPage() {
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewBusyAction, setReviewBusyAction] = useState<"" | "submit" | "delete">("");
   const [isReviewLoading, setIsReviewLoading] = useState(true);
+  const [isWorkbookFallback, setIsWorkbookFallback] = useState(false);
+  const currentPath = `${location.pathname}${location.search}${location.hash}`;
+
+  const applyProductSnapshot = useCallback((nextProduct: Product) => {
+    setProduct(nextProduct);
+
+    const images =
+      nextProduct.image_urls.length > 0
+        ? nextProduct.image_urls
+        : nextProduct.image_url
+          ? [nextProduct.image_url]
+          : [];
+    setActiveImage(images[0] ?? "");
+
+    const defaultVariant =
+      nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
+    setSelectedVariantSku(defaultVariant?.sku ?? "");
+    setQuantity(1);
+  }, []);
 
   useEffect(() => {
     let active = true;
+    const workbookReference = content ? findHomeWorkbookProductReference(content, productId) : null;
 
     setFeedback("");
     setReviewFeedback("");
@@ -74,49 +108,37 @@ export function ProductDetailPage() {
     setMyReview(null);
     setReviewForm(defaultReviewForm);
     setIsReviewLoading(true);
+    setIsWorkbookFallback(false);
 
-    const productRequest = api.getProductById(productId);
-    const reviewListRequest = api.listProductReviews(productId, { page: 1, limit: 6 });
-    const myReviewRequest =
-      isAuthenticated && token
-        ? api
-            .getMyProductReview(token, productId)
-            .then((response) => response.data)
-            .catch((reason) => {
-              if (isHttpError(reason) && reason.status === 404) {
-                return null;
-              }
+    async function loadProductPage() {
+      try {
+        const productResponse = await api.getProductById(productId);
 
-              throw reason;
-            })
-        : Promise.resolve(null);
-
-    void Promise.allSettled([productRequest, reviewListRequest, myReviewRequest]).then(
-      ([productResult, reviewListResult, myReviewResult]) => {
         if (!active) {
           return;
         }
 
-        if (productResult.status === "fulfilled") {
-          const nextProduct = productResult.value.data;
-          setProduct(nextProduct);
+        const nextProduct = productResponse.data;
+        applyProductSnapshot(nextProduct);
 
-          const images =
-            nextProduct.image_urls.length > 0
-              ? nextProduct.image_urls
-              : nextProduct.image_url
-                ? [nextProduct.image_url]
-                : [];
-          setActiveImage(images[0] ?? "");
+        const reviewListRequest = api.listProductReviews(nextProduct.id, { page: 1, limit: 6 });
+        const myReviewRequest =
+          isAuthenticated && token
+            ? api
+                .getMyProductReview(token, nextProduct.id)
+                .then((response) => response.data)
+                .catch((reason) => {
+                  if (isHttpError(reason) && reason.status === 404) {
+                    return null;
+                  }
 
-          const defaultVariant =
-            nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
-          setSelectedVariantSku(defaultVariant?.sku ?? "");
-          setQuantity(1);
-        } else {
-          setProduct(null);
-          setFeedback(getErrorMessage(productResult.reason));
-        }
+                  throw reason;
+                })
+            : Promise.resolve(null);
+        const [reviewListResult, myReviewResult] = await Promise.allSettled([
+          reviewListRequest,
+          myReviewRequest,
+        ]);
 
         if (reviewListResult.status === "fulfilled") {
           setReviewList(reviewListResult.value.data);
@@ -139,18 +161,38 @@ export function ProductDetailPage() {
         }
 
         setIsReviewLoading(false);
+      } catch (reason) {
+        if (!active) {
+          return;
+        }
+
+        if (workbookReference) {
+          applyProductSnapshot(buildWorkbookFallbackProduct(workbookReference, productId));
+          setIsWorkbookFallback(true);
+          setFeedback(
+            "San pham nay hien duoc render tu workbook CSV/XLSX. Hay dong bo product live trong trang admin de bat gio hang, ton kho va danh gia."
+          );
+          setIsReviewLoading(false);
+          return;
+        }
+
+        setProduct(null);
+        setFeedback(getErrorMessage(reason));
+        setIsReviewLoading(false);
       }
-    );
+    }
+
+    void loadProductPage();
 
     return () => {
       active = false;
     };
-  }, [isAuthenticated, productId, token]);
+  }, [applyProductSnapshot, content, isAuthenticated, productId, token]);
 
   useEffect(() => {
     let active = true;
 
-    if (!product) {
+    if (!product || isWorkbookFallback) {
       setRelatedProducts([]);
       return () => {
         active = false;
@@ -202,10 +244,160 @@ export function ProductDetailPage() {
     return () => {
       active = false;
     };
-  }, [product]);
+  }, [isWorkbookFallback, product]);
+
+  function startGoogleAuthForProductAction(intent: PendingProductDetailActionIntent) {
+    if (!product) {
+      return;
+    }
+
+    const pendingAction = savePendingProductDetailAction({
+      intent,
+      productId: product.id,
+      redirectTo: currentPath,
+      quantity,
+    });
+
+    appendAuthFlowLog("product_detail_oauth_redirect_requested", {
+      intent,
+      productId: product.id,
+      redirectTo: currentPath,
+      quantity,
+      pendingActionCreated: Boolean(pendingAction),
+    });
+
+    setFeedback(
+      intent === "add_to_cart"
+        ? "Đang chuyển bạn tới Google để đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
+        : "Đang chuyển bạn tới Google để đăng nhập trước khi mua ngay."
+    );
+
+    beginOAuthLogin("google", {
+      redirectTo: currentPath,
+      remember: false,
+    });
+  }
+
+  useEffect(() => {
+    if (!product || isWorkbookFallback || !isAuthenticated || isBootstrapping || !token) {
+      return;
+    }
+
+    const pendingAction = readPendingProductDetailAction();
+    if (
+      !pendingAction ||
+      pendingAction.productId !== product.id ||
+      pendingAction.redirectTo !== currentPath
+    ) {
+      return;
+    }
+
+    const resumeKey = `${pendingAction.intent}:${pendingAction.productId}:${pendingAction.createdAt}`;
+    if (resumedActionRef.current === resumeKey) {
+      return;
+    }
+    resumedActionRef.current = resumeKey;
+
+    appendAuthFlowLog("product_detail_resume_detected", {
+      intent: pendingAction.intent,
+      productId: pendingAction.productId,
+      redirectTo: pendingAction.redirectTo,
+      quantity: pendingAction.quantity,
+    });
+
+    void (async () => {
+      try {
+        setIsBusy(true);
+
+        if (pendingAction.intent === "add_to_cart") {
+          const resumeQuantity = isStorefrontAutoAddCategory(product.category || "")
+            ? 1
+            : pendingAction.quantity;
+
+          await addItem({
+            product_id: product.id,
+            quantity: resumeQuantity,
+          });
+
+          clearPendingPostLoginAction();
+          setFeedback("Đăng nhập Google thành công. Sản phẩm đã được thêm vào giỏ hàng.");
+          appendAuthFlowLog("product_detail_resume_add_to_cart_succeeded", {
+            productId: product.id,
+            quantity: resumeQuantity,
+          });
+          return;
+        }
+
+        const shouldSyncCart = isStorefrontAutoAddCategory(product.category || "");
+        const checkoutQuantity = shouldSyncCart ? 1 : pendingAction.quantity;
+
+        if (shouldSyncCart) {
+          await addItem({
+            product_id: product.id,
+            quantity: 1,
+          });
+        }
+
+        clearPendingPostLoginAction();
+        appendAuthFlowLog("product_detail_resume_buy_now_succeeded", {
+          productId: product.id,
+          quantity: checkoutQuantity,
+          cartSynced: shouldSyncCart,
+        });
+
+        navigate("/checkout", {
+          state: {
+            directProduct: {
+              id: product.id,
+              name: product.name,
+              price: product.price,
+              quantity: checkoutQuantity,
+            },
+          },
+        });
+      } catch (reason) {
+        clearPendingPostLoginAction();
+        setFeedback(getErrorMessage(reason));
+        appendAuthFlowLog("product_detail_resume_failed", {
+          productId: product.id,
+          intent: pendingAction.intent,
+          error: getErrorMessage(reason),
+        });
+      } finally {
+        setIsBusy(false);
+      }
+    })();
+  }, [
+    addItem,
+    currentPath,
+    isAuthenticated,
+    isBootstrapping,
+    isWorkbookFallback,
+    navigate,
+    product,
+    quantity,
+    token,
+  ]);
 
   async function handleAddToCart() {
     if (!product) {
+      return;
+    }
+
+    if (isWorkbookFallback) {
+      setFeedback(
+        "Muc nay dang hien thi tu workbook nen chua the them vao gio hang. Hay dong bo sang product live trong admin."
+      );
+      return;
+    }
+
+    if (!isAuthenticated) {
+      startGoogleAuthForProductAction("add_to_cart");
+      return;
+    }
+
+    if (!token) {
+      setFeedback("Phiên đăng nhập đang được khôi phục. Vui lòng thử lại sau vài giây.");
       return;
     }
 
@@ -233,6 +425,23 @@ export function ProductDetailPage() {
 
   async function handleBuyNow() {
     if (!product) {
+      return;
+    }
+
+    if (isWorkbookFallback) {
+      setFeedback(
+        "Muc nay dang hien thi tu workbook nen chua the mua ngay. Hay dong bo sang product live trong admin."
+      );
+      return;
+    }
+
+    if (!isAuthenticated) {
+      startGoogleAuthForProductAction("buy_now");
+      return;
+    }
+
+    if (!token) {
+      setFeedback("Phiên đăng nhập đang được khôi phục. Vui lòng thử lại sau vài giây.");
       return;
     }
 
@@ -306,6 +515,13 @@ export function ProductDetailPage() {
   }
 
   function handleReviewCallToAction() {
+    if (isWorkbookFallback) {
+      setReviewFeedback(
+        "Danh gia chi kha dung sau khi san pham workbook duoc dong bo voi product live."
+      );
+      return;
+    }
+
     if (!isAuthenticated) {
       navigate("/login", { state: { from: location } });
       return;
@@ -320,7 +536,7 @@ export function ProductDetailPage() {
   async function handleReviewSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!product) {
+    if (!product || isWorkbookFallback) {
       return;
     }
 
@@ -369,7 +585,7 @@ export function ProductDetailPage() {
   }
 
   async function handleDeleteReview() {
-    if (!product || !token || !myReview) {
+    if (!product || !token || !myReview || isWorkbookFallback) {
       return;
     }
 
@@ -398,7 +614,10 @@ export function ProductDetailPage() {
   const normalizedCategory = (product?.category ?? "").trim().toLowerCase();
   const isFootwear = normalizedCategory.includes("footwear");
   const isApparel =
-    normalizedCategory.includes("shop men") || normalizedCategory.includes("shop women");
+    normalizedCategory.includes("shop men") ||
+    normalizedCategory.includes("shop women") ||
+    normalizedCategory === "men" ||
+    normalizedCategory === "women";
   const selectedVariant =
     product?.variants.find((variant) => variant.sku === selectedVariantSku) ??
     product?.variants.find((variant) => variant.stock > 0) ??
@@ -407,11 +626,13 @@ export function ProductDetailPage() {
   const activeStock = selectedVariant?.stock ?? product?.stock ?? 0;
   const activePrice = selectedVariant?.price ?? product?.price ?? 0;
   const stockToneClass =
-    activeStock === 0
+    isWorkbookFallback || activeStock === 0
       ? "detail-stock-line detail-stock-line-out"
       : "detail-stock-line detail-stock-line-in";
   const stockToneCopy =
-    activeStock === 0
+    isWorkbookFallback
+      ? "Workbook preview only"
+      : activeStock === 0
       ? "Hết hàng"
       : activeStock <= 2
         ? `Chỉ còn ${activeStock}`
@@ -425,7 +646,7 @@ export function ProductDetailPage() {
         },
         {
           label: "Status",
-          value: product.status || "active",
+          value: isWorkbookFallback ? "workbook-preview" : product.status || "active",
         },
         {
           label: "SKU",
@@ -433,25 +654,49 @@ export function ProductDetailPage() {
         },
         {
           label: "Stock",
-          value: activeStock > 0 ? `${activeStock} còn lại` : "Hết hàng",
+          value: isWorkbookFallback
+            ? "Workbook preview"
+            : activeStock > 0
+              ? `${activeStock} còn lại`
+              : "Hết hàng",
         },
       ]
     : [];
-  const systemCards = [
-    {
-      title: "Product API",
-      description: "Metadata, media và category được nạp trực tiếp từ product service qua gateway.",
-    },
-    {
-      title: "Inventory Sync",
-      description: "Tồn kho và variants phản ánh dữ liệu hiện có để test tình huống mua hàng thật.",
-    },
-    {
-      title: "Checkout Ready",
-      description:
-        "Từ trang này có thể thêm giỏ hoặc đi thẳng sang checkout với quantity hiện tại.",
-    },
-  ];
+  const systemCards = isWorkbookFallback
+    ? [
+        {
+          title: "Workbook Source",
+          description:
+            "Noi dung hien tai duoc doc truc tiep tu workbook CSV/XLSX sau khi storefront dong bo lai.",
+        },
+        {
+          title: "Detail Route",
+          description:
+            "Moi card workbook gio co route detail rieng thay vi tro nguoc ve trang category tong hop.",
+        },
+        {
+          title: "Live Upgrade",
+          description:
+            "Sau khi admin CRUD va workbook sync xong, card nay se chuyen sang product live day du tu gateway.",
+        },
+      ]
+    : [
+        {
+          title: "Product API",
+          description:
+            "Metadata, media va category duoc nap truc tiep tu product service qua gateway.",
+        },
+        {
+          title: "Inventory Sync",
+          description:
+            "Ton kho va variants phan anh du lieu hien co de test tinh huong mua hang that.",
+        },
+        {
+          title: "Checkout Ready",
+          description:
+            "Tu trang nay co the them gio hoac di thang sang checkout voi quantity hien tai.",
+        },
+      ];
   const alphaScale = ["XS", "S", "M", "L", "XL"];
   const sizeOptions = product
     ? buildSizeOptions(product.variants, { isApparel, isFootwear, alphaScale })
@@ -524,7 +769,9 @@ export function ProductDetailPage() {
 
                 <div className="detail-support-inline">
                   <span className="detail-support-note">
-                    Media từ backend object storage / URL được cấu hình trong product service.
+                    {isWorkbookFallback
+                      ? "Media dang duoc hien thi tu workbook storefront. Khi sync sang product live, anh se lay tu media URL/backend hien tai."
+                      : "Media tu backend object storage / URL duoc cau hinh trong product service."}
                   </span>
                 </div>
               </div>
@@ -669,6 +916,7 @@ export function ProductDetailPage() {
                     <span className="field-label">Số lượng</span>
                     <input
                       id="detail-quantity"
+                      disabled={isWorkbookFallback}
                       max={activeStock || undefined}
                       min="1"
                       step="1"
@@ -686,7 +934,7 @@ export function ProductDetailPage() {
                   <div className="product-actions detail-actions-editorial">
                     <button
                       className="primary-button"
-                      disabled={isBusy || activeStock === 0}
+                      disabled={isWorkbookFallback || isBusy || activeStock === 0}
                       onClick={() => void handleAddToCart()}
                       type="button"
                     >
@@ -694,7 +942,7 @@ export function ProductDetailPage() {
                     </button>
                     <button
                       className="secondary-button"
-                      disabled={isBusy || activeStock === 0}
+                      disabled={isWorkbookFallback || isBusy || activeStock === 0}
                       onClick={() => void handleBuyNow()}
                       type="button"
                     >
@@ -703,8 +951,9 @@ export function ProductDetailPage() {
                   </div>
 
                   <p className="detail-support-note">
-                    Complimentary test flow: bạn có thể thêm vào giỏ hoặc đi thẳng sang checkout để
-                    verify chức năng.
+                    {isWorkbookFallback
+                      ? "Muc nay dang o che do workbook preview. Sau khi admin dong bo san pham live vao workbook, gio hang va checkout se hoat dong nhu binh thuong."
+                      : "Complimentary test flow: ban co the them vao gio hoac di thang sang checkout de verify chuc nang."}
                   </p>
                 </div>
               </div>
@@ -739,185 +988,206 @@ export function ProductDetailPage() {
               </div>
             </section>
 
-            <section className="detail-review-section">
-              <div className="detail-review-head">
-                <div>
-                  <h2>The Wearer's Voice</h2>
-                  <p className="detail-review-summary">
-                    {reviewSummaryStars} {averageRatingLabel} dựa trên{" "}
-                    {reviewList.summary.review_count} đánh giá
-                  </p>
-                </div>
-                <button
-                  className="detail-review-link"
-                  type="button"
-                  onClick={handleReviewCallToAction}
-                >
-                  {isAuthenticated ? "Viết / sửa đánh giá" : "Đăng nhập để đánh giá"}
-                </button>
-              </div>
-
-              <div className="detail-review-shell">
-                <div className="detail-review-summary-panel">
-                  <div className="detail-review-average">
-                    <strong>{averageRatingLabel}</strong>
-                    <span>{reviewSummaryStars}</span>
-                    <p>{reviewList.summary.review_count} đánh giá công khai cho sản phẩm này.</p>
+            {isWorkbookFallback ? (
+              <section className="detail-review-section">
+                <div className="detail-review-head">
+                  <div>
+                    <h2>Workbook Preview</h2>
+                    <p className="detail-review-summary">
+                      Muc nay dang hien thi tu workbook storefront nen review live tam thoi chua mo.
+                    </p>
                   </div>
+                </div>
 
-                  <div className="detail-review-breakdown">
-                    {reviewBreakdown.map((row) => {
-                      const width =
-                        reviewList.summary.review_count > 0
-                          ? `${(row.count / reviewList.summary.review_count) * 100}%`
-                          : "0%";
+                <div className="detail-review-empty">
+                  <strong>Route chi tiet da san sang cho card workbook.</strong>
+                  <span>
+                    Khi san pham duoc dong bo bang ID live tu trang admin, khu vuc danh gia, ton kho
+                    va mua hang se hoat dong day du.
+                  </span>
+                </div>
+              </section>
+            ) : (
+              <section className="detail-review-section">
+                <div className="detail-review-head">
+                  <div>
+                    <h2>The Wearer's Voice</h2>
+                    <p className="detail-review-summary">
+                      {reviewSummaryStars} {averageRatingLabel} dựa trên{" "}
+                      {reviewList.summary.review_count} đánh giá
+                    </p>
+                  </div>
+                  <button
+                    className="detail-review-link"
+                    type="button"
+                    onClick={handleReviewCallToAction}
+                  >
+                    {isAuthenticated ? "Viết / sửa đánh giá" : "Đăng nhập để đánh giá"}
+                  </button>
+                </div>
 
-                      return (
-                        <div className="detail-review-breakdown-row" key={row.label}>
-                          <span className="detail-review-breakdown-label">{row.label}</span>
-                          <div className="detail-review-breakdown-track" aria-hidden="true">
-                            <span className="detail-review-breakdown-fill" style={{ width }} />
+                <div className="detail-review-shell">
+                  <div className="detail-review-summary-panel">
+                    <div className="detail-review-average">
+                      <strong>{averageRatingLabel}</strong>
+                      <span>{reviewSummaryStars}</span>
+                      <p>{reviewList.summary.review_count} đánh giá công khai cho sản phẩm này.</p>
+                    </div>
+
+                    <div className="detail-review-breakdown">
+                      {reviewBreakdown.map((row) => {
+                        const width =
+                          reviewList.summary.review_count > 0
+                            ? `${(row.count / reviewList.summary.review_count) * 100}%`
+                            : "0%";
+
+                        return (
+                          <div className="detail-review-breakdown-row" key={row.label}>
+                            <span className="detail-review-breakdown-label">{row.label}</span>
+                            <div className="detail-review-breakdown-track" aria-hidden="true">
+                              <span className="detail-review-breakdown-fill" style={{ width }} />
+                            </div>
+                            <strong className="detail-review-breakdown-count">{row.count}</strong>
                           </div>
-                          <strong className="detail-review-breakdown-count">{row.count}</strong>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
 
-                <div className="detail-review-form-panel" id="detail-review-form">
-                  {isAuthenticated ? (
-                    <form className="detail-review-form" onSubmit={handleReviewSubmit}>
-                      <div className="detail-review-form-head">
-                        <strong>
-                          {hasExistingReview ? "Đánh giá của bạn" : "Chia sẻ cảm nhận"}
-                        </strong>
-                        <span>
-                          {hasExistingReview
-                            ? "Bạn có thể chỉnh sửa số sao hoặc nội dung nhận xét bất kỳ lúc nào."
-                            : "Chọn số sao và để lại nhận xét ngắn gọn cho sản phẩm này."}
-                        </span>
-                      </div>
+                  <div className="detail-review-form-panel" id="detail-review-form">
+                    {isAuthenticated ? (
+                      <form className="detail-review-form" onSubmit={handleReviewSubmit}>
+                        <div className="detail-review-form-head">
+                          <strong>
+                            {hasExistingReview ? "Đánh giá của bạn" : "Chia sẻ cảm nhận"}
+                          </strong>
+                          <span>
+                            {hasExistingReview
+                              ? "Bạn có thể chỉnh sửa số sao hoặc nội dung nhận xét bất kỳ lúc nào."
+                              : "Chọn số sao và để lại nhận xét ngắn gọn cho sản phẩm này."}
+                          </span>
+                        </div>
 
-                      <div
-                        className="detail-review-star-row"
-                        role="radiogroup"
-                        aria-label="Chọn số sao"
-                      >
-                        {[1, 2, 3, 4, 5].map((rating) => (
-                          <button
-                            key={rating}
-                            type="button"
-                            className={
-                              rating <= reviewForm.rating
-                                ? "detail-review-star-button detail-review-star-button-active"
-                                : "detail-review-star-button"
+                        <div
+                          className="detail-review-star-row"
+                          role="radiogroup"
+                          aria-label="Chọn số sao"
+                        >
+                          {[1, 2, 3, 4, 5].map((rating) => (
+                            <button
+                              key={rating}
+                              type="button"
+                              className={
+                                rating <= reviewForm.rating
+                                  ? "detail-review-star-button detail-review-star-button-active"
+                                  : "detail-review-star-button"
+                              }
+                              aria-pressed={rating === reviewForm.rating}
+                              onClick={() => setReviewForm((current) => ({ ...current, rating }))}
+                            >
+                              <span aria-hidden="true">★</span>
+                              <span>{rating}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <label className="field" htmlFor="detail-review-comment">
+                          <span className="field-label">Nhận xét</span>
+                          <textarea
+                            id="detail-review-comment"
+                            className="detail-review-textarea"
+                            maxLength={2000}
+                            placeholder="Sản phẩm có đúng kỳ vọng không? Chất liệu, kích cỡ, độ hoàn thiện ra sao?"
+                            value={reviewForm.comment}
+                            onChange={(event) =>
+                              setReviewForm((current) => ({
+                                ...current,
+                                comment: event.target.value,
+                              }))
                             }
-                            aria-pressed={rating === reviewForm.rating}
-                            onClick={() => setReviewForm((current) => ({ ...current, rating }))}
+                          />
+                        </label>
+
+                        <div className="detail-review-form-actions">
+                          <button
+                            className="primary-button"
+                            disabled={reviewBusyAction !== ""}
+                            type="submit"
                           >
-                            <span aria-hidden="true">★</span>
-                            <span>{rating}</span>
+                            {reviewSubmitLabel}
                           </button>
-                        ))}
-                      </div>
-
-                      <label className="field" htmlFor="detail-review-comment">
-                        <span className="field-label">Nhận xét</span>
-                        <textarea
-                          id="detail-review-comment"
-                          className="detail-review-textarea"
-                          maxLength={2000}
-                          placeholder="Sản phẩm có đúng kỳ vọng không? Chất liệu, kích cỡ, độ hoàn thiện ra sao?"
-                          value={reviewForm.comment}
-                          onChange={(event) =>
-                            setReviewForm((current) => ({
-                              ...current,
-                              comment: event.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-
-                      <div className="detail-review-form-actions">
+                          {hasExistingReview ? (
+                            <button
+                              className="ghost-button"
+                              disabled={reviewBusyAction !== ""}
+                              type="button"
+                              onClick={() => void handleDeleteReview()}
+                            >
+                              {reviewBusyAction === "delete" ? "Đang xóa..." : "Xóa đánh giá"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="detail-review-login-card">
+                        <strong>Đăng nhập để đánh giá sản phẩm</strong>
+                        <p>
+                          Review chỉ dành cho người dùng đã đăng nhập. Sau khi đăng nhập, bạn sẽ
+                          được quay lại đúng trang hiện tại để tiếp tục viết đánh giá.
+                        </p>
                         <button
                           className="primary-button"
-                          disabled={reviewBusyAction !== ""}
-                          type="submit"
+                          type="button"
+                          onClick={handleReviewCallToAction}
                         >
-                          {reviewSubmitLabel}
+                          Đi tới đăng nhập
                         </button>
-                        {hasExistingReview ? (
-                          <button
-                            className="ghost-button"
-                            disabled={reviewBusyAction !== ""}
-                            type="button"
-                            onClick={() => void handleDeleteReview()}
-                          >
-                            {reviewBusyAction === "delete" ? "Đang xóa..." : "Xóa đánh giá"}
-                          </button>
-                        ) : null}
                       </div>
-                    </form>
-                  ) : (
-                    <div className="detail-review-login-card">
-                      <strong>Đăng nhập để đánh giá sản phẩm</strong>
-                      <p>
-                        Review chỉ dành cho người dùng đã đăng nhập. Sau khi đăng nhập, bạn sẽ được
-                        quay lại đúng trang hiện tại để tiếp tục viết đánh giá.
-                      </p>
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={handleReviewCallToAction}
-                      >
-                        Đi tới đăng nhập
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {reviewFeedback ? (
-                <div className="feedback feedback-info detail-review-feedback">
-                  {reviewFeedback}
-                </div>
-              ) : null}
+                {reviewFeedback ? (
+                  <div className="feedback feedback-info detail-review-feedback">
+                    {reviewFeedback}
+                  </div>
+                ) : null}
 
-              {isReviewLoading ? (
-                <div className="page-state">Đang tải đánh giá sản phẩm...</div>
-              ) : reviewList.items.length > 0 ? (
-                <div className="detail-review-grid">
-                  {reviewList.items.map((review) => (
-                    <article className="detail-review-card" key={review.id}>
-                      <div className="detail-review-card-head">
-                        <span className="detail-review-stars">{renderStars(review.rating)}</span>
-                        <span className="detail-review-date">
-                          {formatReviewDate(review.updated_at || review.created_at)}
-                        </span>
-                      </div>
-                      <p>
-                        {review.comment ||
-                          "Người dùng này đã chấm sao nhưng chưa để lại nhận xét chi tiết."}
-                      </p>
-                      <div className="detail-review-author">
-                        <strong>{review.author_label}</strong>
-                        <span>
-                          {myReview?.id === review.id
-                            ? "Đánh giá của bạn"
-                            : "Người mua đã đăng nhập"}
-                        </span>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="detail-review-empty">
-                  <strong>Chưa có đánh giá nào cho sản phẩm này.</strong>
-                  <span>Hãy trở thành người đầu tiên chia sẻ cảm nhận của bạn.</span>
-                </div>
-              )}
-            </section>
+                {isReviewLoading ? (
+                  <div className="page-state">Đang tải đánh giá sản phẩm...</div>
+                ) : reviewList.items.length > 0 ? (
+                  <div className="detail-review-grid">
+                    {reviewList.items.map((review) => (
+                      <article className="detail-review-card" key={review.id}>
+                        <div className="detail-review-card-head">
+                          <span className="detail-review-stars">{renderStars(review.rating)}</span>
+                          <span className="detail-review-date">
+                            {formatReviewDate(review.updated_at || review.created_at)}
+                          </span>
+                        </div>
+                        <p>
+                          {review.comment ||
+                            "Người dùng này đã chấm sao nhưng chưa để lại nhận xét chi tiết."}
+                        </p>
+                        <div className="detail-review-author">
+                          <strong>{review.author_label}</strong>
+                          <span>
+                            {myReview?.id === review.id
+                              ? "Đánh giá của bạn"
+                              : "Người mua đã đăng nhập"}
+                          </span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="detail-review-empty">
+                    <strong>Chưa có đánh giá nào cho sản phẩm này.</strong>
+                    <span>Hãy trở thành người đầu tiên chia sẻ cảm nhận của bạn.</span>
+                  </div>
+                )}
+              </section>
+            )}
 
             <section className="detail-look-section">
               <div className="detail-look-head">

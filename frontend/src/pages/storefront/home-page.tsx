@@ -9,7 +9,11 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 
-import { type HomeWorkbookProduct, type HomeWorkbookSegment } from "@/features/home/home-workbook";
+import {
+  resolveHomeWorkbookProductHref,
+  type HomeWorkbookProduct,
+  type HomeWorkbookSegment,
+} from "@/features/home/home-workbook";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
 import { formatCurrency } from "@/utils/format";
@@ -70,7 +74,12 @@ function buildTileHref(segment: HomeWorkbookSegment | null, href: string) {
 }
 
 function buildProductHref(product: HomeWorkbookProduct) {
-  return resolveHref(product.href, "/products");
+  return resolveHomeWorkbookProductHref({
+    productId: product.productId,
+    productName: product.name,
+    href: product.href,
+    fallbackHref: "/products",
+  });
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {
