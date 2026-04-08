@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
@@ -10,6 +10,7 @@ import "@/components/form/form-field.css";
 import "@/styles/pages/storefront/cart-page.css";
 
 export function CartPage() {
+  const location = useLocation();
   const { token, isAuthenticated } = useAuth();
   const { cart, clearCart, error, removeItem, updateItem, isLoading } = useCart();
   const [couponCode, setCouponCode] = useState("");
@@ -17,6 +18,7 @@ export function CartPage() {
   const [couponFeedback, setCouponFeedback] = useState("");
   const [isPreviewingCoupon, setIsPreviewingCoupon] = useState(false);
   const [productMap, setProductMap] = useState<Record<string, Product>>({});
+  const [navigationFeedback, setNavigationFeedback] = useState("");
 
   const previewItems = useMemo(
     () =>
@@ -37,6 +39,12 @@ export function CartPage() {
   useEffect(() => {
     setCouponPreview(null);
   }, [cartSignature]);
+
+  useEffect(() => {
+    const nextFeedback =
+      (location.state as { feedback?: string } | null)?.feedback?.trim() ?? "";
+    setNavigationFeedback(nextFeedback);
+  }, [location.key, location.state]);
 
   useEffect(() => {
     let active = true;
@@ -152,6 +160,7 @@ export function CartPage() {
         </div>
       </header>
 
+      {navigationFeedback ? <div className="feedback feedback-info">{navigationFeedback}</div> : null}
       {error ? <div className="feedback feedback-error">{error}</div> : null}
       {!isAuthenticated && cart.items.length > 0 ? (
         <div className="feedback feedback-info">

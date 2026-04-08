@@ -36,7 +36,16 @@ export declare function applyWorkbookProductMutation(table: WorkbookTable, mutat
         [x: string]: string;
     }[];
 };
+export declare function applyWorkbookProductMutations(table: WorkbookTable, mutations: WorkbookProductMutation[]): {
+    headers: string[];
+    rows: {
+        [x: string]: string;
+    }[];
+};
 export declare function syncWorkbookProductFiles(csvPath: string, xlsxPath: string, mutation: WorkbookProductMutation): Promise<{
+    message: string;
+}>;
+export declare function syncWorkbookProductBatch(csvPath: string, xlsxPath: string, mutations: WorkbookProductMutation[]): Promise<{
     message: string;
 }>;
 export {};

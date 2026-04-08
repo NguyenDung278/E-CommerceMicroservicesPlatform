@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
@@ -73,7 +75,14 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		return nil, err
 	}
 
+	if err := s.reserveCreatedOrderStock(ctx, requestLog, order); err != nil {
+		outcome = appobs.OutcomeFromError(err, ErrProductNotFound, ErrInsufficientStock)
+		requestLog.Warn("create order failed while reserving stock", zap.String("outcome", outcome), zap.Error(err))
+		return nil, err
+	}
+
 	if err := s.persistCreatedOrder(ctx, requestLog, order, createdOutbox); err != nil {
+		s.restoreOrderItemsStock(ctx, order.ID, order.Items, "create order persistence rollback")
 		outcome = appobs.OutcomeFromError(
 			err,
 			ErrCouponNotFound,
@@ -486,20 +495,62 @@ func (s *OrderService) markOrderCancelled(
 // Performance:
 //   - O(n) remote calls over the order items.
 func (s *OrderService) restoreCancelledOrderStock(ctx context.Context, order *model.Order) {
+	s.restoreOrderItemsStock(ctx, order.ID, order.Items, "cancelled order stock restore")
+}
+
+func (s *OrderService) reserveCreatedOrderStock(ctx context.Context, requestLog *zap.Logger, order *model.Order) error {
+	reservedItems := make([]model.OrderItem, 0, len(order.Items))
 	for _, item := range order.Items {
+		stockDecreaseStartedAt := time.Now()
+		if err := s.productClient.DecreaseStock(ctx, item.ProductID, item.Quantity); err != nil {
+			appobs.ObserveOperation("order-service", "reserve_stock", appobs.OutcomeSystemError, time.Since(stockDecreaseStartedAt))
+			s.restoreOrderItemsStock(ctx, order.ID, reservedItems, "create order stock rollback")
+			return mapCreateOrderStockError(err)
+		}
+
+		appobs.ObserveOperation("order-service", "reserve_stock", appobs.OutcomeSuccess, time.Since(stockDecreaseStartedAt))
+		requestLog.Info("reserved stock for order item",
+			zap.String("order_id", order.ID),
+			zap.String("product_id", item.ProductID),
+			zap.Int("quantity", item.Quantity),
+		)
+		reservedItems = append(reservedItems, item)
+	}
+
+	return nil
+}
+
+func (s *OrderService) restoreOrderItemsStock(
+	ctx context.Context,
+	orderID string,
+	items []model.OrderItem,
+	restoreReason string,
+) {
+	for _, item := range items {
 		stockRestoreStartedAt := time.Now()
 		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
 			appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSystemError, time.Since(stockRestoreStartedAt))
 			s.log.Error("failed to restore stock for product",
 				zap.String("product_id", item.ProductID),
-				zap.String("order_id", order.ID),
+				zap.String("order_id", orderID),
 				zap.Int("quantity", item.Quantity),
-				zap.String("user_id", order.UserID),
+				zap.String("reason", restoreReason),
 				zap.Error(err),
 			)
 			continue
 		}
 		appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSuccess, time.Since(stockRestoreStartedAt))
+	}
+}
+
+func mapCreateOrderStockError(err error) error {
+	switch grpcstatus.Code(err) {
+	case codes.NotFound:
+		return ErrProductNotFound
+	case codes.FailedPrecondition:
+		return ErrInsufficientStock
+	default:
+		return err
 	}
 }
 

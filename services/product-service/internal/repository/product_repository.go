@@ -15,7 +15,10 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 )
 
-var ErrInvalidCursor = errors.New("invalid cursor")
+var (
+	ErrInvalidCursor     = errors.New("invalid cursor")
+	ErrInsufficientStock = errors.New("insufficient stock")
+)
 
 type ListProductsParams struct {
 	Limit    int
@@ -337,7 +340,7 @@ func (r *postgresProductRepository) UpdateStock(ctx context.Context, id string, 
 		return err
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("insufficient stock for product %s", id)
+		return fmt.Errorf("%w: product %s", ErrInsufficientStock, id)
 	}
 	return nil
 }

@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
+import { canSyncProductToWorkbook } from "@/features/home/workbook-sync-catalog";
+import { syncWorkbookProductMutations } from "@/features/home/workbook-sync-client";
 import { api, getErrorMessage } from "@/services/api";
 import type { Address, Product } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
@@ -250,6 +252,8 @@ export function CheckoutPage() {
         payment_method: paymentMethod,
       });
 
+      await syncPurchasedProductsToWorkbook(draftItems);
+
       if (!directProduct && cart.items.length > 0) {
         await clearCart();
       }
@@ -493,6 +497,33 @@ export function CheckoutPage() {
       </section>
     </div>
   );
+}
+
+async function syncPurchasedProductsToWorkbook(items: Array<{ product_id: string }>) {
+  const productIds = Array.from(
+    new Set(items.map((item) => item.product_id.trim()).filter(Boolean))
+  );
+  if (productIds.length === 0) {
+    return;
+  }
+
+  try {
+    const latestProducts = await Promise.all(
+      productIds.map((productId) => api.getProductById(productId).then((response) => response.data))
+    );
+    const syncableProducts = latestProducts.filter(canSyncProductToWorkbook);
+    if (syncableProducts.length === 0) {
+      return;
+    }
+    await syncWorkbookProductMutations(
+      syncableProducts.map((product) => ({
+        operation: "upsert",
+        product,
+      }))
+    );
+  } catch (reason) {
+    console.warn("Failed to sync sold products into workbook CSV/XLSX.", reason);
+  }
 }
 
 function hasCheckoutFormValue(form: CheckoutFormState) {

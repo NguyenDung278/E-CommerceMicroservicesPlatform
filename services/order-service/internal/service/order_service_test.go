@@ -20,9 +20,13 @@ type fakeOrderRepo struct {
 	createdOutbox *model.OutboxMessage
 	coupons       map[string]*model.Coupon
 	userOrders    []*model.Order
+	createErr     error
 }
 
 func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *model.OutboxMessage) error {
+	if r.createErr != nil {
+		return r.createErr
+	}
 	r.createdOrder = order
 	r.createdOutbox = outbox
 	return nil
@@ -109,8 +113,12 @@ func (r *fakeOrderRepo) ApplyInboxStatusTransition(
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {
-	products map[string]*pb.Product
-	calls    map[string]int
+	products            map[string]*pb.Product
+	calls               map[string]int
+	decreaseCalls       map[string]int
+	restoreCalls        map[string]int
+	failDecreaseForID   string
+	failDecreaseWithErr error
 }
 
 func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*pb.Product, error) {
@@ -124,7 +132,40 @@ func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*p
 	return nil, grpcstatus.Error(codes.NotFound, "product not found")
 }
 
-func (c *fakeProductCatalog) RestoreStock(_ context.Context, _ string, _ int) error {
+func (c *fakeProductCatalog) DecreaseStock(_ context.Context, productID string, quantity int) error {
+	if c.decreaseCalls == nil {
+		c.decreaseCalls = map[string]int{}
+	}
+	c.decreaseCalls[productID]++
+
+	if c.failDecreaseForID == productID && c.failDecreaseWithErr != nil {
+		return c.failDecreaseWithErr
+	}
+
+	product, ok := c.products[productID]
+	if !ok {
+		return grpcstatus.Error(codes.NotFound, "product not found")
+	}
+	if int(product.StockQuantity) < quantity {
+		return grpcstatus.Error(codes.FailedPrecondition, "insufficient stock")
+	}
+
+	product.StockQuantity -= int32(quantity)
+	return nil
+}
+
+func (c *fakeProductCatalog) RestoreStock(_ context.Context, productID string, quantity int) error {
+	if c.restoreCalls == nil {
+		c.restoreCalls = map[string]int{}
+	}
+	c.restoreCalls[productID]++
+
+	product, ok := c.products[productID]
+	if !ok {
+		return grpcstatus.Error(codes.NotFound, "product not found")
+	}
+
+	product.StockQuantity += int32(quantity)
 	return nil
 }
 
@@ -282,6 +323,70 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 	}
 	if order.CouponCode != "FLASH15" {
 		t.Fatalf("expected coupon code FLASH15, got %q", order.CouponCode)
+	}
+	if catalog.products["product-1"].StockQuantity != 8 {
+		t.Fatalf("expected stock to decrease to 8, got %d", catalog.products["product-1"].StockQuantity)
+	}
+}
+
+func TestCreateOrderRestoresReservedStockWhenPersistenceFails(t *testing.T) {
+	repo := &fakeOrderRepo{
+		createErr: errors.New("insert failed"),
+	}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Archive Boot",
+				Price:         80,
+				StockQuantity: 5,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 2},
+		},
+		ShippingMethod: "pickup",
+	})
+	if err == nil {
+		t.Fatal("expected CreateOrder to return a persistence error")
+	}
+	if catalog.products["product-1"].StockQuantity != 5 {
+		t.Fatalf("expected stock rollback to restore quantity 5, got %d", catalog.products["product-1"].StockQuantity)
+	}
+	if catalog.restoreCalls["product-1"] != 1 {
+		t.Fatalf("expected one stock restore call, got %d", catalog.restoreCalls["product-1"])
+	}
+}
+
+func TestCreateOrderReturnsInsufficientStockWhenReservationFails(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Archive Boot",
+				Price:         80,
+				StockQuantity: 1,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 2},
+		},
+		ShippingMethod: "pickup",
+	})
+	if err != ErrInsufficientStock {
+		t.Fatalf("expected ErrInsufficientStock, got %v", err)
+	}
+	if repo.createdOrder != nil {
+		t.Fatal("expected no order to be persisted when stock reservation fails")
 	}
 }
 

@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { syncWorkbookProductFiles } from "./dev/workbook-sync.js";
+import { syncWorkbookProductBatch, syncWorkbookProductFiles } from "./dev/workbook-sync.js";
 const importMetaUrl = import.meta.url;
 const workbookCsvPath = new URL("./public/content/stitchfix-home.csv", importMetaUrl).pathname;
 const workbookXlsxPath = new URL("./public/content/stitchfix-home.xlsx", importMetaUrl).pathname;
@@ -18,6 +18,12 @@ function isWorkbookMutationPayload(value) {
         return false;
     }
     return typeof value.product.id === "string" && typeof value.product.name === "string";
+}
+function isWorkbookBatchPayload(value) {
+    if (!Array.isArray(value.mutations) || value.mutations.length === 0) {
+        return false;
+    }
+    return value.mutations.every((mutation) => isRecord(mutation) && isWorkbookMutationPayload(mutation));
 }
 function sendJsonResponse(response, statusCode, body) {
     response.statusCode = statusCode;
@@ -55,13 +61,15 @@ function workbookSyncPlugin() {
             }
             void readJsonBody(request)
                 .then(async (payload) => {
-                if (!isWorkbookMutationPayload(payload)) {
+                if (!isWorkbookMutationPayload(payload) && !isWorkbookBatchPayload(payload)) {
                     sendJsonResponse(response, 400, {
                         message: "Invalid workbook sync payload.",
                     });
                     return;
                 }
-                const result = await syncWorkbookProductFiles(workbookCsvPath, workbookXlsxPath, payload);
+                const result = isWorkbookBatchPayload(payload)
+                    ? await syncWorkbookProductBatch(workbookCsvPath, workbookXlsxPath, payload.mutations)
+                    : await syncWorkbookProductFiles(workbookCsvPath, workbookXlsxPath, payload);
                 sendJsonResponse(response, 200, result);
             })
                 .catch((error) => {

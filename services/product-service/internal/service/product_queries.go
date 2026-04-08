@@ -188,7 +188,71 @@ func (s *ProductService) RestoreStock(ctx context.Context, productID string, qua
 	if quantity <= 0 {
 		return errors.New("quantity must be positive")
 	}
-	return s.repo.RestoreStock(ctx, productID, quantity)
+
+	if _, err := s.GetByID(ctx, productID); err != nil {
+		return err
+	}
+	if err := s.repo.RestoreStock(ctx, productID, quantity); err != nil {
+		return err
+	}
+
+	s.reindexStockChangeBestEffort(ctx, productID)
+	return nil
+}
+
+// DecreaseStock atomically decrements product stock, typically when an order is
+// created successfully enough to reserve inventory.
+//
+// Inputs:
+//   - ctx carries cancellation to the repository.
+//   - productID identifies the product to decrement.
+//   - quantity is the number of units to subtract.
+//
+// Returns:
+//   - nil on success.
+//   - ErrProductNotFound when the product does not exist.
+//   - ErrInsufficientStock when the remaining stock is too low.
+//   - any repository error.
+//
+// Edge cases:
+//   - non-positive quantities are rejected immediately to avoid accidental
+//     no-op or restore semantics.
+//
+// Side effects:
+//   - writes stock changes to PostgreSQL and best-effort reindexes the product.
+//
+// Performance:
+//   - one lookup, one atomic stock update, and one best-effort reindex read.
+func (s *ProductService) DecreaseStock(ctx context.Context, productID string, quantity int) error {
+	if quantity <= 0 {
+		return errors.New("quantity must be positive")
+	}
+
+	if _, err := s.GetByID(ctx, productID); err != nil {
+		return err
+	}
+	if err := s.repo.UpdateStock(ctx, productID, quantity); err != nil {
+		if errors.Is(err, repository.ErrInsufficientStock) {
+			return ErrInsufficientStock
+		}
+		return err
+	}
+
+	s.reindexStockChangeBestEffort(ctx, productID)
+	return nil
+}
+
+func (s *ProductService) reindexStockChangeBestEffort(ctx context.Context, productID string) {
+	product, err := s.repo.GetByID(ctx, productID)
+	if err != nil {
+		s.log.Warn("failed to reload product after stock change", zap.String("product_id", productID), zap.Error(err))
+		return
+	}
+	if product == nil {
+		return
+	}
+
+	s.indexProductBestEffort(ctx, product, "failed to reindex product after stock change")
 }
 
 // normalizeListProductsQuery trims and canonicalizes raw query parameters once

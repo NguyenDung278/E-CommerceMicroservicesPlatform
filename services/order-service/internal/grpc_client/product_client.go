@@ -59,11 +59,39 @@ func (c *ProductClient) GetProduct(ctx context.Context, productID string) (*pb.P
 	return res.Product, nil
 }
 
-// RestoreStock increments stock by reading the current product snapshot and then
-// issuing a gRPC UpdateProduct call with the adjusted stock quantity.
-//
-// We intentionally reuse the existing proto contract here instead of adding a
-// dedicated RestoreStock RPC to keep service coordination simple.
+// DecreaseStock atomically decrements stock through the existing UpdateProduct
+// RPC using the service's stock-delta mode.
+func (c *ProductClient) DecreaseStock(ctx context.Context, productID string, quantity int) error {
+	startedAt := time.Now()
+	requestLog := appobs.LoggerWithContext(c.log, ctx,
+		zap.String("product_id", productID),
+		zap.Int("quantity", quantity),
+	)
+	defer func() {
+		appobs.ObserveOperation("order-service", "stock_decrease_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
+	}()
+
+	if quantity <= 0 {
+		return fmt.Errorf("quantity must be positive")
+	}
+
+	_, err := c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
+		ProductId:     productID,
+		StockQuantity: int32(quantity),
+	})
+	if err != nil {
+		appobs.ObserveOperation("order-service", "stock_decrease_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("failed to decrease stock via product-service gRPC", zap.Error(err))
+		return fmt.Errorf("failed to decrease stock for product %s: %w", productID, err)
+	}
+
+	requestLog.Info("decreased stock via product-service gRPC")
+
+	return nil
+}
+
+// RestoreStock increments stock by using the product-service stock-delta mode
+// exposed through the existing UpdateProduct RPC.
 func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quantity int) error {
 	startedAt := time.Now()
 	requestLog := appobs.LoggerWithContext(c.log, ctx,
@@ -74,39 +102,20 @@ func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quan
 		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
 	}()
 
-	product, err := c.GetProduct(ctx, productID)
-	if err != nil {
-		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to fetch product snapshot before stock restore", zap.Error(err))
-		return fmt.Errorf("failed to get product for stock restore: %w", err)
+	if quantity <= 0 {
+		return fmt.Errorf("quantity must be positive")
 	}
 
-	newStock := product.StockQuantity + int32(quantity)
-	// UpdateProduct currently behaves like a snapshot-style update, so we resend
-	// the fields we just read before applying the stock adjustment.
-	_, err = c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
+	_, err := c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
 		ProductId:     productID,
-		Name:          product.Name,
-		Description:   product.Description,
-		Price:         product.Price,
-		Category:      product.Category,
-		StockQuantity: newStock,
-		ImageUrl:      product.ImageUrl,
+		StockQuantity: -int32(quantity),
 	})
 	if err != nil {
 		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to restore stock via product-service gRPC",
-			zap.Int32("previous_stock", product.StockQuantity),
-			zap.Int32("new_stock", newStock),
-			zap.Error(err),
-		)
+		requestLog.Error("failed to restore stock via product-service gRPC", zap.Error(err))
 		return fmt.Errorf("failed to restore stock for product %s: %w", productID, err)
 	}
 
-	requestLog.Info("restored stock via product-service gRPC",
-		zap.Int32("previous_stock", product.StockQuantity),
-		zap.Int32("new_stock", newStock),
-	)
-
+	requestLog.Info("restored stock via product-service gRPC")
 	return nil
 }

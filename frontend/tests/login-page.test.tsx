@@ -17,6 +17,10 @@ vi.mock("../src/features/auth/storage/remembered-login-storage", () => ({
   saveRememberedLogin: vi.fn(),
 }));
 
+vi.mock("../src/features/auth/storage/auth-flow-log-storage", () => ({
+  appendAuthFlowLog: vi.fn(),
+}));
+
 vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: vi.fn(() => ({
     itemCount: 2,
@@ -29,7 +33,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
-function renderLoginPage(initialEntry = "/login") {
+function renderLoginPage(
+  initialEntry:
+    | string
+    | {
+        pathname: string;
+        state?: Record<string, unknown>;
+      } = "/login"
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -111,5 +122,33 @@ describe("LoginPage storefront header", () => {
 
     expect(accountLink?.getAttribute("href")).toBe("/profile");
     expect(bagLink?.getAttribute("href")).toBe("/cart");
+  });
+
+  it("shows a login-required notification when redirected from a protected cart action", () => {
+    authMocks.useAuth.mockReturnValue({
+      isAuthenticated: false,
+      login: vi.fn(),
+      beginOAuthLogin: vi.fn(),
+      error: "",
+      clearError: vi.fn(),
+    });
+
+    const { container } = renderLoginPage({
+      pathname: "/login",
+      state: {
+        from: {
+          pathname: "/products/p-1",
+          search: "",
+          hash: "",
+        },
+        message:
+          "Bạn cần đăng nhập để thêm sản phẩm vào giỏ hàng. Sau khi đăng nhập, sản phẩm sẽ được tự động thêm vào giỏ hàng và chuyển bạn tới trang giỏ hàng.",
+      },
+    });
+
+    expect(container.textContent).toContain("Yêu cầu đăng nhập");
+    expect(container.textContent).toContain(
+      "Bạn cần đăng nhập để thêm sản phẩm vào giỏ hàng. Sau khi đăng nhập, sản phẩm sẽ được tự động thêm vào giỏ hàng và chuyển bạn tới trang giỏ hàng."
+    );
   });
 });

@@ -18,7 +18,11 @@ import {
   validateSelectedImageFiles,
 } from "@/features/admin/utils/product-form";
 import { useAuth } from "@/features/auth/hooks/use-auth";
-import { syncWorkbookProductMutation } from "@/features/home/workbook-sync-client";
+import { canSyncProductToWorkbook } from "@/features/home/workbook-sync-catalog";
+import {
+  syncWorkbookProductMutation,
+  syncWorkbookProductMutations,
+} from "@/features/home/workbook-sync-client";
 import { FormField } from "@/components/form/form-field";
 import "@/styles/pages/admin/admin-order-history.css";
 import { ProductCard } from "@/components/product/product-card";
@@ -46,10 +50,12 @@ export function AdminPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [isCreatingCoupon, setIsCreatingCoupon] = useState(false);
+  const [isSyncingWorkbook, setIsSyncingWorkbook] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [editingProductId, setEditingProductId] = useState("");
+  const [syncingWorkbookProductId, setSyncingWorkbookProductId] = useState("");
   const [reportDays, setReportDays] = useState(30);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
@@ -70,6 +76,41 @@ export function AdminPage() {
       setFeedback(
         `${baseMessage} Tuy nhien workbook CSV/XLSX chua dong bo duoc: ${getErrorMessage(reason)}`
       );
+    }
+  }
+
+  async function syncProductsToWorkbook(
+    nextProducts: Product[],
+    baseMessage: string,
+    emptyMessage: string
+  ) {
+    const syncableProducts = nextProducts.filter(canSyncProductToWorkbook);
+    if (syncableProducts.length === 0) {
+      setFeedback(emptyMessage);
+      return;
+    }
+
+    const skippedCount = nextProducts.length - syncableProducts.length;
+
+    try {
+      setIsSyncingWorkbook(true);
+      const result = await syncWorkbookProductMutations(
+        syncableProducts.map((product) => ({
+          operation: "upsert",
+          product,
+        }))
+      );
+      setFeedback(
+        skippedCount > 0
+          ? `${baseMessage} ${result.message} Bo qua ${skippedCount} san pham chua map vao workbook storefront.`
+          : `${baseMessage} ${result.message}`
+      );
+    } catch (reason) {
+      setFeedback(
+        `${baseMessage} Tuy nhien workbook CSV/XLSX chua dong bo duoc: ${getErrorMessage(reason)}`
+      );
+    } finally {
+      setIsSyncingWorkbook(false);
     }
   }
 
@@ -380,6 +421,30 @@ export function AdminPage() {
     }
   }
 
+  async function handleSyncProduct(product: Product) {
+    if (!canSyncProductToWorkbook(product)) {
+      setFeedback(
+        `San pham ${product.name} chua thuoc cac section workbook duoc map san. Hay dat category ve Men, Women, Footwear hoac Accessories truoc khi sync.`
+      );
+      return;
+    }
+
+    try {
+      setSyncingWorkbookProductId(product.id);
+      await syncWorkbookFeedback("upsert", product, `Đã lấy trạng thái live của ${product.name} từ database.`);
+    } finally {
+      setSyncingWorkbookProductId("");
+    }
+  }
+
+  async function handleSyncAllProductsToWorkbook() {
+    await syncProductsToWorkbook(
+      products,
+      "Đã đồng bộ catalog hiện tại từ database sang workbook.",
+      "Chưa có sản phẩm nào trong database thuộc các section workbook đã map."
+    );
+  }
+
   async function handleManualCancel(order: Order) {
     if (!token) {
       setFeedback("Bạn cần JWT staff/admin để hủy đơn.");
@@ -677,6 +742,14 @@ export function AdminPage() {
             <div className="admin-console-hero-actions">
               <button className="ghost-button" type="button" onClick={refreshDashboardData}>
                 Làm mới dữ liệu
+              </button>
+              <button
+                className="ghost-button"
+                disabled={isSyncingWorkbook}
+                type="button"
+                onClick={() => void handleSyncAllProductsToWorkbook()}
+              >
+                {isSyncingWorkbook ? "Đang sync workbook..." : "DB -> Workbook"}
               </button>
               <button className="primary-button" type="button" onClick={startNewProductEntry}>
                 + Sản phẩm mới
@@ -1426,7 +1499,23 @@ export function AdminPage() {
             </form>
 
             <div className="card admin-console-panel">
-              <h2>Danh sách sản phẩm</h2>
+              <div className="section-heading">
+                <div>
+                  <h2>Danh sách sản phẩm</h2>
+                  <p className="history-subtle">
+                    Có thể đẩy từng sản phẩm live hoặc toàn bộ catalog đã map category sang
+                    workbook CSV/XLSX.
+                  </p>
+                </div>
+                <button
+                  className="ghost-button"
+                  disabled={isSyncingWorkbook}
+                  type="button"
+                  onClick={() => void handleSyncAllProductsToWorkbook()}
+                >
+                  {isSyncingWorkbook ? "Đang sync workbook..." : "Đồng bộ toàn bộ"}
+                </button>
+              </div>
               <div className="product-grid product-grid-admin">
                 {products.map((product) => (
                   <ProductCard
@@ -1441,6 +1530,11 @@ export function AdminPage() {
                       onClick: handleDelete,
                       danger: true,
                       busy: busyProductId === product.id,
+                    }}
+                    tertiaryAdminAction={{
+                      label: "Đẩy workbook",
+                      onClick: handleSyncProduct,
+                      busy: syncingWorkbookProductId === product.id,
                     }}
                     product={product}
                   />

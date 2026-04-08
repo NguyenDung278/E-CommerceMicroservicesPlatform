@@ -165,6 +165,30 @@ Vì vậy, khi bạn đổi giữa Vite dev và frontend Docker, hãy chỉnh `F
 
 Điểm này ảnh hưởng trực tiếp tới verify email, reset password và redirect sau OAuth.
 
+Hai lệnh `make` nhanh nhất cho luồng admin/workbook:
+
+```bash
+make storefront-open-admin
+make storefront-sync-live-workbook
+```
+
+Ý nghĩa:
+
+- `make storefront-open-admin`: mở thẳng trang admin ở `http://127.0.0.1:5174/admin` để bạn login rồi dùng nút `DB -> Workbook` hoặc `Đẩy workbook`.
+- `make storefront-sync-live-workbook`: lấy product live từ API Gateway `http://127.0.0.1:8080`, lọc các category đã map vào storefront workbook, rồi ghi lại `frontend/public/content/stitchfix-home.csv` và `.xlsx` ngay từ terminal.
+
+Các biến có thể override khi cần:
+
+```bash
+make storefront-open-admin FRONTEND_ADMIN_URL=http://127.0.0.1:5174/admin
+make storefront-sync-live-workbook STOREFRONT_API_BASE_URL=http://127.0.0.1:8080 STOREFRONT_SYNC_PRODUCT_STATUS=active STOREFRONT_SYNC_PRODUCT_LIMIT=100
+```
+
+Lưu ý:
+
+- `storefront-open-admin` cần frontend Vite đang chạy, thường là sau `make frontend-dev`.
+- `storefront-sync-live-workbook` cần `api-gateway` + `product-service` đang chạy, thường là sau `make compose-up`.
+
 Nếu HomePage hiện dòng:
 
 ```text

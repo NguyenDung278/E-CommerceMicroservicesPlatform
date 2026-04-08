@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { appendAuthFlowLog } from "@/features/auth/storage/auth-flow-log-storage";
 import {
   clearRememberedLogin,
   readRememberedLogin,
@@ -28,6 +29,7 @@ import "@/styles/pages/auth/auth-pages.css";
 
 type AuthLocationState = {
   from?: RouterLocation;
+  message?: string;
 };
 
 const defaultLoginForm: LoginFormValues = {
@@ -69,6 +71,7 @@ export function LoginPage() {
   const redirectTo = navigationState?.from
     ? `${navigationState.from.pathname}${navigationState.from.search}${navigationState.from.hash}`
     : "/profile";
+  const loginPromptMessage = navigationState?.message?.trim() ?? "";
   const loginErrors = validateLoginFields(loginForm);
   const visibleErrors = getVisibleErrors(loginErrors, touched, submitted);
 
@@ -79,6 +82,18 @@ export function LoginPage() {
 
     pushNotification("error", "Có lỗi xác thực", error);
   }, [error]);
+
+  useEffect(() => {
+    if (!loginPromptMessage) {
+      return;
+    }
+
+    pushNotification("info", "Yêu cầu đăng nhập", loginPromptMessage);
+    appendAuthFlowLog("login_prompt_displayed", {
+      redirectTo,
+      message: loginPromptMessage,
+    });
+  }, [loginPromptMessage, redirectTo]);
 
   function pushNotification(tone: NotificationItem["tone"], title: string, message: string) {
     const id = Date.now() + Math.floor(Math.random() * 1000);

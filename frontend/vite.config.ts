@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { syncWorkbookProductFiles } from "./dev/workbook-sync.js";
+import { syncWorkbookProductBatch, syncWorkbookProductFiles } from "./dev/workbook-sync.js";
 
 const importMetaUrl = (import.meta as ImportMeta & { url: string }).url;
 const workbookCsvPath = new URL("./public/content/stitchfix-home.csv", importMetaUrl).pathname;
@@ -19,6 +19,9 @@ type JsonRequest = {
 };
 
 type WorkbookMutationPayload = Parameters<typeof syncWorkbookProductFiles>[2];
+type WorkbookBatchPayload = {
+  mutations: WorkbookMutationPayload[];
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -38,6 +41,14 @@ function isWorkbookMutationPayload(value: Record<string, unknown>): value is Wor
   }
 
   return typeof value.product.id === "string" && typeof value.product.name === "string";
+}
+
+function isWorkbookBatchPayload(value: Record<string, unknown>): value is WorkbookBatchPayload {
+  if (!Array.isArray(value.mutations) || value.mutations.length === 0) {
+    return false;
+  }
+
+  return value.mutations.every((mutation) => isRecord(mutation) && isWorkbookMutationPayload(mutation));
 }
 
 function sendJsonResponse(response: JsonResponse, statusCode: number, body: Record<string, unknown>) {
@@ -81,18 +92,16 @@ function workbookSyncPlugin(): Plugin {
 
       void readJsonBody(request)
         .then(async (payload) => {
-          if (!isWorkbookMutationPayload(payload)) {
+          if (!isWorkbookMutationPayload(payload) && !isWorkbookBatchPayload(payload)) {
             sendJsonResponse(response, 400, {
               message: "Invalid workbook sync payload.",
             });
             return;
           }
 
-          const result = await syncWorkbookProductFiles(
-            workbookCsvPath,
-            workbookXlsxPath,
-            payload
-          );
+          const result = isWorkbookBatchPayload(payload)
+            ? await syncWorkbookProductBatch(workbookCsvPath, workbookXlsxPath, payload.mutations)
+            : await syncWorkbookProductFiles(workbookCsvPath, workbookXlsxPath, payload);
 
           sendJsonResponse(response, 200, result);
         })

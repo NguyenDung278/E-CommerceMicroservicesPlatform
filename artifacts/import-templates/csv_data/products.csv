@@ -1,4 +1,49 @@
 id,external_id,name,category_slug,category,price,stock,material,merchandising_rank,updated_at
-550e8400-e29b-41d4-a716-446655440000,SM-001,Linen Shirt,shop-men,shop-men,129.99,18,Italian Linen,1,2025-09-26 10:00:00
-550e8400-e29b-41d4-a716-446655440001,SM-002,Cotton Tee,shop-men,shop-men,49.99,42,Organic Cotton,2,2025-09-26 10:00:00
-550e8400-e29b-41d4-a716-446655440002,AW-001,Silk Dress,atelier-women,atelier-women,229.0,7,Mulberry Silk,1,2025-09-26 10:05:00
+10000000-0000-4000-8000-000000000001,SM-001,Sculpted Linen Shirt,shop-men,Shop Men,420,15,Italian Linen Blend,1,2026-04-08 02:01:00
+10000000-0000-4000-8000-000000000002,SM-002,Structured Atelier Jacket,shop-men,Shop Men,1250,9,100% Merino Wool,2,2026-04-08 02:02:00
+10000000-0000-4000-8000-000000000003,SM-003,Modern Drape Trousers,shop-men,Shop Men,380,16,Fine Serge Cotton,3,2026-04-08 02:03:00
+10000000-0000-4000-8000-000000000004,SM-004,Atelier Knit Polo,shop-men,Shop Men,290,18,Sea Island Cotton,4,2026-04-08 02:04:00
+10000000-0000-4000-8000-000000000005,SM-005,The Obsidian Overcoat,shop-men,Shop Men,1890,6,Cashmere Blend,5,2026-04-08 02:05:00
+10000000-0000-4000-8000-000000000006,SM-006,Relaxed Cargo Trouser,shop-men,Shop Men,340,14,Brushed Twill,6,2026-04-08 02:06:00
+10000000-0000-4000-8000-000000000007,SM-007,Stonewashed Utility Overshirt,shop-men,Shop Men,360,12,Washed Cotton Drill,7,2026-04-08 02:07:00
+10000000-0000-4000-8000-000000000008,SM-008,Meridian Wool Cardigan,shop-men,Shop Men,410,11,Merino Wool,8,2026-04-08 02:08:00
+10000000-0000-4000-8000-000000000009,SM-009,Foundry Pleat Short,shop-men,Shop Men,250,17,Tumbled Cotton Poplin,9,2026-04-08 02:09:00
+10000000-0000-4000-8000-000000000010,SM-010,Tailored Poplin Bandshirt,shop-men,Shop Men,280,20,Compact Cotton Poplin,10,2026-04-08 02:10:00
+10000000-0000-4000-8000-000000000011,SM-011,Alpine Field Parka,shop-men,Shop Men,980,8,Technical Cotton Shell,11,2026-04-08 02:11:00
+10000000-0000-4000-8000-000000000012,SM-012,Slate Double Pleat Trouser,shop-men,Shop Men,390,13,Worsted Wool Blend,12,2026-04-08 02:12:00
+10000000-0000-4000-8000-000000000013,AW-001,Ethereal Silk Slip,atelier-women,Atelier Women,340,10,Mulberry Silk,1,2026-04-08 02:11:00
+10000000-0000-4000-8000-000000000014,AW-002,Architectural Overcoat,atelier-women,Atelier Women,1250,7,Structured Wool Twill,2,2026-04-08 02:12:00
+10000000-0000-4000-8000-000000000015,AW-003,Cloud Cashmere Crew,atelier-women,Atelier Women,280,14,Pure Cashmere,3,2026-04-08 02:13:00
+10000000-0000-4000-8000-000000000016,AW-004,Sculptural Pleated Skirt,atelier-women,Atelier Women,490,12,Pleated Wool Crepe,4,2026-04-08 02:14:00
+10000000-0000-4000-8000-000000000017,AW-005,Hearth Tapered Pant,atelier-women,Atelier Women,320,16,Brushed Wool Blend,5,2026-04-08 02:15:00
+10000000-0000-4000-8000-000000000018,AW-006,Atelier Formal Blazer,atelier-women,Atelier Women,850,9,Tailored Wool Blend,6,2026-04-08 02:16:00
+10000000-0000-4000-8000-000000000019,AW-007,Botanical Wrap Dress,atelier-women,Atelier Women,410,11,Washed Silk Blend,7,2026-04-08 02:17:00
+10000000-0000-4000-8000-000000000020,AW-008,Gallery Satin Blouse,atelier-women,Atelier Women,295,15,Liquid Satin,8,2026-04-08 02:18:00
+10000000-0000-4000-8000-000000000021,AW-009,Quiet Wool Column Coat,atelier-women,Atelier Women,1180,6,Double-Faced Wool,9,2026-04-08 02:19:00
+10000000-0000-4000-8000-000000000022,AW-010,Soft Structure Trouser,atelier-women,Atelier Women,365,13,Compact Viscose Twill,10,2026-04-08 02:20:00
+10000000-0000-4000-8000-000000000023,AW-011,Moonstone Rib Tank,atelier-women,Atelier Women,180,18,Fine Rib Cotton,11,2026-04-08 02:21:00
+10000000-0000-4000-8000-000000000024,AW-012,Atelier Bias Midi Skirt,atelier-women,Atelier Women,430,10,Washed Satin,12,2026-04-08 02:22:00
+10000000-0000-4000-8000-000000000025,FW-001,Atelier Low Sneaker,footwear,Footwear,340,18,Smooth Italian Calfskin,1,2026-04-08 02:21:00
+10000000-0000-4000-8000-000000000026,FW-002,Chelsea Field Boot,footwear,Footwear,495,11,Waxed Roughout Leather,2,2026-04-08 02:22:00
+10000000-0000-4000-8000-000000000027,FW-003,Classic Penny Loafer,footwear,Footwear,420,12,Pebbled Grain Leather,3,2026-04-08 02:23:00
+10000000-0000-4000-8000-000000000028,FW-004,Moc Toe Service Boot,footwear,Footwear,560,9,English Bridle Leather,4,2026-04-08 02:24:00
+10000000-0000-4000-8000-000000000029,FW-005,Ridge Runner Hiker,footwear,Footwear,610,8,Stormwelt Bridle Leather,5,2026-04-08 02:25:00
+10000000-0000-4000-8000-000000000030,FW-006,Polished Derby Loafer,footwear,Footwear,450,10,Polished Grain Leather,6,2026-04-08 02:26:00
+10000000-0000-4000-8000-000000000031,FW-007,Slate Suede Desert Boot,footwear,Footwear,470,10,Premium Suede,7,2026-04-08 02:27:00
+10000000-0000-4000-8000-000000000032,FW-008,Court Leather Trainer,footwear,Footwear,360,16,Full-Grain Calfskin,8,2026-04-08 02:28:00
+10000000-0000-4000-8000-000000000033,FW-009,Artisan Monk Strap,footwear,Footwear,530,7,Hand-Burnished Grain Leather,9,2026-04-08 02:29:00
+10000000-0000-4000-8000-000000000034,FW-010,Pebble Driving Loafer,footwear,Footwear,390,12,Pebbled Grain Leather,10,2026-04-08 02:30:00
+10000000-0000-4000-8000-000000000035,FW-011,Harbor Fisher Sandal,footwear,Footwear,310,14,Matte Calfskin,11,2026-04-08 02:31:00
+10000000-0000-4000-8000-000000000036,FW-012,Iron Commute Boot,footwear,Footwear,580,8,Weatherproof Bridle Leather,12,2026-04-08 02:32:00
+10000000-0000-4000-8000-000000000037,AC-001,Atelier Tote,accessories,Accessories,840,9,Vegetable Tanned Leather,1,2026-04-08 02:31:00
+10000000-0000-4000-8000-000000000038,AC-002,Aurora Wrap,accessories,Accessories,215,18,Organic Raw Silk,2,2026-04-08 02:32:00
+10000000-0000-4000-8000-000000000039,AC-003,Cintura Belt,accessories,Accessories,165,20,Full Grain Saddle Leather,3,2026-04-08 02:33:00
+10000000-0000-4000-8000-000000000040,AC-004,Vault Clutch,accessories,Accessories,420,10,Nappa Leather,4,2026-04-08 02:34:00
+10000000-0000-4000-8000-000000000041,AC-005,Obsidian Band,accessories,Accessories,310,12,925 Sterling Silver,5,2026-04-08 02:35:00
+10000000-0000-4000-8000-000000000042,AC-006,Mist Scarf,accessories,Accessories,190,16,Cashmere Blend,6,2026-04-08 02:36:00
+10000000-0000-4000-8000-000000000043,AC-007,Meridian Weekender,accessories,Accessories,980,7,Vachetta Leather,7,2026-04-08 02:37:00
+10000000-0000-4000-8000-000000000044,AC-008,Sculptor Card Holder,accessories,Accessories,145,15,Vachetta Leather,8,2026-04-08 02:38:00
+10000000-0000-4000-8000-000000000045,AC-009,Studio Key Lanyard,accessories,Accessories,110,14,Bridle Leather,9,2026-04-08 02:39:00
+10000000-0000-4000-8000-000000000046,AC-010,Veil Silk Neckerchief,accessories,Accessories,175,17,Printed Raw Silk,10,2026-04-08 02:40:00
+10000000-0000-4000-8000-000000000047,AC-011,Hinge Cuff,accessories,Accessories,265,11,Sterling Silver,11,2026-04-08 02:41:00
+10000000-0000-4000-8000-000000000048,AC-012,Atelier Bucket Pouch,accessories,Accessories,390,9,Nappa Leather,12,2026-04-08 02:42:00

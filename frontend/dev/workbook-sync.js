@@ -7,28 +7,28 @@ const workbookSections = [
     segmentSlug: "nam",
     pageSlug: "men-atelier",
     categoryHref: "/categories/Shop%20Men",
-    matchers: ["shop men", "men", "nam"],
+    matchers: ["shop men", "men", "nam", "atelier men", "men atelier"],
   },
   {
     label: "Women",
     segmentSlug: "nu",
     pageSlug: "women-atelier",
     categoryHref: "/categories/Shop%20Women",
-    matchers: ["shop women", "women", "nu"],
+    matchers: ["shop women", "women", "nu", "atelier women", "women atelier"],
   },
   {
     label: "Footwear",
     segmentSlug: "footwear",
     pageSlug: "footwear-atelier",
     categoryHref: "/categories/Footwear",
-    matchers: ["footwear", "shoes", "giay"],
+    matchers: ["footwear", "shoes", "giay", "atelier footwear", "footwear atelier"],
   },
   {
     label: "Accessories",
     segmentSlug: "accessories",
     pageSlug: "accessories-atelier",
     categoryHref: "/categories/Accessories",
-    matchers: ["accessories", "accessory", "phu kien"],
+    matchers: ["accessories", "accessory", "phu kien", "atelier accessories", "accessories atelier"],
   },
 ];
 
@@ -36,6 +36,7 @@ function normalizeLookupToken(value) {
   return String(value ?? "")
     .trim()
     .toLowerCase()
+    .replace(/-+/g, " ")
     .replace(/\s+/g, " ");
 }
 
@@ -371,6 +372,16 @@ export function applyWorkbookProductMutation(table, mutation) {
   };
 }
 
+export function applyWorkbookProductMutations(table, mutations) {
+  return mutations.reduce(
+    (currentTable, mutation) => applyWorkbookProductMutation(currentTable, mutation),
+    {
+      headers: table.headers.slice(),
+      rows: table.rows.map((row) => ({ ...row })),
+    }
+  );
+}
+
 function buildWorkbookSheet(table) {
   return XLSX.utils.json_to_sheet(table.rows, {
     header: table.headers,
@@ -405,5 +416,20 @@ export async function syncWorkbookProductFiles(csvPath, xlsxPath, mutation) {
       mutation.operation === "delete"
         ? `Da xoa ${mutation.product.name} khoi workbook CSV/XLSX.`
         : `Da dong bo ${mutation.product.name} vao workbook CSV/XLSX.`,
+  };
+}
+
+export async function syncWorkbookProductBatch(csvPath, xlsxPath, mutations) {
+  if (!Array.isArray(mutations) || mutations.length === 0) {
+    throw new Error("Can it nhat mot thay doi de dong bo workbook.");
+  }
+
+  const table = await loadWorkbookTable(csvPath, xlsxPath);
+  const nextTable = applyWorkbookProductMutations(table, mutations);
+
+  await writeWorkbookFiles(nextTable, csvPath, xlsxPath);
+
+  return {
+    message: `Da dong bo ${mutations.length} thay doi vao workbook CSV/XLSX.`,
   };
 }

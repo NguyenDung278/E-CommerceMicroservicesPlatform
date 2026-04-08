@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyWorkbookProductMutation } from "../dev/workbook-sync";
+import { applyWorkbookProductMutation, applyWorkbookProductMutations } from "../dev/workbook-sync";
 
 const headers = [
   "record_type",
@@ -157,5 +157,60 @@ describe("workbook product sync", () => {
     );
 
     expect(nextTable.rows).toHaveLength(0);
+  });
+
+  it("applies multiple workbook mutations in one batch while keeping row positions stable", () => {
+    const nextTable = applyWorkbookProductMutations(
+      {
+        headers,
+        rows: [],
+      },
+      [
+        {
+          operation: "upsert",
+          product: {
+            id: "prod-men-001",
+            name: "Structured Atelier Jacket",
+            description: "Merino wool outer layer.",
+            price: 1250,
+            stock: 8,
+            category: "Shop Men",
+            brand: "ND Atelier",
+            tags: ["Limited Edition"],
+            status: "active",
+            sku: "MEN-001",
+            variants: [],
+            image_url: "https://example.com/jacket.jpg",
+            image_urls: ["https://example.com/jacket.jpg"],
+          },
+        },
+        {
+          operation: "upsert",
+          product: {
+            id: "prod-women-002",
+            name: "Silk Archive Dress",
+            description: "Fluid silk silhouette.",
+            price: 780,
+            stock: 4,
+            category: "Women",
+            brand: "ND Atelier",
+            tags: ["Runway"],
+            status: "active",
+            sku: "WOMEN-002",
+            variants: [],
+            image_url: "https://example.com/dress.jpg",
+            image_urls: ["https://example.com/dress.jpg"],
+          },
+        },
+      ]
+    );
+
+    const productRows = nextTable.rows.filter((row) => row.record_type === "product");
+    const categoryRows = nextTable.rows.filter((row) => row.record_type === "category_page_product");
+
+    expect(productRows).toHaveLength(2);
+    expect(categoryRows).toHaveLength(2);
+    expect(productRows.map((row) => row.position)).toEqual(["1", "1"]);
+    expect(categoryRows.map((row) => row.position)).toEqual(["1", "1"]);
   });
 });

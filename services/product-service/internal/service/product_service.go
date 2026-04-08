@@ -13,6 +13,7 @@ import (
 
 var (
 	ErrProductNotFound         = errors.New("product not found")
+	ErrInsufficientStock       = errors.New("insufficient stock")
 	ErrInvalidStatus           = errors.New("invalid product status")
 	ErrInvalidCursor           = errors.New("invalid cursor")
 	ErrImageStorageUnavailable = errors.New("image storage unavailable")

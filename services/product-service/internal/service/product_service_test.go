@@ -104,7 +104,15 @@ func (r *fakeProductServiceRepo) ListForSearchIndex(_ context.Context) ([]*model
 	return results, nil
 }
 
-func (r *fakeProductServiceRepo) UpdateStock(_ context.Context, _ string, _ int) error {
+func (r *fakeProductServiceRepo) UpdateStock(_ context.Context, id string, quantity int) error {
+	product, ok := r.products[id]
+	if !ok {
+		return errors.New("product not found")
+	}
+	if product.Stock < quantity {
+		return repository.ErrInsufficientStock
+	}
+	product.Stock -= quantity
 	return nil
 }
 
@@ -222,6 +230,47 @@ func TestCreateNormalizesFieldsAndIndexesProduct(t *testing.T) {
 	}
 	if len(search.indexedIDs) != 1 || search.indexedIDs[0] != product.ID {
 		t.Fatalf("expected search index to receive product %q, got %#v", product.ID, search.indexedIDs)
+	}
+}
+
+func TestDecreaseStockUpdatesStoredQuantity(t *testing.T) {
+	repo := newFakeProductServiceRepo()
+	search := &fakeProductSearchIndex{}
+	repo.products["product-1"] = &model.Product{
+		ID:        "product-1",
+		Name:      "Archive Coat",
+		Stock:     7,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	svc := NewProductService(repo, WithSearchIndex(search), WithLogger(zap.NewNop()))
+
+	if err := svc.DecreaseStock(context.Background(), "product-1", 2); err != nil {
+		t.Fatalf("DecreaseStock returned error: %v", err)
+	}
+
+	if repo.products["product-1"].Stock != 5 {
+		t.Fatalf("expected stock 5 after decrement, got %d", repo.products["product-1"].Stock)
+	}
+	if len(search.indexedIDs) != 1 || search.indexedIDs[0] != "product-1" {
+		t.Fatalf("expected stock change to reindex product-1, got %#v", search.indexedIDs)
+	}
+}
+
+func TestDecreaseStockReturnsInsufficientStock(t *testing.T) {
+	repo := newFakeProductServiceRepo()
+	repo.products["product-1"] = &model.Product{
+		ID:        "product-1",
+		Name:      "Archive Coat",
+		Stock:     1,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	svc := NewProductService(repo, WithLogger(zap.NewNop()))
+
+	err := svc.DecreaseStock(context.Background(), "product-1", 2)
+	if err != ErrInsufficientStock {
+		t.Fatalf("expected ErrInsufficientStock, got %v", err)
 	}
 }
 

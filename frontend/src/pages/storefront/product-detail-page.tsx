@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   buildWorkbookFallbackProduct,
   findHomeWorkbookProductReference,
+  type HomeWorkbookProductReference,
 } from "@/features/home/home-workbook";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { useAuth } from "@/features/auth/hooks/use-auth";
@@ -16,7 +17,6 @@ import {
 } from "@/features/auth/storage/post-login-action-storage";
 import { useCart } from "@/features/cart/hooks/use-cart";
 import { api, getErrorMessage, isHttpError } from "@/services/api";
-import { isStorefrontAutoAddCategory } from "@/constants/storefront-navigation";
 import type {
   Product,
   ProductReview,
@@ -56,12 +56,31 @@ const defaultReviewForm: ReviewFormState = {
   comment: "",
 };
 
+function buildProductActionLoginRequiredMessage(intent: PendingProductDetailActionIntent) {
+  if (intent === "buy_now") {
+    return "Bạn cần đăng nhập để tiếp tục mua hàng. Sau khi đăng nhập, sản phẩm sẽ được tự động thêm vào giỏ hàng và chuyển bạn tới trang giỏ hàng.";
+  }
+
+  return "Bạn cần đăng nhập để thêm sản phẩm vào giỏ hàng. Sau khi đăng nhập, sản phẩm sẽ được tự động thêm vào giỏ hàng và chuyển bạn tới trang giỏ hàng.";
+}
+
+function buildProductActionCartSuccessMessage(
+  productName: string,
+  intent: PendingProductDetailActionIntent
+) {
+  if (intent === "buy_now") {
+    return `${productName} đã được thêm vào giỏ hàng. Bạn có thể tiếp tục thanh toán từ giỏ hàng.`;
+  }
+
+  return `${productName} đã được thêm vào giỏ hàng.`;
+}
+
 export function ProductDetailPage() {
   const { productId = "" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const { content } = useHomeWorkbook();
-  const { token, isAuthenticated, isBootstrapping, beginOAuthLogin } = useAuth();
+  const { token, isAuthenticated, isBootstrapping } = useAuth();
   const { addItem } = useCart();
   const resumedActionRef = useRef("");
 
@@ -111,14 +130,7 @@ export function ProductDetailPage() {
     setIsWorkbookFallback(false);
 
     async function loadProductPage() {
-      try {
-        const productResponse = await api.getProductById(productId);
-
-        if (!active) {
-          return;
-        }
-
-        const nextProduct = productResponse.data;
+      async function hydrateLiveProduct(nextProduct: Product) {
         applyProductSnapshot(nextProduct);
 
         const reviewListRequest = api.listProductReviews(nextProduct.id, { page: 1, limit: 6 });
@@ -161,12 +173,37 @@ export function ProductDetailPage() {
         }
 
         setIsReviewLoading(false);
+      }
+
+      try {
+        const productResponse = await api.getProductById(productId);
+
+        if (!active) {
+          return;
+        }
+
+        await hydrateLiveProduct(productResponse.data);
       } catch (reason) {
         if (!active) {
           return;
         }
 
         if (workbookReference) {
+          try {
+            const resolvedLiveProduct = await findLiveProductForWorkbookReference(workbookReference);
+            if (!active) {
+              return;
+            }
+
+            if (resolvedLiveProduct) {
+              await hydrateLiveProduct(resolvedLiveProduct);
+              setFeedback("");
+              return;
+            }
+          } catch {
+            // Fall through to workbook-only preview mode when the live lookup cannot be resolved.
+          }
+
           applyProductSnapshot(buildWorkbookFallbackProduct(workbookReference, productId));
           setIsWorkbookFallback(true);
           setFeedback(
@@ -246,7 +283,7 @@ export function ProductDetailPage() {
     };
   }, [isWorkbookFallback, product]);
 
-  function startGoogleAuthForProductAction(intent: PendingProductDetailActionIntent) {
+  function redirectToLoginForProductAction(intent: PendingProductDetailActionIntent) {
     if (!product) {
       return;
     }
@@ -258,25 +295,85 @@ export function ProductDetailPage() {
       quantity,
     });
 
-    appendAuthFlowLog("product_detail_oauth_redirect_requested", {
+    appendAuthFlowLog("product_detail_login_redirect_requested", {
       intent,
       productId: product.id,
       redirectTo: currentPath,
       quantity,
       pendingActionCreated: Boolean(pendingAction),
+      loginRoute: "/login",
     });
 
-    setFeedback(
-      intent === "add_to_cart"
-        ? "Đang chuyển bạn tới Google để đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
-        : "Đang chuyển bạn tới Google để đăng nhập trước khi mua ngay."
-    );
-
-    beginOAuthLogin("google", {
-      redirectTo: currentPath,
-      remember: false,
+    navigate("/login", {
+      state: {
+        from: location,
+        message: buildProductActionLoginRequiredMessage(intent),
+      },
     });
   }
+
+  const addProductToCartAndRedirectToCart = useCallback(
+    async (
+      intent: PendingProductDetailActionIntent,
+      nextQuantity: number,
+      options: {
+        isResume?: boolean;
+      } = {}
+    ) => {
+      if (!product) {
+        return;
+      }
+
+      const normalizedQuantity =
+        Number.isInteger(nextQuantity) && nextQuantity > 0 ? nextQuantity : 1;
+      const successEvent = options.isResume
+        ? "product_detail_resume_cart_redirect_succeeded"
+        : "product_detail_cart_redirect_succeeded";
+      const failureEvent = options.isResume
+        ? "product_detail_resume_failed"
+        : "product_detail_cart_redirect_failed";
+
+      try {
+        setIsBusy(true);
+        await addItem({
+          product_id: product.id,
+          quantity: normalizedQuantity,
+        });
+
+        if (options.isResume) {
+          clearPendingPostLoginAction();
+        }
+
+        appendAuthFlowLog(successEvent, {
+          intent,
+          productId: product.id,
+          quantity: normalizedQuantity,
+          redirectTo: "/cart",
+        });
+
+        navigate("/cart", {
+          state: {
+            feedback: buildProductActionCartSuccessMessage(product.name, intent),
+          },
+        });
+      } catch (reason) {
+        if (options.isResume) {
+          clearPendingPostLoginAction();
+        }
+
+        setFeedback(getErrorMessage(reason));
+        appendAuthFlowLog(failureEvent, {
+          intent,
+          productId: product.id,
+          quantity: normalizedQuantity,
+          error: getErrorMessage(reason),
+        });
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [addItem, navigate, product]
+  );
 
   useEffect(() => {
     if (!product || isWorkbookFallback || !isAuthenticated || isBootstrapping || !token) {
@@ -306,76 +403,17 @@ export function ProductDetailPage() {
     });
 
     void (async () => {
-      try {
-        setIsBusy(true);
-
-        if (pendingAction.intent === "add_to_cart") {
-          const resumeQuantity = isStorefrontAutoAddCategory(product.category || "")
-            ? 1
-            : pendingAction.quantity;
-
-          await addItem({
-            product_id: product.id,
-            quantity: resumeQuantity,
-          });
-
-          clearPendingPostLoginAction();
-          setFeedback("Đăng nhập Google thành công. Sản phẩm đã được thêm vào giỏ hàng.");
-          appendAuthFlowLog("product_detail_resume_add_to_cart_succeeded", {
-            productId: product.id,
-            quantity: resumeQuantity,
-          });
-          return;
-        }
-
-        const shouldSyncCart = isStorefrontAutoAddCategory(product.category || "");
-        const checkoutQuantity = shouldSyncCart ? 1 : pendingAction.quantity;
-
-        if (shouldSyncCart) {
-          await addItem({
-            product_id: product.id,
-            quantity: 1,
-          });
-        }
-
-        clearPendingPostLoginAction();
-        appendAuthFlowLog("product_detail_resume_buy_now_succeeded", {
-          productId: product.id,
-          quantity: checkoutQuantity,
-          cartSynced: shouldSyncCart,
-        });
-
-        navigate("/checkout", {
-          state: {
-            directProduct: {
-              id: product.id,
-              name: product.name,
-              price: product.price,
-              quantity: checkoutQuantity,
-            },
-          },
-        });
-      } catch (reason) {
-        clearPendingPostLoginAction();
-        setFeedback(getErrorMessage(reason));
-        appendAuthFlowLog("product_detail_resume_failed", {
-          productId: product.id,
-          intent: pendingAction.intent,
-          error: getErrorMessage(reason),
-        });
-      } finally {
-        setIsBusy(false);
-      }
+      await addProductToCartAndRedirectToCart(pendingAction.intent, pendingAction.quantity, {
+        isResume: true,
+      });
     })();
   }, [
-    addItem,
+    addProductToCartAndRedirectToCart,
     currentPath,
     isAuthenticated,
     isBootstrapping,
     isWorkbookFallback,
-    navigate,
     product,
-    quantity,
     token,
   ]);
 
@@ -392,7 +430,7 @@ export function ProductDetailPage() {
     }
 
     if (!isAuthenticated) {
-      startGoogleAuthForProductAction("add_to_cart");
+      redirectToLoginForProductAction("add_to_cart");
       return;
     }
 
@@ -401,26 +439,7 @@ export function ProductDetailPage() {
       return;
     }
 
-    const shouldUseDefaultCartQuantity =
-      isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
-    const nextQuantity = shouldUseDefaultCartQuantity ? 1 : quantity;
-
-    try {
-      setIsBusy(true);
-      await addItem({
-        product_id: product.id,
-        quantity: nextQuantity,
-      });
-      setFeedback(
-        shouldUseDefaultCartQuantity
-          ? "Sản phẩm đã được thêm vào giỏ hàng với số lượng mặc định là 1."
-          : "Sản phẩm đã được thêm vào giỏ hàng."
-      );
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setIsBusy(false);
-    }
+    await addProductToCartAndRedirectToCart("add_to_cart", quantity);
   }
 
   async function handleBuyNow() {
@@ -436,7 +455,7 @@ export function ProductDetailPage() {
     }
 
     if (!isAuthenticated) {
-      startGoogleAuthForProductAction("buy_now");
+      redirectToLoginForProductAction("buy_now");
       return;
     }
 
@@ -445,35 +464,7 @@ export function ProductDetailPage() {
       return;
     }
 
-    const shouldSyncCart = isAuthenticated && isStorefrontAutoAddCategory(product.category || "");
-    const checkoutQuantity = shouldSyncCart ? 1 : quantity;
-
-    try {
-      if (shouldSyncCart) {
-        setIsBusy(true);
-        await addItem({
-          product_id: product.id,
-          quantity: 1,
-        });
-      }
-
-      navigate("/checkout", {
-        state: {
-          directProduct: {
-            id: product.id,
-            name: product.name,
-            price: activePrice,
-            quantity: checkoutQuantity,
-          },
-        },
-      });
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      if (shouldSyncCart) {
-        setIsBusy(false);
-      }
-    }
+    await addProductToCartAndRedirectToCart("buy_now", quantity);
   }
 
   async function refreshReviews(nextMessage = "") {
@@ -662,41 +653,6 @@ export function ProductDetailPage() {
         },
       ]
     : [];
-  const systemCards = isWorkbookFallback
-    ? [
-        {
-          title: "Workbook Source",
-          description:
-            "Noi dung hien tai duoc doc truc tiep tu workbook CSV/XLSX sau khi storefront dong bo lai.",
-        },
-        {
-          title: "Detail Route",
-          description:
-            "Moi card workbook gio co route detail rieng thay vi tro nguoc ve trang category tong hop.",
-        },
-        {
-          title: "Live Upgrade",
-          description:
-            "Sau khi admin CRUD va workbook sync xong, card nay se chuyen sang product live day du tu gateway.",
-        },
-      ]
-    : [
-        {
-          title: "Product API",
-          description:
-            "Metadata, media va category duoc nap truc tiep tu product service qua gateway.",
-        },
-        {
-          title: "Inventory Sync",
-          description:
-            "Ton kho va variants phan anh du lieu hien co de test tinh huong mua hang that.",
-        },
-        {
-          title: "Checkout Ready",
-          description:
-            "Tu trang nay co the them gio hoac di thang sang checkout voi quantity hien tai.",
-        },
-      ];
   const alphaScale = ["XS", "S", "M", "L", "XL"];
   const sizeOptions = product
     ? buildSizeOptions(product.variants, { isApparel, isFootwear, alphaScale })
@@ -949,44 +905,9 @@ export function ProductDetailPage() {
                       Mua ngay
                     </button>
                   </div>
-
-                  <p className="detail-support-note">
-                    {isWorkbookFallback
-                      ? "Muc nay dang o che do workbook preview. Sau khi admin dong bo san pham live vao workbook, gio hang va checkout se hoat dong nhu binh thuong."
-                      : "Complimentary test flow: ban co the them vao gio hoac di thang sang checkout de verify chuc nang."}
-                  </p>
                 </div>
               </div>
             </div>
-
-            <section className="detail-platform-section">
-              <div className="detail-platform-head">
-                <span className="section-kicker">Backend Integrity</span>
-                <h2>System Architecture</h2>
-              </div>
-
-              <div className="detail-platform-flow">
-                {systemCards.map((item, index) => (
-                  <div className="detail-platform-flow-item" key={item.title}>
-                    <article
-                      className={
-                        index === 1
-                          ? "detail-system-card detail-system-card-active"
-                          : "detail-system-card"
-                      }
-                    >
-                      <strong>{item.title}</strong>
-                      <p>{item.description}</p>
-                    </article>
-                    {index < systemCards.length - 1 ? (
-                      <span className="detail-platform-arrow" aria-hidden="true">
-                        →
-                      </span>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </section>
 
             {isWorkbookFallback ? (
               <section className="detail-review-section">
@@ -1239,6 +1160,53 @@ function formatReviewDate(value: string) {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+async function findLiveProductForWorkbookReference(reference: HomeWorkbookProductReference) {
+  const response = await api.listProducts({
+    status: "active",
+    search: reference.name,
+    limit: 24,
+  });
+
+  return resolveWorkbookReferenceLiveProduct(reference, response.data);
+}
+
+function resolveWorkbookReferenceLiveProduct(
+  reference: HomeWorkbookProductReference,
+  candidates: Product[]
+) {
+  const targetName = normalizeProductLookupValue(reference.name);
+  if (!targetName) {
+    return null;
+  }
+
+  const exactNameMatches = candidates.filter(
+    (candidate) => normalizeProductLookupValue(candidate.name) === targetName
+  );
+  if (exactNameMatches.length === 0) {
+    return null;
+  }
+
+  const targetBrand = normalizeProductLookupValue(reference.brand);
+  const targetCategory = normalizeProductLookupValue(reference.categoryLabel);
+
+  return (
+    exactNameMatches.find(
+      (candidate) =>
+        targetBrand.length > 0 && normalizeProductLookupValue(candidate.brand) === targetBrand
+    ) ??
+    exactNameMatches.find(
+      (candidate) =>
+        targetCategory.length > 0 &&
+        normalizeProductLookupValue(candidate.category) === targetCategory
+    ) ??
+    exactNameMatches[0]
+  );
+}
+
+function normalizeProductLookupValue(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function buildSizeOptions(

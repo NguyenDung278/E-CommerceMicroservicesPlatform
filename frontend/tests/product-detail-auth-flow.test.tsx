@@ -101,6 +101,62 @@ const baseProduct = {
   updated_at: "2026-04-07T00:00:00Z",
 };
 
+const workbookContent = {
+  sourceName: "stitchfix-home.csv",
+  sourceKind: "csv" as const,
+  loadedAt: "2026-04-07T00:00:00Z",
+  footer: {
+    brandName: "ND Shop",
+    caption: "Crafted for the Discerning",
+    note: "Workbook-driven editorial homepage.",
+  },
+  footerLinks: [],
+  navItems: [],
+  categoryPages: [],
+  segments: [
+    {
+      slug: "all-archive",
+      label: "All Archive",
+      href: "/products",
+      isDefault: true,
+      hero: {
+        segmentSlug: "all-archive",
+        collectionKicker: "Archive",
+        title: "Archive",
+        description: "Workbook content",
+        primaryCtaLabel: "Explore",
+        primaryCtaHref: "/products",
+        secondaryCtaLabel: "Lookbook",
+        secondaryCtaHref: "/products",
+        backgroundImage: "https://example.com/hero.jpg",
+        quoteKicker: "Note",
+        quoteBody: "Workbook note",
+        accent: "#946246",
+        arrivalsKicker: "Arrivals",
+        arrivalsTitle: "Archive",
+      },
+      tiles: [],
+      callout: null,
+      metrics: [],
+      products: [
+        {
+          segmentSlug: "all-archive",
+          position: 1,
+          productId: "archive-001",
+          eyebrow: "Archive",
+          brand: baseProduct.brand,
+          name: baseProduct.name,
+          price: baseProduct.price,
+          sizeTag: "M",
+          fitNote: baseProduct.description,
+          imageUrl: baseProduct.image_url,
+          href: "/products",
+        },
+      ],
+    },
+  ],
+};
+
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
 function renderProductDetail(initialEntry = "/products/p-1") {
@@ -113,6 +169,8 @@ function renderProductDetail(initialEntry = "/products/p-1") {
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route element={<ProductDetailPage />} path="/products/:productId" />
+          <Route element={<div data-testid="login-route">login</div>} path="/login" />
+          <Route element={<div data-testid="cart-route">cart</div>} path="/cart" />
           <Route element={<div data-testid="checkout-route">checkout</div>} path="/checkout" />
         </Routes>
       </MemoryRouter>
@@ -148,15 +206,13 @@ afterEach(() => {
 });
 
 describe("ProductDetailPage auth redirect flow", () => {
-  it("redirects unauthenticated Add to Cart clicks straight into Google OAuth and stores the pending action", async () => {
-    const beginOAuthLogin = vi.fn();
+  it("redirects unauthenticated Add to Cart clicks to login and stores the pending action", async () => {
     const addItem = vi.fn();
 
     authMocks.useAuth.mockReturnValue({
       token: "",
       isAuthenticated: false,
       isBootstrapping: false,
-      beginOAuthLogin,
     });
     cartMocks.useCart.mockReturnValue({
       addItem,
@@ -184,25 +240,17 @@ describe("ProductDetailPage auth redirect flow", () => {
       redirectTo: "/products/p-1",
       quantity: 1,
     });
-    expect(beginOAuthLogin).toHaveBeenCalledWith("google", {
-      redirectTo: "/products/p-1",
-      remember: false,
-    });
     expect(addItem).not.toHaveBeenCalled();
-    expect(container.textContent).toContain(
-      "Đang chuyển bạn tới Google để đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
-    );
+    expect(container.querySelector('[data-testid="login-route"]')?.textContent).toBe("login");
   });
 
-  it("redirects unauthenticated Buy now clicks straight into Google OAuth and stores the pending action", async () => {
-    const beginOAuthLogin = vi.fn();
+  it("redirects unauthenticated Buy now clicks to login and stores the pending action", async () => {
     const addItem = vi.fn();
 
     authMocks.useAuth.mockReturnValue({
       token: "",
       isAuthenticated: false,
       isBootstrapping: false,
-      beginOAuthLogin,
     });
     cartMocks.useCart.mockReturnValue({
       addItem,
@@ -230,17 +278,11 @@ describe("ProductDetailPage auth redirect flow", () => {
       redirectTo: "/products/p-1",
       quantity: 1,
     });
-    expect(beginOAuthLogin).toHaveBeenCalledWith("google", {
-      redirectTo: "/products/p-1",
-      remember: false,
-    });
     expect(addItem).not.toHaveBeenCalled();
-    expect(container.textContent).toContain(
-      "Đang chuyển bạn tới Google để đăng nhập trước khi mua ngay."
-    );
+    expect(container.querySelector('[data-testid="login-route"]')?.textContent).toBe("login");
   });
 
-  it("resumes a pending Add to Cart action after OAuth callback returns to the product detail page", async () => {
+  it("resumes a pending Add to Cart action after login returns to the product detail page", async () => {
     const addItem = vi.fn().mockResolvedValue({
       items: [
         {
@@ -282,13 +324,19 @@ describe("ProductDetailPage auth redirect flow", () => {
       quantity: 2,
     });
     expect(pendingActionMocks.clearPendingPostLoginAction).toHaveBeenCalled();
-    expect(container.textContent).toContain(
-      "Đăng nhập Google thành công. Sản phẩm đã được thêm vào giỏ hàng."
-    );
+    expect(container.querySelector('[data-testid="cart-route"]')?.textContent).toBe("cart");
   });
 
-  it("resumes a pending Buy now action after OAuth callback returns to the product detail page", async () => {
-    const addItem = vi.fn();
+  it("resumes a pending Buy now action after login returns to the product detail page", async () => {
+    const addItem = vi.fn().mockResolvedValue({
+      items: [
+        {
+          product_id: "p-1",
+          quantity: 2,
+        },
+      ],
+      total: 258,
+    });
 
     authMocks.useAuth.mockReturnValue({
       token: "jwt-token",
@@ -316,8 +364,61 @@ describe("ProductDetailPage auth redirect flow", () => {
     await flushAsync();
     await flushAsync();
 
-    expect(addItem).not.toHaveBeenCalled();
+    expect(addItem).toHaveBeenCalledWith({
+      product_id: "p-1",
+      quantity: 2,
+    });
     expect(pendingActionMocks.clearPendingPostLoginAction).toHaveBeenCalled();
-    expect(container.querySelector('[data-testid="checkout-route"]')?.textContent).toBe("checkout");
+    expect(container.querySelector('[data-testid="cart-route"]')?.textContent).toBe("cart");
+  });
+
+  it("auto-resolves legacy workbook routes to a live product so Add to Cart stays clickable", async () => {
+    const addItem = vi.fn();
+
+    authMocks.useAuth.mockReturnValue({
+      token: "",
+      isAuthenticated: false,
+      isBootstrapping: false,
+    });
+    cartMocks.useCart.mockReturnValue({
+      addItem,
+    });
+    workbookMocks.useHomeWorkbook.mockReturnValue({
+      content: workbookContent,
+    });
+    apiMocks.api.getProductById.mockRejectedValue(new Error("not found"));
+    apiMocks.api.listProductReviews.mockResolvedValue({ data: emptyReviewList });
+    apiMocks.api.listProducts.mockImplementation((options?: { search?: string }) => {
+      if (options?.search === baseProduct.name) {
+        return Promise.resolve({ data: [baseProduct] });
+      }
+
+      return Promise.resolve({ data: [] });
+    });
+
+    const { container } = renderProductDetail("/products/archive-001");
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    const addToCartButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Add to Cart"
+    );
+
+    expect(container.textContent).not.toContain("San pham nay hien duoc render tu workbook CSV/XLSX");
+    expect(addToCartButton).toBeTruthy();
+    expect(addToCartButton?.hasAttribute("disabled")).toBe(false);
+
+    act(() => {
+      addToCartButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(pendingActionMocks.savePendingProductDetailAction).toHaveBeenCalledWith({
+      intent: "add_to_cart",
+      productId: "p-1",
+      redirectTo: "/products/archive-001",
+      quantity: 1,
+    });
+    expect(container.querySelector('[data-testid="login-route"]')?.textContent).toBe("login");
   });
 });

@@ -73,6 +73,10 @@ func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdatePro
 		return nil, status.Error(codes.InvalidArgument, "product_id is required")
 	}
 
+	if isStockDeltaOnlyRequest(req) {
+		return s.updateProductStockDelta(ctx, req, requestLog, startedAt)
+	}
+
 	existing, existingErr := s.productService.GetByID(ctx, productID)
 	if existingErr != nil && existingErr != service.ErrProductNotFound {
 		requestLog.Warn("failed to load existing product snapshot for observability", zap.Error(existingErr))
@@ -118,6 +122,87 @@ func (s *ProductGRPCServer) UpdateProduct(ctx context.Context, req *pb.UpdatePro
 	} else {
 		requestLog.Info("product updated via gRPC", zap.Float64("price", product.Price))
 	}
+
+	return &pb.UpdateProductResponse{
+		Product: toProtoProduct(product),
+	}, nil
+}
+
+func isStockDeltaOnlyRequest(req *pb.UpdateProductRequest) bool {
+	return req.GetName() == "" &&
+		req.GetDescription() == "" &&
+		req.GetCategory() == "" &&
+		req.GetImageUrl() == "" &&
+		req.GetPrice() == 0
+}
+
+func (s *ProductGRPCServer) updateProductStockDelta(
+	ctx context.Context,
+	req *pb.UpdateProductRequest,
+	requestLog *zap.Logger,
+	startedAt time.Time,
+) (*pb.UpdateProductResponse, error) {
+	productID := req.GetProductId()
+	delta := int(req.GetStockQuantity())
+	if delta == 0 {
+		appobs.ObserveOperation("product-service", "grpc_update_product", appobs.OutcomeBusinessError, time.Since(startedAt))
+		return nil, status.Error(codes.InvalidArgument, "stock delta must be non-zero")
+	}
+
+	previous, previousErr := s.productService.GetByID(ctx, productID)
+	if previousErr != nil {
+		outcome := appobs.OutcomeFromError(previousErr, service.ErrProductNotFound)
+		appobs.ObserveOperation("product-service", "grpc_update_product", outcome, time.Since(startedAt))
+		if previousErr == service.ErrProductNotFound {
+			requestLog.Warn("grpc stock delta failed: product not found", zap.Error(previousErr))
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		requestLog.Error("grpc stock delta failed while loading product", zap.Error(previousErr))
+		return nil, status.Error(codes.Internal, previousErr.Error())
+	}
+
+	var err error
+	if delta > 0 {
+		err = s.productService.DecreaseStock(ctx, productID, delta)
+	} else {
+		err = s.productService.RestoreStock(ctx, productID, -delta)
+	}
+	if err != nil {
+		outcome := appobs.OutcomeFromError(err, service.ErrProductNotFound, service.ErrInsufficientStock)
+		appobs.ObserveOperation("product-service", "grpc_update_product", outcome, time.Since(startedAt))
+		switch err {
+		case service.ErrProductNotFound:
+			requestLog.Warn("grpc stock delta failed: product not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, "product not found")
+		case service.ErrInsufficientStock:
+			requestLog.Warn("grpc stock delta failed: insufficient stock",
+				zap.Int("requested_delta", delta),
+				zap.Int("previous_stock", previous.Stock),
+				zap.Error(err),
+			)
+			return nil, status.Error(codes.FailedPrecondition, "insufficient stock")
+		default:
+			requestLog.Error("grpc stock delta failed",
+				zap.Int("requested_delta", delta),
+				zap.Int("previous_stock", previous.Stock),
+				zap.Error(err),
+			)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
+	product, reloadErr := s.productService.GetByID(ctx, productID)
+	if reloadErr != nil {
+		appobs.ObserveOperation("product-service", "grpc_update_product", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("grpc stock delta updated inventory but failed to reload product", zap.Error(reloadErr))
+		return nil, status.Error(codes.Internal, reloadErr.Error())
+	}
+
+	requestLog.Info("product stock adjusted via gRPC",
+		zap.Int("previous_stock", previous.Stock),
+		zap.Int("current_stock", product.Stock),
+		zap.Int("stock_delta", delta),
+	)
 
 	return &pb.UpdateProductResponse{
 		Product: toProtoProduct(product),

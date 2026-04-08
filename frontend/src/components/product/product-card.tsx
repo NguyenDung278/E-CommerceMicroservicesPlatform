@@ -22,6 +22,12 @@ type ProductCardProps = {
     danger?: boolean;
     busy?: boolean;
   };
+  tertiaryAdminAction?: {
+    label: string;
+    onClick: (product: Product) => void | Promise<void>;
+    danger?: boolean;
+    busy?: boolean;
+  };
 };
 
 export function ProductCard({
@@ -32,8 +38,9 @@ export function ProductCard({
   variant = "default",
   adminAction,
   secondaryAdminAction,
+  tertiaryAdminAction,
 }: ProductCardProps) {
-  const isAdminCard = Boolean(adminAction || secondaryAdminAction);
+  const isAdminCard = Boolean(adminAction || secondaryAdminAction || tertiaryAdminAction);
   const productImages = Array.isArray(product.image_urls)
     ? product.image_urls
     : product.image_url
@@ -237,6 +244,16 @@ export function ProductCard({
             type="button"
           >
             {secondaryAdminAction.busy ? "Đang xử lý..." : secondaryAdminAction.label}
+          </button>
+        ) : null}
+        {tertiaryAdminAction ? (
+          <button
+            className={tertiaryAdminAction.danger ? "danger-button" : "ghost-button"}
+            disabled={tertiaryAdminAction.busy}
+            onClick={() => void tertiaryAdminAction.onClick(product)}
+            type="button"
+          >
+            {tertiaryAdminAction.busy ? "Đang xử lý..." : tertiaryAdminAction.label}
           </button>
         ) : null}
       </div>

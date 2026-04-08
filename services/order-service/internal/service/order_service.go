@@ -56,6 +56,7 @@ type OrderService struct {
 // service needs for pricing and stock restoration.
 type productCatalog interface {
 	GetProduct(ctx context.Context, productID string) (*pb.Product, error)
+	DecreaseStock(ctx context.Context, productID string, quantity int) error
 	RestoreStock(ctx context.Context, productID string, quantity int) error
 }
 
