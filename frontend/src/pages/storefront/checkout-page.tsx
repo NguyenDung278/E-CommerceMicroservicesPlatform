@@ -6,7 +6,7 @@ import { useCart } from "@/features/cart/hooks/use-cart";
 import { canSyncProductToWorkbook } from "@/features/home/workbook-sync-catalog";
 import { syncWorkbookProductMutations } from "@/features/home/workbook-sync-client";
 import { api, getErrorMessage } from "@/services/api";
-import type { Address, Product } from "@/types/api";
+import type { Address, OrderPreview, Product } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 import { sanitizeText } from "@/utils/sanitize";
 import "@/styles/pages/storefront/checkout-page.css";
@@ -18,6 +18,7 @@ type DirectProductState = {
     price: number;
     quantity: number;
   };
+  appliedCouponCode?: string;
 };
 
 type PaymentChoice = "manual" | "momo";
@@ -47,21 +48,37 @@ const emptyCheckoutForm: CheckoutFormState = {
   phone: "",
 };
 
+const HARD_CODED_CHECKOUT_VOUCHER_CODE = "ND2026";
+const HARD_CODED_CHECKOUT_VOUCHER_RATE = 0.25;
+
 export function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { token, isAuthenticated } = useAuth();
   const { cart, clearCart } = useCart();
+  const locationState = (location.state as DirectProductState | null) ?? null;
+  const initialAppliedCouponCode = normalizeCheckoutCouponCode(
+    locationState?.appliedCouponCode ?? "",
+  );
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [form, setForm] = useState<CheckoutFormState>(emptyCheckoutForm);
   const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("manual");
   const [feedback, setFeedback] = useState("");
+  const [couponCode, setCouponCode] = useState(
+    initialAppliedCouponCode || HARD_CODED_CHECKOUT_VOUCHER_CODE,
+  );
+  const [couponFeedback, setCouponFeedback] = useState("");
+  const [appliedCouponCode, setAppliedCouponCode] = useState(
+    initialAppliedCouponCode,
+  );
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [pricingPreview, setPricingPreview] = useState<OrderPreview | null>(null);
   const [productLookup, setProductLookup] = useState<Record<string, Product>>({});
 
-  const directProduct = (location.state as DirectProductState | null)?.directProduct;
+  const directProduct = locationState?.directProduct;
   const draftItems = useMemo(
     () =>
       directProduct
@@ -190,11 +207,66 @@ export function CheckoutPage() {
 
   const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const shippingFee = subtotal >= 100 || subtotal === 0 ? 0 : 5.99;
-  const total = subtotal + shippingFee;
+  const grossTotal = subtotal + shippingFee;
+  const hardcodedVoucherApplied = normalizeCheckoutCouponCode(appliedCouponCode) === HARD_CODED_CHECKOUT_VOUCHER_CODE;
+  const voucherDiscount =
+    hardcodedVoucherApplied && grossTotal > 0
+      ? roundCurrencyAmount(grossTotal * HARD_CODED_CHECKOUT_VOUCHER_RATE)
+      : 0;
+  const total = Math.max(grossTotal - voucherDiscount, 0);
+  const displayedSubtotal = pricingPreview?.subtotal_price ?? subtotal;
+  const displayedShippingFee = pricingPreview?.shipping_fee ?? shippingFee;
+  const displayedDiscount = pricingPreview?.discount_amount ?? voucherDiscount;
+  const displayedTotal = pricingPreview?.total_price ?? total;
+  const displayedCouponCode = pricingPreview?.coupon_code ?? appliedCouponCode;
   const savedAddressLabel =
     addresses.length > 0
       ? "Pre-filled from your saved address book."
       : "Fill in the shipping details for this order.";
+
+  useEffect(() => {
+    let active = true;
+
+    if (!token || draftItems.length === 0 || !appliedCouponCode) {
+      setPricingPreview(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    const shippingAddress = buildCheckoutPreviewAddress(form);
+    if (!shippingAddress) {
+      setPricingPreview(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    void api
+      .previewOrder(token, {
+        items: draftItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
+        coupon_code: appliedCouponCode,
+        shipping_method: "standard",
+        shipping_address: shippingAddress,
+      })
+      .then((response) => {
+        if (active) {
+          setPricingPreview(response.data);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPricingPreview(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [appliedCouponCode, draftItems, form, token]);
 
   function updateForm<Key extends keyof CheckoutFormState>(
     field: Key,
@@ -202,6 +274,71 @@ export function CheckoutPage() {
   ) {
     setForm((current) => ({ ...current, [field]: value }));
     setFeedback("");
+  }
+
+  async function handleApplyVoucher() {
+    const normalizedCouponCode = normalizeCheckoutCouponCode(
+      couponCode || HARD_CODED_CHECKOUT_VOUCHER_CODE
+    );
+
+    if (!normalizedCouponCode) {
+      setAppliedCouponCode("");
+      setPricingPreview(null);
+      setCouponFeedback("Vui lòng nhập mã voucher trước khi áp dụng.");
+      return;
+    }
+
+    if (draftItems.length === 0) {
+      setCouponFeedback("Không có sản phẩm nào để áp dụng voucher.");
+      return;
+    }
+
+    if (normalizedCouponCode !== HARD_CODED_CHECKOUT_VOUCHER_CODE) {
+      setAppliedCouponCode("");
+      setPricingPreview(null);
+      setCouponFeedback(`Checkout hiện chỉ hỗ trợ voucher ${HARD_CODED_CHECKOUT_VOUCHER_CODE}.`);
+      return;
+    }
+
+    setCouponCode(normalizedCouponCode);
+    setAppliedCouponCode(normalizedCouponCode);
+    setPricingPreview(
+      buildLocalVoucherPreview(subtotal, shippingFee, normalizedCouponCode)
+    );
+    setCouponFeedback(
+      `Voucher ${normalizedCouponCode} đã được áp dụng. Giá trị đơn hàng đang được cập nhật.`
+    );
+
+    const shippingAddress = buildCheckoutPreviewAddress(form);
+    if (!token || !shippingAddress) {
+      return;
+    }
+
+    try {
+      setIsApplyingVoucher(true);
+      const response = await api.previewOrder(token, {
+        items: draftItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+        })),
+        coupon_code: normalizedCouponCode,
+        shipping_method: "standard",
+        shipping_address: shippingAddress,
+      });
+      setPricingPreview(response.data);
+      setCouponFeedback(`Voucher ${response.data.coupon_code ?? normalizedCouponCode} đã được áp dụng.`);
+    } catch (reason) {
+      setCouponFeedback(getErrorMessage(reason));
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  }
+
+  function handleClearVoucher() {
+    setCouponCode(HARD_CODED_CHECKOUT_VOUCHER_CODE);
+    setAppliedCouponCode("");
+    setPricingPreview(null);
+    setCouponFeedback("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -236,6 +373,7 @@ export function CheckoutPage() {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
+        coupon_code: appliedCouponCode || undefined,
         shipping_method: "standard",
         shipping_address: {
           recipient_name: normalizedFullName,
@@ -455,20 +593,63 @@ export function CheckoutPage() {
                   ))}
                 </div>
 
+                <div className="checkout-voucher-panel">
+                  <label className="checkout-voucher-label" htmlFor="checkout-voucher-code">
+                    Voucher
+                  </label>
+                  <div className="checkout-voucher-row">
+                    <input
+                      id="checkout-voucher-code"
+                      value={couponCode}
+                      placeholder="Nhập mã voucher"
+                      onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    />
+                    <button
+                      className="secondary-button checkout-voucher-action"
+                      type="button"
+                      onClick={handleApplyVoucher}
+                    >
+                      {isApplyingVoucher ? "Đang áp dụng..." : "Áp dụng voucher"}
+                    </button>
+                  </div>
+                  {appliedCouponCode ? (
+                    <button
+                      className="checkout-voucher-clear"
+                      type="button"
+                      onClick={handleClearVoucher}
+                    >
+                      Gỡ voucher
+                    </button>
+                  ) : null}
+                  {couponFeedback ? (
+                    <p className="checkout-voucher-feedback">{couponFeedback}</p>
+                  ) : null}
+                </div>
+
                 <div className="checkout-summary-totals">
                   <div className="checkout-summary-line">
                     <span>Subtotal</span>
-                    <span>{formatCurrency(subtotal)}</span>
+                    <span>{formatCurrency(displayedSubtotal)}</span>
                   </div>
                   <div className="checkout-summary-line">
                     <span>Shipping</span>
-                    <span className={shippingFee === 0 ? "checkout-shipping-free" : undefined}>
-                      {shippingFee === 0 ? "Free" : formatCurrency(shippingFee)}
+                    <span
+                      className={
+                        displayedShippingFee === 0 ? "checkout-shipping-free" : undefined
+                      }
+                    >
+                      {displayedShippingFee === 0 ? "Free" : formatCurrency(displayedShippingFee)}
                     </span>
                   </div>
+                  {displayedDiscount > 0 && displayedCouponCode ? (
+                    <div className="checkout-summary-line">
+                      <span>Voucher ({displayedCouponCode})</span>
+                      <span>-{formatCurrency(displayedDiscount)}</span>
+                    </div>
+                  ) : null}
                   <div className="checkout-summary-line checkout-summary-line-total">
                     <span>Total</span>
-                    <strong>{formatCurrency(total)}</strong>
+                    <strong>{formatCurrency(displayedTotal)}</strong>
                   </div>
                 </div>
 
@@ -481,8 +662,10 @@ export function CheckoutPage() {
                 </button>
 
                 <p className="checkout-summary-caption">
-                  Secure SSL encrypted checkout. By placing your order, you agree to our Terms of
-                  Service.
+                  {displayedCouponCode
+                    ? `Voucher ${displayedCouponCode} đang được áp dụng cho đơn hàng này. `
+                    : ""}
+                  By placing your order, you agree to our Terms of Service.
                 </p>
               </div>
 
@@ -537,4 +720,59 @@ function buildCheckoutItemSubtitle(product?: Product) {
 
   const subtitle = [product.category, product.brand].filter(Boolean).join(" / ");
   return subtitle || "Curated piece";
+}
+
+function buildCheckoutPreviewAddress(form: CheckoutFormState) {
+  const recipientName = sanitizeText(form.fullName);
+  const street = sanitizeText(form.street);
+  const city = sanitizeText(form.city);
+  const postcode = sanitizeText(form.postcode);
+  const phone = sanitizeText(form.phone);
+
+  if (!recipientName || !street || !city || !phone) {
+    return null;
+  }
+
+  return {
+    recipient_name: recipientName,
+    phone,
+    street,
+    ward: postcode || undefined,
+    district: postcode || city,
+    city,
+  };
+}
+
+function normalizeCheckoutCouponCode(value: string) {
+  return sanitizeText(value).toUpperCase();
+}
+
+function buildLocalVoucherPreview(
+  subtotal: number,
+  shippingFee: number,
+  couponCode: string
+): OrderPreview {
+  const normalizedCouponCode = normalizeCheckoutCouponCode(couponCode);
+  const grossTotal = roundCurrencyAmount(subtotal + shippingFee);
+  const discountAmount =
+    normalizedCouponCode === HARD_CODED_CHECKOUT_VOUCHER_CODE
+      ? roundCurrencyAmount(grossTotal * HARD_CODED_CHECKOUT_VOUCHER_RATE)
+      : 0;
+
+  return {
+    subtotal_price: subtotal,
+    discount_amount: discountAmount,
+    coupon_code: normalizedCouponCode || undefined,
+    coupon_description:
+      normalizedCouponCode === HARD_CODED_CHECKOUT_VOUCHER_CODE
+        ? "Giảm 25% cho toàn bộ giá trị đơn hàng."
+        : undefined,
+    shipping_method: "standard",
+    shipping_fee: shippingFee,
+    total_price: Math.max(roundCurrencyAmount(grossTotal - discountAmount), 0),
+  };
+}
+
+function roundCurrencyAmount(value: number) {
+  return Math.round(value * 100) / 100;
 }

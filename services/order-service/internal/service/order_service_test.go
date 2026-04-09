@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -326,6 +327,65 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 	}
 	if catalog.products["product-1"].StockQuantity != 8 {
 		t.Fatalf("expected stock to decrease to 8, got %d", catalog.products["product-1"].StockQuantity)
+	}
+}
+
+func TestPreviewOrderAppliesND2026ToSubtotalAndShipping(t *testing.T) {
+	repo := &fakeOrderRepo{
+		coupons: map[string]*model.Coupon{
+			"ND2026": {
+				Code:          "ND2026",
+				Description:   "25% off entire order total",
+				DiscountType:  model.CouponDiscountTypePercentage,
+				DiscountValue: 25,
+				Active:        true,
+			},
+		},
+	}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Archive Tote",
+				Price:         80,
+				StockQuantity: 12,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		CouponCode:     "nd2026",
+		ShippingMethod: "standard",
+		ShippingAddress: &dto.ShippingAddressRequest{
+			RecipientName: "Nguyen Van B",
+			Phone:         "0901234567",
+			Street:        "42 Tran Hung Dao",
+			District:      "District 1",
+			City:          "Ho Chi Minh",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewOrder returned error: %v", err)
+	}
+
+	if preview.SubtotalPrice != 80 {
+		t.Fatalf("expected subtotal 80, got %.2f", preview.SubtotalPrice)
+	}
+	if preview.ShippingFee != 5.99 {
+		t.Fatalf("expected shipping fee 5.99, got %.2f", preview.ShippingFee)
+	}
+	if preview.DiscountAmount != 21.5 {
+		t.Fatalf("expected discount 21.50, got %.2f", preview.DiscountAmount)
+	}
+	if preview.TotalPrice != 64.49 {
+		t.Fatalf("expected total 64.49, got %.2f", preview.TotalPrice)
+	}
+	if preview.CouponCode != "ND2026" {
+		t.Fatalf("expected coupon code ND2026, got %q", preview.CouponCode)
 	}
 }
 

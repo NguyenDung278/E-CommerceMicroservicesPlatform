@@ -254,7 +254,9 @@ export function OrderDetailPage() {
                 </div>
                 {order.discount_amount > 0 ? (
                   <div className="order-confirmation-total-line">
-                    <span>Discount</span>
+                    <span>
+                      Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}
+                    </span>
                     <span>-{formatCurrency(order.discount_amount)}</span>
                   </div>
                 ) : null}

@@ -238,6 +238,64 @@
   gap: 18px;
 }
 
+.checkout-voucher-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(115, 121, 115, 0.22);
+}
+
+.checkout-voucher-label {
+  color: #404660;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.checkout-voucher-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.checkout-voucher-row input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 16px;
+  border: 1px solid rgba(115, 121, 115, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #061b0e;
+  font-size: 0.98rem;
+}
+
+.checkout-voucher-row input::placeholder {
+  color: rgba(87, 93, 121, 0.52);
+}
+
+.checkout-voucher-action {
+  min-width: 156px;
+  min-height: 50px;
+}
+
+.checkout-voucher-clear {
+  justify-self: start;
+  color: #575d79;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.checkout-voucher-feedback {
+  margin: 0;
+  color: #575d79;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
 .checkout-summary-item {
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
@@ -377,6 +435,14 @@
 
   .checkout-summary-panel {
     position: static;
+  }
+
+  .checkout-voucher-row {
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-voucher-action {
+    width: 100%;
   }
 }
 

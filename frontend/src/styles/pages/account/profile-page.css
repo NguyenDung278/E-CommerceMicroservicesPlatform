@@ -1,4 +1,20 @@
 .profile-route {
+  --profile-surface: var(--color-surface-low);
+  --profile-heading-color: var(--color-primary);
+  --profile-body-color: var(--color-text);
+  --profile-body-muted: var(--color-text-soft);
+  --profile-body-subtle: var(--color-text-muted);
+  --profile-outline: var(--color-outline);
+  --profile-outline-strong: var(--color-outline-strong);
+  --profile-accent: var(--color-tertiary);
+  --profile-spacing-lg: clamp(24px, 3vw, 34px);
+  --profile-spacing-md: clamp(18px, 2.2vw, 24px);
+  --profile-spacing-sm: 12px;
+  --profile-title-size: clamp(2.5rem, 4vw, 4.1rem);
+  --profile-panel-title-size: clamp(1.7rem, 2.4vw, 2.35rem);
+  --profile-card-title-size: clamp(1.5rem, 2.2vw, 2rem);
+  --profile-field-value-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  --profile-body-size: 1rem;
   display: grid;
   gap: 42px;
   padding-top: 4px;
@@ -47,8 +63,8 @@
 
 .profile-route-hero {
   display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: 52px;
+  grid-template-columns: minmax(144px, 168px) minmax(0, 1fr);
+  gap: clamp(26px, 4vw, 52px);
   align-items: start;
 }
 
@@ -160,19 +176,21 @@
 
 .profile-route-hero-copy {
   display: grid;
-  gap: 32px;
+  min-width: 0;
+  gap: clamp(24px, 3vw, 32px);
 }
 
 .profile-route-identity-row {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
-  align-items: center;
+  gap: 20px 28px;
+  align-items: flex-start;
 }
 
 .profile-route-identity {
   display: grid;
-  gap: 10px;
+  min-width: 0;
+  gap: 12px;
 }
 
 .profile-route-identity h1,
@@ -180,14 +198,15 @@
 .profile-route-form-head h2,
 .profile-route-card h3 {
   margin: 0;
-  color: #061b0e;
-  font-family: "Noto Serif", Georgia, serif;
+  color: var(--profile-heading-color);
+  font-family: var(--font-display);
   letter-spacing: -0.06em;
 }
 
 .profile-route-identity h1 {
-  font-size: clamp(3rem, 5vw, 4.6rem);
-  line-height: 0.96;
+  font-size: var(--profile-title-size);
+  line-height: 1.02;
+  text-wrap: balance;
 }
 
 .profile-route-membership {
@@ -195,9 +214,10 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  color: #575d79;
-  font-size: 1.1rem;
-  line-height: 1.5;
+  color: var(--profile-body-muted);
+  font-size: 0.98rem;
+  line-height: 1.65;
+  flex-wrap: wrap;
 }
 
 .profile-route-membership-icon {
@@ -232,8 +252,8 @@
   min-height: 34px;
   padding: 0 16px;
   border-radius: 999px;
-  background: #575d79;
-  color: #ffffff;
+  background: var(--profile-body-muted);
+  color: var(--color-on-primary);
   font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -243,44 +263,51 @@
 
 .profile-route-divider {
   height: 1px;
-  background: rgba(115, 121, 115, 0.42);
+  background: rgba(115, 121, 115, 0.32);
 }
 
 .profile-route-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px 42px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 24px clamp(22px, 2.6vw, 36px);
+  align-items: start;
 }
 
 .profile-route-field {
   display: grid;
-  gap: 10px;
+  min-width: 0;
+  gap: 12px;
 }
 
 .profile-route-field label,
 .profile-route-form-field span,
 .profile-route-orders-table th {
-  color: #1b1c19;
+  color: var(--profile-body-color);
   font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0.18em;
+  line-height: 1.45;
   text-transform: uppercase;
 }
 
 .profile-route-field p {
   margin: 0;
-  color: #061b0e;
-  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  max-width: 100%;
+  color: var(--profile-heading-color);
+  font-size: var(--profile-field-value-size);
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-wrap: pretty;
 }
 
 .profile-route-form {
   display: grid;
-  gap: 22px;
-  padding: 30px 32px;
-  border-radius: 28px;
-  background: #f5f3ee;
+  gap: var(--profile-spacing-md);
+  padding: var(--profile-spacing-lg);
+  border-radius: var(--radius-card);
+  background: var(--profile-surface);
 }
 
 .profile-route-form-head {
@@ -291,44 +318,53 @@
 }
 
 .profile-route-form-head h2 {
-  font-size: clamp(2rem, 3vw, 2.6rem);
-  line-height: 0.98;
+  font-size: var(--profile-panel-title-size);
+  line-height: 1.08;
+  text-wrap: balance;
 }
 
 .profile-route-form-head p {
+  max-width: 64ch;
   margin: 10px 0 0;
-  color: #575d79;
-  line-height: 1.7;
+  color: var(--profile-body-muted);
+  font-size: var(--profile-body-size);
+  line-height: 1.72;
+  text-wrap: pretty;
 }
 
 .profile-route-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 22px 28px;
 }
 
 .profile-route-form-field {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .profile-route-form-field input {
   width: 100%;
-  min-height: 52px;
-  padding: 0 0 10px;
+  min-height: 54px;
+  padding: 10px 0 12px;
   border: 0;
-  border-bottom: 1px solid rgba(115, 121, 115, 0.28);
+  border-bottom: 1px solid var(--profile-outline-strong);
   background: transparent;
+  color: var(--profile-body-color);
+  font-size: var(--profile-body-size);
+  line-height: 1.5;
 }
 
 .profile-route-phone-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
 }
 
 .profile-route-phone-action {
-  min-width: 168px;
+  min-width: 156px;
+  min-height: 52px;
 }
 
 .profile-route-phone-action.profile-route-phone-action-disabled {
@@ -339,24 +375,28 @@
 }
 
 .profile-route-form-hint {
-  color: #6a706a;
+  color: var(--profile-body-subtle);
   font-size: 0.82rem;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .profile-route-form-actions {
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .profile-route-form-actions-stacked {
-  justify-content: flex-end;
-  align-items: flex-end;
+  display: grid;
+  gap: 12px;
+  justify-content: stretch;
+  align-content: end;
+  align-items: stretch;
 }
 
 .profile-route-form-head-inline {
-  margin-bottom: 18px;
+  margin-bottom: 8px;
 }
 
 .profile-route-form-field-full {
@@ -364,29 +404,31 @@
 }
 
 .profile-route-form-error {
-  color: #a23122;
+  color: var(--color-error);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
 .profile-route-verification-panel {
   display: grid;
-  gap: 18px;
-  padding: 22px 24px;
-  border-radius: 28px;
-  background: #f5f3ee;
+  gap: 20px;
+  padding: clamp(22px, 2.6vw, 28px);
+  border-radius: var(--radius-card);
+  background: var(--profile-surface);
 }
 
 .profile-route-verification-meta {
   display: grid;
-  gap: 8px;
-  color: #575d79;
-  font-size: 0.96rem;
-  line-height: 1.6;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  color: var(--profile-body-muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
 }
 
 .profile-route-verification-meta p {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .profile-route-subhead {
@@ -397,28 +439,30 @@
 }
 
 .profile-route-subhead h2 {
-  font-size: clamp(2rem, 3vw, 3rem);
-  line-height: 0.98;
+  font-size: clamp(1.9rem, 3vw, 2.8rem);
+  line-height: 1.06;
+  text-wrap: balance;
 }
 
 .profile-route-text-link {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: #061b0e;
-  font-size: 1rem;
+  color: var(--profile-heading-color);
+  font-size: 0.98rem;
   font-weight: 500;
 }
 
 .profile-route-orders-panel {
   overflow: hidden;
-  border-radius: 28px;
-  background: #f5f3ee;
-  padding: 18px 0;
+  border-radius: var(--radius-card);
+  background: var(--profile-surface);
+  padding: 10px 0;
 }
 
 .profile-route-empty-state {
-  margin: 14px 24px 0;
+  margin: 12px 24px 4px;
+  padding: 28px;
 }
 
 .profile-route-orders-table {
@@ -428,23 +472,26 @@
 
 .profile-route-orders-table th,
 .profile-route-orders-table td {
-  padding: 22px 32px;
+  padding: 18px 28px;
   text-align: left;
+  vertical-align: top;
 }
 
 .profile-route-orders-table tbody tr + tr td {
-  border-top: 1px solid rgba(195, 200, 193, 0.4);
+  border-top: 1px solid rgba(195, 200, 193, 0.34);
 }
 
 .profile-route-orders-table td {
-  color: #061b0e;
-  font-size: 1rem;
+  color: var(--profile-heading-color);
+  font-size: 0.98rem;
+  line-height: 1.55;
 }
 
 .profile-route-order-link {
-  color: #061b0e;
-  font-size: 1rem;
+  color: var(--profile-heading-color);
+  font-size: 0.98rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .profile-route-status {
@@ -474,18 +521,18 @@
 .profile-route-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px;
+  gap: 24px;
 }
 
 .profile-route-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 18px 22px;
+  gap: 16px 20px;
   align-items: start;
-  min-height: 240px;
-  padding: 34px;
-  border-radius: 28px;
-  background: #f5f3ee;
+  min-height: 0;
+  padding: clamp(24px, 3vw, 32px);
+  border-radius: var(--radius-card);
+  background: var(--profile-surface);
 }
 
 .profile-route-card-accent {
@@ -518,19 +565,23 @@
 
 .profile-route-card-copy {
   display: grid;
-  gap: 12px;
+  min-width: 0;
+  gap: 10px;
 }
 
 .profile-route-card h3 {
-  font-size: clamp(2rem, 3vw, 2.6rem);
-  line-height: 1;
+  font-size: var(--profile-card-title-size);
+  line-height: 1.12;
+  text-wrap: balance;
 }
 
 .profile-route-card p {
   margin: 0;
-  color: #434843;
-  font-size: 1.08rem;
-  line-height: 1.7;
+  color: var(--profile-body-subtle);
+  font-size: 0.98rem;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .profile-route-card-accent h3,
@@ -545,10 +596,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #d07d63;
-  font-size: 1rem;
+  margin-top: 4px;
+  color: var(--profile-accent);
+  font-size: 0.92rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
   text-transform: uppercase;
 }
 
@@ -569,6 +622,10 @@
 
   .profile-route-card-link {
     grid-column: auto;
+  }
+
+  .profile-route-verification-meta {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -592,8 +649,18 @@
     padding: 24px;
   }
 
+  .profile-route-empty-state {
+    margin-inline: 18px;
+    padding: 22px;
+  }
+
+  .profile-route-orders-table th,
+  .profile-route-orders-table td {
+    padding: 16px 18px;
+  }
+
   .profile-route-phone-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: stretch;
   }
 

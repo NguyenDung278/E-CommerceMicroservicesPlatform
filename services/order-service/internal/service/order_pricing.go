@@ -15,6 +15,8 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 )
 
+const hardCodedCheckoutCouponCode = "ND2026"
+
 type validatedOrderRequest struct {
 	shippingMethod  string
 	shippingAddress *model.ShippingAddress
@@ -455,14 +457,14 @@ func normalizeCouponCode(code string) string {
 }
 
 // calculateDiscount computes the discount amount that a coupon contributes for a
-// given subtotal.
+// given discount base.
 //
 // Inputs:
 //   - coupon defines the discount strategy and amount.
-//   - subtotal is the pre-discount order value.
+//   - amount is the pre-discount order value used by the coupon rule.
 //
 // Returns:
-//   - the discount amount capped at the subtotal.
+//   - the discount amount capped at the amount.
 //
 // Edge cases:
 //   - unsupported discount types fall back to zero to avoid panics.
@@ -472,12 +474,12 @@ func normalizeCouponCode(code string) string {
 //
 // Performance:
 //   - O(1).
-func calculateDiscount(coupon *model.Coupon, subtotal float64) float64 {
+func calculateDiscount(coupon *model.Coupon, amount float64) float64 {
 	switch coupon.DiscountType {
 	case model.CouponDiscountTypePercentage:
-		return math.Min(subtotal, subtotal*(coupon.DiscountValue/100))
+		return math.Min(amount, amount*(coupon.DiscountValue/100))
 	case model.CouponDiscountTypeFixed:
-		return math.Min(subtotal, coupon.DiscountValue)
+		return math.Min(amount, coupon.DiscountValue)
 	default:
 		return 0
 	}
@@ -504,6 +506,18 @@ func calculateDiscount(coupon *model.Coupon, subtotal float64) float64 {
 func applyCouponToQuote(quote *pricedOrderQuote, coupon *model.Coupon) {
 	quote.CouponCode = coupon.Code
 	quote.CouponDescription = strings.TrimSpace(coupon.Description)
-	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, quote.SubtotalPrice))
+	quote.DiscountAmount = roundCurrency(calculateDiscount(coupon, discountBaseForCoupon(quote, coupon)))
 	quote.TotalPrice = roundCurrency(quote.SubtotalPrice - quote.DiscountAmount + quote.ShippingFee)
+}
+
+func discountBaseForCoupon(quote *pricedOrderQuote, coupon *model.Coupon) float64 {
+	if quote == nil || coupon == nil {
+		return 0
+	}
+
+	if coupon.Code == hardCodedCheckoutCouponCode {
+		return roundCurrency(quote.SubtotalPrice + quote.ShippingFee)
+	}
+
+	return quote.SubtotalPrice
 }

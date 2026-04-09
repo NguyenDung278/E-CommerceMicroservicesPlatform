@@ -9,6 +9,9 @@ import { formatCurrency } from "@/utils/format";
 import "@/components/form/form-field.css";
 import "@/styles/pages/storefront/cart-page.css";
 
+const HARD_CODED_CART_VOUCHER_CODE = "ND2026";
+const HARD_CODED_CART_VOUCHER_RATE = 0.25;
+
 export function CartPage() {
   const location = useLocation();
   const { token, isAuthenticated } = useAuth();
@@ -38,6 +41,7 @@ export function CartPage() {
 
   useEffect(() => {
     setCouponPreview(null);
+    setCouponFeedback("");
   }, [cartSignature]);
 
   useEffect(() => {
@@ -106,12 +110,7 @@ export function CartPage() {
   }
 
   async function handlePreviewCoupon() {
-    const normalizedCouponCode = couponCode.trim();
-
-    if (!token) {
-      setCouponFeedback("Bạn cần đăng nhập để xem trước mã giảm giá.");
-      return;
-    }
+    const normalizedCouponCode = normalizeCartCouponCode(couponCode);
 
     if (!normalizedCouponCode) {
       setCouponFeedback("Nhập mã voucher trước khi áp dụng.");
@@ -120,6 +119,20 @@ export function CartPage() {
 
     if (previewItems.length === 0) {
       setCouponFeedback("Giỏ hàng đang trống nên chưa thể áp dụng voucher.");
+      return;
+    }
+
+    if (normalizedCouponCode !== HARD_CODED_CART_VOUCHER_CODE) {
+      setCouponPreview(null);
+      setCouponFeedback(`Giỏ hàng hiện chỉ hỗ trợ voucher ${HARD_CODED_CART_VOUCHER_CODE}.`);
+      return;
+    }
+
+    setCouponCode(normalizedCouponCode);
+    setCouponPreview(buildCartVoucherPreview(cart.total, normalizedCouponCode));
+    setCouponFeedback(`Voucher ${normalizedCouponCode} đã được áp dụng.`);
+
+    if (!token) {
       return;
     }
 
@@ -276,11 +289,11 @@ export function CartPage() {
                 </div>
                 <div className="summary-row">
                   <span>Shipping</span>
-                  <strong>Calculated at checkout</strong>
+                  <strong>Free</strong>
                 </div>
                 <div className="summary-row">
                   <span>Estimated Tax</span>
-                  <strong>Calculated at checkout</strong>
+                  <strong>Free</strong>
                 </div>
               </div>
 
@@ -295,9 +308,6 @@ export function CartPage() {
                     setCouponPreview(null);
                   }}
                 />
-                <span className="field-hint">
-                  Xem trước mức giảm giá ngay trên giỏ hàng trước khi checkout.
-                </span>
               </label>
 
               <div className="coupon-action-row">
@@ -345,15 +355,16 @@ export function CartPage() {
                 <div className="feedback feedback-info">{couponFeedback}</div>
               ) : null}
 
-              <Link className="secondary-link cart-editorial-cta" to="/checkout">
+              <Link
+                className="secondary-link cart-editorial-cta"
+                to="/checkout"
+                state={{
+                  appliedCouponCode:
+                    couponPreview?.coupon_code ?? normalizeCartCouponCode(couponCode),
+                }}
+              >
                 Proceed to Checkout
               </Link>
-
-              <div className="cart-editorial-assurance">
-                <div>
-                  <strong>Secure encrypted payment processing</strong>
-                </div>
-              </div>
 
               <button
                 className="danger-button cart-editorial-clear"
@@ -364,18 +375,38 @@ export function CartPage() {
               </button>
             </div>
 
-            <div className="cart-editorial-promo">
-              <span>Exclusive Offer</span>
-              <p>
-                Join ND Atelier for free shipping and early access to the next preview collection.
-              </p>
-              <Link className="text-link" to="/register">
-                Join Now
-              </Link>
-            </div>
           </aside>
         </div>
       )}
     </div>
   );
+}
+
+function normalizeCartCouponCode(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function buildCartVoucherPreview(subtotal: number, couponCode: string): OrderPreview {
+  const normalizedCouponCode = normalizeCartCouponCode(couponCode);
+  const discountAmount =
+    normalizedCouponCode === HARD_CODED_CART_VOUCHER_CODE
+      ? roundCartCurrencyAmount(subtotal * HARD_CODED_CART_VOUCHER_RATE)
+      : 0;
+
+  return {
+    subtotal_price: subtotal,
+    discount_amount: discountAmount,
+    coupon_code: normalizedCouponCode || undefined,
+    coupon_description:
+      normalizedCouponCode === HARD_CODED_CART_VOUCHER_CODE
+        ? "Giảm 25% trên tổng giá trị giỏ hàng."
+        : undefined,
+    shipping_method: "standard",
+    shipping_fee: 0,
+    total_price: Math.max(roundCartCurrencyAmount(subtotal - discountAmount), 0),
+  };
+}
+
+function roundCartCurrencyAmount(value: number) {
+  return Math.round(value * 100) / 100;
 }
