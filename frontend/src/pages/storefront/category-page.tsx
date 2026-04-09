@@ -17,6 +17,11 @@ import {
   type HomeWorkbookCategoryProduct,
   type HomeWorkbookContent,
 } from "@/features/home/home-workbook";
+import {
+  dedupeWorkbookLiveProducts,
+  deriveWorkbookCategoryCandidatesFromPage,
+  selectLiveProductForWorkbookEntry,
+} from "@/features/home/workbook-live-products";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { api, getErrorMessage, isHttpError } from "@/services/api";
 import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
@@ -174,6 +179,10 @@ function buildWorkbookProductSearchIndex(product: HomeWorkbookCategoryProduct) {
 
 function buildInitialWorkbookSectionState(page: HomeWorkbookCategoryPage) {
   return Object.fromEntries(page.filters.map((filter) => [filter.filterKey, true]));
+}
+
+function buildWorkbookCategoryProductLookupKey(product: HomeWorkbookCategoryProduct) {
+  return product.productId || normalizeStorefrontNavigationToken(product.name);
 }
 
 function CategoryActionLink({
@@ -428,6 +437,7 @@ function WorkbookCategoryPage({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     buildInitialWorkbookSectionState(pageData)
   );
+  const [liveWorkbookProducts, setLiveWorkbookProducts] = useState<Record<string, Product>>({});
 
   useEffect(() => {
     setActiveFilters(buildInitialFilterState(pageData));
@@ -435,6 +445,88 @@ function WorkbookCategoryPage({
     setIsFiltersPanelOpen(false);
     setSortBy("latest");
     setOpenSections(buildInitialWorkbookSectionState(pageData));
+    setLiveWorkbookProducts({});
+  }, [pageData]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (pageData.products.length === 0) {
+      setLiveWorkbookProducts({});
+      return () => {
+        active = false;
+      };
+    }
+
+    async function loadLiveWorkbookProducts() {
+      const categoryCandidates = deriveWorkbookCategoryCandidatesFromPage(pageData);
+      const candidateBuckets: Product[] = [];
+
+      if (categoryCandidates.length > 0) {
+        const categoryResponses = await Promise.all(
+          categoryCandidates.map((category) =>
+            api
+              .listProducts({
+                status: "active",
+                category,
+                limit: 100,
+              })
+              .then((response) => response.data)
+              .catch(() => [] as Product[])
+          )
+        );
+
+        candidateBuckets.push(...categoryResponses.flat());
+      }
+
+      if (candidateBuckets.length < pageData.products.length) {
+        const fallbackResponse = await api
+          .listProducts({
+            status: "active",
+            limit: 100,
+          })
+          .then((response) => response.data)
+          .catch(() => [] as Product[]);
+
+        candidateBuckets.push(...fallbackResponse);
+      }
+
+      const uniqueCandidates = dedupeWorkbookLiveProducts(candidateBuckets);
+      const nextLookup = Object.fromEntries(
+        pageData.products.flatMap((product) => {
+          const liveProduct = selectLiveProductForWorkbookEntry(
+            {
+              productId: product.productId,
+              name: product.name,
+              brand: pageData.navLabel,
+              categoryLabel: pageData.navLabel,
+              href: product.href,
+            },
+            uniqueCandidates
+          );
+
+          if (!liveProduct) {
+            return [];
+          }
+
+          return [[buildWorkbookCategoryProductLookupKey(product), liveProduct] as const];
+        })
+      );
+
+      if (active) {
+        setLiveWorkbookProducts(nextLookup);
+      }
+    }
+
+    void loadLiveWorkbookProducts().catch(() => {
+      if (active) {
+        setLiveWorkbookProducts({});
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, [pageData]);
 
   const filteredProducts = useMemo(() => {
@@ -667,27 +759,12 @@ function WorkbookCategoryPage({
             {filteredProducts.length > 0 ? (
               <div className="atelier-category-product-grid">
                 {filteredProducts.map((product) => (
-                  <CategoryActionLink
-                    className="atelier-category-product-card"
+                  <WorkbookCategoryProductCard
                     fallbackHref={primaryCategoryRoute}
-                    href={resolveHomeWorkbookProductHref({
-                      productId: product.productId,
-                      productName: product.name,
-                      href: product.href,
-                      fallbackHref: primaryCategoryRoute,
-                    })}
                     key={`${pageData.slug}-${product.position}-${product.name}`}
-                  >
-                    <div className="atelier-category-product-media">
-                      <img alt={product.imageAlt || product.name} src={product.imageUrl} />
-                    </div>
-                    <div className="atelier-category-product-copy">
-                      <span>{product.badge}</span>
-                      <strong>{product.name}</strong>
-                      <p>{product.material}</p>
-                      <em>{formatCurrency(product.price)}</em>
-                    </div>
-                  </CategoryActionLink>
+                    liveProduct={liveWorkbookProducts[buildWorkbookCategoryProductLookupKey(product)]}
+                    product={product}
+                  />
                 ))}
               </div>
             ) : (
@@ -755,6 +832,57 @@ function WorkbookCategoryPage({
         </div>
       </footer>
     </div>
+  );
+}
+
+function WorkbookCategoryProductCard({
+  product,
+  liveProduct,
+  fallbackHref,
+}: {
+  product: HomeWorkbookCategoryProduct;
+  liveProduct?: Product;
+  fallbackHref: string;
+}) {
+  const resolvedHref = liveProduct
+    ? `/products/${encodeURIComponent(liveProduct.id)}`
+    : resolveHomeWorkbookProductHref({
+        productId: product.productId,
+        productName: product.name,
+        href: product.href,
+        fallbackHref,
+      });
+  const stockCopy = liveProduct
+    ? liveProduct.stock > 0
+      ? `${liveProduct.stock} còn lại`
+      : "Hết hàng"
+    : "Workbook preview";
+
+  return (
+    <CategoryActionLink
+      className="atelier-category-product-card"
+      fallbackHref={fallbackHref}
+      href={resolvedHref}
+    >
+      <div className="atelier-category-product-media">
+        <img alt={product.imageAlt || product.name} src={product.imageUrl} />
+      </div>
+      <div className="atelier-category-product-copy">
+        <span>{product.badge}</span>
+        <strong>{product.name}</strong>
+        <p>{product.material}</p>
+        <small
+          className={
+            liveProduct && liveProduct.stock === 0
+              ? "atelier-category-product-stock atelier-category-product-stock-out"
+              : "atelier-category-product-stock"
+          }
+        >
+          {stockCopy}
+        </small>
+        <em>{formatCurrency(liveProduct?.price ?? product.price)}</em>
+      </div>
+    </CategoryActionLink>
   );
 }
 

@@ -157,6 +157,50 @@ const workbookContent = {
   ],
 };
 
+const menWorkbookContent = {
+  ...workbookContent,
+  categoryPages: [
+    {
+      slug: "men-atelier",
+      navLabel: "Men",
+      routeAliases: ["Shop Men", "shop-men", "Men"],
+      heroEyebrow: "The Men's",
+      heroTitle: "Men's Atelier",
+      heroDescription: "Workbook category content",
+      heroImageUrl: "https://example.com/hero-men.jpg",
+      heroImageAlt: "Men hero",
+      quoteBody: "",
+      quoteAuthor: "",
+      storyEyebrow: "",
+      storyTitle: "",
+      storyBody: "",
+      storyImageUrl: "",
+      storyImageAlt: "",
+      storyCtaLabel: "",
+      storyCtaHref: "/categories/Shop%20Men",
+      resultsLabel: "Showing %count% results",
+      sortLabel: "Sort by: Relevance",
+      footerNote: "",
+      filters: [],
+      products: [
+        {
+          pageSlug: "men-atelier",
+          position: 1,
+          productId: "men-001",
+          badge: "New Arrival",
+          name: "Sculpted Linen Shirt",
+          material: "Italian Linen Blend",
+          price: 420,
+          imageUrl: "https://example.com/men-shirt.jpg",
+          imageAlt: "Men shirt",
+          href: "/categories/Shop%20Men",
+          filterTags: ["category:shirts", "size:M"],
+        },
+      ],
+    },
+  ],
+};
+
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
 function renderProductDetail(initialEntry = "/products/p-1") {
@@ -420,5 +464,64 @@ describe("ProductDetailPage auth redirect flow", () => {
       quantity: 1,
     });
     expect(container.querySelector('[data-testid="login-route"]')?.textContent).toBe("login");
+  });
+
+  it("resolves workbook product ids like men-001 through category candidates so stock and actions stay enabled", async () => {
+    const liveMenProduct = {
+      ...baseProduct,
+      id: "live-men-001",
+      name: "Sculpted Linen Shirt",
+      category: "Shop Men",
+      sku: "SM-001",
+      stock: 12,
+    };
+
+    authMocks.useAuth.mockReturnValue({
+      token: "",
+      isAuthenticated: false,
+      isBootstrapping: false,
+    });
+    cartMocks.useCart.mockReturnValue({
+      addItem: vi.fn(),
+    });
+    workbookMocks.useHomeWorkbook.mockReturnValue({
+      content: menWorkbookContent,
+    });
+    apiMocks.api.getProductById.mockRejectedValue(new Error("not found"));
+    apiMocks.api.listProductReviews.mockResolvedValue({ data: emptyReviewList });
+    apiMocks.api.listProducts.mockImplementation(
+      (options?: { category?: string; search?: string; limit?: number }) => {
+        if (
+          options?.category === "Shop Men" ||
+          options?.category === "shop-men" ||
+          options?.category === "Men"
+        ) {
+          return Promise.resolve({ data: [liveMenProduct] });
+        }
+
+        if (typeof options?.limit === "number" && options.limit >= 100) {
+          return Promise.resolve({ data: [liveMenProduct] });
+        }
+
+        return Promise.resolve({ data: [] });
+      }
+    );
+
+    const { container } = renderProductDetail("/products/men-001");
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    const addToCartButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Add to Cart"
+    );
+    const buyNowButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Mua ngay"
+    );
+
+    expect(container.textContent).toContain("12 còn lại");
+    expect(container.textContent).not.toContain("Workbook preview only");
+    expect(addToCartButton?.hasAttribute("disabled")).toBe(false);
+    expect(buyNowButton?.hasAttribute("disabled")).toBe(false);
   });
 });

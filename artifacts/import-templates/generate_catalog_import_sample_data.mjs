@@ -77,12 +77,25 @@ function buildCategories() {
 }
 
 function buildAliases() {
-  return sampleCatalogCollections.flatMap((collection) =>
-    collection.routeAliases.map((alias) => ({
-      category_slug: collection.categorySlug,
-      alias,
-    }))
-  );
+  const aliases = [];
+  const seenAliases = new Set();
+
+  for (const collection of sampleCatalogCollections) {
+    for (const alias of collection.routeAliases) {
+      const normalizedAlias = String(alias).trim().toLowerCase();
+      if (!normalizedAlias || seenAliases.has(normalizedAlias)) {
+        continue;
+      }
+
+      seenAliases.add(normalizedAlias);
+      aliases.push({
+        category_slug: collection.categorySlug,
+        alias: String(alias).trim(),
+      });
+    }
+  }
+
+  return aliases;
 }
 
 function buildProducts() {

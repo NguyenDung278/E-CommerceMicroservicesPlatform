@@ -8,10 +8,15 @@
 .cache
 **/.cache
 **/.cache/**
+**/.npm-cache
+**/.npm-cache/**
+**/.vite
+**/.vite/**
 **/node_modules
 **/dist
 **/.next
 **/.DS_Store
 **/*.tsbuildinfo
+frontend/ui-reference
 coverage
 tmp

@@ -60,6 +60,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if err := importer.EnsureStorefrontSchema(ctx, db); err != nil {
+		log.Fatal("failed to repair storefront schema", zap.Error(err))
+	}
+
 	tool := importer.New(db, log)
 	report, err := tool.ImportWorkbook(ctx, workbookPath, mode)
 	if err != nil {

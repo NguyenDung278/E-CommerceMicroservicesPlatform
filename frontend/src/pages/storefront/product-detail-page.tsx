@@ -6,6 +6,11 @@ import {
   findHomeWorkbookProductReference,
   type HomeWorkbookProductReference,
 } from "@/features/home/home-workbook";
+import {
+  dedupeWorkbookLiveProducts,
+  deriveWorkbookCategoryCandidatesFromReference,
+  selectLiveProductForWorkbookEntry,
+} from "@/features/home/workbook-live-products";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { appendAuthFlowLog } from "@/features/auth/storage/auth-flow-log-storage";
@@ -1163,50 +1168,62 @@ function formatReviewDate(value: string) {
 }
 
 async function findLiveProductForWorkbookReference(reference: HomeWorkbookProductReference) {
-  const response = await api.listProducts({
+  const categoryCandidates = deriveWorkbookCategoryCandidatesFromReference(reference);
+  const candidateBuckets: Product[] = [];
+
+  if (categoryCandidates.length > 0) {
+    const categoryResponses = await Promise.all(
+      categoryCandidates.map((category) =>
+        api
+          .listProducts({
+            status: "active",
+            category,
+            limit: 100,
+          })
+          .then((response) => response.data)
+          .catch(() => [] as Product[])
+      )
+    );
+
+    candidateBuckets.push(...categoryResponses.flat());
+  }
+
+  const searchResponse = await api
+    .listProducts({
+      status: "active",
+      search: reference.name,
+      limit: 24,
+    })
+    .then((response) => response.data)
+    .catch(() => [] as Product[]);
+
+  candidateBuckets.push(...searchResponse);
+
+  const uniqueCandidates = dedupeWorkbookLiveProducts(candidateBuckets);
+  const resolvedFromScopedCandidates = resolveWorkbookReferenceLiveProduct(
+    reference,
+    uniqueCandidates
+  );
+  if (resolvedFromScopedCandidates) {
+    return resolvedFromScopedCandidates;
+  }
+
+  const fallbackResponse = await api.listProducts({
     status: "active",
-    search: reference.name,
-    limit: 24,
+    limit: 100,
   });
 
-  return resolveWorkbookReferenceLiveProduct(reference, response.data);
+  return resolveWorkbookReferenceLiveProduct(reference, [
+    ...uniqueCandidates,
+    ...fallbackResponse.data,
+  ]);
 }
 
 function resolveWorkbookReferenceLiveProduct(
   reference: HomeWorkbookProductReference,
   candidates: Product[]
 ) {
-  const targetName = normalizeProductLookupValue(reference.name);
-  if (!targetName) {
-    return null;
-  }
-
-  const exactNameMatches = candidates.filter(
-    (candidate) => normalizeProductLookupValue(candidate.name) === targetName
-  );
-  if (exactNameMatches.length === 0) {
-    return null;
-  }
-
-  const targetBrand = normalizeProductLookupValue(reference.brand);
-  const targetCategory = normalizeProductLookupValue(reference.categoryLabel);
-
-  return (
-    exactNameMatches.find(
-      (candidate) =>
-        targetBrand.length > 0 && normalizeProductLookupValue(candidate.brand) === targetBrand
-    ) ??
-    exactNameMatches.find(
-      (candidate) =>
-        targetCategory.length > 0 &&
-        normalizeProductLookupValue(candidate.category) === targetCategory
-    ) ??
-    exactNameMatches[0]
-  );
-}
-
-function normalizeProductLookupValue(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
+  return selectLiveProductForWorkbookEntry(reference, dedupeWorkbookLiveProducts(candidates));
 }
 
 function buildSizeOptions(

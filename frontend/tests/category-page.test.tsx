@@ -41,6 +41,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
+async function flushAsync() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 function renderCategoryPage(initialEntry = "/categories/Shop%20Men") {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -78,6 +85,55 @@ afterEach(() => {
 
 describe("CategoryPage workbook mode", () => {
   it("renders workbook-driven atelier content and filters products client-side", async () => {
+    apiMocks.listProducts.mockImplementation((options?: { category?: string }) => {
+      if (
+        options?.category === "Shop Men" ||
+        options?.category === "shop-men" ||
+        options?.category === "Men"
+      ) {
+        return Promise.resolve({
+          data: [
+            {
+              id: "live-men-001",
+              name: "Sculpted Linen Shirt",
+              description: "Live stock for workbook card.",
+              price: 420,
+              stock: 12,
+              category: "Shop Men",
+              brand: "ND Atelier",
+              tags: ["new"],
+              status: "active",
+              sku: "SM-001",
+              variants: [],
+              image_url: "https://example.com/shirt.jpg",
+              image_urls: ["https://example.com/shirt.jpg"],
+              created_at: "",
+              updated_at: "",
+            },
+            {
+              id: "live-men-002",
+              name: "Structured Atelier Jacket",
+              description: "Low stock live product.",
+              price: 1250,
+              stock: 4,
+              category: "Shop Men",
+              brand: "ND Atelier",
+              tags: ["limited"],
+              status: "active",
+              sku: "SM-002",
+              variants: [],
+              image_url: "https://example.com/jacket.jpg",
+              image_urls: ["https://example.com/jacket.jpg"],
+              created_at: "",
+              updated_at: "",
+            },
+          ],
+        });
+      }
+
+      return Promise.resolve({ data: [] });
+    });
+
     vi.mocked(useHomeWorkbook).mockReturnValue({
       content: {
         sourceName: "stitchfix-home.xlsx",
@@ -201,6 +257,8 @@ describe("CategoryPage workbook mode", () => {
     });
 
     const { container } = renderCategoryPage();
+    await flushAsync();
+    await flushAsync();
 
     expect(container.textContent).toContain("Men's Atelier");
     expect(container.textContent).toContain("Structure, restraint, and material depth.");
@@ -215,7 +273,9 @@ describe("CategoryPage workbook mode", () => {
     expect(container.textContent).toContain("CATEGORY");
     expect(container.textContent).toContain("SIZE");
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
-    expect(apiMocks.listProducts).not.toHaveBeenCalled();
+    expect(apiMocks.listProducts).toHaveBeenCalled();
+    expect(container.textContent).toContain("12 còn lại");
+    expect(container.textContent).toContain("4 còn lại");
 
     const searchInput = container.querySelector<HTMLInputElement>("#category-search-men-atelier");
 
@@ -243,7 +303,7 @@ describe("CategoryPage workbook mode", () => {
 
     const productLink = container.querySelector<HTMLAnchorElement>(".atelier-category-product-card");
 
-    expect(productLink?.getAttribute("href")).toBe("/products/men-001");
+    expect(productLink?.getAttribute("href")).toBe("/products/live-men-001");
 
     act(() => {
       if (!searchInput) {

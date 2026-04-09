@@ -512,12 +512,23 @@
 }
 
 .atelier-category-product-copy p,
-.atelier-category-product-copy em {
+.atelier-category-product-copy em,
+.atelier-category-product-copy small {
   margin: 0;
 }
 
 .atelier-category-product-copy p {
   color: rgba(27, 44, 34, 0.62);
+}
+
+.atelier-category-product-stock {
+  color: rgba(27, 44, 34, 0.7);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.atelier-category-product-stock-out {
+  color: #8a4e4e;
 }
 
 .atelier-category-product-copy em {
