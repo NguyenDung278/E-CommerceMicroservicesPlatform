@@ -33,6 +33,34 @@ export interface UpdateUserRoleData {
   role: string;
 }
 
+export interface UploadAvatarResult {
+  avatar_url?: string;
+  user?: UserProfile;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function normalizeUploadAvatarResult(value: unknown): UploadAvatarResult {
+  const payload = isRecord(value) ? value : {};
+  const user = isRecord(payload.user) ? normalizeUserProfile(payload.user) : undefined;
+  const avatarUrl =
+    normalizeOptionalString(payload.avatar_url) ??
+    normalizeOptionalString(payload.url) ??
+    normalizeOptionalString(payload.avatarUrl) ??
+    user?.avatar_url;
+
+  return {
+    avatar_url: avatarUrl,
+    user,
+  };
+}
+
 /**
  * User API functions
  */
@@ -58,6 +86,23 @@ export const userApi = {
     }).then((response) => ({
       ...response,
       data: normalizeAddress(response.data),
+    }));
+  },
+
+  /**
+   * Upload current user avatar
+   */
+  uploadAvatar(token: string, file: File): Promise<ApiEnvelope<UploadAvatarResult>> {
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    return request<unknown>("/api/v1/users/avatar", {
+      method: "POST",
+      token,
+      body: formData,
+    }).then((response) => ({
+      ...response,
+      data: normalizeUploadAvatarResult(response.data),
     }));
   },
 

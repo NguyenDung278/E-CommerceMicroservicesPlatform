@@ -29,6 +29,7 @@ export type JsonObject = {
 export type UserProfile = {
   id: string;
   email: string;
+  avatar_url?: string;
   phone?: string;
   phone_verified: boolean;
   phone_verified_at?: string;

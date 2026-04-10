@@ -25,6 +25,7 @@ func TestUserHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/oauth/exchange"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/users/profile"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/users/profile"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/avatar"},
 	)
 
 	assertRoutesAbsent(t, e,

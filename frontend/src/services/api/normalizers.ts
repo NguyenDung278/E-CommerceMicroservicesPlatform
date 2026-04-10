@@ -513,6 +513,7 @@ export function normalizeUserProfile(value: unknown): UserProfile {
   return {
     id: normalizeString(user.id),
     email: normalizeString(user.email),
+    avatar_url: normalizeString(user.avatar_url) || undefined,
     phone: normalizeString(user.phone) || undefined,
     phone_verified: normalizeBoolean(user.phone_verified),
     phone_verified_at: normalizeString(user.phone_verified_at) || undefined,

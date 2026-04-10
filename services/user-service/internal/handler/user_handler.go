@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +21,8 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
 )
+
+const maxAvatarUploadSize = 5 << 20
 
 // UserHandler handles HTTP requests for user operations.
 type UserHandler struct {
@@ -49,6 +54,7 @@ func NewUserHandlerWithLoginProtector(userService *service.UserService, loginPro
 //   - POST /api/v1/auth/refresh  — Public (validated by refresh token itself)
 //   - GET  /api/v1/users/profile — Protected (requires valid JWT)
 //   - PUT  /api/v1/users/profile — Protected
+//   - POST /api/v1/users/avatar — Protected
 //   - PUT  /api/v1/users/password — Protected
 func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Public routes — no authentication required.
@@ -68,6 +74,7 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.Use(middleware.JWTAuth(jwtSecret))
 	users.GET("/profile", h.GetProfile)
 	users.PUT("/profile", h.UpdateProfile)
+	users.POST("/avatar", h.UploadAvatar)
 	users.GET("/profile/phone-verification", h.GetPhoneVerificationStatus)
 	users.POST("/profile/phone-verification/send-otp", h.SendPhoneOTP)
 	users.POST("/profile/phone-verification/verify-otp", h.VerifyPhoneOTP)
@@ -305,6 +312,42 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "profile updated", user)
 }
 
+func (h *UserHandler) UploadAvatar(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	fileHeader, err := c.FormFile("avatar")
+	if err != nil {
+		fileHeader, err = c.FormFile("image")
+	}
+	if err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "avatar image file is required")
+	}
+
+	input, err := toUploadAvatarInput(fileHeader)
+	if err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
+	}
+
+	result, err := h.userService.UploadAvatar(c.Request().Context(), claims.UserID, input)
+	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "user not found")
+		}
+		if errors.Is(err, service.ErrInvalidAvatarFile) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "only image files are supported")
+		}
+		if errors.Is(err, service.ErrAvatarTooLarge) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "avatar image size exceeds 5MB limit")
+		}
+		return response.Error(c, http.StatusInternalServerError, "avatar upload failed", "internal server error")
+	}
+
+	return response.Success(c, http.StatusCreated, "avatar uploaded", result)
+}
+
 func (h *UserHandler) GetPhoneVerificationStatus(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	if claims == nil {
@@ -540,6 +583,46 @@ func (h *UserHandler) ExchangeOAuthTicket(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "oauth exchange successful", result)
+}
+
+func toUploadAvatarInput(fileHeader *multipart.FileHeader) (dto.UploadAvatarInput, error) {
+	if fileHeader == nil {
+		return dto.UploadAvatarInput{}, errors.New("avatar image file is required")
+	}
+	if fileHeader.Size > maxAvatarUploadSize {
+		return dto.UploadAvatarInput{}, errors.New("avatar image size exceeds 5MB limit")
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		return dto.UploadAvatarInput{}, errors.New("failed to open uploaded avatar")
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxAvatarUploadSize+1))
+	if err != nil {
+		return dto.UploadAvatarInput{}, errors.New("failed to read uploaded avatar")
+	}
+	if len(data) == 0 {
+		return dto.UploadAvatarInput{}, errors.New("avatar image file is required")
+	}
+	if len(data) > maxAvatarUploadSize {
+		return dto.UploadAvatarInput{}, errors.New("avatar image size exceeds 5MB limit")
+	}
+
+	contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
+		return dto.UploadAvatarInput{}, errors.New("only image files are supported")
+	}
+
+	return dto.UploadAvatarInput{
+		FileName:    strings.TrimSpace(fileHeader.Filename),
+		ContentType: contentType,
+		Data:        bytes.Clone(data),
+	}, nil
 }
 
 func (h *UserHandler) startOAuth(c echo.Context, provider string) error {

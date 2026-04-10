@@ -38,6 +38,9 @@ var (
 	ErrPhoneVerificationRateLimited   = errors.New("phone verification rate limited")
 	ErrPhoneVerificationInvalidOTP    = errors.New("invalid otp code")
 	ErrPhoneVerificationAlreadyUsed   = errors.New("phone verification already used")
+	ErrInvalidAvatarFile              = errors.New("invalid avatar file")
+	ErrAvatarTooLarge                 = errors.New("avatar file too large")
+	ErrAvatarRepositoryUnavailable    = errors.New("avatar repository unavailable")
 )
 
 var vnPhoneRegex = regexp.MustCompile(`^0\d{9,10}$`)
@@ -48,6 +51,7 @@ type UserService struct {
 	repo                  repository.UserRepository
 	oauthRepo             repository.OAuthAccountRepository
 	phoneVerificationRepo repository.PhoneVerificationRepository
+	avatarRepo            repository.UserAvatarRepository
 	profileTxManager      repository.ProfileTxManager
 	addressService        *AddressService
 	jwtSecret             string
@@ -175,6 +179,14 @@ func WithFrontendBaseURL(baseURL string) UserServiceOption {
 func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneVerificationRepo = repo
+	}
+}
+
+// WithUserAvatarRepository injects avatar persistence used by profile reads and
+// avatar upload flows.
+func WithUserAvatarRepository(repo repository.UserAvatarRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.avatarRepo = repo
 	}
 }
 

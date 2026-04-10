@@ -1,11 +1,71 @@
-import type { FormEvent } from "react";
+import { useEffect, useState, type CSSProperties, type ChangeEvent, type FormEvent } from "react";
 
+import { useAuth } from "@/features/auth/hooks/use-auth";
+import { getErrorMessage } from "@/services/api";
+import { userApi } from "@/services/api/modules/user-api";
 import type { PhoneVerificationChallenge } from "@/types/api";
 import {
+  buildProfileInitials,
   getPhoneVerificationDescription,
   type ProfileFieldErrors,
   type ProfileFormState,
 } from "../../utils/profile-editor";
+
+const MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+
+const avatarUploadLayoutStyle: CSSProperties = {
+  display: "flex",
+  gap: "18px",
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const avatarPreviewShellStyle: CSSProperties = {
+  width: "104px",
+  height: "104px",
+  borderRadius: "999px",
+  overflow: "hidden",
+  flexShrink: 0,
+  border: "1px solid var(--profile-outline-strong)",
+  background: "rgba(247, 242, 235, 0.92)",
+  display: "grid",
+  placeItems: "center",
+};
+
+const avatarPreviewImageStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+};
+
+const avatarFallbackStyle: CSSProperties = {
+  color: "rgba(14, 29, 19, 0.48)",
+  fontSize: "1.75rem",
+  fontWeight: 700,
+  letterSpacing: "-0.08em",
+};
+
+const avatarUploadControlsStyle: CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  flex: "1 1 260px",
+};
+
+const avatarFileInputStyle: CSSProperties = {
+  width: "100%",
+  minHeight: "auto",
+  padding: "14px 16px",
+  border: "1px dashed var(--profile-outline-strong)",
+  borderRadius: "18px",
+  background: "rgba(255, 255, 255, 0.76)",
+  cursor: "pointer",
+};
+
+const avatarSuccessStyle: CSSProperties = {
+  color: "var(--color-success, #2e7d32)",
+  fontSize: "0.88rem",
+  lineHeight: 1.5,
+};
 
 type ProfileEditorFormProps = {
   canSubmit: boolean;
@@ -56,14 +116,122 @@ export function ProfileEditorForm({
   onSubmit,
   onVerifyPhoneOtp,
 }: ProfileEditorFormProps) {
+  const { refreshProfile, token, user } = useAuth();
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || "");
+  const [avatarError, setAvatarError] = useState("");
+  const [avatarSuccess, setAvatarSuccess] = useState("");
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const avatarFallbackLabel = buildProfileInitials(`${form.firstName} ${form.lastName}`.trim());
+  const displayedAvatarUrl = avatarPreviewUrl || avatarUrl;
+
+  // Keep the saved avatar in sync with auth context after profile refreshes.
+  useEffect(() => {
+    if (!selectedAvatarFile) {
+      setAvatarUrl(user?.avatar_url || "");
+    }
+  }, [selectedAvatarFile, user?.avatar_url]);
+
+  // Object URLs let us preview the local image before it is sent to the API.
+  useEffect(() => {
+    if (!selectedAvatarFile) {
+      setAvatarPreviewUrl("");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(selectedAvatarFile);
+    setAvatarPreviewUrl(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedAvatarFile]);
+
+  function resetAvatarFeedback() {
+    setAvatarError("");
+    setAvatarSuccess("");
+  }
+
+  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    resetAvatarFeedback();
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setSelectedAvatarFile(null);
+      setAvatarError("Please choose a valid image file.");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_FILE_SIZE_BYTES) {
+      setSelectedAvatarFile(null);
+      setAvatarError("Avatar image must be smaller than 5MB.");
+      return;
+    }
+
+    setSelectedAvatarFile(file);
+  }
+
+  function handleClearSelectedAvatar() {
+    setSelectedAvatarFile(null);
+    resetAvatarFeedback();
+  }
+
+  // Upload stays separate so the existing profile-save flow keeps working as-is.
+  async function handleAvatarUpload() {
+    if (!selectedAvatarFile) {
+      setAvatarError("Choose an image before uploading.");
+      return;
+    }
+
+    if (!token) {
+      setAvatarError("Your session has expired. Please sign in again.");
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      resetAvatarFeedback();
+
+      const response = await userApi.uploadAvatar(token, selectedAvatarFile);
+      let refreshedProfile = null;
+
+      try {
+        refreshedProfile = await refreshProfile();
+      } catch {
+        refreshedProfile = null;
+      }
+
+      const nextAvatarUrl =
+        refreshedProfile?.avatar_url ||
+        response.data.user?.avatar_url ||
+        response.data.avatar_url ||
+        "";
+
+      if (nextAvatarUrl) {
+        setAvatarUrl(nextAvatarUrl);
+      }
+
+      setSelectedAvatarFile(null);
+      setAvatarSuccess("Avatar uploaded successfully.");
+    } catch (reason) {
+      setAvatarError(getErrorMessage(reason));
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }
+
   return (
     <form className="profile-route-form" onSubmit={onSubmit}>
       <div className="profile-route-form-head">
         <div>
           <h2>Edit Profile</h2>
-          <p>
-            Update your profile, delivery address, and verify any new phone number before saving.
-          </p>
         </div>
 
         <button className="ghost-button" type="button" onClick={onClose}>
@@ -72,6 +240,68 @@ export function ProfileEditorForm({
       </div>
 
       <div className="profile-route-form-grid">
+        <div className="profile-route-form-field profile-route-form-field-full">
+          <span>Profile Avatar</span>
+          <div style={avatarUploadLayoutStyle}>
+            <div style={avatarPreviewShellStyle}>
+              {displayedAvatarUrl ? (
+                <img alt="Avatar preview" src={displayedAvatarUrl} style={avatarPreviewImageStyle} />
+              ) : (
+                <span style={avatarFallbackStyle}>{avatarFallbackLabel}</span>
+              )}
+            </div>
+
+            <div style={avatarUploadControlsStyle}>
+              <input
+                accept="image/*"
+                style={avatarFileInputStyle}
+                type="file"
+                onChange={handleAvatarChange}
+              />
+
+              <div className="profile-route-form-actions">
+                <button
+                  className="secondary-button"
+                  disabled={!selectedAvatarFile || isUploadingAvatar}
+                  type="button"
+                  onClick={() => void handleAvatarUpload()}
+                >
+                  {isUploadingAvatar ? "Uploading..." : "Upload Avatar"}
+                </button>
+
+                {selectedAvatarFile ? (
+                  <button
+                    className="ghost-button"
+                    disabled={isUploadingAvatar}
+                    type="button"
+                    onClick={handleClearSelectedAvatar}
+                  >
+                    Remove Selection
+                  </button>
+                ) : null}
+              </div>
+
+              <small className="profile-route-form-hint">
+                Choose a JPG, PNG, WEBP, or GIF under 5MB. A preview appears before upload.
+              </small>
+
+              {selectedAvatarFile ? (
+                <small className="profile-route-form-hint">
+                  Ready to upload: {selectedAvatarFile.name}
+                </small>
+              ) : null}
+
+              {avatarError ? (
+                <small className="profile-route-form-error">{avatarError}</small>
+              ) : null}
+
+              {!avatarError && avatarSuccess ? (
+                <small style={avatarSuccessStyle}>{avatarSuccess}</small>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
         <label className="profile-route-form-field">
           <span>First Name</span>
           <input

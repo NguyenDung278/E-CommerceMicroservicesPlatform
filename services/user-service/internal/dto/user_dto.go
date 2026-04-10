@@ -1,5 +1,7 @@
 package dto
 
+import "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
+
 // RegisterRequest is the request body for user registration.
 type RegisterRequest struct {
 	Email     string `json:"email" validate:"required,email"`
@@ -83,6 +85,17 @@ type RefreshTokenRequest struct {
 
 type OAuthExchangeRequest struct {
 	Ticket string `json:"ticket" validate:"required"`
+}
+
+type UploadAvatarInput struct {
+	FileName    string
+	ContentType string
+	Data        []byte
+}
+
+type UploadAvatarResponse struct {
+	AvatarURL string      `json:"avatar_url,omitempty"`
+	User      *model.User `json:"user,omitempty"`
 }
 
 type VerifyEmailRequest struct {

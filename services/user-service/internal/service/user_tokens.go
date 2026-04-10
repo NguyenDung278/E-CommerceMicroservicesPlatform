@@ -52,7 +52,7 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshTokenString strin
 		return nil, err
 	}
 
-	return s.buildAuthResponse(user)
+	return s.buildAuthResponse(ctx, user)
 }
 
 // generateTokenPair signs the access and refresh tokens for an authenticated user.

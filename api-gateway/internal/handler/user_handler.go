@@ -37,6 +37,7 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.Use(appmw.JWTAuth(jwtSecret))
 	users.GET("/profile", h.forward)
 	users.PUT("/profile", h.forward)
+	users.POST("/avatar", h.forward)
 	users.GET("/profile/phone-verification", h.forward)
 	users.POST("/profile/phone-verification/send-otp", h.forward)
 	users.POST("/profile/phone-verification/verify-otp", h.forward)

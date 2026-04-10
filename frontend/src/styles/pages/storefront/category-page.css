@@ -1,4 +1,7 @@
 .atelier-category-page {
+  --atelier-category-sticky-top: clamp(12px, 3vw, 24px);
+  --atelier-category-sidebar-max-height: calc(100vh - var(--atelier-category-sticky-top) - 20px);
+
   display: grid;
   gap: 28px;
   padding: 20px 20px 40px;
@@ -122,7 +125,7 @@
 
 .atelier-category-search-shell {
   position: sticky;
-  top: 16px;
+  top: var(--atelier-category-sticky-top);
   z-index: 24;
 }
 
@@ -302,7 +305,8 @@
 
 .atelier-category-sidebar {
   position: sticky;
-  top: 124px;
+  top: var(--atelier-category-sticky-top);
+  align-self: start;
   display: grid;
   gap: 24px;
   padding: 24px;
@@ -310,6 +314,11 @@
   border-radius: 30px;
   background: #f7f2eb;
   box-shadow: 0 20px 40px rgba(27, 44, 34, 0.06);
+  z-index: 12;
+  max-height: var(--atelier-category-sidebar-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .atelier-category-sidebar-group {
@@ -803,12 +812,14 @@
 
   .atelier-category-sidebar {
     display: none;
-    position: static;
-    top: auto;
   }
 
   .atelier-category-sidebar.atelier-category-sidebar-open {
     display: grid;
+    position: sticky;
+    top: var(--atelier-category-sticky-top);
+    max-height: var(--atelier-category-sidebar-max-height);
+    overflow-y: auto;
   }
 }
 
@@ -834,7 +845,7 @@
   }
 
   .atelier-category-search-shell {
-    top: 10px;
+    top: var(--atelier-category-sticky-top);
   }
 
   .atelier-category-search-bar,

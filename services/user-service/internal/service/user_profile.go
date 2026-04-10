@@ -28,7 +28,12 @@ import (
 // Performance:
 //   - one repository lookup.
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
-	return s.loadUserByID(ctx, s.repo, userID)
+	user, err := s.loadUserByID(ctx, s.repo, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.attachAvatarURL(ctx, user)
 }
 
 // UpdateProfile applies profile, phone, and default-address changes while
@@ -54,7 +59,12 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 //   - dominated by repository lookups; an empty address patch now skips the address lookup entirely.
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.UpdateProfileRequest) (*model.User, error) {
 	if s.profileTxManager == nil {
-		return s.updateProfileWithDependencies(ctx, userID, req, s.repo, s.phoneVerificationRepo, s.addressService)
+		user, err := s.updateProfileWithDependencies(ctx, userID, req, s.repo, s.phoneVerificationRepo, s.addressService)
+		if err != nil {
+			return nil, err
+		}
+
+		return s.attachAvatarURL(ctx, user)
 	}
 
 	var updatedUser *model.User
@@ -76,7 +86,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.
 		return nil, err
 	}
 
-	return updatedUser, nil
+	return s.attachAvatarURL(ctx, updatedUser)
 }
 
 // updateProfileWithDependencies contains the core profile-update workflow so it

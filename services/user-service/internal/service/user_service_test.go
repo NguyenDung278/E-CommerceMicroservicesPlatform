@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,10 @@ type fakeOAuthProviderClient struct {
 	lastAuthorizationRedirectURL string
 }
 
+type fakeUserAvatarRepo struct {
+	avatars map[string]*model.UserAvatar
+}
+
 func (s *fakeEmailSender) Send(_ email.Message) error {
 	return s.err
 }
@@ -50,6 +55,12 @@ func newFakeOAuthAccountRepo() *fakeOAuthAccountRepo {
 	return &fakeOAuthAccountRepo{
 		accountsByProvider: map[string]*model.OAuthAccount{},
 		accountsByUser:     map[string]*model.OAuthAccount{},
+	}
+}
+
+func newFakeUserAvatarRepo() *fakeUserAvatarRepo {
+	return &fakeUserAvatarRepo{
+		avatars: map[string]*model.UserAvatar{},
 	}
 }
 
@@ -136,6 +147,15 @@ func (r *fakeOAuthAccountRepo) GetByProviderUserID(_ context.Context, provider, 
 
 func (r *fakeOAuthAccountRepo) GetByUserIDAndProvider(_ context.Context, userID, provider string) (*model.OAuthAccount, error) {
 	return r.accountsByUser[userID+":"+provider], nil
+}
+
+func (r *fakeUserAvatarRepo) GetByUserID(_ context.Context, userID string) (*model.UserAvatar, error) {
+	return r.avatars[userID], nil
+}
+
+func (r *fakeUserAvatarRepo) Upsert(_ context.Context, avatar *model.UserAvatar) error {
+	r.avatars[avatar.UserID] = avatar
+	return nil
 }
 
 func (c *fakeOAuthProviderClient) AuthorizationURL(provider, state, redirectURL string) (string, error) {
@@ -226,6 +246,51 @@ func TestLoginRejectsInvalidPassword(t *testing.T) {
 		Password:   "wrong-password",
 	}); err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestUploadAvatarStoresDataURLOnProfile(t *testing.T) {
+	repo := newFakeUserRepo()
+	avatarRepo := newFakeUserAvatarRepo()
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithUserAvatarRepository(avatarRepo),
+	)
+
+	user := &model.User{
+		ID:        "avatar-user",
+		Email:     "avatar@example.com",
+		FirstName: "Avatar",
+		LastName:  "User",
+	}
+	seedUser(repo, user)
+
+	result, err := svc.UploadAvatar(context.Background(), user.ID, dto.UploadAvatarInput{
+		FileName:    "avatar.png",
+		ContentType: "image/png",
+		Data:        []byte("png-binary-payload"),
+	})
+	if err != nil {
+		t.Fatalf("UploadAvatar returned error: %v", err)
+	}
+	if result == nil || result.User == nil {
+		t.Fatalf("expected upload response with user payload, got %#v", result)
+	}
+	if !strings.HasPrefix(result.AvatarURL, "data:image/png;base64,") {
+		t.Fatalf("expected data URL avatar, got %q", result.AvatarURL)
+	}
+	if avatarRepo.avatars[user.ID] == nil {
+		t.Fatal("expected avatar payload to be stored in avatar repository")
+	}
+
+	profile, err := svc.GetProfile(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetProfile returned error: %v", err)
+	}
+	if profile.AvatarURL != result.AvatarURL {
+		t.Fatalf("expected persisted avatar URL on profile, got %q want %q", profile.AvatarURL, result.AvatarURL)
 	}
 }
 

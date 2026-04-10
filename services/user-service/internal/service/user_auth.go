@@ -92,7 +92,7 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 
 	_ = s.sendVerificationEmail(user, verificationToken)
 
-	return s.buildAuthResponse(user)
+	return s.buildAuthResponse(ctx, user)
 }
 
 // Login authenticates a user by email or phone and returns a fresh token pair.
@@ -131,7 +131,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Aut
 		return nil, ErrInvalidCredentials
 	}
 
-	return s.buildAuthResponse(user)
+	return s.buildAuthResponse(ctx, user)
 }
 
 // ChangePassword validates the current password, hashes the new password, and
@@ -194,7 +194,12 @@ func (s *UserService) ChangePassword(ctx context.Context, userID string, req dto
 //
 // Performance:
 //   - dominated by generateTokenPair.
-func (s *UserService) buildAuthResponse(user *model.User) (*dto.AuthResponse, error) {
+func (s *UserService) buildAuthResponse(ctx context.Context, user *model.User) (*dto.AuthResponse, error) {
+	userWithAvatar, err := s.attachAvatarURL(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
 	accessToken, refreshToken, err := s.generateTokenPair(user)
 	if err != nil {
 		return nil, err
@@ -203,7 +208,7 @@ func (s *UserService) buildAuthResponse(user *model.User) (*dto.AuthResponse, er
 	return &dto.AuthResponse{
 		Token:        accessToken,
 		RefreshToken: refreshToken,
-		User:         user,
+		User:         userWithAvatar,
 	}, nil
 }
 

@@ -107,6 +107,7 @@ func main() {
 	telegramSender := telegramsender.NewSender(cfg.Telegram, log)
 	oauthRepo := repository.NewOAuthAccountRepository(db)
 	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
+	avatarRepo := repository.NewUserAvatarRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
 	profileTxManager := repository.NewProfileTxManager(db)
 	addressService := service.NewAddressService(addressRepo)
@@ -118,6 +119,7 @@ func main() {
 		service.WithEmailSender(emailSender),
 		service.WithOAuthAccountRepository(oauthRepo),
 		service.WithPhoneVerificationRepository(phoneVerificationRepo),
+		service.WithUserAvatarRepository(avatarRepo),
 		service.WithProfileTxManager(profileTxManager),
 		service.WithAddressService(addressService),
 		service.WithTelegramSender(telegramSender),

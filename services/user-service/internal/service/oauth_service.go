@@ -183,16 +183,7 @@ func (s *UserService) ExchangeOAuthTicket(ctx context.Context, ticket string) (*
 		return nil, ErrUserNotFound
 	}
 
-	accessToken, refreshToken, err := s.generateTokenPair(user)
-	if err != nil {
-		return nil, err
-	}
-
-	return &dto.AuthResponse{
-		Token:        accessToken,
-		RefreshToken: refreshToken,
-		User:         user,
-	}, nil
+	return s.buildAuthResponse(ctx, user)
 }
 
 func (s *UserService) BuildOAuthStartErrorRedirect(redirectTo, requestOrigin, errorCode, message string) string {

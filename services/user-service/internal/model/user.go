@@ -10,6 +10,7 @@ import "time"
 type User struct {
 	ID                         string     `json:"id"`
 	Email                      string     `json:"email"`
+	AvatarURL                  string     `json:"avatar_url,omitempty"`
 	Phone                      string     `json:"phone,omitempty"`
 	PhoneVerified              bool       `json:"phone_verified"`
 	PhoneVerifiedAt            *time.Time `json:"phone_verified_at,omitempty"`
