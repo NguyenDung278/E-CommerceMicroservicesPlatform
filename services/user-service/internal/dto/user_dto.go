@@ -49,6 +49,12 @@ type SendPhoneOTPRequest struct {
 	Phone string `json:"phone" validate:"required,min=10,max=20"`
 }
 
+type StartPhoneSignupRequest struct {
+	Phone           string `json:"phone" validate:"required,min=10,max=20"`
+	Password        string `json:"password" validate:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" validate:"required,min=8"`
+}
+
 type VerifyPhoneOTPRequest struct {
 	VerificationID string `json:"verification_id" validate:"required,uuid4"`
 	OTPCode        string `json:"otp_code" validate:"required,len=6,numeric"`
@@ -100,6 +106,29 @@ type UploadAvatarResponse struct {
 
 type VerifyEmailRequest struct {
 	Token string `json:"token" validate:"required"`
+}
+
+type VerifyEmailOTPRequest struct {
+	VerificationID string `json:"verification_id" validate:"required,uuid4"`
+	OTPCode        string `json:"otp_code" validate:"required,len=6,numeric"`
+}
+
+type ResendEmailOTPRequest struct {
+	VerificationID string `json:"verification_id" validate:"required,uuid4"`
+}
+
+type EmailVerificationStatusResponse struct {
+	VerificationID    string  `json:"verification_id"`
+	Email             string  `json:"email"`
+	EmailMasked       string  `json:"email_masked"`
+	Status            string  `json:"status"`
+	ExpiresAt         string  `json:"expires_at,omitempty"`
+	ResendAvailableAt string  `json:"resend_available_at,omitempty"`
+	ExpiresInSeconds  int64   `json:"expires_in_seconds"`
+	ResendInSeconds   int64   `json:"resend_in_seconds"`
+	MaxAttempts       int     `json:"max_attempts"`
+	RemainingAttempts int     `json:"remaining_attempts"`
+	VerifiedAt        *string `json:"verified_at,omitempty"`
 }
 
 type ForgotPasswordRequest struct {

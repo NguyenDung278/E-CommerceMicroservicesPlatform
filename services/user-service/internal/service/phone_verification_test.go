@@ -139,7 +139,9 @@ func (s *fakeTelegramSender) SendOTP(_ string, phone string, otpCode string, _ t
 
 func seedUser(repo *fakeUserRepo, user *model.User) {
 	repo.usersByID[user.ID] = user
-	repo.usersByEmail[user.Email] = user
+	if user.Email != "" {
+		repo.usersByEmail[user.Email] = user
+	}
 	if user.Phone != "" {
 		repo.usersByPhone[user.Phone] = user
 	}

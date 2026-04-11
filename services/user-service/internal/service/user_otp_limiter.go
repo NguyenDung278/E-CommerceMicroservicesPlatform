@@ -74,6 +74,43 @@ func (s *UserService) telegramOTPMaxAttempts() int {
 	return s.telegramCfg.OTPMaxAttempts
 }
 
+func (s *UserService) emailVerificationOTPConfigTTL() time.Duration {
+	seconds := s.emailVerificationCfg.OTPMessageTTLSeconds
+	if seconds <= 0 {
+		seconds = 600
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *UserService) emailVerificationOTPCooldown() time.Duration {
+	seconds := s.emailVerificationCfg.OTPResendCooldownSeconds
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *UserService) emailVerificationOTPMaxAttempts() int {
+	if s.emailVerificationCfg.OTPMaxAttempts <= 0 {
+		return 5
+	}
+	return s.emailVerificationCfg.OTPMaxAttempts
+}
+
+func (s *UserService) emailVerificationDailyLimitPerUser() int {
+	if s.emailVerificationCfg.OTPDailyLimitPerUser <= 0 {
+		return 5
+	}
+	return s.emailVerificationCfg.OTPDailyLimitPerUser
+}
+
+func (s *UserService) emailVerificationHourlyLimitPerIP() int {
+	if s.emailVerificationCfg.OTPHourlyLimitPerIP <= 0 {
+		return 10
+	}
+	return s.emailVerificationCfg.OTPHourlyLimitPerIP
+}
+
 // allowOTPEvent applies an in-memory sliding-window rate limit for OTP-related
 // events keyed by user, phone, or IP address.
 //

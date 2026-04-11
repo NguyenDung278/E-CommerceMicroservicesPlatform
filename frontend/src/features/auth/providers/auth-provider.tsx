@@ -18,6 +18,7 @@ import { authApi, type OAuthProvider } from "@/services/api/modules/auth-api";
 import { getErrorMessage, isHttpError } from "@/services/api/error-handler";
 import type {
   ApiEnvelope,
+  EmailVerificationChallenge,
   PhoneVerificationChallenge,
   ProfileAddressPatch,
   UserProfile,
@@ -82,6 +83,21 @@ type AuthContextValue = {
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
+  sendPhoneSignupOtp: (
+    phone: string,
+    password: string,
+    confirmPassword: string
+  ) => Promise<PhoneVerificationChallenge>;
+  verifyPhoneSignupOtp: (
+    verificationId: string,
+    otpCode: string,
+    options?: AuthOptions
+  ) => Promise<UserProfile>;
+  resendPhoneSignupOtp: (verificationId: string) => Promise<PhoneVerificationChallenge>;
+  getEmailVerificationStatus: () => Promise<EmailVerificationChallenge | null>;
+  sendEmailVerificationOtp: () => Promise<EmailVerificationChallenge | null>;
+  verifyEmailOtp: (verificationId: string, otpCode: string) => Promise<EmailVerificationChallenge>;
+  resendEmailVerificationOtp: (verificationId: string) => Promise<EmailVerificationChallenge>;
   getPhoneVerificationStatus: () => Promise<PhoneVerificationChallenge | null>;
   sendPhoneOtp: (phone: string) => Promise<PhoneVerificationChallenge>;
   verifyPhoneOtp: (verificationId: string, otpCode: string) => Promise<PhoneVerificationChallenge>;
@@ -310,6 +326,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function sendPhoneSignupOtp(phone: string, password: string, confirmPassword: string) {
+    setError("");
+    const response = await authApi.startPhoneSignup({
+      phone,
+      password,
+      confirm_password: confirmPassword,
+    });
+    return response.data as PhoneVerificationChallenge;
+  }
+
+  async function verifyPhoneSignupOtp(
+    verificationId: string,
+    otpCode: string,
+    options?: AuthOptions
+  ) {
+    setError("");
+    const response = await authApi.verifyPhoneSignup({
+      verification_id: verificationId,
+      otp_code: otpCode,
+    });
+    completeAuth(response, options?.remember ?? false);
+    return response.data.user;
+  }
+
+  async function resendPhoneSignupOtp(verificationId: string) {
+    setError("");
+    const response = await authApi.resendPhoneSignupOtp({
+      verification_id: verificationId,
+    });
+    return response.data as PhoneVerificationChallenge;
+  }
+
   const getPhoneVerificationStatus = useCallback(async () => {
     setError("");
     const response = await withFreshToken((activeToken) =>
@@ -317,6 +365,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     return response.data;
   }, [withFreshToken]);
+
+  const getEmailVerificationStatus = useCallback(async () => {
+    setError("");
+    const response = await withFreshToken((activeToken) =>
+      authApi.getEmailVerificationStatus(activeToken)
+    );
+    return response.data;
+  }, [withFreshToken]);
+
+  async function sendEmailVerificationOtp() {
+    setError("");
+    const response = await withFreshToken((activeToken) =>
+      authApi.sendEmailVerificationOtp(activeToken)
+    );
+    return response.data;
+  }
+
+  async function verifyEmailOtp(verificationId: string, otpCode: string) {
+    setError("");
+    const response = await withFreshToken((activeToken) =>
+      authApi.verifyEmailOtp(activeToken, {
+        verification_id: verificationId,
+        otp_code: otpCode,
+      })
+    );
+    return response.data;
+  }
+
+  async function resendEmailVerificationOtp(verificationId: string) {
+    setError("");
+    const response = await withFreshToken((activeToken) =>
+      authApi.resendEmailVerificationOtp(activeToken, {
+        verification_id: verificationId,
+      })
+    );
+    return response.data;
+  }
 
   async function sendPhoneOtp(phone: string) {
     setError("");
@@ -378,6 +463,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshProfile,
         updateProfile,
         changePassword,
+        sendPhoneSignupOtp,
+        verifyPhoneSignupOtp,
+        resendPhoneSignupOtp,
+        getEmailVerificationStatus,
+        sendEmailVerificationOtp,
+        verifyEmailOtp,
+        resendEmailVerificationOtp,
         getPhoneVerificationStatus,
         sendPhoneOtp,
         verifyPhoneOtp,

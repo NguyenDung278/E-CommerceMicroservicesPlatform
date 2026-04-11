@@ -8,11 +8,16 @@ import { API_BASE_URL, request } from "../http-client";
 import type {
   ApiEnvelope,
   AuthPayload,
+  EmailVerificationChallenge,
   PhoneVerificationChallenge,
   ProfileAddressPatch,
   UserProfile,
 } from "@/types/api";
-import { normalizePhoneVerificationChallenge, normalizeUserProfile } from "../normalizers";
+import {
+  normalizeEmailVerificationChallenge,
+  normalizePhoneVerificationChallenge,
+  normalizeUserProfile,
+} from "../normalizers";
 
 export type OAuthProvider = "google";
 
@@ -86,12 +91,27 @@ export interface SendPhoneOtpData {
   phone: string;
 }
 
+export interface StartPhoneSignupData {
+  phone: string;
+  password: string;
+  confirm_password: string;
+}
+
 export interface VerifyPhoneOtpData {
   verification_id: string;
   otp_code: string;
 }
 
 export interface ResendPhoneOtpData {
+  verification_id: string;
+}
+
+export interface VerifyEmailOtpData {
+  verification_id: string;
+  otp_code: string;
+}
+
+export interface ResendEmailOtpData {
   verification_id: string;
 }
 
@@ -107,6 +127,35 @@ export const authApi = {
       method: "POST",
       body,
     });
+  },
+
+  startPhoneSignup(body: StartPhoneSignupData): Promise<ApiEnvelope<PhoneVerificationChallenge>> {
+    return request<unknown>("/api/v1/auth/register/phone/send-otp", {
+      method: "POST",
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
+  },
+
+  verifyPhoneSignup(body: VerifyPhoneOtpData): Promise<ApiEnvelope<AuthPayload>> {
+    return request<AuthPayload>("/api/v1/auth/register/phone/verify-otp", {
+      method: "POST",
+      body,
+    });
+  },
+
+  resendPhoneSignupOtp(
+    body: ResendPhoneOtpData
+  ): Promise<ApiEnvelope<PhoneVerificationChallenge>> {
+    return request<unknown>("/api/v1/auth/register/phone/resend-otp", {
+      method: "POST",
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
   },
 
   /**
@@ -245,6 +294,55 @@ export const authApi = {
     }).then((response) => ({
       ...response,
       data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
+  },
+
+  getEmailVerificationStatus(
+    token: string
+  ): Promise<ApiEnvelope<EmailVerificationChallenge | null>> {
+    return request<unknown>("/api/v1/users/verify-email/status", { token }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data),
+    }));
+  },
+
+  sendEmailVerificationOtp(
+    token: string
+  ): Promise<ApiEnvelope<EmailVerificationChallenge | null>> {
+    return request<unknown>("/api/v1/users/verify-email/send-otp", {
+      method: "POST",
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data),
+    }));
+  },
+
+  verifyEmailOtp(
+    token: string,
+    body: VerifyEmailOtpData
+  ): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/verify-email/verify-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
+    }));
+  },
+
+  resendEmailVerificationOtp(
+    token: string,
+    body: ResendEmailOtpData
+  ): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/verify-email/resend-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
     }));
   },
 

@@ -19,6 +19,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
 )
 
@@ -60,6 +61,9 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Public routes — no authentication required.
 	auth := e.Group("/api/v1/auth")
 	auth.POST("/register", h.Register)
+	auth.POST("/register/phone/send-otp", h.StartPhoneSignup)
+	auth.POST("/register/phone/verify-otp", h.VerifyPhoneSignupOTP)
+	auth.POST("/register/phone/resend-otp", h.ResendPhoneSignupOTP)
 	auth.POST("/login", h.Login)
 	auth.POST("/refresh", h.RefreshToken)
 	auth.POST("/verify-email", h.VerifyEmail)
@@ -79,6 +83,10 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.POST("/profile/phone-verification/send-otp", h.SendPhoneOTP)
 	users.POST("/profile/phone-verification/verify-otp", h.VerifyPhoneOTP)
 	users.POST("/profile/phone-verification/resend-otp", h.ResendPhoneOTP)
+	users.GET("/verify-email/status", h.GetEmailVerificationStatus)
+	users.POST("/verify-email/send-otp", h.SendEmailVerificationOTP)
+	users.POST("/verify-email/verify-otp", h.VerifyEmailOTP)
+	users.POST("/verify-email/resend-otp", h.ResendEmailVerificationOTP)
 	users.PUT("/password", h.ChangePassword)
 	users.POST("/verify-email/resend", h.ResendVerificationEmail)
 
@@ -115,6 +123,12 @@ func (h *UserHandler) Register(c echo.Context) error {
 			return response.Error(c, http.StatusConflict, "registration failed", "phone already exists")
 		}
 		return response.Error(c, http.StatusInternalServerError, "registration failed", "internal server error")
+	}
+
+	if user, ok := result.User.(*model.User); ok && user != nil && user.Email != "" && !user.EmailVerified {
+		if _, otpErr := h.userService.StartEmailVerificationOTP(c.Request().Context(), user.ID, c.RealIP()); otpErr != nil {
+			c.Logger().Warnf("register email otp dispatch deferred for user=%s: %v", user.ID, otpErr)
+		}
 	}
 
 	return response.Success(c, http.StatusCreated, "user registered successfully", result)
@@ -190,6 +204,7 @@ func (h *UserHandler) RefreshToken(c echo.Context) error {
 		if errors.Is(err, service.ErrUserNotFound) {
 			return response.Error(c, http.StatusUnauthorized, "refresh failed", "user no longer exists")
 		}
+		c.Logger().Errorf("refresh token failed: %v", err)
 		return response.Error(c, http.StatusInternalServerError, "refresh failed", "internal server error")
 	}
 
@@ -361,6 +376,129 @@ func (h *UserHandler) GetPhoneVerificationStatus(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "phone verification status retrieved", statusPayload)
 }
 
+func (h *UserHandler) StartPhoneSignup(c echo.Context) error {
+	var req dto.StartPhoneSignupRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.StartPhoneSignup(c.Request().Context(), c.RealIP(), req)
+	if err != nil {
+		return handlePhoneSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone signup otp sent", result)
+}
+
+func (h *UserHandler) VerifyPhoneSignupOTP(c echo.Context) error {
+	var req dto.VerifyPhoneOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.VerifyPhoneSignupOTP(c.Request().Context(), req)
+	if err != nil {
+		return handlePhoneSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone signup verified", result)
+}
+
+func (h *UserHandler) ResendPhoneSignupOTP(c echo.Context) error {
+	var req dto.ResendPhoneOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.ResendPhoneSignupOTP(c.Request().Context(), c.RealIP(), req)
+	if err != nil {
+		return handlePhoneSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "phone signup otp resent", result)
+}
+
+func (h *UserHandler) GetEmailVerificationStatus(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	statusPayload, err := h.userService.GetEmailVerificationStatus(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load email verification status")
+	}
+
+	return response.Success(c, http.StatusOK, "email verification status retrieved", statusPayload)
+}
+
+func (h *UserHandler) SendEmailVerificationOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	result, err := h.userService.StartEmailVerificationOTP(c.Request().Context(), claims.UserID, c.RealIP())
+	if err != nil {
+		return handleEmailOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email verification otp sent", result)
+}
+
+func (h *UserHandler) VerifyEmailOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	var req dto.VerifyEmailOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.VerifyEmailOTP(c.Request().Context(), claims.UserID, req)
+	if err != nil {
+		return handleEmailOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email verification successful", result)
+}
+
+func (h *UserHandler) ResendEmailVerificationOTP(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	var req dto.ResendEmailOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.ResendEmailVerificationOTP(c.Request().Context(), claims.UserID, c.RealIP(), req)
+	if err != nil {
+		return handleEmailOTPError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email verification otp resent", result)
+}
+
 func (h *UserHandler) SendPhoneOTP(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	if claims == nil {
@@ -477,6 +615,56 @@ func handlePhoneOTPError(c echo.Context, err error) error {
 	return response.Error(c, http.StatusInternalServerError, "phone verification failed", "internal server error")
 }
 
+func handlePhoneSignupError(c echo.Context, err error) error {
+	if errors.Is(err, service.ErrPasswordConfirmationMismatch) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "password confirmation does not match")
+	}
+
+	return handlePhoneOTPError(c, err)
+}
+
+func handleEmailOTPError(c echo.Context, err error) error {
+	var emailVerificationErr *service.EmailVerificationError
+	hasEmailVerificationError := errors.As(err, &emailVerificationErr)
+
+	if errors.Is(err, service.ErrUserNotFound) {
+		return response.Error(c, http.StatusNotFound, "not found", "user not found")
+	}
+	if errors.Is(err, service.ErrEmailVerificationNotFound) {
+		return response.Error(c, http.StatusBadRequest, "email verification failed", "email verification not found")
+	}
+	if errors.Is(err, service.ErrEmailVerificationExpired) {
+		return response.Error(c, http.StatusBadRequest, "email verification failed", "email verification otp has expired")
+	}
+	if errors.Is(err, service.ErrEmailVerificationInvalidOTP) {
+		detail := "invalid email verification otp"
+		if hasEmailVerificationError && emailVerificationErr.RemainingAttempts > 0 {
+			detail = fmt.Sprintf("invalid email verification otp, %d attempts remaining", emailVerificationErr.RemainingAttempts)
+		}
+		return response.Error(c, http.StatusBadRequest, "email verification failed", detail)
+	}
+	if errors.Is(err, service.ErrEmailVerificationLocked) {
+		return response.Error(c, http.StatusTooManyRequests, "email verification locked", "too many invalid email verification attempts, challenge has been locked")
+	}
+	if errors.Is(err, service.ErrEmailVerificationResendTooSoon) {
+		detail := "please wait before resending email verification otp"
+		if hasEmailVerificationError && emailVerificationErr.ResendInSeconds > 0 {
+			c.Response().Header().Set(echo.HeaderRetryAfter, strconv.FormatInt(emailVerificationErr.ResendInSeconds, 10))
+			detail = fmt.Sprintf("please wait %d seconds before resending email verification otp", emailVerificationErr.ResendInSeconds)
+		}
+		return response.Error(c, http.StatusTooManyRequests, "email verification failed", detail)
+	}
+	if errors.Is(err, service.ErrEmailVerificationRateLimited) {
+		return response.Error(c, http.StatusTooManyRequests, "email verification failed", "email verification otp rate limit exceeded")
+	}
+	if errors.Is(err, service.ErrEmailVerificationAlreadyUsed) {
+		return response.Error(c, http.StatusBadRequest, "email verification failed", "email verification is invalid or already used")
+	}
+
+	c.Logger().Errorf("email verification failed: %v", err)
+	return response.Error(c, http.StatusInternalServerError, "email verification failed", "internal server error")
+}
+
 // ChangePassword handles PUT /api/v1/users/password
 func (h *UserHandler) ChangePassword(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
@@ -579,6 +767,7 @@ func (h *UserHandler) ExchangeOAuthTicket(c echo.Context) error {
 		if errors.Is(err, service.ErrUserNotFound) {
 			return response.Error(c, http.StatusUnauthorized, "oauth exchange failed", "user no longer exists")
 		}
+		c.Logger().Errorf("oauth ticket exchange failed: %v", err)
 		return response.Error(c, http.StatusInternalServerError, "oauth exchange failed", "internal server error")
 	}
 
@@ -611,7 +800,7 @@ func toUploadAvatarInput(fileHeader *multipart.FileHeader) (dto.UploadAvatarInpu
 	}
 
 	contentType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
-	if contentType == "" {
+	if contentType == "" || contentType == "application/octet-stream" {
 		contentType = http.DetectContentType(data)
 	}
 	if !strings.HasPrefix(strings.ToLower(contentType), "image/") {
@@ -681,6 +870,7 @@ func (h *UserHandler) handleOAuthCallback(c echo.Context, provider string) error
 		nonceCookie.Value,
 	)
 	if err != nil {
+		c.Logger().Errorf("oauth callback failed for provider=%s: %v", provider, err)
 		return c.Redirect(http.StatusFound, h.userService.BuildOAuthErrorRedirect(
 			rawState,
 			oauthErrorCode(err),

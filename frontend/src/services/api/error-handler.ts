@@ -144,7 +144,11 @@ function getUserFriendlyMessage(error: HttpError): string {
     if (detail.includes("before resending otp")) {
       return "Bạn vừa yêu cầu OTP. Hãy chờ thêm một chút rồi thử gửi lại.";
     }
-    if (detail.includes("invalid otp attempts") || detail.includes("challenge has been locked")) {
+    if (
+      detail.includes("invalid otp attempts") ||
+      detail.includes("challenge has been locked") ||
+      detail.includes("invalid email verification attempts")
+    ) {
       return "Bạn đã nhập sai OTP quá nhiều lần. Hãy gửi OTP mới để tiếp tục.";
     }
     if (detail.includes("otp rate limit exceeded")) {
@@ -165,6 +169,18 @@ function getUserFriendlyMessage(error: HttpError): string {
     if (detail.includes("oauth")) {
       return detail;
     }
+    if (detail.includes("email verification not found")) {
+      return "Không tìm thấy phiên xác minh email. Hãy yêu cầu gửi mã mới.";
+    }
+    if (detail.includes("email verification otp has expired")) {
+      return "Mã OTP email đã hết hạn. Hãy yêu cầu gửi mã mới.";
+    }
+    if (detail.includes("invalid email verification otp")) {
+      return "Mã OTP email chưa chính xác. Hãy kiểm tra lại và thử tiếp.";
+    }
+    if (detail.includes("email verification is invalid or already used")) {
+      return "Phiên xác minh email không còn hợp lệ. Hãy gửi lại OTP email.";
+    }
     if (detail.includes("phone verification required")) {
       return "Số điện thoại mới cần được xác minh OTP trước khi lưu hồ sơ.";
     }
@@ -176,6 +192,9 @@ function getUserFriendlyMessage(error: HttpError): string {
     }
     if (detail.includes("invalid phone number")) {
       return "Số điện thoại chưa đúng định dạng Việt Nam.";
+    }
+    if (detail.includes("password confirmation does not match")) {
+      return "Mật khẩu xác nhận chưa khớp.";
     }
     return detail || "Dữ liệu không hợp lệ.";
   }

@@ -29,13 +29,19 @@ const (
 )
 
 type OAuthIdentity struct {
-	Provider       string
-	ProviderUserID string
-	Email          string
-	FirstName      string
-	LastName       string
-	FullName       string
-	EmailVerified  bool
+	Provider             string
+	ProviderUserID       string
+	Email                string
+	FirstName            string
+	LastName             string
+	FullName             string
+	EmailVerified        bool
+	AccessToken          string
+	RefreshToken         string
+	TokenType            string
+	Scope                string
+	IDToken              string
+	AccessTokenExpiresAt *time.Time
 }
 
 type OAuthStartResult struct {
@@ -229,6 +235,10 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 		return nil, err
 	}
 	if existingAccount != nil {
+		if err := s.syncOAuthAccount(ctx, existingAccount, identity); err != nil {
+			return nil, err
+		}
+
 		user, err := s.repo.GetByID(ctx, existingAccount.UserID)
 		if err != nil {
 			return nil, err
@@ -274,18 +284,13 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 		if userProviderAccount.ProviderUserID != strings.TrimSpace(identity.ProviderUserID) {
 			return nil, ErrOAuthAccountConflict
 		}
+		if err := s.syncOAuthAccount(ctx, userProviderAccount, identity); err != nil {
+			return nil, err
+		}
 		return user, nil
 	}
 
-	now := time.Now()
-	account := &model.OAuthAccount{
-		ID:             uuid.New().String(),
-		UserID:         user.ID,
-		Provider:       provider,
-		ProviderUserID: strings.TrimSpace(identity.ProviderUserID),
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	}
+	account := newOAuthAccountLink(user.ID, provider, identity)
 
 	if err := s.oauthRepo.Create(ctx, account); err != nil {
 		if errors.Is(err, repository.ErrOAuthAccountAlreadyExists) {
@@ -294,6 +299,10 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 				return nil, lookupErr
 			}
 			if existingByProvider != nil {
+				if syncErr := s.syncOAuthAccount(ctx, existingByProvider, identity); syncErr != nil {
+					return nil, syncErr
+				}
+
 				linkedUser, userErr := s.repo.GetByID(ctx, existingByProvider.UserID)
 				if userErr != nil {
 					return nil, userErr
@@ -310,6 +319,66 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 	return user, nil
 }
 
+func newOAuthAccountLink(userID, provider string, identity *OAuthIdentity) *model.OAuthAccount {
+	now := currentTime()
+	account := &model.OAuthAccount{
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		Provider:       provider,
+		ProviderUserID: strings.TrimSpace(identity.ProviderUserID),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	applyOAuthIdentity(account, identity)
+	return account
+}
+
+func applyOAuthIdentity(account *model.OAuthAccount, identity *OAuthIdentity) {
+	if account == nil || identity == nil {
+		return
+	}
+
+	if providerEmail := normalizeEmail(identity.Email); providerEmail != "" {
+		account.ProviderEmail = providerEmail
+	}
+	account.ProviderUserID = strings.TrimSpace(identity.ProviderUserID)
+
+	if accessToken := strings.TrimSpace(identity.AccessToken); accessToken != "" {
+		account.AccessToken = accessToken
+	}
+	if refreshToken := strings.TrimSpace(identity.RefreshToken); refreshToken != "" {
+		account.RefreshToken = refreshToken
+	}
+
+	if tokenType := strings.TrimSpace(identity.TokenType); tokenType != "" {
+		account.TokenType = tokenType
+	}
+	if scope := strings.TrimSpace(identity.Scope); scope != "" {
+		account.Scope = scope
+	}
+	if idToken := strings.TrimSpace(identity.IDToken); idToken != "" {
+		account.IDToken = idToken
+	}
+
+	if identity.AccessTokenExpiresAt != nil {
+		expiresAt := identity.AccessTokenExpiresAt.UTC()
+		account.AccessTokenExpiresAt = &expiresAt
+	} else if strings.TrimSpace(identity.AccessToken) != "" {
+		account.AccessTokenExpiresAt = nil
+	}
+}
+
+func (s *UserService) syncOAuthAccount(ctx context.Context, account *model.OAuthAccount, identity *OAuthIdentity) error {
+	if account == nil {
+		return ErrOAuthAccountConflict
+	}
+
+	applyOAuthIdentity(account, identity)
+	account.UpdatedAt = currentTime()
+
+	return s.oauthRepo.Update(ctx, account)
+}
+
 func newSocialUser(identity *OAuthIdentity) (*model.User, error) {
 	firstName, lastName := splitOAuthName(identity.FirstName, identity.LastName, identity.FullName)
 	passwordHash, err := generatePlaceholderPasswordHash()
@@ -317,7 +386,7 @@ func newSocialUser(identity *OAuthIdentity) (*model.User, error) {
 		return nil, err
 	}
 
-	now := time.Now()
+	now := currentTime()
 	return &model.User{
 		ID:            uuid.New().String(),
 		Email:         normalizeEmail(identity.Email),

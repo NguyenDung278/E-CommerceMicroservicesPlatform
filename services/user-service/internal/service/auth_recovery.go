@@ -43,7 +43,7 @@ func (s *UserService) ResendVerificationEmail(ctx context.Context, userID string
 	if user == nil {
 		return ErrUserNotFound
 	}
-	if user.EmailVerified {
+	if user.EmailVerified || normalizeEmail(user.Email) == "" {
 		return nil
 	}
 
@@ -144,7 +144,7 @@ func (s *UserService) UpdateUserRole(ctx context.Context, userID, role string) (
 }
 
 func (s *UserService) sendVerificationEmail(user *model.User, token string) error {
-	if s.emailSender == nil {
+	if s.emailSender == nil || normalizeEmail(user.Email) == "" {
 		return nil
 	}
 
@@ -167,7 +167,7 @@ func (s *UserService) sendVerificationEmail(user *model.User, token string) erro
 }
 
 func (s *UserService) sendPasswordResetEmail(user *model.User, token string) error {
-	if s.emailSender == nil {
+	if s.emailSender == nil || normalizeEmail(user.Email) == "" {
 		return nil
 	}
 

@@ -28,7 +28,7 @@ import (
 //
 // Side effects:
 //   - writes a user row to PostgreSQL.
-//   - may send a verification email when an email sender is configured.
+//   - prepares verification state so higher layers can trigger the chosen email verification flow.
 //
 // Performance:
 //   - dominated by bcrypt password hashing plus up to two repository lookups and one insert.
@@ -79,7 +79,7 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 		UpdatedAt:     now,
 	}
 
-	verificationToken, verificationTokenHash, verificationTokenExpiry, err := issueTimeBoundToken(48 * hours)
+	_, verificationTokenHash, verificationTokenExpiry, err := issueTimeBoundToken(48 * hours)
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +89,6 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, mapUserRepositoryError(err)
 	}
-
-	_ = s.sendVerificationEmail(user, verificationToken)
 
 	return s.buildAuthResponse(ctx, user)
 }

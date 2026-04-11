@@ -15,6 +15,9 @@ func TestUserHandlerRegisterRoutesParity(t *testing.T) {
 
 	assertRoutesPresent(t, e,
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/send-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/verify-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/resend-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/login"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/refresh"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/verify-email"},
@@ -26,6 +29,10 @@ func TestUserHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodGet, path: "/api/v1/users/profile"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/users/profile"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/users/avatar"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/verify-email/status"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/send-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/verify-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/resend-otp"},
 	)
 
 	assertRoutesAbsent(t, e,

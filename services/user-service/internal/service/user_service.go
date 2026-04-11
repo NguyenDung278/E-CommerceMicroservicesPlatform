@@ -29,6 +29,7 @@ var (
 	ErrInvalidOAuthTicket             = errors.New("invalid oauth ticket")
 	ErrOAuthAccountConflict           = errors.New("oauth account conflict")
 	ErrInvalidPhoneNumber             = errors.New("invalid phone number")
+	ErrPasswordConfirmationMismatch   = errors.New("password confirmation does not match")
 	ErrTelegramChatNotLinked          = errors.New("telegram chat not linked")
 	ErrPhoneVerificationRequired      = errors.New("phone verification required")
 	ErrPhoneVerificationNotFound      = errors.New("phone verification not found")
@@ -38,6 +39,13 @@ var (
 	ErrPhoneVerificationRateLimited   = errors.New("phone verification rate limited")
 	ErrPhoneVerificationInvalidOTP    = errors.New("invalid otp code")
 	ErrPhoneVerificationAlreadyUsed   = errors.New("phone verification already used")
+	ErrEmailVerificationNotFound      = errors.New("email verification not found")
+	ErrEmailVerificationExpired       = errors.New("email verification expired")
+	ErrEmailVerificationLocked        = errors.New("email verification locked")
+	ErrEmailVerificationResendTooSoon = errors.New("email verification resend too soon")
+	ErrEmailVerificationRateLimited   = errors.New("email verification rate limited")
+	ErrEmailVerificationInvalidOTP    = errors.New("invalid email verification otp")
+	ErrEmailVerificationAlreadyUsed   = errors.New("email verification already used")
 	ErrInvalidAvatarFile              = errors.New("invalid avatar file")
 	ErrAvatarTooLarge                 = errors.New("avatar file too large")
 	ErrAvatarRepositoryUnavailable    = errors.New("avatar repository unavailable")
@@ -51,6 +59,8 @@ type UserService struct {
 	repo                  repository.UserRepository
 	oauthRepo             repository.OAuthAccountRepository
 	phoneVerificationRepo repository.PhoneVerificationRepository
+	phoneSignupRepo       repository.PhoneSignupRepository
+	emailVerificationRepo repository.EmailVerificationRepository
 	avatarRepo            repository.UserAvatarRepository
 	profileTxManager      repository.ProfileTxManager
 	addressService        *AddressService
@@ -61,6 +71,7 @@ type UserService struct {
 	oauthClient           OAuthProviderClient
 	frontendBaseURL       string
 	telegramCfg           config.TelegramConfig
+	emailVerificationCfg  config.EmailVerificationConfig
 	otpLimiterMu          sync.Mutex
 	otpLimiterState       map[string][]time.Time
 }
@@ -182,6 +193,22 @@ func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository
 	}
 }
 
+// WithPhoneSignupRepository injects the repository used by public phone signup
+// OTP flows before a user row exists.
+func WithPhoneSignupRepository(repo repository.PhoneSignupRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.phoneSignupRepo = repo
+	}
+}
+
+// WithEmailVerificationRepository injects the repository used by email OTP
+// verification flows.
+func WithEmailVerificationRepository(repo repository.EmailVerificationRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.emailVerificationRepo = repo
+	}
+}
+
 // WithUserAvatarRepository injects avatar persistence used by profile reads and
 // avatar upload flows.
 func WithUserAvatarRepository(repo repository.UserAvatarRepository) UserServiceOption {
@@ -282,6 +309,14 @@ func WithTelegramConfig(cfg config.TelegramConfig) UserServiceOption {
 	}
 }
 
+// WithEmailVerificationConfig injects the email OTP configuration used by
+// verification and resend rate limiting.
+func WithEmailVerificationConfig(cfg config.EmailVerificationConfig) UserServiceOption {
+	return func(s *UserService) {
+		s.emailVerificationCfg = cfg
+	}
+}
+
 // NewUserService wires the dependencies and defaults used by the user domain.
 //
 // Inputs:
@@ -311,6 +346,14 @@ func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry 
 		telegramCfg: config.TelegramConfig{
 			APIBaseURL:               "https://api.telegram.org",
 			OTPMessageTTLSeconds:     300,
+			OTPResendCooldownSeconds: 60,
+			OTPMaxAttempts:           5,
+			OTPDailyLimitPerUser:     5,
+			OTPHourlyLimitPerIP:      10,
+			SecretPepper:             "change-me",
+		},
+		emailVerificationCfg: config.EmailVerificationConfig{
+			OTPMessageTTLSeconds:     600,
 			OTPResendCooldownSeconds: 60,
 			OTPMaxAttempts:           5,
 			OTPDailyLimitPerUser:     5,

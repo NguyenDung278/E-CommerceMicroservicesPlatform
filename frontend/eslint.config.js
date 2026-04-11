@@ -11,7 +11,6 @@ export default tseslint.config(
       "node_modules/**",
       ".npm-cache/**",
       "public/content/**",
-      "ui-reference/**",
     ],
   },
   js.configs.recommended,

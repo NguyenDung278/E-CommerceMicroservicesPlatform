@@ -3,4 +3,3 @@ node_modules
 .npm-cache
 package-lock.json
 public/content
-ui-reference

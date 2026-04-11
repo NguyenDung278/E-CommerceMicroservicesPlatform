@@ -1,4 +1,5 @@
 SHELL := /bin/bash
+PATH := /usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:$(PATH)
 
 MODULES := pkg api-gateway proto services/user-service services/product-service services/cart-service services/order-service services/payment-service services/notification-service
 DOCKER_BUILDKIT ?= 1

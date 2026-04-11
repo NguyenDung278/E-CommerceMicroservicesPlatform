@@ -8,6 +8,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 const maxAvatarUploadSize = 5 << 20
@@ -75,6 +76,11 @@ func (s *UserService) attachAvatarURL(ctx context.Context, user *model.User) (*m
 
 	avatar, err := s.avatarRepo.GetByUserID(ctx, user.ID)
 	if err != nil {
+		// Avatar rendering is optional for auth/profile bootstrap. When an older
+		// local database is missing the avatar table, we keep the login flow alive.
+		if repository.IsUndefinedTableError(err) {
+			return user, nil
+		}
 		return nil, err
 	}
 	user.AvatarURL = buildAvatarDataURL(avatar)

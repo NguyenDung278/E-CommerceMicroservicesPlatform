@@ -2,6 +2,7 @@ import { request } from "@/lib/api/http-client";
 import {
   normalizeAddress,
   normalizeAddressList,
+  normalizeEmailVerificationChallenge,
   normalizePhoneVerificationChallenge,
   normalizeUserProfile,
   normalizeUserProfileList,
@@ -9,6 +10,7 @@ import {
 import type {
   Address,
   ApiEnvelope,
+  EmailVerificationChallenge,
   PhoneVerificationChallenge,
   ProfileAddressPatch,
   UserProfile,
@@ -56,6 +58,15 @@ export interface VerifyPhoneOTPData {
 }
 
 export interface ResendPhoneOTPData {
+  verification_id: string;
+}
+
+export interface VerifyEmailOTPData {
+  verification_id: string;
+  otp_code: string;
+}
+
+export interface ResendEmailOTPData {
   verification_id: string;
 }
 
@@ -115,6 +126,45 @@ export const userApi = {
     }).then((response) => ({
       ...response,
       data: normalizePhoneVerificationChallenge(response.data) as PhoneVerificationChallenge,
+    }));
+  },
+
+  getEmailVerificationStatus(token: string): Promise<ApiEnvelope<EmailVerificationChallenge | null>> {
+    return request<unknown>("/api/v1/users/verify-email/status", { token }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data),
+    }));
+  },
+
+  sendEmailVerificationOtp(token: string): Promise<ApiEnvelope<EmailVerificationChallenge | null>> {
+    return request<unknown>("/api/v1/users/verify-email/send-otp", {
+      method: "POST",
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data),
+    }));
+  },
+
+  verifyEmailOtp(token: string, body: VerifyEmailOTPData): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/verify-email/verify-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
+    }));
+  },
+
+  resendEmailVerificationOtp(token: string, body: ResendEmailOTPData): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/users/verify-email/resend-otp", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
     }));
   },
 

@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
@@ -39,6 +42,10 @@ type fakeUserAvatarRepo struct {
 	avatars map[string]*model.UserAvatar
 }
 
+type fakeBrokenUserAvatarRepo struct {
+	err error
+}
+
 func (s *fakeEmailSender) Send(_ email.Message) error {
 	return s.err
 }
@@ -65,7 +72,9 @@ func newFakeUserAvatarRepo() *fakeUserAvatarRepo {
 }
 
 func (r *fakeUserRepo) Create(_ context.Context, user *model.User) error {
-	r.usersByEmail[user.Email] = user
+	if user.Email != "" {
+		r.usersByEmail[user.Email] = user
+	}
 	if user.Phone != "" {
 		r.usersByPhone[user.Phone] = user
 	}
@@ -78,6 +87,9 @@ func (r *fakeUserRepo) GetByID(_ context.Context, id string) (*model.User, error
 }
 
 func (r *fakeUserRepo) GetByEmail(_ context.Context, email string) (*model.User, error) {
+	if strings.TrimSpace(email) == "" {
+		return nil, nil
+	}
 	return r.usersByEmail[email], nil
 }
 
@@ -112,12 +124,19 @@ func (r *fakeUserRepo) List(_ context.Context) ([]*model.User, error) {
 }
 
 func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
+	for email, existing := range r.usersByEmail {
+		if existing.ID == user.ID && email != user.Email {
+			delete(r.usersByEmail, email)
+		}
+	}
 	for phone, existing := range r.usersByPhone {
 		if existing.ID == user.ID && phone != user.Phone {
 			delete(r.usersByPhone, phone)
 		}
 	}
-	r.usersByEmail[user.Email] = user
+	if user.Email != "" {
+		r.usersByEmail[user.Email] = user
+	}
 	if user.Phone != "" {
 		r.usersByPhone[user.Phone] = user
 	}
@@ -149,6 +168,12 @@ func (r *fakeOAuthAccountRepo) GetByUserIDAndProvider(_ context.Context, userID,
 	return r.accountsByUser[userID+":"+provider], nil
 }
 
+func (r *fakeOAuthAccountRepo) Update(_ context.Context, account *model.OAuthAccount) error {
+	r.accountsByProvider[account.Provider+":"+account.ProviderUserID] = account
+	r.accountsByUser[account.UserID+":"+account.Provider] = account
+	return nil
+}
+
 func (r *fakeUserAvatarRepo) GetByUserID(_ context.Context, userID string) (*model.UserAvatar, error) {
 	return r.avatars[userID], nil
 }
@@ -156,6 +181,14 @@ func (r *fakeUserAvatarRepo) GetByUserID(_ context.Context, userID string) (*mod
 func (r *fakeUserAvatarRepo) Upsert(_ context.Context, avatar *model.UserAvatar) error {
 	r.avatars[avatar.UserID] = avatar
 	return nil
+}
+
+func (r *fakeBrokenUserAvatarRepo) GetByUserID(_ context.Context, _ string) (*model.UserAvatar, error) {
+	return nil, r.err
+}
+
+func (r *fakeBrokenUserAvatarRepo) Upsert(_ context.Context, _ *model.UserAvatar) error {
+	return r.err
 }
 
 func (c *fakeOAuthProviderClient) AuthorizationURL(provider, state, redirectURL string) (string, error) {
@@ -496,6 +529,37 @@ func TestRefreshTokenRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestRefreshTokenIgnoresMissingAvatarTable(t *testing.T) {
+	repo := newFakeUserRepo()
+	seedSvc := NewUserService(repo, testSecret, 24)
+
+	registerResp, err := seedSvc.Register(context.Background(), dto.RegisterRequest{
+		Email:     "avatarless@example.com",
+		Password:  "password123",
+		FirstName: "Avatarless",
+		LastName:  "User",
+	})
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	brokenAvatarErr := fmt.Errorf("failed to get user avatar: %w", &pq.Error{Code: "42P01"})
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithUserAvatarRepository(&fakeBrokenUserAvatarRepo{err: brokenAvatarErr}),
+	)
+
+	refreshResp, err := svc.RefreshToken(context.Background(), registerResp.RefreshToken)
+	if err != nil {
+		t.Fatalf("RefreshToken returned error: %v", err)
+	}
+	if refreshResp.Token == "" || refreshResp.RefreshToken == "" {
+		t.Fatalf("expected refresh to keep auth flow alive, got %#v", refreshResp)
+	}
+}
+
 func TestVerifyEmailMarksUserVerified(t *testing.T) {
 	repo := newFakeUserRepo()
 	svc := NewUserService(repo, testSecret, 24)
@@ -588,19 +652,26 @@ func TestUpdateUserRoleSupportsStaff(t *testing.T) {
 func TestCompleteOAuthCallbackCreatesNewUserAndExchangeTicket(t *testing.T) {
 	repo := newFakeUserRepo()
 	oauthRepo := newFakeOAuthAccountRepo()
+	accessTokenExpiry := time.Now().Add(55 * time.Minute).UTC()
 	oauthClient := &fakeOAuthProviderClient{
 		redirects: map[string]string{
 			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
 		},
 		identities: map[string]*OAuthIdentity{
 			OAuthProviderGoogle: {
-				Provider:       OAuthProviderGoogle,
-				ProviderUserID: "google-user-1",
-				Email:          "social@example.com",
-				FirstName:      "Social",
-				LastName:       "Login",
-				FullName:       "Social Login",
-				EmailVerified:  true,
+				Provider:             OAuthProviderGoogle,
+				ProviderUserID:       "google-user-1",
+				Email:                "social@example.com",
+				FirstName:            "Social",
+				LastName:             "Login",
+				FullName:             "Social Login",
+				EmailVerified:        true,
+				AccessToken:          "google-access-token",
+				RefreshToken:         "google-refresh-token",
+				TokenType:            "Bearer",
+				Scope:                "openid email profile",
+				IDToken:              "google-id-token",
+				AccessTokenExpiresAt: &accessTokenExpiry,
 			},
 		},
 	}
@@ -655,8 +726,24 @@ func TestCompleteOAuthCallbackCreatesNewUserAndExchangeTicket(t *testing.T) {
 	if params.Get("next") != "/checkout" {
 		t.Fatalf("expected next path /checkout, got %q", params.Get("next"))
 	}
-	if oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-1"] == nil {
+	account := oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-1"]
+	if account == nil {
 		t.Fatal("expected oauth account link to be stored")
+	}
+	if account.ProviderEmail != "social@example.com" {
+		t.Fatalf("expected provider email to be stored, got %q", account.ProviderEmail)
+	}
+	if account.AccessToken != "google-access-token" {
+		t.Fatalf("expected provider access token to be stored, got %q", account.AccessToken)
+	}
+	if account.RefreshToken != "google-refresh-token" {
+		t.Fatalf("expected provider refresh token to be stored, got %q", account.RefreshToken)
+	}
+	if account.Scope != "openid email profile" {
+		t.Fatalf("expected provider scope to be stored, got %q", account.Scope)
+	}
+	if account.AccessTokenExpiresAt == nil || !account.AccessTokenExpiresAt.Equal(accessTokenExpiry) {
+		t.Fatalf("expected provider access token expiry to be stored, got %#v", account.AccessTokenExpiresAt)
 	}
 }
 
@@ -756,6 +843,109 @@ func TestCompleteOAuthCallbackAutoLinksExistingEmail(t *testing.T) {
 	linkedUser := authResp.User.(*model.User)
 	if linkedUser.ID != existingUser.ID {
 		t.Fatalf("expected oauth login to reuse existing user %q, got %q", existingUser.ID, linkedUser.ID)
+	}
+}
+
+func TestCompleteOAuthCallbackRefreshesStoredOAuthTokensWithoutClearingRefreshToken(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	existingExpiry := time.Now().Add(15 * time.Minute).UTC()
+	newExpiry := time.Now().Add(75 * time.Minute).UTC()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:             OAuthProviderGoogle,
+				ProviderUserID:       "google-user-3",
+				Email:                "alice@example.com",
+				FirstName:            "Alice",
+				LastName:             "Nguyen",
+				FullName:             "Alice Nguyen",
+				EmailVerified:        true,
+				AccessToken:          "new-access-token",
+				TokenType:            "Bearer",
+				Scope:                "openid email profile",
+				IDToken:              "new-id-token",
+				AccessTokenExpiresAt: &newExpiry,
+			},
+		},
+	}
+
+	existingUser := &model.User{
+		ID:        "oauth-linked-user",
+		Email:     "alice@example.com",
+		FirstName: "Alice",
+		LastName:  "Nguyen",
+	}
+	seedUser(repo, existingUser)
+
+	existingAccount := &model.OAuthAccount{
+		ID:                   "oauth-account-1",
+		UserID:               existingUser.ID,
+		Provider:             OAuthProviderGoogle,
+		ProviderUserID:       "google-user-3",
+		ProviderEmail:        "old@example.com",
+		AccessToken:          "old-access-token",
+		RefreshToken:         "persisted-refresh-token",
+		TokenType:            "Bearer",
+		Scope:                "openid",
+		IDToken:              "old-id-token",
+		AccessTokenExpiresAt: &existingExpiry,
+		CreatedAt:            time.Now().Add(-time.Hour),
+		UpdatedAt:            time.Now().Add(-time.Hour),
+	}
+	oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-3"] = existingAccount
+	oauthRepo.accountsByUser[existingUser.ID+":"+OAuthProviderGoogle] = existingAccount
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+	authURL, _ := url.Parse(startResult.AuthorizationURL)
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, _ := url.Parse(redirectURL)
+	params, _ := url.ParseQuery(callbackURL.Fragment)
+	if _, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket")); err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	storedAccount := oauthRepo.accountsByProvider[OAuthProviderGoogle+":google-user-3"]
+	if storedAccount.AccessToken != "new-access-token" {
+		t.Fatalf("expected access token to be refreshed, got %q", storedAccount.AccessToken)
+	}
+	if storedAccount.RefreshToken != "persisted-refresh-token" {
+		t.Fatalf("expected existing refresh token to be preserved, got %q", storedAccount.RefreshToken)
+	}
+	if storedAccount.ProviderEmail != "alice@example.com" {
+		t.Fatalf("expected provider email to be refreshed, got %q", storedAccount.ProviderEmail)
+	}
+	if storedAccount.IDToken != "new-id-token" {
+		t.Fatalf("expected id token to be refreshed, got %q", storedAccount.IDToken)
+	}
+	if storedAccount.AccessTokenExpiresAt == nil || !storedAccount.AccessTokenExpiresAt.Equal(newExpiry) {
+		t.Fatalf("expected access token expiry to be refreshed, got %#v", storedAccount.AccessTokenExpiresAt)
 	}
 }
 

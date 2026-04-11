@@ -73,7 +73,11 @@ function getUserFriendlyMessage(error: HttpError) {
       return "Bạn vừa yêu cầu OTP. Hãy chờ thêm một chút rồi thử gửi lại.";
     }
 
-    if (detail.includes("invalid otp attempts") || detail.includes("challenge has been locked")) {
+    if (
+      detail.includes("invalid otp attempts") ||
+      detail.includes("challenge has been locked") ||
+      detail.includes("invalid email verification attempts")
+    ) {
       return "Bạn đã nhập sai OTP quá nhiều lần. Hãy gửi lại mã mới để tiếp tục.";
     }
 
@@ -101,8 +105,28 @@ function getUserFriendlyMessage(error: HttpError) {
       return "Bot Telegram chưa thấy cuộc trò chuyện riêng tư nào. Hãy mở bot và gửi /start rồi thử lại.";
     }
 
+    if (detail.includes("email verification not found")) {
+      return "Không tìm thấy phiên xác minh email. Hãy yêu cầu gửi mã mới.";
+    }
+
+    if (detail.includes("email verification otp has expired")) {
+      return "Mã OTP email đã hết hạn. Hãy yêu cầu gửi lại mã mới.";
+    }
+
+    if (detail.includes("invalid email verification otp")) {
+      return "Mã OTP email chưa chính xác. Hãy kiểm tra lại rồi thử tiếp.";
+    }
+
+    if (detail.includes("email verification is invalid or already used")) {
+      return "Phiên xác minh email không còn hợp lệ. Hãy yêu cầu gửi mã mới.";
+    }
+
     if (detail.includes("invalid phone number")) {
       return "Số điện thoại chưa đúng định dạng Việt Nam.";
+    }
+
+    if (detail.includes("password confirmation does not match")) {
+      return "Mật khẩu xác nhận chưa khớp.";
     }
 
     return detail || error.message || "Dữ liệu không hợp lệ.";

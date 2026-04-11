@@ -59,7 +59,7 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 	`
 	_, err := r.executor.ExecContext(ctx, query,
 		user.ID,
-		user.Email,
+		toNullableString(user.Email),
 		toNullableString(user.Phone),
 		user.PhoneVerified,
 		user.PhoneVerifiedAt,
@@ -93,7 +93,7 @@ func (r *postgresUserRepository) Create(ctx context.Context, user *model.User) e
 func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -116,9 +116,13 @@ func (r *postgresUserRepository) GetByID(ctx context.Context, id string) (*model
 // GetByEmail retrieves a user by their email address.
 // Used during login to look up the user and verify their password.
 func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	if strings.TrimSpace(email) == "" {
+		return nil, nil
+	}
+
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -142,7 +146,7 @@ func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (
 func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -165,7 +169,7 @@ func (r *postgresUserRepository) GetByPhone(ctx context.Context, phone string) (
 func (r *postgresUserRepository) GetByEmailVerificationTokenHash(ctx context.Context, tokenHash string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -189,7 +193,7 @@ func (r *postgresUserRepository) GetByEmailVerificationTokenHash(ctx context.Con
 func (r *postgresUserRepository) GetByPasswordResetTokenHash(ctx context.Context, tokenHash string) (*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -213,7 +217,7 @@ func (r *postgresUserRepository) GetByPasswordResetTokenHash(ctx context.Context
 func (r *postgresUserRepository) List(ctx context.Context) ([]*model.User, error) {
 	query := `
 		SELECT
-			id, email, COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
+			id, COALESCE(email, ''), COALESCE(phone, ''), phone_verified, phone_verified_at, phone_last_changed_at,
 			password, first_name, last_name, role,
 			email_verified,
 			COALESCE(email_verification_token_hash, ''), email_verification_expires_at,
@@ -266,7 +270,7 @@ func (r *postgresUserRepository) Update(ctx context.Context, user *model.User) e
 		WHERE id = $16
 	`
 	_, err := r.executor.ExecContext(ctx, query,
-		user.Email,
+		toNullableString(user.Email),
 		toNullableString(user.Phone),
 		user.PhoneVerified,
 		user.PhoneVerifiedAt,

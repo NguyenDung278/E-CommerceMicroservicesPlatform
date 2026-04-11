@@ -27,23 +27,6 @@ export function normalizeIdentifier(value: string) {
   return trimmed.includes("@") ? sanitizeEmail(trimmed) : trimmed;
 }
 
-export function splitFullName(value: string) {
-  const normalized = sanitizeText(value);
-  const parts = normalized.split(" ").filter(Boolean);
-
-  if (parts.length <= 1) {
-    return {
-      firstName: normalized,
-      lastName: "",
-    };
-  }
-
-  return {
-    firstName: parts[parts.length - 1],
-    lastName: parts.slice(0, -1).join(" "),
-  };
-}
-
 export function inputClassName(hasError: boolean) {
   return hasError ? "auth-field-input input-error" : "auth-field-input";
 }

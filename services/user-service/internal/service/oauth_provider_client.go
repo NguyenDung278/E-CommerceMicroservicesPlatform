@@ -52,6 +52,10 @@ func (c *httpOAuthProviderClient) AuthorizationURL(provider, state, redirectURL 
 	switch provider {
 	case OAuthProviderGoogle:
 		values.Set("scope", "openid email profile")
+		// Request offline access so Google can issue a refresh token on the first
+		// consent grant without changing the app's primary session model.
+		values.Set("access_type", "offline")
+		values.Set("include_granted_scopes", "true")
 		return "https://accounts.google.com/o/oauth2/v2/auth?" + values.Encode(), nil
 	default:
 		return "", ErrInvalidOAuthProvider
@@ -95,8 +99,12 @@ func (c *httpOAuthProviderClient) exchangeGoogleCode(ctx context.Context, code, 
 	form.Set("redirect_uri", redirectURL)
 
 	tokenResponse := struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		TokenType    string `json:"token_type"`
+		Scope        string `json:"scope"`
+		IDToken      string `json:"id_token"`
+		ExpiresIn    int64  `json:"expires_in"`
 	}{}
 	if err := c.doFormRequest(ctx, http.MethodPost, "https://oauth2.googleapis.com/token", form, &tokenResponse); err != nil {
 		return nil, err
@@ -123,14 +131,26 @@ func (c *httpOAuthProviderClient) exchangeGoogleCode(ctx context.Context, code, 
 		return nil, err
 	}
 
+	var accessTokenExpiresAt *time.Time
+	if tokenResponse.ExpiresIn > 0 {
+		expiresAt := time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second).UTC()
+		accessTokenExpiresAt = &expiresAt
+	}
+
 	return &OAuthIdentity{
-		Provider:       OAuthProviderGoogle,
-		ProviderUserID: strings.TrimSpace(profileResponse.Subject),
-		Email:          strings.TrimSpace(profileResponse.Email),
-		FirstName:      strings.TrimSpace(profileResponse.GivenName),
-		LastName:       strings.TrimSpace(profileResponse.FamilyName),
-		FullName:       strings.TrimSpace(profileResponse.Name),
-		EmailVerified:  profileResponse.EmailVerified,
+		Provider:             OAuthProviderGoogle,
+		ProviderUserID:       strings.TrimSpace(profileResponse.Subject),
+		Email:                strings.TrimSpace(profileResponse.Email),
+		FirstName:            strings.TrimSpace(profileResponse.GivenName),
+		LastName:             strings.TrimSpace(profileResponse.FamilyName),
+		FullName:             strings.TrimSpace(profileResponse.Name),
+		EmailVerified:        profileResponse.EmailVerified,
+		AccessToken:          strings.TrimSpace(tokenResponse.AccessToken),
+		RefreshToken:         strings.TrimSpace(tokenResponse.RefreshToken),
+		TokenType:            strings.TrimSpace(tokenResponse.TokenType),
+		Scope:                strings.TrimSpace(tokenResponse.Scope),
+		IDToken:              strings.TrimSpace(tokenResponse.IDToken),
+		AccessTokenExpiresAt: accessTokenExpiresAt,
 	}, nil
 }
 

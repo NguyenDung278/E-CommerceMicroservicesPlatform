@@ -2,6 +2,7 @@ import type {
   Address,
   Cart,
   CartItem,
+  EmailVerificationChallenge,
   Order,
   OrderEvent,
   OrderItem,
@@ -468,6 +469,26 @@ export function normalizePhoneVerificationChallenge(value: unknown): PhoneVerifi
     verification_id: normalizeString(value.verification_id),
     phone: normalizeString(value.phone),
     phone_masked: normalizeString(value.phone_masked),
+    status: normalizeString(value.status),
+    expires_at: normalizeString(value.expires_at) || undefined,
+    resend_available_at: normalizeString(value.resend_available_at) || undefined,
+    expires_in_seconds: normalizeNumber(value.expires_in_seconds),
+    resend_in_seconds: normalizeNumber(value.resend_in_seconds),
+    max_attempts: normalizeNumber(value.max_attempts),
+    remaining_attempts: normalizeNumber(value.remaining_attempts),
+    verified_at: normalizeString(value.verified_at) || undefined,
+  };
+}
+
+export function normalizeEmailVerificationChallenge(value: unknown): EmailVerificationChallenge | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    verification_id: normalizeString(value.verification_id),
+    email: normalizeString(value.email),
+    email_masked: normalizeString(value.email_masked),
     status: normalizeString(value.status),
     expires_at: normalizeString(value.expires_at) || undefined,
     resend_available_at: normalizeString(value.resend_available_at) || undefined,

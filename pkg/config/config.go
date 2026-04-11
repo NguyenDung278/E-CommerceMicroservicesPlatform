@@ -36,12 +36,22 @@ type Config struct {
 	Search         SearchConfig         `mapstructure:"search"`
 	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
 	Telegram       TelegramConfig       `mapstructure:"telegram"`
+	EmailVerification EmailVerificationConfig `mapstructure:"email_verification"`
 }
 
 type TelegramConfig struct {
 	Enabled                  bool   `mapstructure:"enabled"`
 	BotToken                 string `mapstructure:"bot_token"`
 	APIBaseURL               string `mapstructure:"api_base_url"`
+	OTPMessageTTLSeconds     int    `mapstructure:"otp_message_ttl_seconds"`
+	OTPResendCooldownSeconds int    `mapstructure:"otp_resend_cooldown_seconds"`
+	OTPMaxAttempts           int    `mapstructure:"otp_max_attempts"`
+	OTPDailyLimitPerUser     int    `mapstructure:"otp_daily_limit_per_user"`
+	OTPHourlyLimitPerIP      int    `mapstructure:"otp_hourly_limit_per_ip"`
+	SecretPepper             string `mapstructure:"secret_pepper"`
+}
+
+type EmailVerificationConfig struct {
 	OTPMessageTTLSeconds     int    `mapstructure:"otp_message_ttl_seconds"`
 	OTPResendCooldownSeconds int    `mapstructure:"otp_resend_cooldown_seconds"`
 	OTPMaxAttempts           int    `mapstructure:"otp_max_attempts"`
@@ -302,6 +312,12 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("telegram.otp_daily_limit_per_user", 5)
 	v.SetDefault("telegram.otp_hourly_limit_per_ip", 10)
 	v.SetDefault("telegram.secret_pepper", "change-me")
+	v.SetDefault("email_verification.otp_message_ttl_seconds", 600)
+	v.SetDefault("email_verification.otp_resend_cooldown_seconds", 60)
+	v.SetDefault("email_verification.otp_max_attempts", 5)
+	v.SetDefault("email_verification.otp_daily_limit_per_user", 5)
+	v.SetDefault("email_verification.otp_hourly_limit_per_ip", 10)
+	v.SetDefault("email_verification.secret_pepper", "change-me")
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port

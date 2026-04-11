@@ -32,12 +32,9 @@ export type LoginFormValues = {
 };
 
 export type RegisterFormValues = {
-  fullName: string;
-  email: string;
-  phone: string;
+  identifier: string;
   password: string;
   confirmPassword: string;
-  agreeToTerms: boolean;
 };
 
 type ProfileValues = {
@@ -83,24 +80,17 @@ export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFo
 
 export function validateRegisterFields(values: RegisterFormValues): FormErrors<RegisterFormValues> {
   const errors: FormErrors<RegisterFormValues> = {};
-  const fullName = sanitizeText(values.fullName);
-  const email = sanitizeText(values.email);
-  const phone = sanitizePhoneNumber(values.phone);
+  const identifier = sanitizeIdentifier(values.identifier);
+  const phone = sanitizePhoneNumber(values.identifier);
 
-  if (!fullName) {
-    errors.fullName = "Họ tên không được để trống.";
-  } else if (!isValidLength(fullName, 2, MAX_NAME_LENGTH)) {
-    errors.fullName = "Họ tên cần từ 2 đến 120 ký tự.";
-  }
-
-  if (!email) {
-    errors.email = "Email không được để trống.";
-  } else if (!isValidEmail(email)) {
-    errors.email = "Email chưa đúng định dạng.";
-  }
-
-  if (phone && phone.length < 10) {
-    errors.phone = "Số điện thoại cần ít nhất 10 ký tự số.";
+  if (!identifier) {
+    errors.identifier = "Email hoặc số điện thoại không được để trống.";
+  } else if (identifier.includes("@")) {
+    if (!isValidEmail(identifier)) {
+      errors.identifier = "Email chưa đúng định dạng.";
+    }
+  } else if (phone.length < 10) {
+    errors.identifier = "Số điện thoại chưa đúng định dạng.";
   }
 
   if (!values.password.trim()) {
@@ -113,10 +103,6 @@ export function validateRegisterFields(values: RegisterFormValues): FormErrors<R
     errors.confirmPassword = "Hãy xác nhận lại mật khẩu.";
   } else if (values.confirmPassword !== values.password) {
     errors.confirmPassword = "Mật khẩu xác nhận chưa khớp.";
-  }
-
-  if (!values.agreeToTerms) {
-    errors.agreeToTerms = "Bạn cần đồng ý với điều khoản để tiếp tục.";
   }
 
   return errors;

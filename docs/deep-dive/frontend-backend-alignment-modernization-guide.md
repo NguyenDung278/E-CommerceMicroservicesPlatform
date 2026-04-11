@@ -310,17 +310,17 @@ Lý do:
 - không tăng giá trị học tập hay runtime
 - làm người đọc dễ nhầm đâu là file nên sửa thật
 
-### 5.2. Không xóa, nhưng nên chuyển chỗ hoặc archive
+### 5.2. Reference assets đã được loại bỏ
 
-Các file nên giữ vì còn giá trị tham chiếu, nhưng không nên để lẫn như thể chúng là source runtime:
+Thư mục reference UI cũ đã được xóa khỏi `frontend/` để tránh bị hiểu nhầm là source runtime:
 
-- toàn bộ `frontend/ui-reference/`
+- `frontend/ui-reference/`
 
-Khuyến nghị:
+Lý do:
 
-- giữ lại để design/dev đối chiếu
-- cân nhắc chuyển sang `docs/ui-reference/` hoặc giữ nguyên nhưng ghi rõ đây là reference-only assets
-- nếu repo phình to, cân nhắc Git LFS cho PNG lớn
+- không có import runtime hay build dependency từ app hiện tại
+- chỉ là HTML/PNG/doc tham chiếu thủ công
+- đã có nguy cơ làm người đọc nhầm với source thật của frontend
 
 ### 5.3. Chưa xóa ngay, nhưng phải quyết định
 

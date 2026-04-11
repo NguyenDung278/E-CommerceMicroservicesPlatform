@@ -73,6 +73,20 @@ export type PhoneVerificationChallenge = {
   verified_at?: string;
 };
 
+export type EmailVerificationChallenge = {
+  verification_id: string;
+  email: string;
+  email_masked: string;
+  status: string;
+  expires_at?: string;
+  resend_available_at?: string;
+  expires_in_seconds: number;
+  resend_in_seconds: number;
+  max_attempts: number;
+  remaining_attempts: number;
+  verified_at?: string;
+};
+
 export type AuthPayload = {
   token: string;
   refresh_token: string;

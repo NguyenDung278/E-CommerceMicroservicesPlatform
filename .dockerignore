@@ -17,6 +17,5 @@
 **/.next
 **/.DS_Store
 **/*.tsbuildinfo
-frontend/ui-reference
 coverage
 tmp

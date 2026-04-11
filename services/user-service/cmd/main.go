@@ -71,6 +71,11 @@ func main() {
 		zap.Bool("bot_token_configured", cfg.Telegram.BotToken != ""),
 		zap.String("api_base_url", cfg.Telegram.APIBaseURL),
 	)
+	log.Info("email verification otp configuration",
+		zap.Int("ttl_seconds", cfg.EmailVerification.OTPMessageTTLSeconds),
+		zap.Int("resend_cooldown_seconds", cfg.EmailVerification.OTPResendCooldownSeconds),
+		zap.Int("max_attempts", cfg.EmailVerification.OTPMaxAttempts),
+	)
 
 	// 3. Connect to PostgreSQL.
 	db, err := database.NewPostgresDB(cfg.Database)
@@ -107,6 +112,8 @@ func main() {
 	telegramSender := telegramsender.NewSender(cfg.Telegram, log)
 	oauthRepo := repository.NewOAuthAccountRepository(db)
 	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
+	phoneSignupRepo := repository.NewPhoneSignupRepository(db)
+	emailVerificationRepo := repository.NewEmailVerificationRepository(db)
 	avatarRepo := repository.NewUserAvatarRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
 	profileTxManager := repository.NewProfileTxManager(db)
@@ -119,11 +126,14 @@ func main() {
 		service.WithEmailSender(emailSender),
 		service.WithOAuthAccountRepository(oauthRepo),
 		service.WithPhoneVerificationRepository(phoneVerificationRepo),
+		service.WithPhoneSignupRepository(phoneSignupRepo),
+		service.WithEmailVerificationRepository(emailVerificationRepo),
 		service.WithUserAvatarRepository(avatarRepo),
 		service.WithProfileTxManager(profileTxManager),
 		service.WithAddressService(addressService),
 		service.WithTelegramSender(telegramSender),
 		service.WithTelegramConfig(cfg.Telegram),
+		service.WithEmailVerificationConfig(cfg.EmailVerification),
 		service.WithOAuthProviderClient(oauthClient),
 		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
 	)

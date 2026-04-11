@@ -9,6 +9,7 @@ export type {
   Cart,
   CartItem,
   Coupon,
+  EmailVerificationChallenge,
   Order,
   OrderEvent,
   OrderItem,
