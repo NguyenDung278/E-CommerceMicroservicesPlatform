@@ -1,5 +1,4 @@
-import { Link } from "react-router-dom";
-
+import { StorefrontActionLink } from "@/components/storefront/storefront-action-link";
 import "./editorial-signature-footer.css";
 
 export type EditorialSignatureFooterLink = {
@@ -30,10 +29,6 @@ const defaultFooterLinks: EditorialSignatureFooterLink[] = [
     href: "/products",
   },
 ];
-
-function isExternalHref(href: string) {
-  return /^https?:\/\//i.test(href);
-}
 
 function normalizeFooterLinks(links?: EditorialSignatureFooterLink[]) {
   const sourceLinks = links?.filter((link) => link.label.trim() && link.href.trim()) ?? [];
@@ -71,27 +66,15 @@ export function EditorialSignatureFooter({
       </div>
 
       <nav aria-label="Footer" className="editorial-signature-footer-links">
-        {footerLinks.map((link) =>
-          isExternalHref(link.href) ? (
-            <a
-              className="editorial-signature-footer-link"
-              href={link.href}
-              key={`${link.position ?? 0}-${link.label}`}
-              rel="noreferrer"
-              target="_blank"
-            >
-              {link.label}
-            </a>
-          ) : (
-            <Link
-              className="editorial-signature-footer-link"
-              key={`${link.position ?? 0}-${link.label}`}
-              to={link.href}
-            >
-              {link.label}
-            </Link>
-          )
-        )}
+        {footerLinks.map((link) => (
+          <StorefrontActionLink
+            className="editorial-signature-footer-link"
+            href={link.href}
+            key={`${link.position ?? 0}-${link.label}`}
+          >
+            {link.label}
+          </StorefrontActionLink>
+        ))}
       </nav>
 
       <p className="editorial-signature-footer-note">{note}</p>

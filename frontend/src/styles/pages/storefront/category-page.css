@@ -4,7 +4,7 @@
 
   display: grid;
   gap: 28px;
-  padding: 20px 20px 40px;
+  padding: clamp(18px, 2.4vw, 24px) var(--page-gutter) clamp(28px, 4vw, 40px);
   color: #203126;
 }
 
@@ -45,7 +45,10 @@
   align-content: space-between;
   gap: 42px;
   min-height: 720px;
-  padding: 28px;
+  padding:
+    var(--storefront-header-shell-padding-block)
+    var(--storefront-header-shell-padding-inline)
+    clamp(24px, 3vw, 32px);
 }
 
 .atelier-category-hero-grid {
@@ -505,6 +508,8 @@
   padding: 28px;
   max-width: none;
   margin: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: 760px;
 }
 
 .atelier-category-results-toolbar-shell {
@@ -557,6 +562,8 @@
   grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
   gap: 0;
   overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: 640px;
 }
 
 .atelier-category-story-copy {
@@ -607,6 +614,8 @@
   justify-content: space-between;
   gap: 20px;
   padding: 26px 28px;
+  content-visibility: auto;
+  contain-intrinsic-size: 240px;
 }
 
 .atelier-category-footer strong {
@@ -806,10 +815,6 @@
 }
 
 @media (max-width: 760px) {
-  .atelier-category-page {
-    padding: 14px 14px 28px;
-  }
-
   .atelier-category-hero {
     min-height: 580px;
     border-radius: 28px;
@@ -817,7 +822,6 @@
 
   .atelier-category-hero-inner {
     min-height: 580px;
-    padding: 18px;
   }
 
   .atelier-category-pill {

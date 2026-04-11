@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { prefetchRouteIntent } from "@/app/router/route-prefetch";
 import type { Product } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 import "./product-card.css";
@@ -50,20 +51,30 @@ export function ProductCard({
   const productVariants = Array.isArray(product.variants) ? product.variants : [];
   const productPrice = Number.isFinite(product.price) ? product.price : 0;
   const primaryImage = productImages[0] ?? "";
+  const productHref = `/products/${product.id}`;
   const accentTag = productTags[0] ?? "";
   const stockLabel = product.stock === 0 ? "Hết hàng" : `${product.stock} còn lại`;
   const stockSignalClassName =
     product.stock === 0 || product.stock <= 2
       ? "product-card-archive-signal product-card-archive-signal-alert"
       : "product-card-archive-signal";
+  const handleProductPrefetch = () => {
+    void prefetchRouteIntent(productHref);
+  };
 
   if (variant === "archive") {
     return (
       <article className="product-card-archive">
         <div className="product-card-archive-media-shell">
-          <Link className="product-card-archive-media" to={`/products/${product.id}`}>
+          <Link
+            className="product-card-archive-media"
+            onFocus={handleProductPrefetch}
+            onMouseEnter={handleProductPrefetch}
+            onTouchStart={handleProductPrefetch}
+            to={productHref}
+          >
             {primaryImage ? (
-              <img alt={product.name} src={primaryImage} />
+              <img alt={product.name} decoding="async" loading="lazy" src={primaryImage} />
             ) : (
               <div className="product-card-archive-fallback">
                 {product.name.slice(0, 1).toUpperCase()}
@@ -89,7 +100,14 @@ export function ProductCard({
         <div className="product-card-archive-copy">
           <div className="product-card-archive-head">
             <h3>
-              <Link to={`/products/${product.id}`}>{product.name}</Link>
+              <Link
+                onFocus={handleProductPrefetch}
+                onMouseEnter={handleProductPrefetch}
+                onTouchStart={handleProductPrefetch}
+                to={productHref}
+              >
+                {product.name}
+              </Link>
             </h3>
             <strong>{formatCurrency(productPrice)}</strong>
           </div>
@@ -111,7 +129,13 @@ export function ProductCard({
 
           {onBuyNow ? (
             <div className="product-card-archive-links">
-              <Link className="text-link" to={`/products/${product.id}`}>
+              <Link
+                className="text-link"
+                onFocus={handleProductPrefetch}
+                onMouseEnter={handleProductPrefetch}
+                onTouchStart={handleProductPrefetch}
+                to={productHref}
+              >
                 Xem chi tiết
               </Link>
               <button
@@ -137,10 +161,16 @@ export function ProductCard({
       }
     >
       <div className="product-card-media-shell">
-        <Link className="product-card-media-link" to={`/products/${product.id}`}>
+        <Link
+          className="product-card-media-link"
+          onFocus={handleProductPrefetch}
+          onMouseEnter={handleProductPrefetch}
+          onTouchStart={handleProductPrefetch}
+          to={productHref}
+        >
           {primaryImage ? (
             <div className="product-card-media">
-              <img alt={product.name} src={primaryImage} />
+              <img alt={product.name} decoding="async" loading="lazy" src={primaryImage} />
             </div>
           ) : (
             <div className="product-card-media product-card-media-fallback">
@@ -199,7 +229,13 @@ export function ProductCard({
             <strong>{formatCurrency(productPrice)}</strong>
             <span>{product.category || "General collection"}</span>
           </div>
-          <Link className="text-link" to={`/products/${product.id}`}>
+          <Link
+            className="text-link"
+            onFocus={handleProductPrefetch}
+            onMouseEnter={handleProductPrefetch}
+            onTouchStart={handleProductPrefetch}
+            to={productHref}
+          >
             Xem chi tiết
           </Link>
         </div>

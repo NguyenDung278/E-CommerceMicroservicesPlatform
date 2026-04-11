@@ -10,6 +10,8 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 243, 238, 0.88))
   );
   box-shadow: var(--storefront-card-shadow, 0 22px 44px -30px rgba(27, 28, 25, 0.28));
+  content-visibility: auto;
+  contain-intrinsic-size: 420px;
   transition:
     transform var(--transition-base),
     box-shadow var(--transition-base),

@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 
+import { prefetchRouteIntent } from "@/app/router/route-prefetch";
 import "./account-sidebar.css";
 
 export type AccountSidebarIconName =
@@ -31,6 +32,10 @@ export function AccountSidebar({
   title = "My Account",
   subtitle = "Manage your preferences",
 }: AccountSidebarProps) {
+  function handlePrefetch(href: string) {
+    void prefetchRouteIntent(href);
+  }
+
   return (
     <aside className="account-sidebar">
       <div className="account-sidebar-panel">
@@ -49,6 +54,9 @@ export function AccountSidebar({
               }
               end={item.end}
               key={item.id}
+              onFocus={() => handlePrefetch(item.to)}
+              onMouseEnter={() => handlePrefetch(item.to)}
+              onTouchStart={() => handlePrefetch(item.to)}
               to={item.to}
             >
               <span className="account-sidebar-icon" aria-hidden="true">

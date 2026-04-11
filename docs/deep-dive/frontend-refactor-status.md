@@ -8,6 +8,7 @@ Tài liệu này ghi lại những gì đã làm và những gì còn lại sau 
 
 - Chuẩn hóa font mới ở tầng token: `Manrope` cho body và `Fraunces` cho display.
 - Đồng bộ spacing, radius, shadow, focus ring và motion token trong `frontend/src/styles/base/_variables.css`.
+- Header storefront/account giờ dùng chung một bộ token `storefront-header-*` cho height, gap, pill, typography, underline offset và action spacing; home, category và account shell đã cùng bám bộ này thay vì mỗi route tự định nghĩa padding riêng.
 - Cập nhật button và form shared để control có cảm giác nhất quán hơn giữa storefront, account và admin.
 - Đổi thứ tự import stylesheet để CSS legacy trong `styles/shared.css` không còn vô tình đè hệ modular mới.
 
@@ -27,9 +28,19 @@ Tài liệu này ghi lại những gì đã làm và những gì còn lại sau 
 - `catalog-page.tsx` đã chuyển sang hook `use-archive-catalog-state`, dùng shared toolbar/filter/card primitives thay cho phần lớn orchestration và card markup tại route.
 - `category-page.tsx` giờ dùng `use-storefront-category-route`, `use-workbook-category-page-state`, và shared collection/filter/toolbar primitives để giảm logic dồn trong page.
 - `home-workbook.ts` giờ lazy-load `xlsx` đúng lúc cần đọc workbook, nên storefront không phải kéo chunk Excel parser ngay từ initial load.
+- Thêm prefetch theo ý định tương tác cho header, footer, account sidebar, shared action links và product/detail links:
+  - warm common routes khi browser rảnh
+  - preload chunk khi hover/focus/touch vào route nội bộ
 - Home, catalog, và workbook category cards giờ ưu tiên ảnh/link/giá live từ product service; khi có dữ liệu, media được lấy từ object storage URL do backend trả về thay vì chỉ dùng workbook image URL.
 - Catalog và category listings đã có pagination shared theo cùng một primitive, áp dụng cho All Archive, Men, Women, Footwear, Accessories và các category routes tương ứng.
 - Placeholder search của archive/category đã ổn định lại theo hành vi test mong đợi, đồng thời search input luôn hiển thị thay vì phụ thuộc state expand/collapse.
+- Hero image và ảnh dưới fold trên home/category/listing cards đã được tối ưu lại bằng `fetchPriority`, `loading=\"lazy\"`, `decoding=\"async\"`.
+- Một phần surface/card lớn đã bật `content-visibility: auto` + `contain-intrinsic-size` để giảm initial paint và main-thread work:
+  - home bento/callout/arrivals/footer
+  - category results/story/footer
+  - storefront collection card
+  - product card
+  - profile sections
 - `pages/admin/admin-page.tsx` đã tách render theo domain slice:
   - sidebar
   - overview
@@ -65,7 +76,7 @@ Tài liệu này ghi lại những gì đã làm và những gì còn lại sau 
 - Thêm test cho profile editor, avatar upload states và phone verification branch.
 - Thêm regression test cho account layout và route shell sau khi đổi typography/token.
 - Bổ sung test riêng cho các component admin domain slices mới nếu dashboard còn tiếp tục thay đổi.
-- Xem xét visual smoke test cho các surface chính: home, catalog, profile, checkout.
+- Thiết lập visual smoke test tự động cho các surface chính: home, catalog, profile, checkout.
 - Bổ sung thêm test riêng cho multi-page pagination và live-media fallback khi product service không trả về bản ghi khớp workbook.
 
 ### UX và accessibility
@@ -73,6 +84,12 @@ Tài liệu này ghi lại những gì đã làm và những gì còn lại sau 
 - Rà focus order trên mobile/account form.
 - Kiểm tra empty/loading/error state cho các page lớn sau khi đổi layout.
 - Chuẩn hóa copy cuối cùng giữa tiếng Việt và tiếng Anh cho toàn bộ account surface.
+- Tối ưu tiếp CLS của home hero xuống dưới `0.01`; sau pass ngày `2026-04-11`, Lighthouse desktop local đã kéo:
+  - `FCP` từ `1.6s` xuống `0.6s`
+  - `LCP` từ `4.5s` xuống `2.1s`
+  - `TBT` từ `2930ms` xuống `0ms`
+  - `Speed Index` từ `8.2s` xuống `1.7s`
+  - `CLS` vẫn còn `0.018`
 
 ## Cách verify sau mỗi lát cắt tiếp theo
 

@@ -9,8 +9,10 @@
 }
 
 .account-shell-header {
-  padding-top: clamp(20px, 3vw, 28px);
-  padding-bottom: 0;
+  padding:
+    var(--storefront-header-shell-padding-block)
+    var(--storefront-header-shell-padding-inline)
+    0;
 }
 
 .account-content {

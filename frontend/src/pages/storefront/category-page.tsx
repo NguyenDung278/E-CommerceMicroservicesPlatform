@@ -37,6 +37,7 @@ const categorySortOptions = [
   { label: "Price: Low to High", value: "price_asc" },
   { label: "Price: High to Low", value: "price_desc" },
 ] as const;
+const highPriorityImageAttribute = { fetchpriority: "high" } as Record<string, string>;
 
 export function CategoryPage() {
   const { categoryName = "" } = useParams();
@@ -217,7 +218,9 @@ function WorkbookCategoryPage({
         <img
           alt={pageData.heroImageAlt || pageData.heroTitle}
           className="atelier-category-hero-image"
+          decoding="async"
           src={pageData.heroImageUrl || getFallbackCategoryImage(pageData.slug, pageData.heroTitle)}
+          {...highPriorityImageAttribute}
         />
         <div className="atelier-category-hero-scrim" />
 
@@ -382,6 +385,8 @@ function WorkbookCategoryPage({
           <div className="atelier-category-story-media">
             <img
               alt={pageData.storyImageAlt || pageData.storyTitle}
+              decoding="async"
+              loading="lazy"
               src={
                 pageData.storyImageUrl ||
                 getFallbackCategoryImage(pageData.slug, pageData.storyTitle || pageData.heroTitle)

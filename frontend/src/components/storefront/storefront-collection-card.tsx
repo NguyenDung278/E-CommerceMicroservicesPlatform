@@ -37,7 +37,7 @@ export function StorefrontCollectionCard({
     >
       <div className="storefront-collection-card-media">
         {imageSrc ? (
-          <img alt={imageAlt} src={imageSrc} />
+          <img alt={imageAlt} decoding="async" loading="lazy" src={imageSrc} />
         ) : (
           <div className="storefront-collection-card-fallback">
             {(fallbackLabel || title).slice(0, 1).toUpperCase()}

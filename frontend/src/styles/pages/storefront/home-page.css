@@ -16,7 +16,15 @@
 .home-stitch-feedback {
   width: min(100%, 1536px);
   margin: 0 auto;
-  padding-inline: 48px;
+  padding-inline: var(--page-gutter);
+}
+
+.home-stitch-bento-section,
+.home-stitch-callout-section,
+.home-stitch-arrivals-section,
+.home-stitch-footer {
+  content-visibility: auto;
+  contain-intrinsic-size: 720px;
 }
 
 .home-stitch-primary-button,
@@ -109,61 +117,10 @@
   display: flex;
   flex-direction: column;
   min-height: 760px;
-  padding: 34px 42px 42px;
-}
-
-.home-stitch-hero-header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-}
-
-.home-stitch-hero-brand {
-  position: absolute;
-  left: 0;
-  color: #fff9f3;
-  font-size: 1.28rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.home-stitch-tab-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 34px;
-}
-
-.home-stitch-tab {
-  padding-bottom: 4px;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  font-size: 0.94rem;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  backdrop-filter: none;
-  transition:
-    color 180ms ease,
-    border-color 180ms ease;
-}
-
-.home-stitch-tab:hover {
-  transform: none;
-  color: #ffffff;
-}
-
-.home-stitch-tab.is-active {
-  background: transparent;
-  border-color: #ffffff;
-  color: #ffffff;
+  padding:
+    var(--storefront-header-shell-padding-block)
+    var(--storefront-header-shell-padding-inline)
+    clamp(28px, 3.2vw, 42px);
 }
 
 .home-stitch-hero-grid {
@@ -290,6 +247,8 @@
   color: #fff9f3;
   text-decoration: none;
   box-shadow: 0 30px 62px -36px rgba(22, 32, 20, 0.36);
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
 }
 
 .home-stitch-bento-card img,
@@ -472,6 +431,8 @@
   text-decoration: none;
   box-shadow: 0 26px 56px -38px rgba(22, 32, 20, 0.28);
   scroll-snap-align: start;
+  content-visibility: auto;
+  contain-intrinsic-size: 480px;
 }
 
 .home-stitch-product-media {
@@ -597,15 +558,6 @@
 }
 
 @media (max-width: 1180px) {
-  .home-stitch-hero,
-  .home-stitch-bento-section,
-  .home-stitch-callout-section,
-  .home-stitch-arrivals-section,
-  .home-stitch-footer,
-  .home-stitch-feedback {
-    padding-inline: 24px;
-  }
-
   .home-stitch-arrivals-head {
     flex-direction: column;
     align-items: flex-start;
@@ -617,7 +569,6 @@
 
   .home-stitch-hero-inner {
     min-height: 680px;
-    padding: 30px;
   }
 
   .home-stitch-hero-grid,
@@ -657,15 +608,6 @@
 }
 
 @media (max-width: 760px) {
-  .home-stitch-hero,
-  .home-stitch-bento-section,
-  .home-stitch-callout-section,
-  .home-stitch-arrivals-section,
-  .home-stitch-footer,
-  .home-stitch-feedback {
-    padding-inline: 18px;
-  }
-
   .home-stitch-hero {
     min-height: 620px;
     border-radius: 30px;
@@ -673,7 +615,6 @@
 
   .home-stitch-hero-inner {
     min-height: 620px;
-    padding: 22px;
   }
 
   .home-stitch-hero-copy h1 {

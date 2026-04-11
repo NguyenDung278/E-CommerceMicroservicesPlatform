@@ -1,16 +1,14 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { isExternalRouteHref, prefetchRouteIntent } from "@/app/router/route-prefetch";
+
 type StorefrontActionLinkProps = {
   href: string;
   className?: string;
   fallbackHref?: string;
   children: ReactNode;
 };
-
-function isExternalHref(href: string) {
-  return /^https?:\/\//i.test(href);
-}
 
 export function StorefrontActionLink({
   href,
@@ -19,8 +17,11 @@ export function StorefrontActionLink({
   children,
 }: StorefrontActionLinkProps) {
   const resolvedHref = href.trim() || fallbackHref || "/";
+  const handlePrefetch = () => {
+    void prefetchRouteIntent(resolvedHref);
+  };
 
-  if (isExternalHref(resolvedHref)) {
+  if (isExternalRouteHref(resolvedHref)) {
     return (
       <a className={className} href={resolvedHref} rel="noreferrer" target="_blank">
         {children}
@@ -29,7 +30,13 @@ export function StorefrontActionLink({
   }
 
   return (
-    <Link className={className} to={resolvedHref}>
+    <Link
+      className={className}
+      onFocus={handlePrefetch}
+      onMouseEnter={handlePrefetch}
+      onTouchStart={handlePrefetch}
+      to={resolvedHref}
+    >
       {children}
     </Link>
   );

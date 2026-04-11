@@ -55,6 +55,8 @@
 .profile-route-section {
   display: grid;
   gap: 24px;
+  content-visibility: auto;
+  contain-intrinsic-size: 760px;
 }
 
 .profile-route-section-compact {

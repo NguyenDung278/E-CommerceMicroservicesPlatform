@@ -5,16 +5,14 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
 
 import {
   resolveHomeWorkbookProductHref,
   type HomeWorkbookProduct,
   type HomeWorkbookSegment,
 } from "@/features/home/home-workbook";
-import { EditorialSignatureFooter } from "@/components";
+import { EditorialSignatureFooter, StorefrontActionLink } from "@/components";
 import { loadWorkbookLiveProductLookup } from "@/features/home/workbook-live-products";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
@@ -29,43 +27,7 @@ const fallbackTileImage =
   "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1400&q=80";
 const fallbackCalloutImage =
   "https://images.unsplash.com/photo-1490114538077-0a7f8cb49891?auto=format&fit=crop&w=1400&q=80";
-
-function isExternalHref(href: string) {
-  return /^https?:\/\//i.test(href);
-}
-
-function resolveHref(href: string, fallbackHref: string) {
-  const trimmed = href.trim();
-  return trimmed || fallbackHref;
-}
-
-function ActionLink({
-  href,
-  fallbackHref,
-  className,
-  children,
-}: {
-  href: string;
-  fallbackHref: string;
-  className: string;
-  children: ReactNode;
-}) {
-  const finalHref = resolveHref(href, fallbackHref);
-
-  if (isExternalHref(finalHref)) {
-    return (
-      <a className={className} href={finalHref} rel="noreferrer" target="_blank">
-        {children}
-      </a>
-    );
-  }
-
-  return (
-    <Link className={className} to={finalHref}>
-      {children}
-    </Link>
-  );
-}
+const highPriorityImageAttribute = { fetchpriority: "high" } as Record<string, string>;
 
 function buildPageStyle(segment: HomeWorkbookSegment | null): CSSProperties {
   return {
@@ -74,7 +36,7 @@ function buildPageStyle(segment: HomeWorkbookSegment | null): CSSProperties {
 }
 
 function buildTileHref(segment: HomeWorkbookSegment | null, href: string) {
-  return resolveHref(href, segment?.href || "/products");
+  return href.trim() || segment?.href || "/products";
 }
 
 function buildProductHref(product: HomeWorkbookProduct) {
@@ -200,7 +162,9 @@ export function HomePage() {
         <img
           alt={activeSegment?.hero.title || "Workbook hero"}
           className="home-stitch-hero-image"
+          decoding="async"
           src={activeSegment?.hero.backgroundImage || fallbackHeroImage}
+          {...highPriorityImageAttribute}
         />
         <div className="home-stitch-hero-scrim" />
 
@@ -221,20 +185,20 @@ export function HomePage() {
               </p>
 
               <div className="home-stitch-action-row">
-                <ActionLink
+                <StorefrontActionLink
                   className="home-stitch-primary-button"
                   fallbackHref={activeSegment?.href || "/products"}
                   href={activeSegment?.hero.primaryCtaHref || "/products"}
                 >
                   {activeSegment?.hero.primaryCtaLabel || "Explore Collection"}
-                </ActionLink>
-                <ActionLink
+                </StorefrontActionLink>
+                <StorefrontActionLink
                   className="home-stitch-secondary-button"
                   fallbackHref={activeSegment?.href || "/products"}
                   href={activeSegment?.hero.secondaryCtaHref || activeSegment?.href || "/products"}
                 >
                   {activeSegment?.hero.secondaryCtaLabel || "View Lookbook"}
-                </ActionLink>
+                </StorefrontActionLink>
               </div>
             </div>
 
@@ -255,13 +219,18 @@ export function HomePage() {
         {activeTiles.length > 0 ? (
           <div className="home-stitch-bento-grid">
             {activeTiles.map((tile, index) => (
-              <ActionLink
+              <StorefrontActionLink
                 className={`home-stitch-bento-card home-stitch-bento-card-${index + 1}`}
                 fallbackHref={activeSegment?.href || "/products"}
                 href={buildTileHref(activeSegment, tile.ctaHref)}
                 key={`${tile.segmentSlug}-${tile.position}-${tile.title}`}
               >
-                <img alt={tile.title} src={tile.imageUrl || fallbackTileImage} />
+                <img
+                  alt={tile.title}
+                  decoding="async"
+                  loading="lazy"
+                  src={tile.imageUrl || fallbackTileImage}
+                />
                 <div className="home-stitch-bento-scrim" />
                 <div className="home-stitch-bento-copy">
                   <span>{tile.eyebrow || activeSegment?.label}</span>
@@ -269,7 +238,7 @@ export function HomePage() {
                   <p>{tile.subtitle}</p>
                   <strong>{tile.ctaLabel || "Explore"}</strong>
                 </div>
-              </ActionLink>
+              </StorefrontActionLink>
             ))}
           </div>
         ) : (
@@ -311,6 +280,8 @@ export function HomePage() {
         <div className="home-stitch-callout-media">
           <img
             alt={activeSegment?.callout?.title || "Editorial callout"}
+            decoding="async"
+            loading="lazy"
             src={activeSegment?.callout?.imageUrl || fallbackCalloutImage}
           />
         </div>
@@ -356,14 +327,19 @@ export function HomePage() {
                 : buildProductHref(product);
 
               return (
-                <ActionLink
+                <StorefrontActionLink
                   className="home-stitch-product-card"
                   fallbackHref="/products"
                   href={productHref}
                   key={`${product.segmentSlug}-${product.position}-${product.name}`}
                 >
                   <div className="home-stitch-product-media">
-                    <img alt={liveProduct?.name || product.name} src={imageSrc || fallbackTileImage} />
+                    <img
+                      alt={liveProduct?.name || product.name}
+                      decoding="async"
+                      loading="lazy"
+                      src={imageSrc || fallbackTileImage}
+                    />
                   </div>
                   <div className="home-stitch-product-copy">
                     <p>{product.eyebrow || liveProduct?.brand || product.brand || activeSegment?.label}</p>
@@ -374,7 +350,7 @@ export function HomePage() {
                     </div>
                     <small>{product.fitNote || "A considered piece selected for the current edit."}</small>
                   </div>
-                </ActionLink>
+                </StorefrontActionLink>
               );
             })}
           </div>

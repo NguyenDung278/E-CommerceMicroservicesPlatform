@@ -16,6 +16,8 @@
   border: 1px solid rgba(87, 93, 121, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 243, 238, 0.86));
   box-shadow: 0 22px 40px -20px rgba(27, 28, 25, 0.24);
+  content-visibility: auto;
+  contain-intrinsic-size: 560px;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,

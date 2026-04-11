@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { Link, NavLink } from "react-router-dom";
 
+import { prefetchRouteIntent, scheduleRoutePrefetch } from "@/app/router/route-prefetch";
+import { warmCommonStorefrontRoutes } from "@/app/router/route-preloaders";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
 import {
@@ -8,6 +11,7 @@ import {
   storefrontFallbackNavigation,
 } from "@/constants/storefront-navigation";
 import { getUserDisplayName } from "@/utils/dev-accounts";
+import "./storefront-overlay-header-critical.css";
 import "./storefront-overlay-header.css";
 
 type StorefrontOverlayHeaderProps = {
@@ -36,9 +40,25 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
       ? "storefront-overlay-header storefront-overlay-header-light"
       : "storefront-overlay-header";
 
+  useEffect(() => {
+    return scheduleRoutePrefetch(() => {
+      warmCommonStorefrontRoutes(isAuthenticated);
+    });
+  }, [isAuthenticated]);
+
+  function handlePrefetch(href: string) {
+    void prefetchRouteIntent(href);
+  }
+
   return (
     <header className={headerClassName}>
-      <Link className="storefront-overlay-brand" to={storefrontBrandHref}>
+      <Link
+        className="storefront-overlay-brand"
+        onFocus={() => handlePrefetch(storefrontBrandHref)}
+        onMouseEnter={() => handlePrefetch(storefrontBrandHref)}
+        onTouchStart={() => handlePrefetch(storefrontBrandHref)}
+        to={storefrontBrandHref}
+      >
         ND Shop
       </Link>
 
@@ -52,6 +72,9 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
             }
             end={item.to === storefrontBrandHref}
             key={item.label}
+            onFocus={() => handlePrefetch(item.to)}
+            onMouseEnter={() => handlePrefetch(item.to)}
+            onTouchStart={() => handlePrefetch(item.to)}
             to={item.to}
           >
             {item.label}
@@ -63,13 +86,22 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
         <Link
           aria-label="Cart"
           className="storefront-overlay-bag-link"
+          onFocus={() => handlePrefetch(bagHref)}
+          onMouseEnter={() => handlePrefetch(bagHref)}
+          onTouchStart={() => handlePrefetch(bagHref)}
           state={bagState}
           to={bagHref}
         >
           <span className="storefront-overlay-bag-icon" aria-hidden="true" />
           <span className="storefront-overlay-bag-count">{itemCount}</span>
         </Link>
-        <NavLink className="storefront-overlay-account-pill" to={accountHref}>
+        <NavLink
+          className="storefront-overlay-account-pill"
+          onFocus={() => handlePrefetch(accountHref)}
+          onMouseEnter={() => handlePrefetch(accountHref)}
+          onTouchStart={() => handlePrefetch(accountHref)}
+          to={accountHref}
+        >
           {isAuthenticated && profileName ? (
             <span className="storefront-overlay-account-copy">
               <span className="storefront-overlay-account-name">{accountLabel}</span>
