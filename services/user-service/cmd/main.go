@@ -113,6 +113,7 @@ func main() {
 	oauthRepo := repository.NewOAuthAccountRepository(db)
 	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
 	phoneSignupRepo := repository.NewPhoneSignupRepository(db)
+	emailSignupRepo := repository.NewEmailSignupRepository(db)
 	emailVerificationRepo := repository.NewEmailVerificationRepository(db)
 	avatarRepo := repository.NewUserAvatarRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
@@ -127,6 +128,7 @@ func main() {
 		service.WithOAuthAccountRepository(oauthRepo),
 		service.WithPhoneVerificationRepository(phoneVerificationRepo),
 		service.WithPhoneSignupRepository(phoneSignupRepo),
+		service.WithEmailSignupRepository(emailSignupRepo),
 		service.WithEmailVerificationRepository(emailVerificationRepo),
 		service.WithUserAvatarRepository(avatarRepo),
 		service.WithProfileTxManager(profileTxManager),

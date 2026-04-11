@@ -97,6 +97,12 @@ export interface StartPhoneSignupData {
   confirm_password: string;
 }
 
+export interface StartEmailSignupData {
+  email: string;
+  password: string;
+  confirm_password: string;
+}
+
 export interface VerifyPhoneOtpData {
   verification_id: string;
   otp_code: string;
@@ -127,6 +133,35 @@ export const authApi = {
       method: "POST",
       body,
     });
+  },
+
+  startEmailSignup(body: StartEmailSignupData): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/auth/register/email/send-otp", {
+      method: "POST",
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
+    }));
+  },
+
+  verifyEmailSignup(body: VerifyEmailOtpData): Promise<ApiEnvelope<AuthPayload>> {
+    return request<AuthPayload>("/api/v1/auth/register/email/verify-otp", {
+      method: "POST",
+      body,
+    });
+  },
+
+  resendEmailSignupOtp(
+    body: ResendEmailOtpData
+  ): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<unknown>("/api/v1/auth/register/email/resend-otp", {
+      method: "POST",
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeEmailVerificationChallenge(response.data) as EmailVerificationChallenge,
+    }));
   },
 
   startPhoneSignup(body: StartPhoneSignupData): Promise<ApiEnvelope<PhoneVerificationChallenge>> {

@@ -260,6 +260,27 @@ func TestRegisterHashesPasswordAndReturnsToken(t *testing.T) {
 	}
 }
 
+func TestRegisterGeneratesRandomNameWhenNamesAreMissing(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := NewUserService(repo, testSecret, 24)
+
+	_, err := svc.Register(context.Background(), dto.RegisterRequest{
+		Email:    "random-name@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	user := repo.usersByEmail["random-name@example.com"]
+	if user == nil {
+		t.Fatal("expected user to be stored in repository")
+	}
+	if user.FirstName == "" || user.LastName == "" {
+		t.Fatalf("expected random signup name to be generated, got %q %q", user.FirstName, user.LastName)
+	}
+}
+
 func TestLoginRejectsInvalidPassword(t *testing.T) {
 	repo := newFakeUserRepo()
 	svc := NewUserService(repo, testSecret, 24)
@@ -747,6 +768,78 @@ func TestCompleteOAuthCallbackCreatesNewUserAndExchangeTicket(t *testing.T) {
 	}
 }
 
+func TestCompleteOAuthCallbackUsesGoogleProfileNameForNewUserWhenRequestNameMissing(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-name-from-profile",
+				Email:          "google-profile@example.com",
+				FullName:       "Google Profile Name",
+				EmailVerified:  true,
+			},
+		},
+	}
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+
+	authURL, err := url.Parse(startResult.AuthorizationURL)
+	if err != nil {
+		t.Fatalf("failed to parse auth URL: %v", err)
+	}
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, err := url.Parse(redirectURL)
+	if err != nil {
+		t.Fatalf("failed to parse callback URL: %v", err)
+	}
+
+	params, _ := url.ParseQuery(callbackURL.Fragment)
+	authResp, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket"))
+	if err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	user := authResp.User.(*model.User)
+	if user.FirstName != "Google" || user.LastName != "Profile Name" {
+		t.Fatalf("expected Google profile name to be used, got %q %q", user.FirstName, user.LastName)
+	}
+}
+
+func TestSplitOAuthNameDoesNotInventPlaceholderForSingleGoogleName(t *testing.T) {
+	firstName, lastName := splitOAuthName("", "", "Mononym")
+	if firstName != "Mononym" || lastName != "" {
+		t.Fatalf("expected single Google profile name to remain intact, got %q %q", firstName, lastName)
+	}
+}
+
 func TestBeginOAuthUsesConfiguredCallbackURLForLoopbackFrontend(t *testing.T) {
 	repo := newFakeUserRepo()
 	oauthRepo := newFakeOAuthAccountRepo()
@@ -843,6 +936,136 @@ func TestCompleteOAuthCallbackAutoLinksExistingEmail(t *testing.T) {
 	linkedUser := authResp.User.(*model.User)
 	if linkedUser.ID != existingUser.ID {
 		t.Fatalf("expected oauth login to reuse existing user %q, got %q", existingUser.ID, linkedUser.ID)
+	}
+}
+
+func TestCompleteOAuthCallbackBackfillsBlankExistingUserNameFromGoogleProfile(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-backfill",
+				Email:          "blank-name@example.com",
+				FullName:       "Google Filled Name",
+				EmailVerified:  true,
+			},
+		},
+	}
+
+	existingUser := &model.User{
+		ID:        "blank-name-user",
+		Email:     "blank-name@example.com",
+		FirstName: "",
+		LastName:  "",
+	}
+	seedUser(repo, existingUser)
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+	authURL, _ := url.Parse(startResult.AuthorizationURL)
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, _ := url.Parse(redirectURL)
+	params, _ := url.ParseQuery(callbackURL.Fragment)
+	authResp, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket"))
+	if err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	user := authResp.User.(*model.User)
+	if user.FirstName != "Google" || user.LastName != "Filled Name" {
+		t.Fatalf("expected blank local name to be backfilled from Google profile, got %q %q", user.FirstName, user.LastName)
+	}
+}
+
+func TestCompleteOAuthCallbackKeepsExistingUserNameWhenAlreadyPresent(t *testing.T) {
+	repo := newFakeUserRepo()
+	oauthRepo := newFakeOAuthAccountRepo()
+	oauthClient := &fakeOAuthProviderClient{
+		redirects: map[string]string{
+			OAuthProviderGoogle: "http://localhost:8080/api/v1/auth/oauth/google/callback",
+		},
+		identities: map[string]*OAuthIdentity{
+			OAuthProviderGoogle: {
+				Provider:       OAuthProviderGoogle,
+				ProviderUserID: "google-user-keep-local-name",
+				Email:          "local-name@example.com",
+				FullName:       "Google Suggested Name",
+				EmailVerified:  true,
+			},
+		},
+	}
+
+	existingUser := &model.User{
+		ID:        "local-name-user",
+		Email:     "local-name@example.com",
+		FirstName: "Local",
+		LastName:  "Name",
+	}
+	seedUser(repo, existingUser)
+
+	svc := NewUserService(
+		repo,
+		testSecret,
+		24,
+		WithOAuthAccountRepository(oauthRepo),
+		WithOAuthProviderClient(oauthClient),
+		WithFrontendBaseURL("http://localhost:5174"),
+	)
+
+	startResult, err := svc.BeginOAuth(OAuthProviderGoogle, "/profile", "http://localhost:5174")
+	if err != nil {
+		t.Fatalf("BeginOAuth returned error: %v", err)
+	}
+	authURL, _ := url.Parse(startResult.AuthorizationURL)
+
+	redirectURL, err := svc.CompleteOAuthCallback(
+		context.Background(),
+		OAuthProviderGoogle,
+		"sample-code",
+		authURL.Query().Get("state"),
+		startResult.Nonce,
+	)
+	if err != nil {
+		t.Fatalf("CompleteOAuthCallback returned error: %v", err)
+	}
+
+	callbackURL, _ := url.Parse(redirectURL)
+	params, _ := url.ParseQuery(callbackURL.Fragment)
+	authResp, err := svc.ExchangeOAuthTicket(context.Background(), params.Get("ticket"))
+	if err != nil {
+		t.Fatalf("ExchangeOAuthTicket returned error: %v", err)
+	}
+
+	user := authResp.User.(*model.User)
+	if user.FirstName != "Local" || user.LastName != "Name" {
+		t.Fatalf("expected existing local name to be preserved, got %q %q", user.FirstName, user.LastName)
 	}
 }
 

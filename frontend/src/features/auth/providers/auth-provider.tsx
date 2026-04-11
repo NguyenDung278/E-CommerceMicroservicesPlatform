@@ -83,6 +83,17 @@ type AuthContextValue = {
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
   changePassword: (input: ChangePasswordInput) => Promise<void>;
+  sendEmailSignupOtp: (
+    email: string,
+    password: string,
+    confirmPassword: string
+  ) => Promise<EmailVerificationChallenge>;
+  verifyEmailSignupOtp: (
+    verificationId: string,
+    otpCode: string,
+    options?: AuthOptions
+  ) => Promise<UserProfile>;
+  resendEmailSignupOtp: (verificationId: string) => Promise<EmailVerificationChallenge>;
   sendPhoneSignupOtp: (
     phone: string,
     password: string,
@@ -326,6 +337,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function sendEmailSignupOtp(email: string, password: string, confirmPassword: string) {
+    setError("");
+    const response = await authApi.startEmailSignup({
+      email,
+      password,
+      confirm_password: confirmPassword,
+    });
+    return response.data as EmailVerificationChallenge;
+  }
+
+  async function verifyEmailSignupOtp(
+    verificationId: string,
+    otpCode: string,
+    options?: AuthOptions
+  ) {
+    setError("");
+    const response = await authApi.verifyEmailSignup({
+      verification_id: verificationId,
+      otp_code: otpCode,
+    });
+    completeAuth(response, options?.remember ?? false);
+    return response.data.user;
+  }
+
+  async function resendEmailSignupOtp(verificationId: string) {
+    setError("");
+    const response = await authApi.resendEmailSignupOtp({
+      verification_id: verificationId,
+    });
+    return response.data as EmailVerificationChallenge;
+  }
+
   async function sendPhoneSignupOtp(phone: string, password: string, confirmPassword: string) {
     setError("");
     const response = await authApi.startPhoneSignup({
@@ -463,6 +506,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshProfile,
         updateProfile,
         changePassword,
+        sendEmailSignupOtp,
+        verifyEmailSignupOtp,
+        resendEmailSignupOtp,
         sendPhoneSignupOtp,
         verifyPhoneSignupOtp,
         resendPhoneSignupOtp,

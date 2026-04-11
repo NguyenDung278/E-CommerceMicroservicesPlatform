@@ -24,6 +24,9 @@ func NewUserHandler(p *proxy.ServiceProxy) *UserHandler {
 func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	auth := e.Group("/api/v1/auth")
 	auth.POST("/register", h.forward)
+	auth.POST("/register/email/send-otp", h.forward)
+	auth.POST("/register/email/verify-otp", h.forward)
+	auth.POST("/register/email/resend-otp", h.forward)
 	auth.POST("/register/phone/send-otp", h.forward)
 	auth.POST("/register/phone/verify-otp", h.forward)
 	auth.POST("/register/phone/resend-otp", h.forward)

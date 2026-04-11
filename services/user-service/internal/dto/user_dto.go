@@ -55,6 +55,12 @@ type StartPhoneSignupRequest struct {
 	ConfirmPassword string `json:"confirm_password" validate:"required,min=8"`
 }
 
+type StartEmailSignupRequest struct {
+	Email           string `json:"email" validate:"required,email"`
+	Password        string `json:"password" validate:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" validate:"required,min=8"`
+}
+
 type VerifyPhoneOTPRequest struct {
 	VerificationID string `json:"verification_id" validate:"required,uuid4"`
 	OTPCode        string `json:"otp_code" validate:"required,len=6,numeric"`

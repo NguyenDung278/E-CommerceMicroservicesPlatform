@@ -246,6 +246,9 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 		if user == nil {
 			return nil, ErrUserNotFound
 		}
+		if err := s.syncOAuthUserNameFromProfile(ctx, user, identity); err != nil {
+			return nil, err
+		}
 		return user, nil
 	}
 
@@ -274,6 +277,9 @@ func (s *UserService) resolveOAuthUser(ctx context.Context, identity *OAuthIdent
 			}
 			user = existingByEmail
 		}
+	}
+	if err := s.syncOAuthUserNameFromProfile(ctx, user, identity); err != nil {
+		return nil, err
 	}
 
 	userProviderAccount, err := s.oauthRepo.GetByUserIDAndProvider(ctx, user.ID, provider)
@@ -400,6 +406,33 @@ func newSocialUser(identity *OAuthIdentity) (*model.User, error) {
 	}, nil
 }
 
+func (s *UserService) syncOAuthUserNameFromProfile(ctx context.Context, user *model.User, identity *OAuthIdentity) error {
+	if user == nil || identity == nil {
+		return nil
+	}
+
+	firstName, lastName := splitOAuthName(identity.FirstName, identity.LastName, identity.FullName)
+	if firstName == "" && lastName == "" {
+		return nil
+	}
+
+	changed := false
+	if strings.TrimSpace(user.FirstName) == "" && firstName != "" {
+		user.FirstName = firstName
+		changed = true
+	}
+	if strings.TrimSpace(user.LastName) == "" && lastName != "" {
+		user.LastName = lastName
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+
+	user.UpdatedAt = currentTime()
+	return s.repo.Update(ctx, user)
+}
+
 func generatePlaceholderPasswordHash() (string, error) {
 	randomPassword, _, _, err := issueTimeBoundToken(24 * time.Hour)
 	if err != nil {
@@ -428,17 +461,14 @@ func splitOAuthName(firstName, lastName, fullName string) (string, string) {
 			return parts[0], strings.Join(parts[1:], " ")
 		}
 		if len(parts) == 1 {
-			return parts[0], "User"
+			return parts[0], ""
 		}
 	}
-	if firstName == "" {
-		firstName = "Social"
-	}
-	if lastName == "" {
-		lastName = "User"
+	if firstName != "" || lastName != "" {
+		return firstName, lastName
 	}
 
-	return firstName, lastName
+	return "", ""
 }
 
 func (s *UserService) signOAuthState(claims oauthStateClaims) (string, error) {

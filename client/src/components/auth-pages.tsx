@@ -27,33 +27,6 @@ type FeedbackState = {
   message: string;
 };
 
-function toTitleCase(value: string) {
-  if (!value) {
-    return "";
-  }
-
-  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-}
-
-function deriveNameFromEmail(email: string) {
-  const localPart = email.trim().toLowerCase().split("@")[0] ?? "";
-  const sanitizedLocalPart =
-    localPart.replace(/[._-]+/g, " ").replace(/\d+/g, " ").trim() || "commerce customer";
-  const parts = sanitizedLocalPart.split(/\s+/).filter(Boolean).map(toTitleCase);
-
-  if (parts.length <= 1) {
-    return {
-      firstName: parts[0] ?? "Commerce",
-      lastName: "Customer",
-    };
-  }
-
-  return {
-    firstName: parts.slice(0, -1).join(" "),
-    lastName: parts[parts.length - 1] ?? "Customer",
-  };
-}
-
 function maskEmail(value: string) {
   const trimmedValue = value.trim();
   const [localPart, domain] = trimmedValue.split("@");
@@ -284,31 +257,20 @@ function RegisterPageContent() {
   const redirectTo = searchParams.get("redirect") || "/profile";
   const {
     isAuthenticated,
-    register,
     beginOAuthLogin,
-    getEmailVerificationStatus,
-    sendEmailVerificationOtp,
-    verifyEmailOtp,
-    resendEmailVerificationOtp,
-    getPhoneVerificationStatus,
+    sendEmailSignupOtp,
+    verifyEmailSignupOtp,
+    resendEmailSignupOtp,
     sendPhoneSignupOtp,
     verifyPhoneSignupOtp,
     resendPhoneSignupOtp,
-    sendPhoneOtp,
-    verifyPhoneOtp,
-    resendPhoneOtp,
-    updateProfile,
-    refreshProfile,
-    user,
   } = useAuth();
   const [identifier, setIdentifier] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [phoneBusy, setPhoneBusy] = useState(false);
-  const [holdRedirect, setHoldRedirect] = useState(false);
   const [stage, setStage] = useState<"form" | "pending_verification">("form");
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
@@ -337,53 +299,13 @@ function RegisterPageContent() {
     setPhoneVerification(status);
     setOtpExpiresIn(status?.expires_in_seconds ?? 0);
     setOtpResendIn(status?.resend_in_seconds ?? 0);
-
-    if (status?.phone) {
-      setPhone(status.phone);
-    }
   }
 
   useEffect(() => {
-    if (isAuthenticated && !holdRedirect) {
+    if (isAuthenticated) {
       router.replace(redirectTo);
     }
-  }, [holdRedirect, isAuthenticated, redirectTo, router]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !holdRedirect) {
-      return;
-    }
-
-    let active = true;
-
-    void getEmailVerificationStatus()
-      .then((status) => {
-        if (active) {
-          applyEmailVerificationStatus(status, user?.email || registeredEmail);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          applyEmailVerificationStatus(null, user?.email || registeredEmail);
-        }
-      });
-
-    void getPhoneVerificationStatus()
-      .then((status) => {
-        if (active) {
-          applyPhoneVerificationStatus(status);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          applyPhoneVerificationStatus(null);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [getEmailVerificationStatus, getPhoneVerificationStatus, holdRedirect, isAuthenticated, registeredEmail, user?.email]);
+  }, [isAuthenticated, redirectTo, router]);
 
   useEffect(() => {
     if (!emailVerification?.verification_id) {
@@ -484,34 +406,26 @@ function RegisterPageContent() {
     }
 
     const normalizedEmail = normalizedIdentifier.toLowerCase();
-    const name = deriveNameFromEmail(normalizedEmail);
 
     try {
-      setHoldRedirect(true);
       setBusy(true);
-      const createdUser = await register(
-        {
-          email: normalizedEmail,
-          phone: "",
-          password: password.trim(),
-          first_name: name.firstName,
-          last_name: name.lastName,
-        },
-        false,
+      const challenge = await sendEmailSignupOtp(
+        normalizedEmail,
+        password.trim(),
+        confirmPassword.trim(),
       );
 
       setStage("pending_verification");
-      setRegisteredEmail(createdUser.email || normalizedEmail);
-      applyEmailVerificationStatus(null, createdUser.email || normalizedEmail);
+      setRegisteredEmail(normalizedEmail);
+      applyEmailVerificationStatus(challenge, normalizedEmail);
       setFeedback({
-        tone: "success",
-        message: `Tài khoản đã được tạo. Nếu OTP chưa hiện ngay, hệ thống sẽ tự đồng bộ phiên và tải trạng thái xác minh cho ${maskEmail(createdUser.email || normalizedEmail)} trong giây lát.`,
+        tone: "info",
+        message: `Mã OTP đăng ký đã được gửi tới ${challenge.email_masked}. Tài khoản chỉ được tạo sau khi bạn xác minh OTP thành công.`,
       });
       setPassword("");
       setConfirmPassword("");
       setEmailOtpCode("");
     } catch (reason) {
-      setHoldRedirect(false);
       setFeedback({
         tone: "error",
         message: getErrorMessage(reason),
@@ -543,14 +457,13 @@ function RegisterPageContent() {
 
     try {
       setEmailBusy(true);
-      const challenge = await verifyEmailOtp(verificationID, emailOtpCode.trim());
-      applyEmailVerificationStatus(challenge, registeredEmail || user?.email || "");
-      const refreshedProfile = await refreshProfile();
-      setRegisteredEmail(refreshedProfile.email || registeredEmail);
+      const challenge = emailVerification;
+      await verifyEmailSignupOtp(verificationID, emailOtpCode.trim(), false);
+      applyEmailVerificationStatus(challenge, registeredEmail);
       setEmailOtpCode("");
       setFeedback({
         tone: "success",
-        message: `Email ${maskEmail(refreshedProfile.email || registeredEmail || user?.email || "")} đã được xác minh thành công.`,
+        message: `Email ${maskEmail(registeredEmail)} đã được xác minh thành công. Hệ thống đang đăng nhập cho bạn.`,
       });
     } catch (reason) {
       setFeedback({
@@ -563,26 +476,24 @@ function RegisterPageContent() {
   }
 
   async function handleResendVerification() {
-    if (emailVerified) {
+    if (!emailVerification?.verification_id) {
       setFeedback({
-        tone: "success",
-        message: "Email hiện đã được xác minh, bạn không cần gửi lại OTP nữa.",
+        tone: "error",
+        message: "Phiên OTP email hiện không còn hiệu lực. Hãy quay lại form và gửi lại yêu cầu đăng ký.",
       });
       return;
     }
 
     try {
       setEmailBusy(true);
-      const challenge = emailVerification?.verification_id
-        ? await resendEmailVerificationOtp(emailVerification.verification_id)
-        : await sendEmailVerificationOtp();
-      applyEmailVerificationStatus(challenge, registeredEmail || user?.email || "");
+      const challenge = await resendEmailSignupOtp(emailVerification.verification_id);
+      applyEmailVerificationStatus(challenge, registeredEmail || identifier.trim().toLowerCase());
       setEmailOtpCode("");
       setFeedback({
         tone: "info",
         message: challenge
           ? `Một mã OTP mới đã được gửi tới ${challenge.email_masked}.`
-          : `Một email xác minh mới đã được gửi tới ${maskEmail(registeredEmail || user?.email || "")}.`,
+          : `Một email xác minh mới đã được gửi tới ${maskEmail(registeredEmail || identifier.trim().toLowerCase())}.`,
       });
     } catch (reason) {
       setFeedback({
@@ -595,27 +506,23 @@ function RegisterPageContent() {
   }
 
   async function handleSendPhoneOtp() {
-    const normalizedPhone = stage === "form"
-      ? normalizePhoneDigits(identifier)
-      : normalizePhoneDigits(phone);
+    const normalizedPhone = normalizePhoneDigits(identifier);
     setPhoneFeedback(null);
 
-    if (stage === "form" && !isAuthenticated) {
-      if (!password.trim() || password.length < 8) {
-        setPhoneFeedback({
-          tone: "error",
-          message: "Mật khẩu cần tối thiểu 8 ký tự trước khi gửi Telegram OTP.",
-        });
-        return;
-      }
+    if (!password.trim() || password.length < 8) {
+      setPhoneFeedback({
+        tone: "error",
+        message: "Mật khẩu cần tối thiểu 8 ký tự trước khi gửi Telegram OTP.",
+      });
+      return;
+    }
 
-      if (password !== confirmPassword) {
-        setPhoneFeedback({
-          tone: "error",
-          message: "Mật khẩu xác nhận chưa khớp.",
-        });
-        return;
-      }
+    if (password !== confirmPassword) {
+      setPhoneFeedback({
+        tone: "error",
+        message: "Mật khẩu xác nhận chưa khớp.",
+      });
+      return;
     }
 
     if (!isValidVietnamesePhone(normalizedPhone)) {
@@ -628,17 +535,12 @@ function RegisterPageContent() {
 
     try {
       setPhoneBusy(true);
-      const challenge = stage === "form" && !isAuthenticated
-        ? await sendPhoneSignupOtp(normalizedPhone, password.trim(), confirmPassword.trim())
-        : await sendPhoneOtp(normalizedPhone);
+      const challenge = await sendPhoneSignupOtp(normalizedPhone, password.trim(), confirmPassword.trim());
       applyPhoneVerificationStatus(challenge);
-      setPhone(normalizedPhone);
       setOtpCode("");
       setPhoneFeedback({
         tone: "info",
-        message: stage === "form" && !isAuthenticated
-          ? `OTP Telegram đã được gửi tới ${challenge.phone_masked}. Hãy nhập 6 chữ số để hoàn tất đăng ký bằng số điện thoại.`
-          : `OTP đã được gửi qua Telegram tới số ${challenge.phone_masked}. Nếu đây là lần đầu, hãy mở bot và gửi /start trước khi thử lại.`,
+        message: `OTP Telegram đã được gửi tới ${challenge.phone_masked}. Hãy nhập 6 chữ số để hoàn tất đăng ký bằng số điện thoại.`,
       });
     } catch (reason) {
       setPhoneFeedback({
@@ -652,9 +554,7 @@ function RegisterPageContent() {
 
   async function handleVerifyPhoneOtp() {
     const verificationID = phoneVerification?.verification_id;
-    const normalizedPhone = stage === "form"
-      ? normalizePhoneDigits(identifier)
-      : normalizePhoneDigits(phone);
+    const normalizedPhone = normalizePhoneDigits(identifier);
     setPhoneFeedback(null);
 
     if (!verificationID) {
@@ -675,24 +575,12 @@ function RegisterPageContent() {
 
     try {
       setPhoneBusy(true);
-      if (stage === "form" && !isAuthenticated) {
-        await verifyPhoneSignupOtp(verificationID, otpCode.trim(), false);
-      } else {
-        const challenge = await verifyPhoneOtp(verificationID, otpCode.trim());
-        applyPhoneVerificationStatus(challenge);
-
-        await updateProfile({
-          phone: normalizedPhone,
-          phone_verification_id: verificationID,
-        });
-      }
+      await verifyPhoneSignupOtp(verificationID, otpCode.trim(), false);
 
       setOtpCode("");
       setPhoneFeedback({
         tone: "success",
-        message: stage === "form" && !isAuthenticated
-          ? `Số điện thoại ${normalizedPhone} đã được xác minh và tài khoản đang được đăng nhập cho bạn.`
-          : `Số điện thoại ${normalizedPhone} đã được xác minh. Từ lần sau bạn có thể đăng nhập bằng số điện thoại hoặc Google.`,
+        message: `Số điện thoại ${normalizedPhone} đã được xác minh và tài khoản đang được đăng nhập cho bạn.`,
       });
     } catch (reason) {
       setPhoneFeedback({
@@ -718,9 +606,7 @@ function RegisterPageContent() {
 
     try {
       setPhoneBusy(true);
-      const challenge = stage === "form" && !isAuthenticated
-        ? await resendPhoneSignupOtp(verificationID)
-        : await resendPhoneOtp(verificationID);
+      const challenge = await resendPhoneSignupOtp(verificationID);
       applyPhoneVerificationStatus(challenge);
       setPhoneFeedback({
         tone: "info",
@@ -736,18 +622,15 @@ function RegisterPageContent() {
     }
   }
 
-  if (isAuthenticated && !holdRedirect) {
+  if (isAuthenticated) {
     return <LoadingScreen label="Đang chuyển hướng..." />;
   }
 
-  const hasPhoneLogin = Boolean(user?.phone_verified && user?.phone);
-  const normalizedPhone = normalizePhoneDigits(phone);
   const normalizedPhoneIdentifier = normalizePhoneDigits(identifier);
   const isPhoneIdentifier =
     identifier.trim() !== "" &&
     !isLikelyEmail(identifier.trim()) &&
-    normalizedPhoneIdentifier.length > 0;
-  const emailVerified = Boolean(user?.email_verified);
+    isValidVietnamesePhone(normalizedPhoneIdentifier);
 
   return (
     <AuthShell
@@ -813,7 +696,7 @@ function RegisterPageContent() {
               </div>
 
               <p className="rounded-[1.1rem] bg-surface-container-low px-4 py-4 text-sm leading-7 text-on-surface-variant">
-                Họ tên mặc định sẽ được suy ra từ email và bạn có thể chỉnh lại sau trong hồ sơ. Nếu bạn tiếp tục với Google, backend sẽ tự đồng bộ email và họ tên từ Google profile.
+                Nếu bạn đăng ký bằng email hoặc số điện thoại, backend sẽ tự tạo một họ tên ngẫu nhiên và bạn có thể chỉnh lại sau trong hồ sơ. Nếu bạn tiếp tục với Google, backend sẽ tự đồng bộ email và họ tên từ Google profile.
               </p>
 
               <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy || phoneBusy}>
@@ -946,101 +829,31 @@ function RegisterPageContent() {
                   <button
                     type="button"
                     className={cn(buttonStyles({ size: "lg" }), "w-full")}
-                    disabled={emailBusy || emailOtpCode.trim().length !== 6 || emailVerified}
+                    disabled={emailBusy || emailOtpCode.trim().length !== 6}
                     onClick={() => void handleVerifyEmailOtp()}
                   >
-                    {emailBusy ? "Đang xác minh..." : emailVerified ? "Email đã xác minh" : "Xác minh OTP email"}
+                    {emailBusy ? "Đang xác minh..." : "Xác minh OTP email"}
                   </button>
                   <button
                     type="button"
                     className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")}
-                    disabled={emailBusy || emailOtpResendIn > 0 || emailVerified}
+                    disabled={emailBusy || emailOtpResendIn > 0}
                     onClick={() => void handleResendVerification()}
                   >
-                    {emailVerified ? "OTP đã hoàn tất" : emailOtpResendIn > 0 ? `Gửi lại sau ${emailOtpResendIn}s` : "Gửi lại OTP email"}
+                    {emailOtpResendIn > 0 ? `Gửi lại sau ${emailOtpResendIn}s` : "Gửi lại OTP email"}
                   </button>
                 </div>
               </div>
-
-              {emailVerified ? (
-                <div className="mt-4">
-                  <InlineAlert tone="success">
-                    Email của bạn đã được xác minh và sẵn sàng cho các luồng khôi phục tài khoản.
-                  </InlineAlert>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Bật đăng nhập bằng số điện thoại
-              </p>
-              <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                Nhập số điện thoại Việt Nam, nhận OTP qua Telegram, rồi lưu số vào hồ sơ để các lần sau có thể đăng nhập bằng số hoặc Google.
-              </p>
-
-              {phoneFeedback ? <div className="mt-4"><InlineAlert tone={phoneFeedback.tone}>{phoneFeedback.message}</InlineAlert></div> : null}
-
-              <div className="mt-5 space-y-4">
-                <TextInput autoComplete="tel" placeholder="09xxxxxxxx" value={phone} onChange={(event) => {
-                  setPhone(event.target.value);
-                  setPhoneFeedback(null);
-                }} />
-
-                <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")} disabled={phoneBusy || !isValidVietnamesePhone(normalizedPhone)} onClick={() => void handleSendPhoneOtp()}>
-                  {phoneBusy ? "Đang gửi OTP..." : "Gửi OTP qua Telegram"}
-                </button>
-              </div>
-
-              {phoneVerification ? (
-                <div className="mt-4 rounded-[1rem] bg-surface px-4 py-4 text-sm leading-7 text-on-surface-variant">
-                  <p>
-                    OTP đang chờ xác minh cho <span className="font-semibold text-primary">{phoneVerification.phone_masked}</span>.
-                  </p>
-                  <p className="mt-2">
-                    Hết hạn sau <span className="font-semibold text-primary">{formatSecondsLabel(otpExpiresIn)}</span>, gửi lại sau{" "}
-                    <span className="font-semibold text-primary">{formatSecondsLabel(otpResendIn)}</span>, còn{" "}
-                    <span className="font-semibold text-primary">{phoneVerification.remaining_attempts}</span> lượt nhập.
-                  </p>
-                </div>
-              ) : null}
-
-              {phoneVerification ? (
-                <div className="mt-4 space-y-4">
-                  <TextInput autoComplete="one-time-code" placeholder="OTP 6 chữ số" value={otpCode} onChange={(event) => {
-                    setOtpCode(event.target.value);
-                    setPhoneFeedback(null);
-                  }} />
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <button type="button" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={phoneBusy || otpCode.trim().length !== 6} onClick={() => void handleVerifyPhoneOtp()}>
-                      {phoneBusy ? "Đang xác minh..." : "Xác minh OTP và lưu số"}
-                    </button>
-                    <button type="button" className={cn(buttonStyles({ variant: "ghost", size: "lg" }), "w-full")} disabled={phoneBusy || otpResendIn > 0} onClick={() => void handleResendPhoneOtp()}>
-                      {otpResendIn > 0 ? `Gửi lại sau ${otpResendIn}s` : "Gửi lại OTP"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <p className="mt-4 text-xs leading-6 text-on-surface-variant">
-                Lưu ý: backend hiện yêu cầu bot Telegram đã nhìn thấy cuộc trò chuyện riêng tư của bạn. Nếu đây là lần đầu, hãy mở bot và gửi <span className="font-semibold text-primary">/start</span>.
-              </p>
-
-              {hasPhoneLogin ? (
-                <div className="mt-4">
-                  <InlineAlert tone="success">
-                    Số điện thoại {user?.phone} đã sẵn sàng cho đăng nhập bằng số điện thoại.
-                  </InlineAlert>
-                </div>
-              ) : null}
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
-              <button type="button" className={cn(buttonStyles({ size: "lg" }), "w-full")} onClick={() => {
-                setHoldRedirect(false);
-                router.replace(redirectTo);
+              <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")} onClick={() => {
+                setStage("form");
+                setFeedback(null);
+                setEmailVerification(null);
+                setEmailOtpCode("");
               }}>
-                {emailVerified ? "Tiếp tục vào tài khoản" : "Tiếp tục sau"}
+                Quay lại chỉnh email
               </button>
             </div>
           </>

@@ -70,6 +70,17 @@ type AuthContextValue = {
   logout: () => void;
   refreshProfile: () => Promise<UserProfile>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
+  sendEmailSignupOtp: (
+    email: string,
+    password: string,
+    confirmPassword: string,
+  ) => Promise<EmailVerificationChallenge>;
+  verifyEmailSignupOtp: (
+    verificationId: string,
+    otpCode: string,
+    remember?: boolean,
+  ) => Promise<UserProfile>;
+  resendEmailSignupOtp: (verificationId: string) => Promise<EmailVerificationChallenge>;
   sendPhoneSignupOtp: (
     phone: string,
     password: string,
@@ -116,6 +127,9 @@ type AuthActionsValue = Pick<
   | "logout"
   | "refreshProfile"
   | "updateProfile"
+  | "sendEmailSignupOtp"
+  | "verifyEmailSignupOtp"
+  | "resendEmailSignupOtp"
   | "sendPhoneSignupOtp"
   | "verifyPhoneSignupOtp"
   | "resendPhoneSignupOtp"
@@ -276,6 +290,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearPendingOAuthRemember();
     return response.data.user;
   }, [completeAuth]);
+
+  const sendEmailSignupOtp = useCallback(async (
+    email: string,
+    password: string,
+    confirmPassword: string,
+  ) => {
+    setError("");
+    const response = await authApi.startEmailSignup({
+      email,
+      password,
+      confirm_password: confirmPassword,
+    });
+    return response.data;
+  }, []);
+
+  const verifyEmailSignupOtp = useCallback(async (
+    verificationId: string,
+    otpCode: string,
+    rememberSession = false,
+  ) => {
+    setError("");
+    const response = await authApi.verifyEmailSignup({
+      verification_id: verificationId,
+      otp_code: otpCode,
+    });
+    completeAuth(response, rememberSession);
+    return response.data.user;
+  }, [completeAuth]);
+
+  const resendEmailSignupOtp = useCallback(async (verificationId: string) => {
+    setError("");
+    const response = await authApi.resendEmailSignupOtp({
+      verification_id: verificationId,
+    });
+    return response.data;
+  }, []);
 
   const sendPhoneSignupOtp = useCallback(async (
     phone: string,
@@ -465,6 +515,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshProfile,
       updateProfile,
+      sendEmailSignupOtp,
+      verifyEmailSignupOtp,
+      resendEmailSignupOtp,
       sendPhoneSignupOtp,
       verifyPhoneSignupOtp,
       resendPhoneSignupOtp,
@@ -488,6 +541,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshProfile,
       updateProfile,
+      sendEmailSignupOtp,
+      verifyEmailSignupOtp,
+      resendEmailSignupOtp,
       sendPhoneSignupOtp,
       verifyPhoneSignupOtp,
       resendPhoneSignupOtp,

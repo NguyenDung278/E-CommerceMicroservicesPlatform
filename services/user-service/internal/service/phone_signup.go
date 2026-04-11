@@ -17,11 +17,6 @@ import (
 	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 )
 
-const (
-	defaultPhoneSignupFirstName = "ND"
-	defaultPhoneSignupLastName  = "Customer"
-)
-
 // StartPhoneSignup begins the public registration flow for phone-only users and
 // dispatches a Telegram OTP before the account is created.
 func (s *UserService) StartPhoneSignup(ctx context.Context, ipAddress string, req dto.StartPhoneSignupRequest) (*dto.PhoneVerificationStatusResponse, error) {
@@ -50,6 +45,7 @@ func (s *UserService) StartPhoneSignup(ctx context.Context, ipAddress string, re
 	if err != nil {
 		return nil, err
 	}
+	firstName, lastName := generateRandomSignupName()
 
 	now := currentTime()
 	if !s.allowOTPEvent("phone-signup:phone:"+phone, s.telegramCfg.OTPDailyLimitPerUser, 24*hours, now) {
@@ -95,8 +91,8 @@ func (s *UserService) StartPhoneSignup(ctx context.Context, ipAddress string, re
 			ID:                uuid.New().String(),
 			Phone:             phone,
 			PasswordHash:      string(passwordHash),
-			FirstName:         defaultPhoneSignupFirstName,
-			LastName:          defaultPhoneSignupLastName,
+			FirstName:         firstName,
+			LastName:          lastName,
 			OTPHash:           otpHash,
 			ExpiresAt:         now.Add(s.telegramOTPConfigTTL()),
 			ResendAvailableAt: now.Add(s.telegramOTPCooldown()),
@@ -113,8 +109,8 @@ func (s *UserService) StartPhoneSignup(ctx context.Context, ipAddress string, re
 		}
 	} else {
 		challenge.PasswordHash = string(passwordHash)
-		challenge.FirstName = defaultPhoneSignupFirstName
-		challenge.LastName = defaultPhoneSignupLastName
+		challenge.FirstName = firstName
+		challenge.LastName = lastName
 		challenge.OTPHash = otpHash
 		challenge.ExpiresAt = now.Add(s.telegramOTPConfigTTL())
 		challenge.ResendAvailableAt = now.Add(s.telegramOTPCooldown())

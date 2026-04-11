@@ -59,6 +59,10 @@ type PaymentValidationValues = {
 const MAX_NAME_LENGTH = 120;
 const MAX_DESCRIPTION_LENGTH = 5000;
 
+function isValidVietnamesePhoneIdentifier(value: string): boolean {
+  return /^0\d{9}$/.test(sanitizePhoneNumber(value));
+}
+
 export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFormValues> {
   const errors: FormErrors<LoginFormValues> = {};
   const identifier = sanitizeIdentifier(values.identifier);
@@ -67,7 +71,7 @@ export function validateLoginFields(values: LoginFormValues): FormErrors<LoginFo
     errors.identifier = "Email hoặc số điện thoại không được để trống.";
   } else if (identifier.includes("@") && !isValidEmail(identifier)) {
     errors.identifier = "Email chưa đúng định dạng.";
-  } else if (!identifier.includes("@") && sanitizePhoneNumber(identifier).length < 10) {
+  } else if (!identifier.includes("@") && !isValidVietnamesePhoneIdentifier(identifier)) {
     errors.identifier = "Số điện thoại chưa đúng định dạng.";
   }
 
@@ -89,7 +93,7 @@ export function validateRegisterFields(values: RegisterFormValues): FormErrors<R
     if (!isValidEmail(identifier)) {
       errors.identifier = "Email chưa đúng định dạng.";
     }
-  } else if (phone.length < 10) {
+  } else if (!isValidVietnamesePhoneIdentifier(phone)) {
     errors.identifier = "Số điện thoại chưa đúng định dạng.";
   }
 

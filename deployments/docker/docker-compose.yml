@@ -240,6 +240,9 @@ services:
       context: ../..
       dockerfile: services/user-service/Dockerfile
     container_name: ecommerce-user-service
+    env_file:
+      - ../../.env
+      - ../../.env.local
     environment:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
@@ -262,7 +265,6 @@ services:
       TELEGRAM_OTP_MAX_ATTEMPTS: ${TELEGRAM_OTP_MAX_ATTEMPTS:-5}
       TELEGRAM_OTP_DAILY_LIMIT_PER_USER: ${TELEGRAM_OTP_DAILY_LIMIT_PER_USER:-5}
       TELEGRAM_OTP_HOURLY_LIMIT_PER_IP: ${TELEGRAM_OTP_HOURLY_LIMIT_PER_IP:-10}
-      TELEGRAM_SECRET_PEPPER: ${TELEGRAM_SECRET_PEPPER:-change-me}
     volumes:
       - ./config/user-service.yaml:/config/config.yaml
     networks:

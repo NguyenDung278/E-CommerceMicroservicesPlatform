@@ -60,6 +60,7 @@ type UserService struct {
 	oauthRepo             repository.OAuthAccountRepository
 	phoneVerificationRepo repository.PhoneVerificationRepository
 	phoneSignupRepo       repository.PhoneSignupRepository
+	emailSignupRepo       repository.EmailSignupRepository
 	emailVerificationRepo repository.EmailVerificationRepository
 	avatarRepo            repository.UserAvatarRepository
 	profileTxManager      repository.ProfileTxManager
@@ -198,6 +199,14 @@ func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository
 func WithPhoneSignupRepository(repo repository.PhoneSignupRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneSignupRepo = repo
+	}
+}
+
+// WithEmailSignupRepository injects the repository used by public email signup
+// OTP flows before a user row exists.
+func WithEmailSignupRepository(repo repository.EmailSignupRepository) UserServiceOption {
+	return func(s *UserService) {
+		s.emailSignupRepo = repo
 	}
 }
 

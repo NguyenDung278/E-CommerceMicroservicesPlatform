@@ -37,6 +37,9 @@ func (s *UserService) Register(ctx context.Context, req dto.RegisterRequest) (*d
 	req.Phone = normalizePhone(req.Phone)
 	req.FirstName = normalizeHumanName(req.FirstName)
 	req.LastName = normalizeHumanName(req.LastName)
+	if req.FirstName == "" && req.LastName == "" {
+		req.FirstName, req.LastName = generateRandomSignupName()
+	}
 
 	existing, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {

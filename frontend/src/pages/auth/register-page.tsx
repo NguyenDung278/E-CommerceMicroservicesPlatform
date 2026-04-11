@@ -3,7 +3,6 @@ import {
   Link,
   Navigate,
   useLocation,
-  useNavigate,
   type Location as RouterLocation,
 } from "react-router-dom";
 
@@ -36,6 +35,10 @@ type InlineFeedback = {
 
 type IdentifierKind = "email" | "phone" | "unknown";
 
+function isValidVietnamesePhone(value: string) {
+  return /^0\d{9}$/.test(sanitizePhoneNumber(value));
+}
+
 const defaultRegisterForm: RegisterFormValues = {
   identifier: "",
   password: "",
@@ -52,39 +55,10 @@ function detectIdentifierKind(value: string): IdentifierKind {
   if (normalized.includes("@")) {
     return "email";
   }
-  if (phone.length >= 10) {
+  if (isValidVietnamesePhone(phone)) {
     return "phone";
   }
   return "unknown";
-}
-
-function deriveNameFromIdentifier(value: string) {
-  const normalized = sanitizeIdentifier(value);
-  const localPart = normalized.includes("@") ? normalized.split("@")[0] ?? "" : normalized;
-  const sanitized = localPart.replace(/[._-]+/g, " ").replace(/\d+/g, " ").trim();
-  const parts = sanitized
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
-
-  if (parts.length === 0) {
-    return {
-      firstName: "ND",
-      lastName: "Shop",
-    };
-  }
-
-  if (parts.length === 1) {
-    return {
-      firstName: parts[0],
-      lastName: "Customer",
-    };
-  }
-
-  return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(" "),
-  };
 }
 
 function maskEmail(value: string) {
@@ -119,19 +93,15 @@ function formatSecondsLabel(seconds: number) {
 
 export function RegisterPage() {
   const location = useLocation();
-  const navigate = useNavigate();
   const {
     isAuthenticated,
-    register,
     beginOAuthLogin,
-    getEmailVerificationStatus,
-    sendEmailVerificationOtp,
-    verifyEmailOtp,
-    resendEmailVerificationOtp,
+    sendEmailSignupOtp,
+    verifyEmailSignupOtp,
+    resendEmailSignupOtp,
     sendPhoneSignupOtp,
     verifyPhoneSignupOtp,
     resendPhoneSignupOtp,
-    refreshProfile,
     error,
     clearError,
   } = useAuth();
@@ -141,7 +111,6 @@ export function RegisterPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [emailBusy, setEmailBusy] = useState(false);
   const [phoneBusy, setPhoneBusy] = useState(false);
-  const [holdRedirect, setHoldRedirect] = useState(false);
   const [stage, setStage] = useState<"form" | "verify_email">("form");
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [emailOtpCode, setEmailOtpCode] = useState("");
@@ -172,52 +141,6 @@ export function RegisterPage() {
 
     pushNotification("error", "Có lỗi xác thực", error);
   }, [error]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !holdRedirect || stage !== "verify_email") {
-      return;
-    }
-
-    let active = true;
-    setEmailBusy(true);
-
-    void (async () => {
-      const status = (await getEmailVerificationStatus()) ?? (await sendEmailVerificationOtp());
-      return status;
-    })()
-      .then((status) => {
-        if (!active) {
-          return;
-        }
-
-        applyEmailVerificationStatus(status, registeredEmail);
-        setVerificationFeedback({
-          tone: "info",
-          message: status
-            ? `Mã OTP đã được gửi tới ${status.email_masked}.`
-            : `Tài khoản đã được tạo cho ${maskEmail(registeredEmail)}.`,
-        });
-      })
-      .catch((reason) => {
-        if (!active) {
-          return;
-        }
-
-        setVerificationFeedback({
-          tone: "error",
-          message: getErrorMessage(reason),
-        });
-      })
-      .finally(() => {
-        if (active) {
-          setEmailBusy(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [getEmailVerificationStatus, holdRedirect, isAuthenticated, registeredEmail, sendEmailVerificationOtp, stage]);
 
   useEffect(() => {
     if (!emailVerification?.verification_id && !phoneVerification?.verification_id) {
@@ -305,7 +228,7 @@ export function RegisterPage() {
       return;
     }
 
-    if (normalizedPhone.length < 10) {
+    if (!isValidVietnamesePhone(normalizedPhone)) {
       setVerificationFeedback({
         tone: "error",
         message: "Số điện thoại chưa đúng định dạng để gửi Telegram OTP.",
@@ -444,38 +367,30 @@ export function RegisterPage() {
       return;
     }
 
-    const name = deriveNameFromIdentifier(normalizedIdentifier);
     const normalizedEmail = sanitizeEmail(normalizedIdentifier);
 
     try {
       setIsBusy(true);
-      await register(
-        {
-          email: normalizedEmail,
-          phone: "",
-          password: form.password.trim(),
-          first_name: name.firstName,
-          last_name: name.lastName,
-        },
-        { remember: false }
+      const challenge = await sendEmailSignupOtp(
+        normalizedEmail,
+        form.password.trim(),
+        form.confirmPassword.trim()
       );
-
-      setHoldRedirect(true);
       setStage("verify_email");
       setRegisteredEmail(normalizedEmail);
       setEmailOtpCode("");
-      applyEmailVerificationStatus(null, normalizedEmail);
+      applyEmailVerificationStatus(challenge, normalizedEmail);
       setVerificationFeedback({
         tone: "info",
-        message: `Tài khoản đã được tạo. Hệ thống đang chuẩn bị mã OTP cho ${maskEmail(normalizedEmail)}.`,
+        message: `Mã OTP đăng ký đã được gửi tới ${challenge.email_masked}. Tài khoản chỉ được tạo sau khi bạn xác minh OTP thành công.`,
       });
       pushNotification(
-        "success",
-        "Tạo tài khoản thành công",
-        "Tài khoản đã được tạo. Hãy nhập OTP được gửi tới email của bạn để hoàn tất xác minh."
+        "info",
+        "Đã gửi OTP email",
+        "Hãy nhập OTP được gửi tới email của bạn để hoàn tất đăng ký."
       );
     } catch (reason) {
-      pushNotification("error", "Không thể tạo tài khoản", getErrorMessage(reason));
+      pushNotification("error", "Không thể gửi OTP email", getErrorMessage(reason));
     } finally {
       setIsBusy(false);
     }
@@ -502,19 +417,18 @@ export function RegisterPage() {
 
     try {
       setEmailBusy(true);
-      const challenge = await verifyEmailOtp(verificationID, emailOtpCode.trim());
+      await verifyEmailSignupOtp(verificationID, emailOtpCode.trim(), { remember: false });
+      const challenge = emailVerification;
       applyEmailVerificationStatus(challenge, registeredEmail);
-      const refreshedProfile = await refreshProfile();
-      setRegisteredEmail(refreshedProfile.email || registeredEmail);
       setEmailOtpCode("");
       setVerificationFeedback({
         tone: "success",
-        message: `Email ${maskEmail(refreshedProfile.email || registeredEmail)} đã được xác minh thành công.`,
+        message: `Email ${maskEmail(registeredEmail)} đã được xác minh thành công. Hệ thống đang đăng nhập cho bạn.`,
       });
       pushNotification(
         "success",
         "Xác minh hoàn tất",
-        "Email đã được xác minh. Bạn có thể tiếp tục vào tài khoản."
+        "Email đã được xác minh và tài khoản đã được tạo thành công."
       );
     } catch (reason) {
       setVerificationFeedback({
@@ -527,11 +441,17 @@ export function RegisterPage() {
   }
 
   async function handleResendEmailOtp() {
+    if (!emailVerification?.verification_id) {
+      setVerificationFeedback({
+        tone: "error",
+        message: "Phiên OTP email hiện không còn hiệu lực. Hãy quay lại form và gửi lại yêu cầu đăng ký.",
+      });
+      return;
+    }
+
     try {
       setEmailBusy(true);
-      const challenge = emailVerification?.verification_id
-        ? await resendEmailVerificationOtp(emailVerification.verification_id)
-        : await sendEmailVerificationOtp();
+      const challenge = await resendEmailSignupOtp(emailVerification.verification_id);
       applyEmailVerificationStatus(challenge, registeredEmail);
       setEmailOtpCode("");
       setVerificationFeedback({
@@ -558,7 +478,7 @@ export function RegisterPage() {
     });
   }
 
-  if (isAuthenticated && !holdRedirect) {
+  if (isAuthenticated) {
     return <Navigate replace to={redirectTo} />;
   }
 
@@ -599,11 +519,6 @@ export function RegisterPage() {
           <div className="auth-register-form-card">
             <header className="auth-register-head auth-register-head-compact">
               <h1>{stage === "verify_email" ? "Verify Email OTP" : "Create Account"}</h1>
-              <p>
-                {stage === "verify_email"
-                  ? "Nhập OTP một lần được gửi tới email của bạn để hoàn tất xác minh."
-                  : "Hệ thống sẽ tự nhận diện email hoặc số điện thoại ngay khi bạn nhập."}
-              </p>
             </header>
 
             {stage === "form" ? (
@@ -616,13 +531,6 @@ export function RegisterPage() {
                       </span>
                     }
                     error={visibleErrors.identifier}
-                    hint={
-                      identifierKind === "email"
-                        ? "Đã nhận diện email. Sau khi tạo tài khoản, OTP sẽ được gửi qua email."
-                        : identifierKind === "phone"
-                          ? "Đã nhận diện số điện thoại. Hệ thống sẽ gửi Telegram OTP ngay sau khi bạn bấm nút đăng ký."
-                          : "Bạn có thể nhập email hoặc số điện thoại Việt Nam."
-                    }
                     htmlFor="register-identifier"
                     label="Email Or Phone Number"
                     required
@@ -857,16 +765,18 @@ export function RegisterPage() {
 
                 <div className="auth-register-footer auth-register-footer-compact">
                   <p>
-                    Ready to continue?
+                    Need to edit your email?
                     <button
                       className="auth-register-inline-link"
                       type="button"
                       onClick={() => {
-                        setHoldRedirect(false);
-                        navigate(redirectTo, { replace: true });
+                        setStage("form");
+                        setVerificationFeedback(null);
+                        setEmailVerification(null);
+                        setEmailOtpCode("");
                       }}
                     >
-                      Go to account
+                      Back to form
                     </button>
                   </p>
                 </div>

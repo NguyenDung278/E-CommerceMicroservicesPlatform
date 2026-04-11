@@ -61,6 +61,9 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Public routes — no authentication required.
 	auth := e.Group("/api/v1/auth")
 	auth.POST("/register", h.Register)
+	auth.POST("/register/email/send-otp", h.StartEmailSignup)
+	auth.POST("/register/email/verify-otp", h.VerifyEmailSignupOTP)
+	auth.POST("/register/email/resend-otp", h.ResendEmailSignupOTP)
 	auth.POST("/register/phone/send-otp", h.StartPhoneSignup)
 	auth.POST("/register/phone/verify-otp", h.VerifyPhoneSignupOTP)
 	auth.POST("/register/phone/resend-otp", h.ResendPhoneSignupOTP)
@@ -376,6 +379,57 @@ func (h *UserHandler) GetPhoneVerificationStatus(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "phone verification status retrieved", statusPayload)
 }
 
+func (h *UserHandler) StartEmailSignup(c echo.Context) error {
+	var req dto.StartEmailSignupRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.StartEmailSignup(c.Request().Context(), c.RealIP(), req)
+	if err != nil {
+		return handleEmailSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email signup otp sent", result)
+}
+
+func (h *UserHandler) VerifyEmailSignupOTP(c echo.Context) error {
+	var req dto.VerifyEmailOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.VerifyEmailSignupOTP(c.Request().Context(), req)
+	if err != nil {
+		return handleEmailSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email signup verified", result)
+}
+
+func (h *UserHandler) ResendEmailSignupOTP(c echo.Context) error {
+	var req dto.ResendEmailOTPRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	result, err := h.userService.ResendEmailSignupOTP(c.Request().Context(), c.RealIP(), req)
+	if err != nil {
+		return handleEmailSignupError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "email signup otp resent", result)
+}
+
 func (h *UserHandler) StartPhoneSignup(c echo.Context) error {
 	var req dto.StartPhoneSignupRequest
 	if err := c.Bind(&req); err != nil {
@@ -623,10 +677,24 @@ func handlePhoneSignupError(c echo.Context, err error) error {
 	return handlePhoneOTPError(c, err)
 }
 
+func handleEmailSignupError(c echo.Context, err error) error {
+	if errors.Is(err, service.ErrPasswordConfirmationMismatch) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", "password confirmation does not match")
+	}
+	if errors.Is(err, service.ErrEmailAlreadyExists) {
+		return response.Error(c, http.StatusConflict, "email signup failed", "email already exists")
+	}
+
+	return handleEmailOTPError(c, err)
+}
+
 func handleEmailOTPError(c echo.Context, err error) error {
 	var emailVerificationErr *service.EmailVerificationError
 	hasEmailVerificationError := errors.As(err, &emailVerificationErr)
 
+	if errors.Is(err, service.ErrEmailAlreadyExists) {
+		return response.Error(c, http.StatusConflict, "email verification failed", "email already exists")
+	}
 	if errors.Is(err, service.ErrUserNotFound) {
 		return response.Error(c, http.StatusNotFound, "not found", "user not found")
 	}

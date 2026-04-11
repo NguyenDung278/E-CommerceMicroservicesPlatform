@@ -118,6 +118,12 @@ func TestStartPhoneSignupAndVerifyOTPCreatesPhoneOnlyUser(t *testing.T) {
 	if !createdUser.EmailVerified {
 		t.Fatal("expected phone-only signup to skip email verification requirement")
 	}
+	if createdUser.FirstName == "" || createdUser.LastName == "" {
+		t.Fatalf("expected phone signup to assign a random profile name, got %q %q", createdUser.FirstName, createdUser.LastName)
+	}
+	if createdUser.FirstName == "ND" && createdUser.LastName == "Customer" {
+		t.Fatalf("expected phone signup to stop using the legacy placeholder name, got %q %q", createdUser.FirstName, createdUser.LastName)
+	}
 
 	challenge := signupRepo.challenges[status.VerificationID]
 	if challenge == nil || challenge.Status != model.PhoneVerificationStatusConsumed || challenge.ConsumedAt == nil {

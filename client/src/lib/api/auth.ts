@@ -1,5 +1,5 @@
 import { API_BASE_URL, request } from "@/lib/api/http-client";
-import type { ApiEnvelope, AuthPayload, PhoneVerificationChallenge } from "@/types/api";
+import type { ApiEnvelope, AuthPayload, EmailVerificationChallenge, PhoneVerificationChallenge } from "@/types/api";
 
 export type OAuthProvider = "google";
 
@@ -23,6 +23,12 @@ export interface RefreshTokenData {
 
 export interface StartPhoneSignupData {
   phone: string;
+  password: string;
+  confirm_password: string;
+}
+
+export interface StartEmailSignupData {
+  email: string;
   password: string;
   confirm_password: string;
 }
@@ -61,6 +67,27 @@ export interface OAuthExchangeData {
 export const authApi = {
   register(body: RegisterData): Promise<ApiEnvelope<AuthPayload>> {
     return request<AuthPayload>("/api/v1/auth/register", {
+      method: "POST",
+      body,
+    });
+  },
+
+  startEmailSignup(body: StartEmailSignupData): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<EmailVerificationChallenge>("/api/v1/auth/register/email/send-otp", {
+      method: "POST",
+      body,
+    });
+  },
+
+  verifyEmailSignup(body: VerifyPhoneOtpData): Promise<ApiEnvelope<AuthPayload>> {
+    return request<AuthPayload>("/api/v1/auth/register/email/verify-otp", {
+      method: "POST",
+      body,
+    });
+  },
+
+  resendEmailSignupOtp(body: ResendPhoneOtpData): Promise<ApiEnvelope<EmailVerificationChallenge>> {
+    return request<EmailVerificationChallenge>("/api/v1/auth/register/email/resend-otp", {
       method: "POST",
       body,
     });

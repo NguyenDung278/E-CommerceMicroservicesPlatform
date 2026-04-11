@@ -15,6 +15,9 @@ func TestUserHandlerRegisterRoutesParity(t *testing.T) {
 
 	assertRoutesPresent(t, e,
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/email/send-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/email/verify-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/email/resend-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/send-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/verify-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/auth/register/phone/resend-otp"},
