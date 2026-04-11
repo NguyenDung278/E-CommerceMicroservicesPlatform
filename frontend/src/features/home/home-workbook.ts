@@ -1,5 +1,9 @@
-import * as XLSX from "xlsx";
 import type { Product } from "@/types/api";
+
+type XlsxModule = typeof import("xlsx");
+type WorkbookDocument = import("xlsx").WorkBook;
+
+let xlsxModulePromise: Promise<XlsxModule> | null = null;
 
 export type HomeWorkbookNavItem = {
   position: number;
@@ -186,6 +190,14 @@ const liveWorkbookCandidates = [
   { url: "/content/stitchfix-home.csv", kind: "csv" as const },
 ];
 
+async function loadXlsxModule() {
+  if (!xlsxModulePromise) {
+    xlsxModulePromise = import("xlsx");
+  }
+
+  return xlsxModulePromise;
+}
+
 function normalizeKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "_");
 }
@@ -282,7 +294,7 @@ function sortByPosition<T extends { position: number }>(items: T[]) {
   return [...items].sort((left, right) => left.position - right.position);
 }
 
-function getSheetRows(workbook: XLSX.WorkBook, sheetName: string) {
+function getSheetRows(xlsx: XlsxModule, workbook: WorkbookDocument, sheetName: string) {
   const matchedSheetName = workbook.SheetNames.find(
     (candidate) => normalizeKey(candidate) === normalizeKey(sheetName)
   );
@@ -296,7 +308,7 @@ function getSheetRows(workbook: XLSX.WorkBook, sheetName: string) {
     return [];
   }
 
-  return XLSX.utils
+  return xlsx.utils
     .sheet_to_json<WorkbookRow>(sheet, {
       defval: "",
       raw: false,
@@ -320,7 +332,7 @@ function emptyParsedRows(): ParsedRows {
   };
 }
 
-function parseFlatRows(workbook: XLSX.WorkBook): ParsedRows {
+function parseFlatRows(xlsx: XlsxModule, workbook: WorkbookDocument): ParsedRows {
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) {
     return emptyParsedRows();
@@ -331,7 +343,7 @@ function parseFlatRows(workbook: XLSX.WorkBook): ParsedRows {
     return emptyParsedRows();
   }
 
-  const rows = XLSX.utils
+  const rows = xlsx.utils
     .sheet_to_json<WorkbookRow>(sheet, {
       defval: "",
       raw: false,
@@ -355,31 +367,30 @@ function parseFlatRows(workbook: XLSX.WorkBook): ParsedRows {
   };
 }
 
-function getWorkbookRows(workbook: XLSX.WorkBook): ParsedRows {
-  const navItems = getSheetRows(workbook, "nav_items");
-  const hero = getSheetRows(workbook, "hero");
-  const categoryPages = getSheetRows(workbook, "category_pages");
+function getWorkbookRows(xlsx: XlsxModule, workbook: WorkbookDocument): ParsedRows {
+  const navItems = getSheetRows(xlsx, workbook, "nav_items");
+  const hero = getSheetRows(xlsx, workbook, "hero");
+  const categoryPages = getSheetRows(xlsx, workbook, "category_pages");
+  const calloutMetrics = getSheetRows(xlsx, workbook, "callout_metrics");
 
   if (navItems.length > 0 || hero.length > 0 || categoryPages.length > 0) {
     return {
-      siteMeta: getSheetRows(workbook, "site_meta"),
+      siteMeta: getSheetRows(xlsx, workbook, "site_meta"),
       navItems,
       hero,
-      categoryTiles: getSheetRows(workbook, "category_tiles"),
-      callout: getSheetRows(workbook, "callout"),
+      categoryTiles: getSheetRows(xlsx, workbook, "category_tiles"),
+      callout: getSheetRows(xlsx, workbook, "callout"),
       calloutMetrics:
-        getSheetRows(workbook, "callout_metrics").length > 0
-          ? getSheetRows(workbook, "callout_metrics")
-          : getSheetRows(workbook, "metrics"),
-      products: getSheetRows(workbook, "products"),
-      footerLinks: getSheetRows(workbook, "footer_links"),
+        calloutMetrics.length > 0 ? calloutMetrics : getSheetRows(xlsx, workbook, "metrics"),
+      products: getSheetRows(xlsx, workbook, "products"),
+      footerLinks: getSheetRows(xlsx, workbook, "footer_links"),
       categoryPages,
-      categoryFilters: getSheetRows(workbook, "category_filters"),
-      categoryPageProducts: getSheetRows(workbook, "category_page_products"),
+      categoryFilters: getSheetRows(xlsx, workbook, "category_filters"),
+      categoryPageProducts: getSheetRows(xlsx, workbook, "category_page_products"),
     };
   }
 
-  return parseFlatRows(workbook);
+  return parseFlatRows(xlsx, workbook);
 }
 
 function parseWorkbookRows(
@@ -394,7 +405,7 @@ function parseWorkbookRows(
     caption: readString(siteMetaRow, "footer_caption") || "Crafted for the Discerning",
     note:
       readString(siteMetaRow, "footer_note") ||
-      "Workbook-driven editorial homepage that refreshes whenever the Excel file changes.",
+      "An editorial storefront shaped for clear browsing, product discovery, and quick returns.",
   };
 
   const navItems = sortByPosition(
@@ -588,7 +599,7 @@ function parseWorkbookRows(
         collectionKicker: hero.collectionKicker || "Seasonal Edit",
         description:
           hero.description ||
-          "Workbook-powered editorial homepage with live copy, imagery, and links.",
+          "Seasonal layers, refined essentials, and considered accessories gathered in one calm edit.",
         primaryCtaLabel: hero.primaryCtaLabel || "Explore Collection",
         primaryCtaHref: hero.primaryCtaHref || "/products",
         secondaryCtaLabel: hero.secondaryCtaLabel || "View Lookbook",
@@ -600,7 +611,7 @@ function parseWorkbookRows(
         quoteKicker: hero.quoteKicker || "Editorial Note",
         quoteBody:
           hero.quoteBody ||
-          "Adjust the workbook and the home page updates without calling a backend API.",
+          "New arrivals, updated imagery, and quieter storytelling stay aligned across the storefront.",
         accent: hero.accent || "#8d573d",
         arrivalsKicker: hero.arrivalsKicker || "New Arrivals",
         arrivalsTitle: hero.arrivalsTitle || "Seasonal Essentials",
@@ -640,11 +651,12 @@ function parseWorkbookRows(
 }
 
 function parseWorkbook(
-  workbook: XLSX.WorkBook,
+  xlsx: XlsxModule,
+  workbook: WorkbookDocument,
   sourceName: string,
   sourceKind: HomeWorkbookContent["sourceKind"]
 ) {
-  return parseWorkbookRows(getWorkbookRows(workbook), sourceName, sourceKind);
+  return parseWorkbookRows(getWorkbookRows(xlsx, workbook), sourceName, sourceKind);
 }
 
 function parseFileName(pathOrName: string) {
@@ -881,9 +893,7 @@ export function buildWorkbookFallbackProduct(
   return {
     id: productId,
     name: reference.name,
-    description:
-      reference.description ||
-      `San pham nay dang duoc hien thi tu workbook cho section ${reference.categoryLabel}.`,
+    description: reference.description || `A curated preview from the ${reference.categoryLabel} edit.`,
     price: reference.price,
     stock: 0,
     category: reference.categoryLabel,
@@ -904,6 +914,7 @@ export async function loadHomeWorkbookFromUrl(
   sourceKind: "xlsx" | "csv",
   signal?: AbortSignal
 ) {
+  const xlsx = await loadXlsxModule();
   const response = await fetch(`${url}?t=${Date.now()}`, {
     cache: "no-store",
     signal,
@@ -915,10 +926,10 @@ export async function loadHomeWorkbookFromUrl(
 
   const workbook =
     sourceKind === "csv"
-      ? XLSX.read(await response.text(), { type: "string" })
-      : XLSX.read(await response.arrayBuffer(), { type: "array" });
+      ? xlsx.read(await response.text(), { type: "string" })
+      : xlsx.read(await response.arrayBuffer(), { type: "array" });
 
-  return parseWorkbook(workbook, parseFileName(url), sourceKind);
+  return parseWorkbook(xlsx, workbook, parseFileName(url), sourceKind);
 }
 
 export async function loadLiveHomeWorkbook(signal?: AbortSignal) {
@@ -936,11 +947,12 @@ export async function loadLiveHomeWorkbook(signal?: AbortSignal) {
 }
 
 export async function loadHomeWorkbookFromFile(file: File) {
+  const xlsx = await loadXlsxModule();
   const extension = file.name.toLowerCase().endsWith(".csv") ? "csv" : "xlsx";
   const workbook =
     extension === "csv"
-      ? XLSX.read(await readBlobText(file), { type: "string" })
-      : XLSX.read(await readBlobArrayBuffer(file), { type: "array" });
+      ? xlsx.read(await readBlobText(file), { type: "string" })
+      : xlsx.read(await readBlobArrayBuffer(file), { type: "array" });
 
-  return parseWorkbook(workbook, file.name, "upload");
+  return parseWorkbook(xlsx, workbook, file.name, "upload");
 }

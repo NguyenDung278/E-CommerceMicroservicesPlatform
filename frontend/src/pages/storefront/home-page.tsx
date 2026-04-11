@@ -14,8 +14,11 @@ import {
   type HomeWorkbookProduct,
   type HomeWorkbookSegment,
 } from "@/features/home/home-workbook";
+import { loadWorkbookLiveProductLookup } from "@/features/home/workbook-live-products";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
+import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
 import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
+import type { Product } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/home-page.css";
 
@@ -82,6 +85,10 @@ function buildProductHref(product: HomeWorkbookProduct) {
   });
 }
 
+function buildProductLookupKey(product: HomeWorkbookProduct) {
+  return product.productId || `${product.segmentSlug}-${product.position}-${product.name}`;
+}
+
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="home-stitch-empty-card">
@@ -98,6 +105,7 @@ export function HomePage() {
   const navItems = useMemo(() => content?.navItems ?? [], [content?.navItems]);
   const segments = useMemo(() => content?.segments ?? [], [content?.segments]);
   const [activeSegmentSlug, setActiveSegmentSlug] = useState("");
+  const [liveArrivalProducts, setLiveArrivalProducts] = useState<Record<string, Product>>({});
 
   useEffect(() => {
     const defaultSegmentSlug =
@@ -119,16 +127,56 @@ export function HomePage() {
     [activeSegmentSlug, segments]
   );
 
-  const activeTiles = activeSegment?.tiles.slice(0, 4) ?? [];
-  const activeMetrics = activeSegment?.metrics.slice(0, 4) ?? [];
-  const activeProducts = activeSegment?.products.slice(0, 8) ?? [];
+  const activeTiles = useMemo(() => activeSegment?.tiles.slice(0, 4) ?? [], [activeSegment]);
+  const activeMetrics = useMemo(() => activeSegment?.metrics.slice(0, 4) ?? [], [activeSegment]);
+  const activeProducts = useMemo(() => activeSegment?.products.slice(0, 8) ?? [], [activeSegment]);
   const footerLinks = content?.footerLinks ?? [];
+  const footerNoteFallback =
+    "An editorial storefront shaped for clear browsing, product discovery, and quick returns.";
   const footer = content?.footer ?? {
     brandName: "ND Shop",
     caption: "Crafted for the Discerning",
-    note: "Workbook-driven editorial homepage.",
+    note: footerNoteFallback,
   };
   const pageStyle = buildPageStyle(activeSegment);
+
+  useEffect(() => {
+    let active = true;
+
+    if (activeProducts.length === 0) {
+      setLiveArrivalProducts({});
+      return () => {
+        active = false;
+      };
+    }
+
+    async function hydrateArrivalProducts() {
+      const nextLookup = await loadWorkbookLiveProductLookup({
+        entries: activeProducts.map((product) => ({
+          lookupKey: buildProductLookupKey(product),
+          productId: product.productId,
+          name: product.name,
+          brand: product.brand,
+          categoryLabel: activeSegment?.label,
+          href: product.href || activeSegment?.href || "/products",
+        })),
+      });
+
+      if (active) {
+        setLiveArrivalProducts(nextLookup);
+      }
+    }
+
+    void hydrateArrivalProducts().catch(() => {
+      if (active) {
+        setLiveArrivalProducts({});
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeProducts, activeSegment?.href, activeSegment?.label]);
 
   function scrollProductRail(direction: "prev" | "next") {
     const rail = productRailRef.current;
@@ -164,7 +212,12 @@ export function HomePage() {
                 {activeSegment?.hero.collectionKicker || "Seasonal Edit"}
               </span>
               <h1>{activeSegment?.hero.title || "Forest & Hearth"}</h1>
-              <p>{activeSegment?.hero.description}</p>
+              <p>
+                {resolveStorefrontCopy(
+                  activeSegment?.hero.description,
+                  "Seasonal layers, refined essentials, and considered accessories gathered in one calm edit."
+                )}
+              </p>
 
               <div className="home-stitch-action-row">
                 <ActionLink
@@ -187,8 +240,10 @@ export function HomePage() {
             <aside className="home-stitch-quote-card">
               <span>{activeSegment?.hero.quoteKicker || "Editorial Note"}</span>
               <p>
-                {activeSegment?.hero.quoteBody ||
-                  "Update the workbook to change hero, tiles, metrics, and arrivals without touching the UI code."}
+                {resolveStorefrontCopy(
+                  activeSegment?.hero.quoteBody,
+                  "New arrivals, updated imagery, and quieter storytelling stay aligned across the storefront."
+                )}
               </p>
             </aside>
           </div>
@@ -218,8 +273,8 @@ export function HomePage() {
           </div>
         ) : (
           <EmptyState
-            body="Thêm các dòng vào sheet category_tiles để lấp đầy editorial grid cho tab này."
-            title="Tab hiện tại chưa có category tile."
+            body="Editorial highlights for this collection will appear here as soon as they are ready."
+            title="This collection has no spotlight cards yet."
           />
         )}
       </section>
@@ -227,12 +282,14 @@ export function HomePage() {
       <section className="home-stitch-callout-section">
         <div className="home-stitch-callout-copy">
           <span className="home-stitch-section-label">
-            {activeSegment?.callout?.eyebrow || "Technical Editorial"}
+            {activeSegment?.callout?.eyebrow || "Collection Focus"}
           </span>
           <h2>{activeSegment?.callout?.title || "Digital Precision, Analogue Soul."}</h2>
           <p>
-            {activeSegment?.callout?.body ||
-              "Workbook-driven sections let the team update imagery and copy without hardcoded homepage data."}
+            {resolveStorefrontCopy(
+              activeSegment?.callout?.body,
+              "Seasonal stories, collection highlights, and product imagery stay aligned across the storefront."
+            )}
           </p>
 
           {activeMetrics.length > 0 ? (
@@ -289,32 +346,41 @@ export function HomePage() {
 
         {activeProducts.length > 0 ? (
           <div className="home-stitch-product-rail" ref={productRailRef}>
-            {activeProducts.map((product) => (
-              <ActionLink
-                className="home-stitch-product-card"
-                fallbackHref="/products"
-                href={buildProductHref(product)}
-                key={`${product.segmentSlug}-${product.position}-${product.name}`}
-              >
-                <div className="home-stitch-product-media">
-                  <img alt={product.name} src={product.imageUrl || fallbackTileImage} />
-                </div>
-                <div className="home-stitch-product-copy">
-                  <p>{product.eyebrow || product.brand || activeSegment?.label}</p>
-                  <h3>{product.name}</h3>
-                  <div className="home-stitch-product-meta">
-                    <span>{product.sizeTag || product.brand || "Archive edit"}</span>
-                    <span>{formatCurrency(product.price)}</span>
+            {activeProducts.map((product) => {
+              const liveProduct = liveArrivalProducts[buildProductLookupKey(product)];
+              const imageSrc =
+                liveProduct?.image_urls[0] || liveProduct?.image_url || product.imageUrl;
+              const productHref = liveProduct
+                ? `/products/${encodeURIComponent(liveProduct.id)}`
+                : buildProductHref(product);
+
+              return (
+                <ActionLink
+                  className="home-stitch-product-card"
+                  fallbackHref="/products"
+                  href={productHref}
+                  key={`${product.segmentSlug}-${product.position}-${product.name}`}
+                >
+                  <div className="home-stitch-product-media">
+                    <img alt={liveProduct?.name || product.name} src={imageSrc || fallbackTileImage} />
                   </div>
-                  <small>{product.fitNote || "Workbook-controlled product story."}</small>
-                </div>
-              </ActionLink>
-            ))}
+                  <div className="home-stitch-product-copy">
+                    <p>{product.eyebrow || liveProduct?.brand || product.brand || activeSegment?.label}</p>
+                    <h3>{liveProduct?.name ?? product.name}</h3>
+                    <div className="home-stitch-product-meta">
+                      <span>{product.sizeTag || liveProduct?.brand || product.brand || "Archive edit"}</span>
+                      <span>{formatCurrency(liveProduct?.price ?? product.price)}</span>
+                    </div>
+                    <small>{product.fitNote || "A considered piece selected for the current edit."}</small>
+                  </div>
+                </ActionLink>
+              );
+            })}
           </div>
         ) : (
           <EmptyState
-            body="Sheet products đang trống cho tab này. Chỉ cần thêm dòng cùng segment_slug là rail sẽ tự hiển thị."
-            title="Tab hiện tại chưa có arrivals."
+            body="Products for this collection will appear here as soon as they are ready."
+            title="This collection has no arrivals yet."
           />
         )}
       </section>
@@ -338,11 +404,13 @@ export function HomePage() {
               </ActionLink>
             ))
           ) : (
-            <span className="home-stitch-footer-link is-muted">No footer links in workbook</span>
+            <span className="home-stitch-footer-link is-muted">More links coming soon</span>
           )}
         </nav>
 
-        <div className="home-stitch-footer-note">{footer.note}</div>
+        <div className="home-stitch-footer-note">
+          {resolveStorefrontCopy(footer.note, footerNoteFallback)}
+        </div>
       </footer>
     </div>
   );

@@ -40,6 +40,32 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ unmount: () => void }> = [];
 
+function createLiveArchiveProduct(
+  id: string,
+  name: string,
+  category: string,
+  imageUrl: string,
+  price: number
+) {
+  return {
+    id,
+    name,
+    description: `${name} served from object storage.`,
+    price,
+    stock: 9,
+    category,
+    brand: "ND Atelier",
+    tags: ["live"],
+    status: "active",
+    sku: `${id.toUpperCase()}-SKU`,
+    variants: [],
+    image_url: imageUrl,
+    image_urls: [imageUrl],
+    created_at: "",
+    updated_at: "",
+  };
+}
+
 function renderCatalogPage(initialEntry = "/products") {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -97,6 +123,61 @@ afterEach(() => {
 
 describe("CatalogPage category aggregation", () => {
   it("combines product cards from the 4 category pages and filters them by category", async () => {
+    apiMocks.listProducts.mockImplementation((options?: { category?: string }) => {
+      switch (options?.category) {
+        case "Men":
+          return Promise.resolve({
+            data: [
+              createLiveArchiveProduct(
+                "live-men-001",
+                "Structured Atelier Jacket",
+                "Men",
+                "https://object-storage.local/products/live-men-001.jpg",
+                1250
+              ),
+            ],
+          });
+        case "Women":
+          return Promise.resolve({
+            data: [
+              createLiveArchiveProduct(
+                "live-women-001",
+                "Cloud Cashmere Crew",
+                "Women",
+                "https://object-storage.local/products/live-women-001.jpg",
+                280
+              ),
+            ],
+          });
+        case "Footwear":
+          return Promise.resolve({
+            data: [
+              createLiveArchiveProduct(
+                "live-footwear-001",
+                "Moc Toe Service Boot",
+                "Footwear",
+                "https://object-storage.local/products/live-footwear-001.jpg",
+                560
+              ),
+            ],
+          });
+        case "Accessories":
+          return Promise.resolve({
+            data: [
+              createLiveArchiveProduct(
+                "live-accessories-001",
+                "Atelier Tote",
+                "Accessories",
+                "https://object-storage.local/products/live-accessories-001.jpg",
+                840
+              ),
+            ],
+          });
+        default:
+          return Promise.resolve({ data: [] });
+      }
+    });
+
     vi.mocked(useHomeWorkbook).mockReturnValue({
       content: {
         sourceName: "stitchfix-home.xlsx",
@@ -310,11 +391,15 @@ describe("CatalogPage category aggregation", () => {
     expect(hrefByLabel["Login"]).toBe("/login");
 
     const archiveLink = container.querySelector<HTMLAnchorElement>(".archive-editorial-card");
+    const archiveImage = container.querySelector<HTMLImageElement>(".archive-editorial-card img");
 
-    expect(archiveLink?.getAttribute("href")).toBe("/products/men-001");
+    expect(archiveLink?.getAttribute("href")).toBe("/products/live-men-001");
+    expect(archiveImage?.getAttribute("src")).toBe(
+      "https://object-storage.local/products/live-men-001.jpg"
+    );
 
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
-    expect(apiMocks.listProducts).not.toHaveBeenCalled();
+    expect(apiMocks.listProducts).toHaveBeenCalled();
 
     const collectionButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".archive-collection-link")

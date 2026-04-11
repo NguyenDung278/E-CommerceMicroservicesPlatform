@@ -9,7 +9,7 @@ Nếu bạn vừa clone repo và muốn có mental model đúng càng nhanh càn
 1. `README.md`
 2. `docs/deep-dive/system-overview.md`
 3. `docs/deep-dive/frontend-architecture.md`
-4. `frontend/src/app/App.tsx`
+4. `frontend/src/app/app.tsx`
 5. `api-gateway/cmd/main.go`
 6. `pkg/config/config.go`
 
@@ -18,7 +18,7 @@ Nếu bạn vừa clone repo và muốn có mental model đúng càng nhanh càn
 - `README.md` cho bạn bức tranh runtime và lệnh chạy
 - `system-overview` giúp bạn biết request đi đâu, data nằm đâu
 - `frontend-architecture` giúp bạn không nhầm `frontend/` và `client/`
-- `App.tsx` cho bạn route map thật của UI
+- `app.tsx` cho bạn route map thật của UI
 - `api-gateway/cmd/main.go` cho bạn entrypoint HTTP của backend
 
 ## 2. Ba mental model bắt buộc phải có trước khi đọc sâu
@@ -36,11 +36,11 @@ Hầu hết service Go trong repo đi theo:
 Frontend React + Vite hiện đi theo:
 
 - `app`
-- `routes`
+- `pages`
 - `features`
-- `shared`
-
-Ngoài ra vẫn còn `hooks`, `lib`, `ui`, `providers`, `utils`, `types` ở root làm compatibility layer.
+- `services`
+- `components`
+- `styles`
 
 ### Runtime
 
@@ -56,8 +56,8 @@ Ngoài ra vẫn còn `hooks`, `lib`, `ui`, `providers`, `utils`, `types` ở roo
 - `deployments/docker/docker-compose.yml`
 - `deployments/docker/config/*.yaml`
 - `frontend/src/app/main.tsx`
-- `frontend/src/app/App.tsx`
-- `frontend/src/app/providers/AppProviders.tsx`
+- `frontend/src/app/app.tsx`
+- `frontend/src/app/providers/app-providers.tsx`
 - `api-gateway/cmd/main.go`
 
 ### Bạn sẽ học được gì
@@ -87,24 +87,24 @@ Những package này được dùng lặp lại khắp repo. Nếu hiểu chúng
 
 ### Bước 1: App shell
 
-- `frontend/src/app/App.tsx`
-- `frontend/src/app/layout/AppLayout.tsx`
-- `frontend/src/app/router/ProtectedRoute.tsx`
+- `frontend/src/app/app.tsx`
+- `frontend/src/app/layout/app-layout.tsx`
+- `frontend/src/app/router/protected-route.tsx`
 
 ### Bước 2: Provider và global state
 
-- `frontend/src/features/auth/providers/AuthProvider.tsx`
-- `frontend/src/features/cart/providers/CartProvider.tsx`
-- `frontend/src/features/account/hooks/useOrderPayments.ts`
-- `frontend/src/features/account/hooks/useSavedAddresses.ts`
+- `frontend/src/features/auth/providers/auth-provider.tsx`
+- `frontend/src/features/cart/providers/cart-provider.tsx`
+- `frontend/src/features/account/hooks/use-order-payments.ts`
+- `frontend/src/features/account/hooks/use-saved-addresses.ts`
 
 ### Bước 3: API boundary
 
-- `frontend/src/shared/api/http-client.ts`
-- `frontend/src/shared/api/error-handler.ts`
-- `frontend/src/shared/api/normalizers.ts`
-- `frontend/src/shared/api/modules/*.ts`
-- `frontend/src/shared/types/api.ts`
+- `frontend/src/services/api/http-client.ts`
+- `frontend/src/services/api/error-handler.ts`
+- `frontend/src/services/api/normalizers.ts`
+- `frontend/src/services/api/modules/*.ts`
+- `frontend/src/types/api.ts`
 
 ### Bước 4: Route pages
 

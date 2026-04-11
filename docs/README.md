@@ -26,11 +26,9 @@ Ba lớp tài liệu chính:
 ### Lộ trình nếu bạn đang sửa frontend React + Vite
 
 1. [deep-dive/frontend-architecture.md](./deep-dive/frontend-architecture.md)
-2. [annotated/frontend-source-map.md](./annotated/frontend-source-map.md)
-3. [annotated/frontend-app.md](./annotated/frontend-app.md)
-4. [annotated/frontend-auth-cart-providers.md](./annotated/frontend-auth-cart-providers.md)
-5. [annotated/frontend-api-layer.md](./annotated/frontend-api-layer.md)
-6. [annotated/frontend-routes-and-flows.md](./annotated/frontend-routes-and-flows.md)
+2. [deep-dive/frontend-refactor-status.md](./deep-dive/frontend-refactor-status.md)
+3. [annotated/frontend-source-map.md](./annotated/frontend-source-map.md)
+4. [annotated/frontend-app.md](./annotated/frontend-app.md)
 
 ### Lộ trình nếu bạn đang sửa backend Go
 
@@ -57,7 +55,8 @@ Ba lớp tài liệu chính:
 
 - [README.md](./deep-dive/README.md): bản đồ của tầng kiến trúc
 - [system-overview.md](./deep-dive/system-overview.md): flow HTTP, gRPC, RabbitMQ, source of truth và runtime Compose
-- [frontend-architecture.md](./deep-dive/frontend-architecture.md): kiến trúc frontend hiện tại, import map sau refactor và dependency flow
+- [frontend-architecture.md](./deep-dive/frontend-architecture.md): kiến trúc frontend hiện tại, dependency flow và lớp UI đang chạy thật
+- [frontend-refactor-status.md](./deep-dive/frontend-refactor-status.md): phần đã làm, phần còn lại và checklist verify cho frontend
 - [frontend-backend-alignment-modernization-guide.md](./deep-dive/frontend-backend-alignment-modernization-guide.md): đánh giá đồng bộ FE/BE, cleanup plan, roadmap UI/UX và hướng import Excel/CSV
 - [api-gateway.md](./deep-dive/api-gateway.md): gateway và logic proxy
 - [user-service.md](./deep-dive/user-service.md): auth, email flow, Google OAuth, phone verification, address
@@ -70,11 +69,8 @@ Ba lớp tài liệu chính:
 ### `annotated/`
 
 - [README.md](./annotated/README.md): lộ trình đọc source theo module
-- [frontend-source-map.md](./annotated/frontend-source-map.md): bản đồ thư mục frontend và mapping giữa import cũ với cấu trúc mới
+- [frontend-source-map.md](./annotated/frontend-source-map.md): bản đồ thư mục frontend, API boundary, provider flow và nơi nên mở source đầu tiên
 - [frontend-app.md](./annotated/frontend-app.md): entrypoint, providers, route shell, AppLayout, ProtectedRoute
-- [frontend-auth-cart-providers.md](./annotated/frontend-auth-cart-providers.md): AuthProvider, CartProvider, token/storage, guest cart, merge flow
-- [frontend-api-layer.md](./annotated/frontend-api-layer.md): http client, error handler, API modules, normalizer, shared types
-- [frontend-routes-and-flows.md](./annotated/frontend-routes-and-flows.md): route/page flow của storefront, account, checkout, admin
 - [client-experimental.md](./annotated/client-experimental.md): nhánh Next.js experimental và cách nó liên hệ với frontend chính
 - [shared-packages.md](./annotated/shared-packages.md): `pkg/` và nền tảng backend dùng chung
 - [api-gateway-main.md](./annotated/api-gateway-main.md): entrypoint gateway
@@ -83,7 +79,7 @@ Ba lớp tài liệu chính:
 ## Điều cần nhớ khi dùng bộ docs này
 
 - Nếu tài liệu và source mâu thuẫn, hãy tin source thật ở `cmd/main.go`, `internal/handler`, `internal/service`, `internal/repository`, `frontend/src/`, `deployments/docker/`.
-- Frontend hiện ở trạng thái refactor chuyển tiếp: cấu trúc thư mục mới đã xuất hiện trong `app/`, `features/`, `shared/`, nhưng một số route/page vẫn còn import theo đường cũ. Bộ docs mới có phần source map để giải thích điều này thay vì bỏ qua.
+- Frontend hiện ở trạng thái refactor chuyển tiếp, nhưng source of truth bây giờ là `app/`, `pages/`, `features/`, `services/`, `components/`, `styles/`. Bộ docs mới gom lại để tránh tài liệu frontend chồng chéo.
 - `frontend/` là UI local chính; `client/` là nhánh Next.js experimental, có giá trị học tập nhưng chưa phải runtime mặc định.
 - Không phải mọi doc cũ đều sai, nhưng các doc frontend và local runtime đã được nâng cấp mạnh để bám hơn với source hiện tại.
 
@@ -95,6 +91,6 @@ Ba lớp tài liệu chính:
 2. [deep-dive/system-overview.md](./deep-dive/system-overview.md)
 3. [deep-dive/frontend-architecture.md](./deep-dive/frontend-architecture.md)
 4. [annotated/shared-packages.md](./annotated/shared-packages.md)
-5. [annotated/frontend-api-layer.md](./annotated/frontend-api-layer.md)
+5. [annotated/frontend-source-map.md](./annotated/frontend-source-map.md)
 6. [annotated/order-service.md](./annotated/order-service.md)
 7. [annotated/payment-service.md](./annotated/payment-service.md)

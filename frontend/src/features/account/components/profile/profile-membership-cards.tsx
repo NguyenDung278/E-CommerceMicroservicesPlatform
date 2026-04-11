@@ -24,13 +24,14 @@ export function ProfileMembershipCards({
       <article className="profile-route-card">
         <span className="profile-route-card-icon" aria-hidden="true" />
         <div className="profile-route-card-copy">
-          <h3>Two-Factor Auth</h3>
+          <h3>Security Center</h3>
           <p>
-            Enhance your account security by adding an extra layer of verification for all logins.
+            Review password hygiene, recovery readiness, and verification status from a single
+            control panel.
           </p>
         </div>
         <Link className="profile-route-card-link" to="/security">
-          Setup Now <span aria-hidden="true">-</span>
+          Open Security <span aria-hidden="true">{"->"}</span>
         </Link>
       </article>
 
@@ -50,12 +51,12 @@ export function ProfileMembershipCards({
 
         {emailVerified ? (
           <Link className="profile-route-card-link" to="/myorders">
-            View Rewards <span aria-hidden="true">-</span>
+            View Order History <span aria-hidden="true">{"->"}</span>
           </Link>
         ) : (
           <button className="profile-route-card-link" type="button" onClick={onResendVerification}>
             {isResendingVerification ? "Sending..." : "Verify Email"}{" "}
-            <span aria-hidden="true">-</span>
+            <span aria-hidden="true">{"->"}</span>
           </button>
         )}
       </article>

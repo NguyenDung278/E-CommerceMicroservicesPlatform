@@ -1,7 +1,7 @@
 .account-layout {
   display: grid;
   grid-template-columns: 284px minmax(0, 1fr);
-  gap: 64px;
+  gap: clamp(32px, 5vw, 68px);
   align-items: start;
 }
 
@@ -9,8 +9,8 @@
   position: sticky;
   top: 132px;
   display: grid;
-  gap: 28px;
-  padding: 8px 0 18px;
+  gap: 24px;
+  padding: 12px 0 18px;
 }
 
 .account-sidebar-head {
@@ -21,9 +21,9 @@
 .account-sidebar-head h2 {
   margin: 0;
   color: #1b1c19;
-  font-family: "Noto Serif", Georgia, serif;
+  font-family: var(--font-display);
   font-size: clamp(2.2rem, 4vw, 3.1rem);
-  line-height: 0.98;
+  line-height: 1;
   letter-spacing: -0.05em;
 }
 
@@ -44,26 +44,32 @@
   display: flex;
   align-items: center;
   gap: 18px;
-  min-height: 56px;
+  min-height: 58px;
   padding: 0 20px;
   border-radius: 999px;
   color: #525852;
-  font-size: 1.02rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.34);
   transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    transform 180ms ease;
+    background-color var(--transition-base),
+    color var(--transition-base),
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 .account-sidebar-link:hover {
-  background: rgba(240, 238, 233, 0.78);
+  background: rgba(240, 238, 233, 0.92);
   color: #061b0e;
+  box-shadow: var(--shadow-soft);
 }
 
 .account-sidebar-link-active {
-  background: #f0eee9;
+  background: rgba(240, 238, 233, 0.98);
   color: #061b0e;
+  box-shadow:
+    inset 0 0 0 1px rgba(115, 121, 115, 0.08),
+    var(--shadow-soft);
 }
 
 .account-sidebar-link span:last-child,
@@ -99,11 +105,17 @@
   padding-inline: 20px;
   color: #7d3a29;
   font-size: 0.98rem;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .account-sidebar-logout:hover {
   background: rgba(255, 226, 217, 0.6);
+}
+
+.account-sidebar-link:focus-visible,
+.account-sidebar-logout:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
 
 @media (max-width: 1180px) {

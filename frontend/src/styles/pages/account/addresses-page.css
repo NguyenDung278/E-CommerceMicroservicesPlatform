@@ -14,7 +14,7 @@
 .addresses-route-head h1 {
   margin: 0;
   color: #061b0e;
-  font-family: "Noto Serif", Georgia, serif;
+  font-family: var(--font-display);
   font-size: clamp(3rem, 5vw, 4.8rem);
   line-height: 0.95;
   letter-spacing: -0.06em;
@@ -89,7 +89,7 @@
 .addresses-route-placeholder strong {
   margin: 0;
   color: #061b0e;
-  font-family: "Noto Serif", Georgia, serif;
+  font-family: var(--font-display);
   font-size: clamp(2rem, 3vw, 2.7rem);
   line-height: 1.02;
   letter-spacing: -0.05em;

@@ -14,7 +14,7 @@ export function ProfileRecentOrdersPanel({ isLoading, orders }: ProfileRecentOrd
   return (
     <div className="profile-route-orders-panel">
       {isLoading ? (
-        <div className="page-state">Đang tải lịch sử giao dịch...</div>
+        <div className="page-state">Loading recent orders...</div>
       ) : orders.length === 0 ? (
         <div className="empty-card history-empty profile-route-empty-state">
           <h3>You have not placed an order yet</h3>

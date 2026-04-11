@@ -1,30 +1,106 @@
+import { Suspense, lazy, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { AppLayout } from "./layout/app-layout";
 import { ProtectedRoute } from "./router/protected-route";
 import { ScrollToTop } from "./router/scroll-to-top";
-import { AdminPage } from "@/pages/admin";
-import { AddressesPage } from "@/pages/account";
-import { AuthCallbackPage } from "@/pages/auth";
-import { CartPage } from "@/pages/storefront";
-import { CategoryPage } from "@/pages/storefront";
-import { CatalogPage } from "@/pages/storefront";
-import { CheckoutPage } from "@/pages/storefront";
-import { ForgotPasswordPage } from "@/pages/auth";
-import { HomePage } from "@/pages/storefront";
-import { LoginPage } from "@/pages/auth";
-import { NotificationsPage } from "@/pages/account";
-import { OrderDetailPage } from "@/pages/account";
-import { OrdersPage } from "@/pages/account";
-import { PaymentHistoryPage } from "@/pages/account";
-import { ProductDetailPage } from "@/pages/storefront";
-import { ProfilePage } from "@/pages/account";
-import { RegisterPage } from "@/pages/auth";
-import { ResetPasswordPage } from "@/pages/auth";
-import { SecurityPage } from "@/pages/account";
-import { VerifyEmailPage } from "@/pages/auth";
 
 import { AppProviders } from "./providers/app-providers";
+
+const AppLayout = lazy(() =>
+  import("./layout/app-layout").then((module) => ({ default: module.AppLayout }))
+);
+const LoginPage = lazy(() =>
+  import("@/pages/auth/login-page").then((module) => ({ default: module.LoginPage }))
+);
+const RegisterPage = lazy(() =>
+  import("@/pages/auth/register-page").then((module) => ({ default: module.RegisterPage }))
+);
+const ForgotPasswordPage = lazy(() =>
+  import("@/pages/auth/forgot-password-page").then((module) => ({
+    default: module.ForgotPasswordPage,
+  }))
+);
+const AuthCallbackPage = lazy(() =>
+  import("@/pages/auth/auth-callback-page").then((module) => ({
+    default: module.AuthCallbackPage,
+  }))
+);
+const VerifyEmailPage = lazy(() =>
+  import("@/pages/auth/verify-email-page").then((module) => ({
+    default: module.VerifyEmailPage,
+  }))
+);
+const ResetPasswordPage = lazy(() =>
+  import("@/pages/auth/reset-password-page").then((module) => ({
+    default: module.ResetPasswordPage,
+  }))
+);
+const HomePage = lazy(() =>
+  import("@/pages/storefront/home-page").then((module) => ({ default: module.HomePage }))
+);
+const CatalogPage = lazy(() =>
+  import("@/pages/storefront/catalog-page").then((module) => ({ default: module.CatalogPage }))
+);
+const ProductDetailPage = lazy(() =>
+  import("@/pages/storefront/product-detail-page").then((module) => ({
+    default: module.ProductDetailPage,
+  }))
+);
+const CategoryPage = lazy(() =>
+  import("@/pages/storefront/category-page").then((module) => ({ default: module.CategoryPage }))
+);
+const CartPage = lazy(() =>
+  import("@/pages/storefront/cart-page").then((module) => ({ default: module.CartPage }))
+);
+const CheckoutPage = lazy(() =>
+  import("@/pages/storefront/checkout-page").then((module) => ({
+    default: module.CheckoutPage,
+  }))
+);
+const ProfilePage = lazy(() =>
+  import("@/pages/account/profile-page").then((module) => ({ default: module.ProfilePage }))
+);
+const OrdersPage = lazy(() =>
+  import("@/pages/account/orders-page").then((module) => ({ default: module.OrdersPage }))
+);
+const AddressesPage = lazy(() =>
+  import("@/pages/account/addresses-page").then((module) => ({
+    default: module.AddressesPage,
+  }))
+);
+const OrderDetailPage = lazy(() =>
+  import("@/pages/account/order-detail-page").then((module) => ({
+    default: module.OrderDetailPage,
+  }))
+);
+const PaymentHistoryPage = lazy(() =>
+  import("@/pages/account/payment-history-page").then((module) => ({
+    default: module.PaymentHistoryPage,
+  }))
+);
+const SecurityPage = lazy(() =>
+  import("@/pages/account/security-page").then((module) => ({ default: module.SecurityPage }))
+);
+const NotificationsPage = lazy(() =>
+  import("@/pages/account/notifications-page").then((module) => ({
+    default: module.NotificationsPage,
+  }))
+);
+const AdminPage = lazy(() =>
+  import("@/pages/admin/admin-page").then((module) => ({ default: module.AdminPage }))
+);
+
+function RouteLoadingFallback() {
+  return (
+    <div className="page-stack">
+      <div className="page-state">Loading page...</div>
+    </div>
+  );
+}
+
+function withSuspense(children: ReactNode) {
+  return <Suspense fallback={<RouteLoadingFallback />}>{children}</Suspense>;
+}
 
 export default function App() {
   return (
@@ -32,74 +108,46 @@ export default function App() {
       <BrowserRouter>
         <ScrollToTop />
         <Routes>
-          <Route element={<LoginPage />} path="/login" />
-          <Route element={<RegisterPage />} path="/register" />
-          <Route element={<ForgotPasswordPage />} path="/forgot-password" />
-          <Route element={<AuthCallbackPage />} path="/auth/callback" />
-          <Route element={<VerifyEmailPage />} path="/verify-email" />
-          <Route element={<ResetPasswordPage />} path="/reset-password" />
+          <Route element={withSuspense(<LoginPage />)} path="/login" />
+          <Route element={withSuspense(<RegisterPage />)} path="/register" />
+          <Route element={withSuspense(<ForgotPasswordPage />)} path="/forgot-password" />
+          <Route element={withSuspense(<AuthCallbackPage />)} path="/auth/callback" />
+          <Route element={withSuspense(<VerifyEmailPage />)} path="/verify-email" />
+          <Route element={withSuspense(<ResetPasswordPage />)} path="/reset-password" />
 
-          <Route element={<AppLayout />} path="/">
-            <Route element={<HomePage />} index />
-            <Route element={<CatalogPage />} path="products" />
-            <Route element={<ProductDetailPage />} path="products/:productId" />
-            <Route element={<CategoryPage />} path="categories/:categoryName" />
-            <Route element={<CartPage />} path="cart" />
-            <Route element={<CheckoutPage />} path="checkout" />
+          <Route element={withSuspense(<AppLayout />)} path="/">
+            <Route element={withSuspense(<HomePage />)} index />
+            <Route element={withSuspense(<CatalogPage />)} path="products" />
+            <Route element={withSuspense(<ProductDetailPage />)} path="products/:productId" />
+            <Route element={withSuspense(<CategoryPage />)} path="categories/:categoryName" />
+            <Route element={withSuspense(<CartPage />)} path="cart" />
+            <Route element={withSuspense(<CheckoutPage />)} path="checkout" />
             <Route
-              element={
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<ProfilePage />)}</ProtectedRoute>}
               path="profile"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <OrdersPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<OrdersPage />)}</ProtectedRoute>}
               path="myorders"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <AddressesPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<AddressesPage />)}</ProtectedRoute>}
               path="addresses"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <OrderDetailPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<OrderDetailPage />)}</ProtectedRoute>}
               path="orders/:orderId"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <PaymentHistoryPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<PaymentHistoryPage />)}</ProtectedRoute>}
               path="payments"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <SecurityPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<SecurityPage />)}</ProtectedRoute>}
               path="security"
             />
             <Route
-              element={
-                <ProtectedRoute>
-                  <NotificationsPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute>{withSuspense(<NotificationsPage />)}</ProtectedRoute>}
               path="notifications"
             />
             <Route element={<Navigate replace to="/myorders" />} path="profile/orders" />
@@ -112,11 +160,7 @@ export default function App() {
             />
             <Route element={<Navigate replace to="/myorders" />} path="orders" />
             <Route
-              element={
-                <ProtectedRoute allowStaff>
-                  <AdminPage />
-                </ProtectedRoute>
-              }
+              element={<ProtectedRoute allowStaff>{withSuspense(<AdminPage />)}</ProtectedRoute>}
               path="admin"
             />
             <Route element={<Navigate replace to="/" />} path="*" />

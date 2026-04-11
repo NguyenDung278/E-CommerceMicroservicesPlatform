@@ -1,76 +1,22 @@
-import { useEffect, useState, type CSSProperties, type ChangeEvent, type FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
-import { useAuth } from "@/features/auth/hooks/use-auth";
-import { getErrorMessage } from "@/services/api";
-import { userApi } from "@/services/api/modules/user-api";
+import { useProfileAvatarUpload } from "@/features/account/hooks/use-profile-avatar-upload";
 import type { PhoneVerificationChallenge } from "@/types/api";
 import {
   buildProfileInitials,
+  formatPhoneForOtpLabel,
   getPhoneVerificationDescription,
+  getPhoneVerificationStatusLabel,
   type ProfileFieldErrors,
   type ProfileFormState,
 } from "../../utils/profile-editor";
-
-const MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-
-const avatarUploadLayoutStyle: CSSProperties = {
-  display: "flex",
-  gap: "18px",
-  alignItems: "center",
-  flexWrap: "wrap",
-};
-
-const avatarPreviewShellStyle: CSSProperties = {
-  width: "104px",
-  height: "104px",
-  borderRadius: "999px",
-  overflow: "hidden",
-  flexShrink: 0,
-  border: "1px solid var(--profile-outline-strong)",
-  background: "rgba(247, 242, 235, 0.92)",
-  display: "grid",
-  placeItems: "center",
-};
-
-const avatarPreviewImageStyle: CSSProperties = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-};
-
-const avatarFallbackStyle: CSSProperties = {
-  color: "rgba(14, 29, 19, 0.48)",
-  fontSize: "1.75rem",
-  fontWeight: 700,
-  letterSpacing: "-0.08em",
-};
-
-const avatarUploadControlsStyle: CSSProperties = {
-  display: "grid",
-  gap: "12px",
-  flex: "1 1 260px",
-};
-
-const avatarFileInputStyle: CSSProperties = {
-  width: "100%",
-  minHeight: "auto",
-  padding: "14px 16px",
-  border: "1px dashed var(--profile-outline-strong)",
-  borderRadius: "18px",
-  background: "rgba(255, 255, 255, 0.76)",
-  cursor: "pointer",
-};
-
-const avatarSuccessStyle: CSSProperties = {
-  color: "var(--color-success, #2e7d32)",
-  fontSize: "0.88rem",
-  lineHeight: 1.5,
-};
 
 type ProfileEditorFormProps = {
   canSubmit: boolean;
   form: ProfileFormState;
   formErrors: ProfileFieldErrors;
+  formatCountdown: (seconds: number) => string;
+  hasValidPhoneDraft: boolean;
   isOtpBusy: boolean;
   isSaving: boolean;
   otpExpiresIn: number;
@@ -81,8 +27,6 @@ type ProfileEditorFormProps = {
   phoneVerification: PhoneVerificationChallenge | null;
   userPhoneVerified: boolean;
   verificationPendingForDraft: boolean;
-  hasValidPhoneDraft: boolean;
-  formatCountdown: (seconds: number) => string;
   onClose: () => void;
   onFieldChange: (field: keyof ProfileFormState, value: string) => void;
   onPhoneChange: (value: string) => void;
@@ -116,122 +60,48 @@ export function ProfileEditorForm({
   onSubmit,
   onVerifyPhoneOtp,
 }: ProfileEditorFormProps) {
-  const { refreshProfile, token, user } = useAuth();
-  const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null);
-  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || "");
-  const [avatarError, setAvatarError] = useState("");
-  const [avatarSuccess, setAvatarSuccess] = useState("");
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const {
+    avatarError,
+    avatarSuccess,
+    displayedAvatarUrl,
+    handleAvatarChange,
+    isUploadingAvatar,
+    retryAvatarUpload,
+    selectedAvatarFile,
+    clearSelectedAvatar,
+  } = useProfileAvatarUpload();
 
   const avatarFallbackLabel = buildProfileInitials(`${form.firstName} ${form.lastName}`.trim());
-  const displayedAvatarUrl = avatarPreviewUrl || avatarUrl;
-
-  // Keep the saved avatar in sync with auth context after profile refreshes.
-  useEffect(() => {
-    if (!selectedAvatarFile) {
-      setAvatarUrl(user?.avatar_url || "");
-    }
-  }, [selectedAvatarFile, user?.avatar_url]);
-
-  // Object URLs let us preview the local image before it is sent to the API.
-  useEffect(() => {
-    if (!selectedAvatarFile) {
-      setAvatarPreviewUrl("");
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(selectedAvatarFile);
-    setAvatarPreviewUrl(objectUrl);
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
-  }, [selectedAvatarFile]);
-
-  function resetAvatarFeedback() {
-    setAvatarError("");
-    setAvatarSuccess("");
-  }
-
-  function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    event.target.value = "";
-    resetAvatarFeedback();
-
-    if (!file) {
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      setSelectedAvatarFile(null);
-      setAvatarError("Please choose a valid image file.");
-      return;
-    }
-
-    if (file.size > MAX_AVATAR_FILE_SIZE_BYTES) {
-      setSelectedAvatarFile(null);
-      setAvatarError("Avatar image must be smaller than 5MB.");
-      return;
-    }
-
-    setSelectedAvatarFile(file);
-  }
-
-  function handleClearSelectedAvatar() {
-    setSelectedAvatarFile(null);
-    resetAvatarFeedback();
-  }
-
-  // Upload stays separate so the existing profile-save flow keeps working as-is.
-  async function handleAvatarUpload() {
-    if (!selectedAvatarFile) {
-      setAvatarError("Choose an image before uploading.");
-      return;
-    }
-
-    if (!token) {
-      setAvatarError("Your session has expired. Please sign in again.");
-      return;
-    }
-
-    try {
-      setIsUploadingAvatar(true);
-      resetAvatarFeedback();
-
-      const response = await userApi.uploadAvatar(token, selectedAvatarFile);
-      let refreshedProfile = null;
-
-      try {
-        refreshedProfile = await refreshProfile();
-      } catch {
-        refreshedProfile = null;
-      }
-
-      const nextAvatarUrl =
-        refreshedProfile?.avatar_url ||
-        response.data.user?.avatar_url ||
-        response.data.avatar_url ||
-        "";
-
-      if (nextAvatarUrl) {
-        setAvatarUrl(nextAvatarUrl);
-      }
-
-      setSelectedAvatarFile(null);
-      setAvatarSuccess("Avatar uploaded successfully.");
-    } catch (reason) {
-      setAvatarError(getErrorMessage(reason));
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  }
+  const otpPhoneLabel = formatPhoneForOtpLabel(phoneVerification?.phone || form.phone);
+  const verificationDescription = getPhoneVerificationDescription({
+    phoneChanged,
+    phoneIsVerifiedForDraft,
+    verificationPendingForDraft,
+    userPhoneVerified,
+  });
+  const verificationStatusLabel = getPhoneVerificationStatusLabel({
+    phoneChanged,
+    phoneIsVerifiedForDraft,
+    verificationPendingForDraft,
+    userPhoneVerified,
+  });
+  const resendButtonLabel =
+    otpResendIn > 0 ? `Resend OTP in ${formatCountdown(otpResendIn)}` : "Resend OTP";
+  const attemptsLeftLabel =
+    phoneVerification && phoneVerification.max_attempts > 0
+      ? `${phoneVerification.remaining_attempts} of ${phoneVerification.max_attempts} attempts left`
+      : "";
 
   return (
     <form className="profile-route-form" onSubmit={onSubmit}>
       <div className="profile-route-form-head">
         <div>
+          <p className="profile-route-form-eyebrow">Profile studio</p>
           <h2>Edit Profile</h2>
+          <p>
+            Refine identity details, update the profile photo instantly, and secure phone changes
+            before saving.
+          </p>
         </div>
 
         <button className="ghost-button" type="button" onClick={onClose}>
@@ -239,205 +109,233 @@ export function ProfileEditorForm({
         </button>
       </div>
 
-      <div className="profile-route-form-grid">
-        <div className="profile-route-form-field profile-route-form-field-full">
-          <span>Profile Avatar</span>
-          <div style={avatarUploadLayoutStyle}>
-            <div style={avatarPreviewShellStyle}>
-              {displayedAvatarUrl ? (
-                <img alt="Avatar preview" src={displayedAvatarUrl} style={avatarPreviewImageStyle} />
-              ) : (
-                <span style={avatarFallbackStyle}>{avatarFallbackLabel}</span>
-              )}
-            </div>
+      <section className="profile-route-form-section">
+        <div className="profile-route-form-section-copy">
+          <h3>Identity</h3>
+          <p>These details appear across account, checkout, and order follow-up flows.</p>
+        </div>
 
-            <div style={avatarUploadControlsStyle}>
-              <input
-                accept="image/*"
-                style={avatarFileInputStyle}
-                type="file"
-                onChange={handleAvatarChange}
-              />
-
-              <div className="profile-route-form-actions">
-                <button
-                  className="secondary-button"
-                  disabled={!selectedAvatarFile || isUploadingAvatar}
-                  type="button"
-                  onClick={() => void handleAvatarUpload()}
-                >
-                  {isUploadingAvatar ? "Uploading..." : "Upload Avatar"}
-                </button>
-
-                {selectedAvatarFile ? (
-                  <button
-                    className="ghost-button"
-                    disabled={isUploadingAvatar}
-                    type="button"
-                    onClick={handleClearSelectedAvatar}
-                  >
-                    Remove Selection
-                  </button>
-                ) : null}
+        <div className="profile-route-form-grid">
+          <div className="profile-route-form-field profile-route-form-field-full">
+            <span>Profile Avatar</span>
+            <div className="profile-route-avatar-upload">
+              <div className="profile-route-avatar-upload-preview">
+                {displayedAvatarUrl ? (
+                  <img
+                    alt="Avatar preview"
+                    className="profile-route-avatar-upload-image"
+                    src={displayedAvatarUrl}
+                  />
+                ) : (
+                  <span className="profile-route-avatar-upload-fallback">
+                    {avatarFallbackLabel}
+                  </span>
+                )}
               </div>
 
-              <small className="profile-route-form-hint">
-                Choose a JPG, PNG, WEBP, or GIF under 5MB. A preview appears before upload.
-              </small>
+              <div className="profile-route-avatar-upload-controls">
+                <input
+                  accept="image/*"
+                  className="profile-route-avatar-upload-input"
+                  disabled={isUploadingAvatar}
+                  type="file"
+                  onChange={handleAvatarChange}
+                />
 
-              {selectedAvatarFile ? (
+                <div className="profile-route-form-actions">
+                  {selectedAvatarFile && avatarError && !isUploadingAvatar ? (
+                    <button className="secondary-button" type="button" onClick={retryAvatarUpload}>
+                      Retry Upload
+                    </button>
+                  ) : null}
+
+                  {selectedAvatarFile && !isUploadingAvatar ? (
+                    <button className="ghost-button" type="button" onClick={clearSelectedAvatar}>
+                      Remove Selection
+                    </button>
+                  ) : null}
+                </div>
+
                 <small className="profile-route-form-hint">
-                  Ready to upload: {selectedAvatarFile.name}
+                  Choose a JPG, PNG, WEBP, or GIF under 5MB. The preview switches instantly while
+                  the upload is processed in the background.
                 </small>
-              ) : null}
 
-              {avatarError ? (
-                <small className="profile-route-form-error">{avatarError}</small>
-              ) : null}
+                {selectedAvatarFile ? (
+                  <small className="profile-route-form-hint">
+                    {isUploadingAvatar
+                      ? `Uploading ${selectedAvatarFile.name}`
+                      : `Selected image: ${selectedAvatarFile.name}`}
+                  </small>
+                ) : null}
 
-              {!avatarError && avatarSuccess ? (
-                <small style={avatarSuccessStyle}>{avatarSuccess}</small>
-              ) : null}
+                {avatarError ? (
+                  <small className="profile-route-form-error">{avatarError}</small>
+                ) : null}
+
+                {!avatarError && avatarSuccess ? (
+                  <small className="profile-route-avatar-upload-success">{avatarSuccess}</small>
+                ) : null}
+              </div>
             </div>
+          </div>
+
+          <ProfileField error={formErrors.firstName} label="First Name">
+            <input
+              placeholder="Enter your first name"
+              value={form.firstName}
+              onChange={(event) => onFieldChange("firstName", event.target.value)}
+            />
+          </ProfileField>
+
+          <ProfileField error={formErrors.lastName} label="Last Name">
+            <input
+              placeholder="Enter your last name"
+              value={form.lastName}
+              onChange={(event) => onFieldChange("lastName", event.target.value)}
+            />
+          </ProfileField>
+
+          <ProfileField
+            className="profile-route-form-field-full"
+            error={formErrors.street}
+            label="Street Address"
+          >
+            <input
+              placeholder="Apartment, street, or delivery note"
+              value={form.street}
+              onChange={(event) => onFieldChange("street", event.target.value)}
+            />
+          </ProfileField>
+        </div>
+      </section>
+
+      <section className="profile-route-verification-panel">
+        <div className="profile-route-form-head profile-route-form-head-inline">
+          <div>
+            <p className="profile-route-form-eyebrow">Secure access</p>
+            <h2>Phone Verification</h2>
+            <p>{verificationDescription}</p>
           </div>
         </div>
 
-        <label className="profile-route-form-field">
-          <span>First Name</span>
-          <input
-            value={form.firstName}
-            onChange={(event) => onFieldChange("firstName", event.target.value)}
-          />
-          {formErrors.firstName ? (
-            <small className="profile-route-form-error">{formErrors.firstName}</small>
+        <div className="profile-route-verification-summary">
+          <span
+            className={
+              phoneIsVerifiedForDraft
+                ? "profile-route-verification-status profile-route-verification-status-success"
+                : verificationPendingForDraft
+                  ? "profile-route-verification-status profile-route-verification-status-pending"
+                  : "profile-route-verification-status"
+            }
+          >
+            {verificationStatusLabel}
+          </span>
+          {attemptsLeftLabel ? (
+            <span className="profile-route-verification-inline-note">{attemptsLeftLabel}</span>
           ) : null}
-        </label>
+        </div>
 
-        <label className="profile-route-form-field">
-          <span>Last Name</span>
-          <input
-            value={form.lastName}
-            onChange={(event) => onFieldChange("lastName", event.target.value)}
-          />
-          {formErrors.lastName ? (
-            <small className="profile-route-form-error">{formErrors.lastName}</small>
-          ) : null}
-        </label>
-
-        <label className="profile-route-form-field">
-          <span>Profile Phone</span>
-          <div className="profile-route-phone-row">
-            <input
-              inputMode="numeric"
-              value={form.phone}
-              onChange={(event) => onPhoneChange(event.target.value)}
-              placeholder="0912345678"
+        <div className="profile-route-verification-stats">
+          {phoneVerification?.verification_id ? (
+            <VerificationStat
+              label="OTP expires"
+              value={otpExpiresIn > 0 ? formatCountdown(otpExpiresIn) : "Expired"}
             />
+          ) : null}
+          {phoneVerification?.verification_id ? (
+            <VerificationStat
+              label="Resend"
+              value={otpResendIn > 0 ? formatCountdown(otpResendIn) : "Ready"}
+            />
+          ) : null}
+          <VerificationStat
+            label="Delivery"
+            value={
+              phoneChanged
+                ? "Telegram OTP"
+                : userPhoneVerified
+                  ? "Verified number"
+                  : "Pending setup"
+            }
+          />
+        </div>
+
+        <div className="profile-route-mobile-verify-flow">
+          <ProfileField
+            className="profile-route-mobile-verify-field"
+            error={formErrors.phone}
+            label="Phone Number"
+          >
+            <div className="profile-route-phone-entry">
+              <select
+                aria-label="Country code"
+                className="profile-route-country-code"
+                defaultValue="+84"
+              >
+                <option value="+84">+84</option>
+              </select>
+              <input
+                inputMode="numeric"
+                placeholder="912 345 678"
+                value={form.phone}
+                onChange={(event) => onPhoneChange(event.target.value)}
+              />
+            </div>
+          </ProfileField>
+
+          <div className="profile-route-verification-actions">
             <button
-              className={`primary-button profile-route-phone-action${!hasValidPhoneDraft ? " profile-route-phone-action-disabled" : ""}`}
+              className={`primary-button profile-route-mobile-verify-button${!hasValidPhoneDraft ? " profile-route-phone-action-disabled" : ""}`}
               disabled={!hasValidPhoneDraft || isOtpBusy}
               type="button"
               onClick={onSendPhoneOtp}
             >
-              {isOtpBusy ? "Sending..." : "Verification"}
+              {isOtpBusy && !otpPanelVisible
+                ? "Sending..."
+                : verificationPendingForDraft
+                  ? "Send fresh OTP"
+                  : "Send OTP"}
             </button>
-          </div>
-          <small className="profile-route-form-hint">
-            Enter a new 10-digit phone number to enable verification.
-          </small>
-          {formErrors.phone ? (
-            <small className="profile-route-form-error">{formErrors.phone}</small>
-          ) : null}
-        </label>
 
-        <label className="profile-route-form-field">
-          <span>Recipient Name</span>
-          <input
-            value={form.recipientName}
-            onChange={(event) => onFieldChange("recipientName", event.target.value)}
-          />
-          {formErrors.recipientName ? (
-            <small className="profile-route-form-error">{formErrors.recipientName}</small>
-          ) : null}
-        </label>
-
-        <label className="profile-route-form-field profile-route-form-field-full">
-          <span>Street Address</span>
-          <input
-            value={form.street}
-            onChange={(event) => onFieldChange("street", event.target.value)}
-          />
-          {formErrors.street ? (
-            <small className="profile-route-form-error">{formErrors.street}</small>
-          ) : null}
-        </label>
-
-        <label className="profile-route-form-field">
-          <span>Ward</span>
-          <input
-            value={form.ward}
-            onChange={(event) => onFieldChange("ward", event.target.value)}
-          />
-        </label>
-
-        <label className="profile-route-form-field">
-          <span>District</span>
-          <input
-            value={form.district}
-            onChange={(event) => onFieldChange("district", event.target.value)}
-          />
-          {formErrors.district ? (
-            <small className="profile-route-form-error">{formErrors.district}</small>
-          ) : null}
-        </label>
-
-        <label className="profile-route-form-field">
-          <span>City</span>
-          <input
-            value={form.city}
-            onChange={(event) => onFieldChange("city", event.target.value)}
-          />
-          {formErrors.city ? (
-            <small className="profile-route-form-error">{formErrors.city}</small>
-          ) : null}
-        </label>
-      </div>
-
-      <div className="profile-route-verification-panel">
-        <div className="profile-route-form-head profile-route-form-head-inline">
-          <div>
-            <h2>Phone Verification</h2>
-            <p>
-              {getPhoneVerificationDescription({
-                phoneChanged,
-                phoneIsVerifiedForDraft,
-                verificationPendingForDraft,
-                userPhoneVerified,
-              })}
-            </p>
-          </div>
-        </div>
-
-        {otpPanelVisible ? (
-          <div className="profile-route-form-grid">
-            <label className="profile-route-form-field">
-              <span>OTP Code</span>
-              <input
-                inputMode="numeric"
-                value={form.otpCode}
-                onChange={(event) =>
-                  onFieldChange("otpCode", event.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                placeholder="6 digits"
-              />
-              {formErrors.otpCode ? (
-                <small className="profile-route-form-error">{formErrors.otpCode}</small>
-              ) : null}
-            </label>
-
-            <div className="profile-route-form-actions profile-route-form-actions-stacked">
+            {otpPanelVisible && phoneVerification?.verification_id ? (
               <button
-                className="secondary-button"
+                className="ghost-button profile-route-mobile-verify-button profile-route-mobile-verify-button-secondary"
+                disabled={isOtpBusy || otpResendIn > 0}
+                type="button"
+                onClick={onResendPhoneOtp}
+              >
+                {resendButtonLabel}
+              </button>
+            ) : null}
+          </div>
+
+          {verificationPendingForDraft ? (
+            <div className="profile-route-verification-toast">
+              OTP sent to {otpPhoneLabel}. Enter the 6-digit code below to continue.
+            </div>
+          ) : null}
+
+          {otpPanelVisible ? (
+            <div className="profile-route-mobile-otp-panel">
+              <ProfileField
+                className="profile-route-mobile-verify-field"
+                error={formErrors.otpCode}
+                label={`Enter the 6-digit code sent to ${otpPhoneLabel}`}
+              >
+                <input
+                  className="profile-route-mobile-otp-input"
+                  inputMode="numeric"
+                  placeholder="6-digit code"
+                  value={form.otpCode}
+                  onChange={(event) =>
+                    onFieldChange("otpCode", event.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                />
+              </ProfileField>
+
+              <button
+                className="primary-button profile-route-mobile-verify-button"
                 disabled={
                   isOtpBusy ||
                   !phoneVerification?.verification_id ||
@@ -448,47 +346,58 @@ export function ProfileEditorForm({
               >
                 {isOtpBusy ? "Verifying..." : "Verify OTP"}
               </button>
-              <button
-                className="secondary-button"
-                disabled={isOtpBusy || !phoneVerification?.verification_id || otpResendIn > 0}
-                type="button"
-                onClick={onResendPhoneOtp}
-              >
-                {otpResendIn > 0 ? `Resend in ${otpResendIn}s` : "Resend OTP"}
-              </button>
             </div>
+          ) : null}
+        </div>
+
+        {phoneIsVerifiedForDraft && phoneChanged ? (
+          <div className="profile-route-verification-note">
+            The new phone number has been verified. Save the profile to apply it permanently.
           </div>
         ) : null}
+      </section>
 
-        {phoneVerification ? (
-          <div className="profile-route-verification-meta">
-            <p>
-              <strong>Masked phone:</strong> {phoneVerification.phone_masked}
-            </p>
-            <p>
-              <strong>Status:</strong>{" "}
-              {phoneVerification.status === "verified"
-                ? "verified - waiting for save"
-                : phoneVerification.status}
-            </p>
-            <p>
-              <strong>Expires in:</strong> {formatCountdown(otpExpiresIn)}
-            </p>
-            <p>
-              <strong>Resend in:</strong> {formatCountdown(otpResendIn)}
-            </p>
-            <p>
-              <strong>Remaining attempts:</strong> {phoneVerification.remaining_attempts}
-            </p>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="profile-route-form-actions">
+      <div className="profile-route-form-actions profile-route-form-actions-end">
+        <small className="profile-route-form-hint">
+          Changes are committed only after a successful save.
+        </small>
         <button className="primary-button" disabled={!canSubmit} type="submit">
           {isSaving ? "Saving..." : "Save Changes"}
         </button>
       </div>
     </form>
+  );
+}
+
+type ProfileFieldProps = {
+  label: string;
+  error?: string;
+  className?: string;
+  children: ReactNode;
+};
+
+function ProfileField({ label, error, className, children }: ProfileFieldProps) {
+  return (
+    <label
+      className={className ? `profile-route-form-field ${className}` : "profile-route-form-field"}
+    >
+      <span>{label}</span>
+      {children}
+      {error ? <small className="profile-route-form-error">{error}</small> : null}
+    </label>
+  );
+}
+
+type VerificationStatProps = {
+  label: string;
+  value: string;
+};
+
+function VerificationStat({ label, value }: VerificationStatProps) {
+  return (
+    <div className="profile-route-verification-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }

@@ -481,6 +481,122 @@ func TestUpdateProfileAllowsPhoneOnlyChange(t *testing.T) {
 	}
 }
 
+func TestUpdateProfileCreatesDefaultAddressFromStreetOnlyUsingVerifiedPhone(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	phoneRepo := newFakePhoneVerificationRepo()
+	addressRepo := newFakeAddressRepo()
+	sender := newFakeTelegramSender()
+	svc := newPhoneVerificationTestService(userRepo, phoneRepo, addressRepo, sender)
+
+	user := &model.User{
+		ID:            "user-6b",
+		Email:         "street-only@example.com",
+		Phone:         "0912345678",
+		PhoneVerified: true,
+		FirstName:     "Street",
+		LastName:      "Only",
+	}
+	seedUser(userRepo, user)
+
+	startResult, err := svc.StartPhoneVerification(context.Background(), user.ID, "127.0.0.1", dto.SendPhoneOTPRequest{Phone: "0987654336"})
+	if err != nil {
+		t.Fatalf("StartPhoneVerification returned error: %v", err)
+	}
+
+	if _, err := svc.VerifyPhoneOTP(context.Background(), user.ID, dto.VerifyPhoneOTPRequest{
+		VerificationID: startResult.VerificationID,
+		OTPCode:        sender.lastOTPByPhone["0987654336"],
+	}); err != nil {
+		t.Fatalf("VerifyPhoneOTP returned error: %v", err)
+	}
+
+	phone := "0987654336"
+	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+		Phone:               &phone,
+		PhoneVerificationID: startResult.VerificationID,
+		DefaultAddress: &dto.UpdateProfileAddressInput{
+			Street: stringPtr("88 Nguyen Hue"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if updatedUser.Phone != "0987654336" {
+		t.Fatalf("expected updated phone to be persisted, got %#v", updatedUser)
+	}
+
+	addresses, err := addressRepo.GetByUserID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetByUserID returned error: %v", err)
+	}
+	if len(addresses) != 1 {
+		t.Fatalf("expected one default address after street-only update, got %d", len(addresses))
+	}
+	if !addresses[0].IsDefault {
+		t.Fatalf("expected created address to be default, got %#v", addresses[0])
+	}
+	if addresses[0].RecipientName != "Street Only" {
+		t.Fatalf("expected recipient fallback from profile name, got %#v", addresses[0])
+	}
+	if addresses[0].Phone != "0987654336" {
+		t.Fatalf("expected verified phone to be reused for address, got %#v", addresses[0])
+	}
+	if addresses[0].Street != "88 Nguyen Hue" {
+		t.Fatalf("expected street-only address to persist street, got %#v", addresses[0])
+	}
+	if addresses[0].District != "" || addresses[0].City != "" || addresses[0].Ward != "" {
+		t.Fatalf("expected omitted location parts to remain empty, got %#v", addresses[0])
+	}
+}
+
+func TestUpdateProfileCreatesDefaultAddressFromStreetOnlyWithoutPhone(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	phoneRepo := newFakePhoneVerificationRepo()
+	addressRepo := newFakeAddressRepo()
+	sender := newFakeTelegramSender()
+	svc := newPhoneVerificationTestService(userRepo, phoneRepo, addressRepo, sender)
+
+	user := &model.User{
+		ID:        "user-6c",
+		Email:     "location-only@example.com",
+		FirstName: "Location",
+		LastName:  "Only",
+	}
+	seedUser(userRepo, user)
+
+	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+		DefaultAddress: &dto.UpdateProfileAddressInput{
+			Street: stringPtr("HCM, THU DUC"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateProfile returned error: %v", err)
+	}
+	if updatedUser.FirstName != "Location" || updatedUser.LastName != "Only" {
+		t.Fatalf("expected profile identity to remain unchanged, got %#v", updatedUser)
+	}
+
+	addresses, err := addressRepo.GetByUserID(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("GetByUserID returned error: %v", err)
+	}
+	if len(addresses) != 1 {
+		t.Fatalf("expected one default address after street-only update, got %d", len(addresses))
+	}
+	if !addresses[0].IsDefault {
+		t.Fatalf("expected created address to be default, got %#v", addresses[0])
+	}
+	if addresses[0].RecipientName != "Location Only" {
+		t.Fatalf("expected recipient fallback from profile name, got %#v", addresses[0])
+	}
+	if addresses[0].Phone != "" {
+		t.Fatalf("expected phone to stay empty when profile phone is missing, got %#v", addresses[0])
+	}
+	if addresses[0].Street != "HCM, THU DUC" {
+		t.Fatalf("expected street-only location to persist, got %#v", addresses[0])
+	}
+}
+
 func TestUpdateProfileAllowsAddressOnlyChangeWithoutMutatingPhone(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	phoneRepo := newFakePhoneVerificationRepo()

@@ -343,7 +343,6 @@ export const callout = [
     segment_slug: "all-archive",
     eyebrow: "Editorial System",
     title: "Digital Precision, Analogue Soul.",
-    body: "Beyond the silhouette lies a sophisticated technological core. Our microservice-driven inventory architecture ensures that every piece in our Digital Atelier is accounted for in real time.",
     image_url: homeImages.callout,
   },
   {

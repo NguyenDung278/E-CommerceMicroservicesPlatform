@@ -1,0 +1,172 @@
+.storefront-results-toolbar-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.storefront-results-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+}
+
+.storefront-results-count {
+  color: var(--storefront-toolbar-count, var(--color-primary));
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.storefront-results-toolbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.storefront-inline-search {
+  display: flex;
+  align-items: flex-end;
+  min-width: min(100%, 260px);
+  flex: 0 1 260px;
+}
+
+.storefront-inline-search-field {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  min-height: 40px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--storefront-toolbar-divider, rgba(87, 93, 121, 0.24));
+  transition: border-color var(--transition-base);
+}
+
+.storefront-inline-search-field:focus-within {
+  border-bottom-color: var(--storefront-toolbar-accent, rgba(6, 27, 14, 0.58));
+}
+
+.storefront-inline-search-field input {
+  width: 100%;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--storefront-toolbar-ink, var(--color-primary));
+  font-size: clamp(0.92rem, 0.84rem + 0.22vw, 1rem);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  box-shadow: none;
+}
+
+.storefront-inline-search-field input::placeholder {
+  color: var(--storefront-toolbar-muted, rgba(67, 72, 67, 0.56));
+}
+
+.storefront-inline-search-field input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.storefront-search-clear,
+.storefront-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--storefront-toolbar-button-border, rgba(115, 121, 115, 0.2));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--storefront-toolbar-ink, var(--color-primary));
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition:
+    transform var(--transition-base),
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.storefront-search-clear:hover,
+.storefront-filters-toggle:hover {
+  transform: translateY(-1px);
+  background: var(--storefront-toolbar-accent-solid, var(--color-primary));
+  color: var(--storefront-toolbar-on-accent, var(--color-on-primary));
+  border-color: var(--storefront-toolbar-accent-solid, var(--color-primary));
+}
+
+.storefront-sort-control {
+  display: grid;
+  grid-template-columns: auto minmax(188px, 1fr);
+  align-items: end;
+  gap: 14px;
+  min-width: min(100%, 320px);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--storefront-toolbar-divider, rgba(87, 93, 121, 0.22));
+}
+
+.storefront-sort-control-label {
+  display: grid;
+  gap: 2px;
+  color: var(--storefront-toolbar-muted-strong, rgba(67, 72, 67, 0.82));
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.storefront-sort-control-field {
+  display: block;
+}
+
+.storefront-sort-control-field select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 24px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--storefront-toolbar-ink, var(--color-primary));
+  font-size: clamp(0.98rem, 0.88rem + 0.36vw, 1.18rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  box-shadow: none;
+  appearance: none;
+}
+
+.storefront-sort-control-field select:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.storefront-results-summary {
+  margin: 0;
+  color: var(--storefront-toolbar-summary, rgba(67, 72, 67, 0.78));
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .storefront-results-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .storefront-results-toolbar-controls {
+    justify-content: stretch;
+    margin-left: 0;
+  }
+
+  .storefront-inline-search,
+  .storefront-sort-control,
+  .storefront-search-clear,
+  .storefront-filters-toggle {
+    width: 100%;
+  }
+}

@@ -34,17 +34,17 @@ Nếu bạn chỉ nhớ một điều khi đọc repo này, hãy nhớ:
 
 ### 2.1. Vai trò của từng thành phần
 
-| Thành phần | Vai trò nghiệp vụ | Storage / Dependency chính | Giao tiếp chính |
-| --- | --- | --- | --- |
-| `api-gateway/` | HTTP entrypoint cho frontend | downstream service URLs | HTTP reverse proxy |
-| `services/user-service/` | auth, profile, address, password, OAuth | PostgreSQL | HTTP + gRPC |
-| `services/product-service/` | catalog, media, review, search, internal product lookup | PostgreSQL, MinIO, Elasticsearch | HTTP + gRPC |
-| `services/cart-service/` | giỏ hàng tạm thời | Redis | HTTP + gRPC client |
-| `services/order-service/` | quote, order lifecycle, coupon, reporting | PostgreSQL, RabbitMQ | HTTP + gRPC client + event consumer |
-| `services/payment-service/` | payment lifecycle, refund, webhook | PostgreSQL, RabbitMQ | HTTP + HTTP client + event publish |
-| `services/notification-service/` | gửi email theo event | RabbitMQ, SMTP | event consumer |
-| `frontend/` | UI chính cho local/dev | browser state | HTTP qua gateway |
-| `pkg/` | shared config, DB, middleware, validation, observability | shared libraries | được import bởi hầu hết service |
+| Thành phần                       | Vai trò nghiệp vụ                                        | Storage / Dependency chính       | Giao tiếp chính                     |
+| -------------------------------- | -------------------------------------------------------- | -------------------------------- | ----------------------------------- |
+| `api-gateway/`                   | HTTP entrypoint cho frontend                             | downstream service URLs          | HTTP reverse proxy                  |
+| `services/user-service/`         | auth, profile, address, password, OAuth                  | PostgreSQL                       | HTTP + gRPC                         |
+| `services/product-service/`      | catalog, media, review, search, internal product lookup  | PostgreSQL, MinIO, Elasticsearch | HTTP + gRPC                         |
+| `services/cart-service/`         | giỏ hàng tạm thời                                        | Redis                            | HTTP + gRPC client                  |
+| `services/order-service/`        | quote, order lifecycle, coupon, reporting                | PostgreSQL, RabbitMQ             | HTTP + gRPC client + event consumer |
+| `services/payment-service/`      | payment lifecycle, refund, webhook                       | PostgreSQL, RabbitMQ             | HTTP + HTTP client + event publish  |
+| `services/notification-service/` | gửi email theo event                                     | RabbitMQ, SMTP                   | event consumer                      |
+| `frontend/`                      | UI chính cho local/dev                                   | browser state                    | HTTP qua gateway                    |
+| `pkg/`                           | shared config, DB, middleware, validation, observability | shared libraries                 | được import bởi hầu hết service     |
 
 ### 2.2. Luồng dữ liệu tiêu biểu
 
@@ -925,19 +925,19 @@ Payment-service đang có tư duy khá trưởng thành ở 3 điểm:
 
 ### File nên đọc
 
-- `frontend/src/shared/api/http-client.ts`
-- `frontend/src/shared/api/modules/*.ts`
-- `frontend/src/shared/api/normalizers.ts`
-- `frontend/src/shared/types/api.ts`
+- `frontend/src/services/api/http-client.ts`
+- `frontend/src/services/api/modules/*.ts`
+- `frontend/src/services/api/normalizers.ts`
+- `frontend/src/types/api.ts`
 - các file compatibility như `frontend/src/lib/api.ts`, `frontend/src/lib/http/client.ts` để hiểu chiến lược re-export hiện tại
 
 ### Điều đáng học nhất: chia `http client` + `api module` + `normalizer`
 
 Đây là một cấu trúc frontend rất sạch:
 
-1. `shared/api/http-client.ts`: lo request raw, error parsing, auth header
-2. `shared/api/modules/*.ts`: lo endpoint cụ thể
-3. `shared/api/normalizers.ts`: ép dữ liệu lỏng từ API thành shape typed, an toàn hơn cho UI
+1. `services/api/http-client.ts`: lo request raw, error parsing, auth header
+2. `services/api/modules/*.ts`: lo endpoint cụ thể
+3. `services/api/normalizers.ts`: ép dữ liệu lỏng từ API thành shape typed, an toàn hơn cho UI
 
 ### Vì sao cách này tốt?
 
@@ -945,7 +945,7 @@ Payment-service đang có tư duy khá trưởng thành ở 3 điểm:
 - nếu backend trả thiếu field, normalizer giữ UI ít gãy hơn
 - dễ test và dễ refactor hơn việc gọi `fetch` rải rác khắp component
 
-### Ví dụ: `frontend/src/shared/api/modules/productApi.ts`
+### Ví dụ: `frontend/src/services/api/modules/product-api.ts`
 
 Điểm hay:
 
@@ -1241,9 +1241,9 @@ Khi mở một function, đừng chỉ hỏi "nó làm gì?". Hãy hỏi theo th
 
 ### Giai đoạn 5: Học frontend boundary
 
-- `frontend/src/shared/api/http-client.ts`
-- `frontend/src/shared/api/modules/*.ts`
-- `frontend/src/shared/api/normalizers.ts`
+- `frontend/src/services/api/http-client.ts`
+- `frontend/src/services/api/modules/*.ts`
+- `frontend/src/services/api/normalizers.ts`
 
 ---
 

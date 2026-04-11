@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import {
+  AdminCatalogSection,
+  AdminConsoleSidebar,
+  AdminCouponsSection,
+  AdminOrdersSection,
+  AdminOverviewSection,
+  AdminReportSection,
+  AdminUsersSection,
+} from "@/features/admin/components";
+import {
   createEmptyVariant,
   createDefaultCouponForm,
   createDefaultProductForm,
@@ -23,13 +32,10 @@ import {
   syncWorkbookProductMutation,
   syncWorkbookProductMutations,
 } from "@/features/home/workbook-sync-client";
-import { FormField } from "@/components/form/form-field";
-import "@/styles/pages/admin/admin-order-history.css";
-import { ProductCard } from "@/components/product/product-card";
 import { api, getErrorMessage } from "@/services/api";
 import type { AdminOrderReport, Coupon, Order, Payment, Product, UserProfile } from "@/types/api";
 import { formatRoleLabel, isDevelopmentAccount } from "@/utils/dev-accounts";
-import { formatCurrency, formatDateTime } from "@/utils/format";
+import { formatCurrency } from "@/utils/format";
 import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "@/utils/sanitize";
 import { validateProduct } from "@/utils/validation";
 import "@/styles/pages/admin/admin-page.css";
@@ -74,7 +80,7 @@ export function AdminPage() {
       setFeedback(`${baseMessage} ${result.message}`);
     } catch (reason) {
       setFeedback(
-        `${baseMessage} Tuy nhien workbook CSV/XLSX chua dong bo duoc: ${getErrorMessage(reason)}`
+        `${baseMessage} Tuy nhien bo suu tap noi bat chua cap nhat duoc: ${getErrorMessage(reason)}`
       );
     }
   }
@@ -102,12 +108,12 @@ export function AdminPage() {
       );
       setFeedback(
         skippedCount > 0
-          ? `${baseMessage} ${result.message} Bo qua ${skippedCount} san pham chua map vao workbook storefront.`
+          ? `${baseMessage} ${result.message} Bo qua ${skippedCount} san pham chua nam trong 4 bo suu tap chinh.`
           : `${baseMessage} ${result.message}`
       );
     } catch (reason) {
       setFeedback(
-        `${baseMessage} Tuy nhien workbook CSV/XLSX chua dong bo duoc: ${getErrorMessage(reason)}`
+        `${baseMessage} Tuy nhien bo suu tap noi bat chua cap nhat duoc: ${getErrorMessage(reason)}`
       );
     } finally {
       setIsSyncingWorkbook(false);
@@ -221,7 +227,7 @@ export function AdminPage() {
     event.preventDefault();
 
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để thao tác catalog.");
+      setFeedback("Bạn cần tài khoản staff/admin để thao tác catalog.");
       return;
     }
 
@@ -290,7 +296,11 @@ export function AdminPage() {
       } else {
         const response = await api.createProduct(token, payload);
         setProducts((current) => [response.data, ...current]);
-        await syncWorkbookFeedback("upsert", response.data, `Đã tạo sản phẩm ${response.data.name}.`);
+        await syncWorkbookFeedback(
+          "upsert",
+          response.data,
+          `Đã tạo sản phẩm ${response.data.name}.`
+        );
       }
 
       resetForm();
@@ -305,7 +315,7 @@ export function AdminPage() {
     event.preventDefault();
 
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để quản trị coupon.");
+      setFeedback("Bạn cần tài khoản staff/admin để quản trị coupon.");
       return;
     }
 
@@ -359,7 +369,7 @@ export function AdminPage() {
 
   async function handleRoleChange(userId: string, role: string) {
     if (!token) {
-      setFeedback("Bạn cần JWT admin để đổi role.");
+      setFeedback("Bạn cần tài khoản admin để đổi vai trò.");
       return;
     }
 
@@ -405,7 +415,7 @@ export function AdminPage() {
 
   async function handleDelete(product: Product) {
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để xóa sản phẩm.");
+      setFeedback("Bạn cần tài khoản staff/admin để xóa sản phẩm.");
       return;
     }
 
@@ -424,14 +434,18 @@ export function AdminPage() {
   async function handleSyncProduct(product: Product) {
     if (!canSyncProductToWorkbook(product)) {
       setFeedback(
-        `San pham ${product.name} chua thuoc cac section workbook duoc map san. Hay dat category ve Men, Women, Footwear hoac Accessories truoc khi sync.`
+        `San pham ${product.name} hien chua nam trong 4 bo suu tap chinh. Hay chuyen ve Men, Women, Footwear hoac Accessories truoc khi cap nhat.`
       );
       return;
     }
 
     try {
       setSyncingWorkbookProductId(product.id);
-      await syncWorkbookFeedback("upsert", product, `Đã lấy trạng thái live của ${product.name} từ database.`);
+      await syncWorkbookFeedback(
+        "upsert",
+        product,
+        `Da cap nhat ${product.name} len bo suu tap noi bat.`
+      );
     } finally {
       setSyncingWorkbookProductId("");
     }
@@ -440,14 +454,14 @@ export function AdminPage() {
   async function handleSyncAllProductsToWorkbook() {
     await syncProductsToWorkbook(
       products,
-      "Đã đồng bộ catalog hiện tại từ database sang workbook.",
-      "Chưa có sản phẩm nào trong database thuộc các section workbook đã map."
+      "Da cap nhat bo suu tap tu catalog hien tai.",
+      "Chua co san pham nao nam trong 4 bo suu tap chinh."
     );
   }
 
   async function handleManualCancel(order: Order) {
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để hủy đơn.");
+      setFeedback("Bạn cần tài khoản staff/admin để hủy đơn.");
       return;
     }
 
@@ -467,7 +481,7 @@ export function AdminPage() {
 
   async function handleRefund(payment: Payment) {
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để hoàn tiền.");
+      setFeedback("Bạn cần tài khoản staff/admin để hoàn tiền.");
       return;
     }
 
@@ -516,7 +530,7 @@ export function AdminPage() {
 
   async function handleUploadImages() {
     if (!token) {
-      setFeedback("Bạn cần JWT staff/admin để upload ảnh.");
+      setFeedback("Bạn cần tài khoản staff/admin để tải ảnh lên.");
       return;
     }
     if (selectedImageFiles.length === 0) {
@@ -533,7 +547,7 @@ export function AdminPage() {
       }));
       setSelectedImageFiles([]);
       setUploadInputKey((current) => current + 1);
-      setFeedback(`Đã upload ${response.data.urls.length} ảnh lên object storage.`);
+      setFeedback(`Da tai len ${response.data.urls.length} anh moi cho gallery san pham.`);
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -616,7 +630,7 @@ export function AdminPage() {
       value: report ? formatCurrency(report.total_revenue) : "--",
       caption: report
         ? `${report.order_count} đơn trong ${report.window_days} ngày gần nhất`
-        : "Đang chờ snapshot báo cáo",
+        : "Dang tai tong quan doanh thu",
     },
     {
       label: "Active Orders",
@@ -636,7 +650,7 @@ export function AdminPage() {
     {
       label: isAdmin ? "Managed Users" : "Visible Customers",
       value: String(managedCustomerCount),
-      caption: isAdmin ? "Sẵn sàng cho role governance" : "Dựa trên danh sách đơn đang tải",
+      caption: isAdmin ? "San sang cap nhat quyen truy cap" : "Tong hop tu don hang hien co",
     },
   ];
   const adminNavItems = [
@@ -644,904 +658,119 @@ export function AdminPage() {
       id: "admin-overview",
       group: "Core Analytics",
       label: "Overview",
-      helper: "Tổng quan KPI và trạng thái sync",
+      helper: "Doanh thu, nhịp vận hành, và trạng thái tổng thể",
     },
     {
       id: "admin-order-ledger",
       group: "Core Analytics",
       label: "Orders",
-      helper: "Ledger đơn hàng và payment actions",
+      helper: "Theo dõi đơn hàng và giao dịch gần đây",
     },
     {
       id: "admin-user-governance",
       group: "Management",
       label: "Users",
-      helper: "Role governance cho admin",
+      helper: "Phân quyền và xác minh tài khoản",
     },
     {
       id: "admin-coupon-workbench",
       group: "Management",
       label: "Coupons",
-      helper: "Ưu đãi, điều kiện, thời hạn",
+      helper: "Ưu đãi, điều kiện áp dụng, và thời hạn",
     },
     {
       id: "admin-product-workbench",
       group: "Management",
       label: "Catalog",
-      helper: "Sản phẩm, gallery, variants",
+      helper: "Sản phẩm, hình ảnh, và biến thể",
     },
   ].filter((item) => item.id !== "admin-user-governance" || isAdmin);
+  const snapshotLabel = report ? `Snapshot ${report.window_days}d` : "Loading snapshot";
 
   return (
     <div className="admin-console-page">
-      {isDevelopmentOperator ? (
-        <div className="admin-console-alert-strip" role="note">
-          <span className="admin-console-alert-icon" aria-hidden="true">
-            !
-          </span>
-          <span>Maintenance Mode: Seeded Development Account in Use.</span>
-        </div>
-      ) : null}
-
       <div className="admin-console-shell">
-        <aside className="admin-console-sidebar">
-          <div className="admin-console-sidebar-brand">
-            <span className="admin-console-sidebar-mark">ND Admin</span>
-            <p>
-              Bảng điều khiển vận hành cho catalog, coupon, order, payment và phân quyền người dùng.
-            </p>
-          </div>
-
-          <div className="admin-console-sidebar-groups">
-            {["Core Analytics", "Management"].map((groupName) => (
-              <div className="admin-console-sidebar-group" key={groupName}>
-                <p className="admin-console-sidebar-label">{groupName}</p>
-                <div className="admin-console-sidebar-links">
-                  {adminNavItems
-                    .filter((item) => item.group === groupName)
-                    .map((item) => (
-                      <button
-                        className="admin-console-sidebar-link"
-                        key={item.id}
-                        type="button"
-                        onClick={() => scrollToAdminSection(item.id)}
-                      >
-                        <strong>{item.label}</strong>
-                        <span>{item.helper}</span>
-                      </button>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="admin-console-health-card">
-            <span className="admin-console-health-label">Database Health</span>
-            <strong>{report ? `Snapshot ${report.window_days}d` : "Waiting for sync"}</strong>
-            <div className="admin-console-health-track" aria-hidden="true">
-              <span className="admin-console-health-fill" />
-            </div>
-            <p>
-              Quyền hiện tại: <strong>{currentRoleLabel}</strong>
-              {isDevelopmentOperator ? " • development account" : " • production-like operator"}
-            </p>
-          </div>
-        </aside>
+        <AdminConsoleSidebar
+          adminNavItems={adminNavItems}
+          currentRoleLabel={currentRoleLabel}
+          isDevelopmentOperator={isDevelopmentOperator}
+          snapshotLabel={snapshotLabel}
+          onNavigate={scrollToAdminSection}
+        />
 
         <div className="admin-console-main">
-          <section className="admin-console-hero" id="admin-overview">
-            <div className="admin-console-hero-copy">
-              <span className="section-kicker">Control Room</span>
-              <h1>System Dashboard</h1>
-              <p className="admin-console-hero-subtitle">
-                Không gian vận hành theo template Stitch, giữ nguyên data flow hiện tại của app
-                nhưng trình bày theo dashboard editorial rõ ràng hơn cho admin/staff.
-              </p>
-            </div>
+          <AdminOverviewSection
+            feedback={feedback}
+            isDevelopmentOperator={isDevelopmentOperator}
+            isSyncingWorkbook={isSyncingWorkbook}
+            overviewCards={overviewCards}
+            onRefreshDashboardData={refreshDashboardData}
+            onStartNewProductEntry={startNewProductEntry}
+            onSyncCollections={() => void handleSyncAllProductsToWorkbook()}
+          />
 
-            <div className="admin-console-hero-actions">
-              <button className="ghost-button" type="button" onClick={refreshDashboardData}>
-                Làm mới dữ liệu
-              </button>
-              <button
-                className="ghost-button"
-                disabled={isSyncingWorkbook}
-                type="button"
-                onClick={() => void handleSyncAllProductsToWorkbook()}
-              >
-                {isSyncingWorkbook ? "Đang sync workbook..." : "DB -> Workbook"}
-              </button>
-              <button className="primary-button" type="button" onClick={startNewProductEntry}>
-                + Sản phẩm mới
-              </button>
-            </div>
-          </section>
+          <AdminReportSection
+            isLoadingReport={isLoadingReport}
+            report={report}
+            reportDays={reportDays}
+            reportWindowOptions={reportWindowOptions}
+            onSelectWindow={setReportDays}
+          />
 
-          {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
-
-          <div className="admin-console-stats">
-            {overviewCards.map((card) => (
-              <article className="admin-console-stat-card" key={card.label}>
-                <span className="admin-console-stat-label">{card.label}</span>
-                <strong>{card.value}</strong>
-                <p>{card.caption}</p>
-              </article>
-            ))}
-          </div>
-
-          <section className="admin-console-panel admin-console-analytics-panel">
-            <div className="section-heading">
-              <div>
-                <h2>Báo cáo kinh doanh</h2>
-                <p className="history-subtle">
-                  Snapshot doanh thu, đơn hàng và top sản phẩm cho cửa sổ gần nhất.
-                </p>
-              </div>
-              <div className="category-filter-row">
-                {reportWindowOptions.map((days) => (
-                  <button
-                    className={
-                      reportDays === days ? "filter-chip filter-chip-active" : "filter-chip"
-                    }
-                    key={days}
-                    type="button"
-                    onClick={() => setReportDays(days)}
-                  >
-                    {days} ngày
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {isLoadingReport ? <div className="page-state">Đang tải báo cáo...</div> : null}
-
-            {report ? (
-              <div className="admin-console-split-grid">
-                <div className="admin-console-subpanel">
-                  <h3>Top sản phẩm bán chạy</h3>
-                  <div className="order-list">
-                    {report.top_products.map((item) => (
-                      <div className="order-card" key={item.product_id}>
-                        <strong>{item.name}</strong>
-                        <span>Số lượng: {item.quantity}</span>
-                        <span>Doanh thu: {formatCurrency(item.revenue)}</span>
-                      </div>
-                    ))}
-                    {report.top_products.length === 0 ? (
-                      <p className="history-empty">
-                        Chưa có dữ liệu top sản phẩm trong cửa sổ này.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="admin-console-subpanel">
-                  <h3>Phân bổ trạng thái đơn</h3>
-                  <div className="order-list">
-                    {report.status_breakdown.map((item) => (
-                      <div className="order-card" key={item.status}>
-                        <strong>{item.status}</strong>
-                        <span>Đơn: {item.orders}</span>
-                        <span>Giá trị: {formatCurrency(item.revenue)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="admin-console-panel" id="admin-order-ledger">
-            <div className="section-heading">
-              <div>
-                <h2>Recent Transaction Ledger</h2>
-                <p className="history-subtle">
-                  Staff/Admin có thể hủy thủ công đơn `pending` / `paid` và refund full cho các giao
-                  dịch charge đã completed.
-                </p>
-              </div>
-            </div>
-
-            {isLoadingOrders ? <div className="page-state">Đang tải đơn gần đây...</div> : null}
-
-            <div className="order-list">
-              {orders.map((order) => {
-                const payments = paymentsByOrder[order.id] ?? [];
-                return (
-                  <article className="coupon-admin-card admin-console-record" key={order.id}>
-                    <div className="coupon-admin-head">
-                      <div>
-                        <strong>{order.id}</strong>
-                        <p className="history-subtle">
-                          User: {order.user_id} • {formatDateTime(order.created_at)}
-                        </p>
-                      </div>
-                      <span className="status-pill status-pill-neutral">{order.status}</span>
-                    </div>
-
-                    <div className="coupon-admin-grid">
-                      <div>
-                        <span>Tổng tiền</span>
-                        <strong>{formatCurrency(order.total_price)}</strong>
-                      </div>
-                      <div>
-                        <span>Vận chuyển</span>
-                        <strong>{order.shipping_method}</strong>
-                      </div>
-                    </div>
-
-                    {order.status === "pending" || order.status === "paid" ? (
-                      <div className="history-actions">
-                        <button
-                          className="ghost-button"
-                          disabled={busyOrderId === order.id}
-                          type="button"
-                          onClick={() => void handleManualCancel(order)}
-                        >
-                          {busyOrderId === order.id ? "Đang hủy..." : "Hủy thủ công"}
-                        </button>
-                      </div>
-                    ) : null}
-
-                    <div className="order-list">
-                      {payments.map((payment) => (
-                        <div className="coupon-preview-card" key={payment.id}>
-                          <strong>{payment.id}</strong>
-                          <span>
-                            {payment.payment_method} • {payment.transaction_type} • {payment.status}
-                          </span>
-                          <span>{formatCurrency(payment.amount)}</span>
-                          {payment.transaction_type === "charge" &&
-                          payment.status === "completed" ? (
-                            <button
-                              className="ghost-button"
-                              disabled={busyRefundId === payment.id}
-                              type="button"
-                              onClick={() => void handleRefund(payment)}
-                            >
-                              {busyRefundId === payment.id ? "Đang refund..." : "Refund full"}
-                            </button>
-                          ) : null}
-                        </div>
-                      ))}
-
-                      {payments.length === 0 ? (
-                        <p className="history-empty">Chưa có payment nào cho đơn này.</p>
-                      ) : null}
-                    </div>
-                  </article>
-                );
-              })}
-
-              {!isLoadingOrders && orders.length === 0 ? (
-                <p className="history-empty">Chưa có đơn hàng nào để vận hành.</p>
-              ) : null}
-            </div>
-          </section>
+          <AdminOrdersSection
+            busyOrderId={busyOrderId}
+            busyRefundId={busyRefundId}
+            isLoadingOrders={isLoadingOrders}
+            orders={orders}
+            paymentsByOrder={paymentsByOrder}
+            onCancelOrder={(order) => void handleManualCancel(order)}
+            onRefund={(payment) => void handleRefund(payment)}
+          />
 
           {isAdmin ? (
-            <section className="admin-console-panel admin-user-card" id="admin-user-governance">
-              <div className="section-heading">
-                <div>
-                  <h2>Phân quyền người dùng</h2>
-                  <p className="history-subtle">
-                    Admin có thể gán `user`, `staff` hoặc `admin`. Staff sẽ vào được khu quản trị
-                    vận hành nhưng không đổi role người khác.
-                  </p>
-                </div>
-              </div>
-
-              {isLoadingUsers ? (
-                <div className="page-state">Đang tải danh sách người dùng...</div>
-              ) : null}
-
-              <div className="order-list">
-                {users.map((adminUser) => (
-                  <article className="coupon-admin-card admin-console-record" key={adminUser.id}>
-                    <div className="coupon-admin-head">
-                      <div className="admin-console-user-block">
-                        <div className="admin-console-user-head">
-                          <strong>{adminUser.email}</strong>
-                          {isDevelopmentAccount(adminUser) ? (
-                            <span className="account-flag">DEV ONLY</span>
-                          ) : null}
-                        </div>
-                        <p className="history-subtle">
-                          {adminUser.first_name} {adminUser.last_name}
-                          {adminUser.phone ? ` • ${adminUser.phone}` : ""}
-                        </p>
-                      </div>
-                      <span
-                        className={
-                          adminUser.email_verified
-                            ? "status-pill status-pill-success"
-                            : "status-pill status-pill-neutral"
-                        }
-                      >
-                        {adminUser.email_verified ? "Email đã xác minh" : "Email chưa xác minh"}
-                      </span>
-                    </div>
-
-                    <div className="coupon-admin-grid">
-                      <div>
-                        <span>Vai trò hiện tại</span>
-                        <strong>{formatRoleLabel(adminUser.role)}</strong>
-                      </div>
-                      <div>
-                        <span>Cập nhật quyền</span>
-                        <select
-                          disabled={busyUserId === adminUser.id}
-                          value={adminUser.role}
-                          onChange={(event) =>
-                            void handleRoleChange(adminUser.id, event.target.value)
-                          }
-                        >
-                          <option value="user">user</option>
-                          <option value="staff">staff</option>
-                          <option value="admin">admin</option>
-                        </select>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-
-                {!isLoadingUsers && users.length === 0 ? (
-                  <p className="history-empty">Chưa có người dùng nào để phân quyền.</p>
-                ) : null}
-              </div>
-            </section>
+            <AdminUsersSection
+              busyUserId={busyUserId}
+              isLoadingUsers={isLoadingUsers}
+              users={users}
+              onRoleChange={(userId, role) => void handleRoleChange(userId, role)}
+            />
           ) : null}
 
-          <div className="two-column-grid admin-console-workbench" id="admin-coupon-workbench">
-            <form className="card admin-console-panel" onSubmit={handleCreateCoupon}>
-              <h2>Tạo coupon mới</h2>
+          <AdminCouponsSection
+            couponForm={couponForm}
+            coupons={coupons}
+            isCreatingCoupon={isCreatingCoupon}
+            setCouponForm={setCouponForm}
+            onSubmit={handleCreateCoupon}
+          />
 
-              <div className="inline-grid">
-                <FormField htmlFor="admin-coupon-code" label="Mã coupon" required>
-                  <input
-                    id="admin-coupon-code"
-                    placeholder="SAVE10"
-                    value={couponForm.code}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({
-                        ...current,
-                        code: event.target.value.toUpperCase(),
-                      }))
-                    }
-                  />
-                </FormField>
-                <FormField htmlFor="admin-coupon-type" label="Kiểu giảm giá">
-                  <select
-                    id="admin-coupon-type"
-                    value={couponForm.discountType}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({
-                        ...current,
-                        discountType: event.target.value as CouponFormState["discountType"],
-                      }))
-                    }
-                  >
-                    <option value="percentage">Theo phần trăm</option>
-                    <option value="fixed">Số tiền cố định</option>
-                  </select>
-                </FormField>
-              </div>
-
-              <FormField
-                htmlFor="admin-coupon-description"
-                hint="Mô tả ngắn sẽ hiển thị trong checkout preview nếu coupon hợp lệ."
-                label="Mô tả"
-              >
-                <input
-                  id="admin-coupon-description"
-                  placeholder="Giảm 10% cho đơn từ $50"
-                  value={couponForm.description}
-                  onChange={(event) =>
-                    setCouponForm((current) => ({ ...current, description: event.target.value }))
-                  }
-                />
-              </FormField>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-coupon-discount" label="Giá trị giảm" required>
-                  <input
-                    id="admin-coupon-discount"
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={couponForm.discountValue}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({
-                        ...current,
-                        discountValue: event.target.value,
-                      }))
-                    }
-                  />
-                </FormField>
-                <FormField htmlFor="admin-coupon-min-order" label="Đơn tối thiểu">
-                  <input
-                    id="admin-coupon-min-order"
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={couponForm.minOrderAmount}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({
-                        ...current,
-                        minOrderAmount: event.target.value,
-                      }))
-                    }
-                  />
-                </FormField>
-              </div>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-coupon-usage-limit" label="Giới hạn sử dụng">
-                  <input
-                    id="admin-coupon-usage-limit"
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={couponForm.usageLimit}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({ ...current, usageLimit: event.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField htmlFor="admin-coupon-expiry" label="Hết hạn">
-                  <input
-                    id="admin-coupon-expiry"
-                    type="datetime-local"
-                    value={couponForm.expiresAt}
-                    onChange={(event) =>
-                      setCouponForm((current) => ({ ...current, expiresAt: event.target.value }))
-                    }
-                  />
-                </FormField>
-              </div>
-
-              <label className="checkbox-field" htmlFor="admin-coupon-active">
-                <input
-                  checked={couponForm.active}
-                  id="admin-coupon-active"
-                  type="checkbox"
-                  onChange={(event) =>
-                    setCouponForm((current) => ({ ...current, active: event.target.checked }))
-                  }
-                />
-                <span>Kích hoạt coupon ngay sau khi tạo</span>
-              </label>
-
-              <button className="primary-button" disabled={isCreatingCoupon} type="submit">
-                {isCreatingCoupon ? "Đang tạo coupon..." : "Tạo coupon"}
-              </button>
-            </form>
-
-            <div className="card admin-console-panel">
-              <div className="section-heading">
-                <div>
-                  <h2>Danh sách coupon</h2>
-                  <p className="history-subtle">
-                    Quản trị nhanh ưu đãi đang hoạt động và mức độ sử dụng.
-                  </p>
-                </div>
-              </div>
-
-              <div className="order-list">
-                {coupons.map((coupon) => (
-                  <article className="coupon-admin-card admin-console-record" key={coupon.id}>
-                    <div className="coupon-admin-head">
-                      <div>
-                        <strong>{coupon.code}</strong>
-                        <p className="history-subtle">
-                          {coupon.description ||
-                            "Chưa có mô tả. Coupon vẫn áp dụng theo rule hiện tại."}
-                        </p>
-                      </div>
-                      <span
-                        className={
-                          coupon.active
-                            ? "status-pill status-pill-success"
-                            : "status-pill status-pill-neutral"
-                        }
-                      >
-                        {coupon.active ? "Đang bật" : "Tạm tắt"}
-                      </span>
-                    </div>
-
-                    <div className="coupon-admin-grid">
-                      <div>
-                        <span>Ưu đãi</span>
-                        <strong>
-                          {coupon.discount_type === "percentage"
-                            ? `${coupon.discount_value}%`
-                            : formatCurrency(coupon.discount_value)}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Đơn tối thiểu</span>
-                        <strong>{formatCurrency(coupon.min_order_amount)}</strong>
-                      </div>
-                      <div>
-                        <span>Đã dùng</span>
-                        <strong>
-                          {coupon.used_count}
-                          {coupon.usage_limit > 0
-                            ? ` / ${coupon.usage_limit}`
-                            : " / không giới hạn"}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Hết hạn</span>
-                        <strong>
-                          {coupon.expires_at ? formatDateTime(coupon.expires_at) : "Không giới hạn"}
-                        </strong>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-
-                {coupons.length === 0 ? (
-                  <p className="history-empty">
-                    Chưa có coupon nào. Bạn có thể tạo coupon đầu tiên ở khung bên trái.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="two-column-grid admin-console-workbench" id="admin-product-workbench">
-            <form className="card admin-console-panel" onSubmit={handleCreate}>
-              <h2>{editingProductId ? "Chỉnh sửa sản phẩm" : "Tạo sản phẩm mới"}</h2>
-
-              <FormField htmlFor="admin-product-name" label="Tên sản phẩm">
-                <input
-                  id="admin-product-name"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                />
-              </FormField>
-
-              <FormField htmlFor="admin-product-description" label="Mô tả">
-                <textarea
-                  id="admin-product-description"
-                  rows={4}
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, description: event.target.value }))
-                  }
-                />
-              </FormField>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-product-price" label="Giá">
-                  <input
-                    id="admin-product-price"
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={form.price}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, price: event.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField
-                  htmlFor="admin-product-stock"
-                  hint="Dùng khi sản phẩm không có variants. Nếu có variants, hệ thống sẽ lấy tổng stock từ variants."
-                  label="Tồn kho gốc"
-                >
-                  <input
-                    id="admin-product-stock"
-                    min="0"
-                    step="1"
-                    type="number"
-                    value={form.stock}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, stock: event.target.value }))
-                    }
-                  />
-                </FormField>
-              </div>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-product-category" label="Danh mục">
-                  <input
-                    id="admin-product-category"
-                    value={form.category}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, category: event.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField htmlFor="admin-product-brand" label="Brand">
-                  <input
-                    id="admin-product-brand"
-                    value={form.brand}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, brand: event.target.value }))
-                    }
-                  />
-                </FormField>
-              </div>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-product-status" label="Status">
-                  <select
-                    id="admin-product-status"
-                    value={form.status}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, status: event.target.value }))
-                    }
-                  >
-                    {productStatusOptions.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-                <FormField htmlFor="admin-product-sku" label="SKU gốc">
-                  <input
-                    id="admin-product-sku"
-                    value={form.sku}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, sku: event.target.value }))
-                    }
-                  />
-                </FormField>
-              </div>
-
-              <div className="inline-grid">
-                <FormField htmlFor="admin-product-tags" label="Tags">
-                  <input
-                    id="admin-product-tags"
-                    placeholder="gaming, ultrabook, office"
-                    value={form.tags}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, tags: event.target.value }))
-                    }
-                  />
-                </FormField>
-                <FormField
-                  htmlFor="admin-product-image-url"
-                  hint="Bạn có thể thêm URL thủ công hoặc upload file lên MinIO/S3-compatible storage."
-                  label="Nguồn ảnh"
-                >
-                  <div className="admin-image-input-row">
-                    <input
-                      id="admin-product-image-url"
-                      placeholder="https://..."
-                      type="url"
-                      value={form.manualImageUrl}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, manualImageUrl: event.target.value }))
-                      }
-                    />
-                    <button className="ghost-button" type="button" onClick={handleManualImageAdd}>
-                      Thêm URL
-                    </button>
-                  </div>
-                </FormField>
-              </div>
-
-              <div className="admin-image-panel">
-                <div className="section-heading">
-                  <div>
-                    <h3>Gallery ảnh sản phẩm</h3>
-                    <p className="history-subtle">
-                      Ảnh đầu tiên sẽ được dùng làm thumbnail chính ngoài catalog và checkout.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="admin-image-upload-row">
-                  <input
-                    key={uploadInputKey}
-                    accept="image/*"
-                    multiple
-                    type="file"
-                    onChange={handleImageSelection}
-                  />
-                  <button
-                    className="primary-button"
-                    disabled={isUploadingImages || selectedImageFiles.length === 0}
-                    type="button"
-                    onClick={() => void handleUploadImages()}
-                  >
-                    {isUploadingImages ? "Đang upload..." : "Upload lên object storage"}
-                  </button>
-                </div>
-
-                {selectedImageFiles.length > 0 ? (
-                  <div className="admin-upload-chip-list">
-                    {selectedImageFiles.map((file) => (
-                      <span className="admin-upload-chip" key={`${file.name}-${file.size}`}>
-                        {file.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="admin-image-grid">
-                  {form.imageUrls.map((imageUrl, index) => (
-                    <article className="admin-image-card" key={imageUrl}>
-                      <img alt={`Product image ${index + 1}`} src={imageUrl} />
-                      <div className="admin-image-card-actions">
-                        {index === 0 ? (
-                          <span className="status-pill status-pill-success">Ảnh chính</span>
-                        ) : (
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => handleSetPrimaryImage(imageUrl)}
-                          >
-                            Đặt làm ảnh chính
-                          </button>
-                        )}
-                        <button
-                          className="danger-button"
-                          type="button"
-                          onClick={() => handleRemoveImage(imageUrl)}
-                        >
-                          Gỡ ảnh
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-
-                  {form.imageUrls.length === 0 ? (
-                    <p className="history-subtle">
-                      Chưa có ảnh nào. Hãy thêm URL hoặc upload một hay nhiều ảnh để tạo gallery.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="admin-variant-panel">
-                <div className="section-heading">
-                  <div>
-                    <h3>Variants / SKU</h3>
-                    <p className="history-subtle">
-                      Mỗi biến thể có SKU, giá và tồn kho riêng để chuẩn bị cho sprint scale
-                      catalog.
-                    </p>
-                  </div>
-                  <button className="ghost-button" type="button" onClick={addVariantRow}>
-                    Thêm biến thể
-                  </button>
-                </div>
-
-                <div className="admin-variant-list">
-                  {form.variants.map((variant) => (
-                    <div className="admin-variant-row" key={variant.id}>
-                      <input
-                        placeholder="Tên biến thể"
-                        value={variant.label}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "label", event.target.value)
-                        }
-                      />
-                      <input
-                        placeholder="SKU"
-                        value={variant.sku}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "sku", event.target.value)
-                        }
-                      />
-                      <input
-                        placeholder="Size"
-                        value={variant.size}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "size", event.target.value)
-                        }
-                      />
-                      <input
-                        placeholder="Màu"
-                        value={variant.color}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "color", event.target.value)
-                        }
-                      />
-                      <input
-                        min="0"
-                        placeholder="Giá"
-                        step="0.01"
-                        type="number"
-                        value={variant.price}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "price", event.target.value)
-                        }
-                      />
-                      <input
-                        min="0"
-                        placeholder="Tồn kho"
-                        step="1"
-                        type="number"
-                        value={variant.stock}
-                        onChange={(event) =>
-                          updateVariantRow(variant.id, "stock", event.target.value)
-                        }
-                      />
-                      <button
-                        className="danger-button"
-                        type="button"
-                        onClick={() => removeVariantRow(variant.id)}
-                      >
-                        Xóa
-                      </button>
-                    </div>
-                  ))}
-
-                  {form.variants.length === 0 ? (
-                    <p className="history-subtle">
-                      Chưa có biến thể nào. Sản phẩm sẽ dùng SKU và stock gốc.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-
-              <button className="primary-button" disabled={isCreating} type="submit">
-                {isCreating ? "Đang xử lý..." : editingProductId ? "Lưu cập nhật" : "Tạo sản phẩm"}
-              </button>
-
-              {editingProductId ? (
-                <button
-                  className="ghost-button admin-cancel-button"
-                  onClick={resetForm}
-                  type="button"
-                >
-                  Hủy sửa
-                </button>
-              ) : null}
-            </form>
-
-            <div className="card admin-console-panel">
-              <div className="section-heading">
-                <div>
-                  <h2>Danh sách sản phẩm</h2>
-                  <p className="history-subtle">
-                    Có thể đẩy từng sản phẩm live hoặc toàn bộ catalog đã map category sang
-                    workbook CSV/XLSX.
-                  </p>
-                </div>
-                <button
-                  className="ghost-button"
-                  disabled={isSyncingWorkbook}
-                  type="button"
-                  onClick={() => void handleSyncAllProductsToWorkbook()}
-                >
-                  {isSyncingWorkbook ? "Đang sync workbook..." : "Đồng bộ toàn bộ"}
-                </button>
-              </div>
-              <div className="product-grid product-grid-admin">
-                {products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    adminAction={{
-                      label: editingProductId === product.id ? "Đang sửa" : "Sửa sản phẩm",
-                      onClick: handleEdit,
-                      busy: false,
-                    }}
-                    secondaryAdminAction={{
-                      label: "Xóa sản phẩm",
-                      onClick: handleDelete,
-                      danger: true,
-                      busy: busyProductId === product.id,
-                    }}
-                    tertiaryAdminAction={{
-                      label: "Đẩy workbook",
-                      onClick: handleSyncProduct,
-                      busy: syncingWorkbookProductId === product.id,
-                    }}
-                    product={product}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+          <AdminCatalogSection
+            busyProductId={busyProductId}
+            editingProductId={editingProductId}
+            form={form}
+            isCreating={isCreating}
+            isSyncingWorkbook={isSyncingWorkbook}
+            isUploadingImages={isUploadingImages}
+            products={products}
+            selectedImageFiles={selectedImageFiles}
+            setForm={setForm}
+            syncingWorkbookProductId={syncingWorkbookProductId}
+            uploadInputKey={uploadInputKey}
+            onAddVariantRow={addVariantRow}
+            onDeleteProduct={(product) => void handleDelete(product)}
+            onEditProduct={handleEdit}
+            onHandleImageSelection={handleImageSelection}
+            onHandleManualImageAdd={handleManualImageAdd}
+            onRemoveImage={handleRemoveImage}
+            onRemoveVariantRow={removeVariantRow}
+            onResetForm={resetForm}
+            onSetPrimaryImage={handleSetPrimaryImage}
+            onSubmit={handleCreate}
+            onSyncAllProducts={() => void handleSyncAllProductsToWorkbook()}
+            onSyncProduct={(product) => void handleSyncProduct(product)}
+            onUpdateVariantRow={updateVariantRow}
+            onUploadImages={() => void handleUploadImages()}
+          />
         </div>
       </div>
     </div>

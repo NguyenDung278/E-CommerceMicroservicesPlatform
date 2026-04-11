@@ -1,217 +1,41 @@
-import {
-  startTransition,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
-import { useCart } from "@/features/cart/hooks/use-cart";
-import { useAuth } from "@/features/auth/hooks/use-auth";
 import {
-  resolveHomeWorkbookProductHref,
-  findHomeWorkbookCategoryPage,
-  type HomeWorkbookCategoryPage,
-  type HomeWorkbookCategoryProduct,
-  type HomeWorkbookContent,
-} from "@/features/home/home-workbook";
-import {
-  dedupeWorkbookLiveProducts,
-  deriveWorkbookCategoryCandidatesFromPage,
-  selectLiveProductForWorkbookEntry,
-} from "@/features/home/workbook-live-products";
-import { useHomeWorkbook } from "@/features/home/use-home-workbook";
-import { api, getErrorMessage, isHttpError } from "@/services/api";
-import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
-import {
-  isStorefrontAutoAddCategory,
-  normalizeStorefrontNavigationToken,
-} from "@/constants/storefront-navigation";
-import { ProductCard } from "@/components/product/product-card";
-import { formatCurrency } from "@/utils/format";
+  PaginationControls,
+  ProductCard,
+  StorefrontActionLink,
+  StorefrontCollectionCard,
+  StorefrontFilterSection,
+  StorefrontOverlayHeader,
+  StorefrontResultsToolbar,
+} from "@/components";
 import type {
-  JsonObject,
-  Product,
-  StorefrontCategoryPageData,
-  StorefrontEditorialSection,
-} from "@/types/api";
+  HomeWorkbookCategoryPage,
+  HomeWorkbookCategoryProduct,
+  HomeWorkbookContent,
+} from "@/features/home/home-workbook";
+import { buildCategoryRoute } from "@/features/storefront/archive/archive-utils";
+import {
+  buildHeroSource,
+  buildWorkbookCategoryProductLookupKey,
+  getFallbackCategoryImage,
+  getSectionPayload,
+  readStringFromRecord,
+  resolveWorkbookProductHref,
+} from "@/features/storefront/category/category-page-utils";
+import { useStorefrontCategoryRoute } from "@/features/storefront/category/use-storefront-category-route";
+import { useWorkbookCategoryPageState } from "@/features/storefront/category/use-workbook-category-page-state";
+import { usePaginatedList } from "@/features/storefront/listing/use-paginated-list";
+import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
+import { formatCurrency } from "@/utils/format";
+import type { Product, StorefrontCategoryPageData } from "@/types/api";
 import "@/styles/pages/storefront/category-page.css";
 
-const fallbackCategoryImages: Record<string, string> = {
-  "shop-men":
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCyUfebOMONTnvYr9ZpAON5r2sqH9cixvFEI4IUO1HgtLokw0DocOKis15vSsJ14j6mnx1QrXMXJyDrzK64DrNUI1kc34lTyj4aIPfoodV3MFa0JLPFNdllb_6HgGOigtKyydUohURWyjMOQURKHAk5z02a5vuIH_t821X1vUIusV9VajR3V14-QiTAt7WCragHu_ErX2cBuxj6cZyi0qHNw-tRhFozQO02eRzXwXB3GyXDgg6tVkt9BgTiuPHfPlE9ZdYH2sNodvYW",
-  "shop-women":
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuBfeL88OBqW4Ue3Wr45J2UYNHHoz1V3GIYVT6BS47pFs4Ts1ZtnuMaaioY1y7Je7oqhcYL8DLZR8KKa3pevzh2EOXaCo_M9xAJhHsGvxIeawRZyLgrBDcTQKiMMTdBJfJv4EDGj_ST1SAVOcoV-DlbA_GhmqAhboruBHvNNSjrLZExknF7AnbpG7f-BfdcG52rKGirTBwXdWoxBIaSFpozclIZ4oni5B5b2Xn7rzo1a13KiUEDsW12kfxNX2AN9xi_LfBWp-G8i2o7n",
-  footwear:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuC35EijN08hEhyXUNWU2WpmdXA-xKjXvVdQOkMB4J5Rt7XVw2ILNt27Jt92PUK2lOZLOyi-wwd64M20h4a_trllHLaecxpEhm3cRJskDeuyLTz248X3saxiF9Xx7qHWTTV-Q_6G58RaZiu-8vk3yYYOiP5aflLpGRjTe6yi6EtaoQKcBvHljgI4ItMv4FXnUPfGAYVnlVFrxYoDYB6LIE9tpXNeScpgugQTJzhp_icbkXy4Ay2kMR5-SI0rGXdV2RyT8p-AYS9ZdH9w",
-  accessories:
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuAtpa0mJyKNICckH1wefUZTbwZo2Cg73toQg0p8Gs8HN84jU1dorhR-2jnXY-oDpZbRJQTYU6z2RuFiaqR_vx_BDTT30cUs2PtZGI-fdDfLZlrhkBB-gyED-FFOC2t0Dwpfe2t6mBWGbfA-f4EbYvH1QV61hKuBF7UfI-b_NBaRjm_A3LejyFwwwvM-2t-K-zHQWiYcOHHbplLjNpn3jDEO4siwrnpdkAaVJDh28LrLN0qGfUWRCFcXRzKfNM5VvnVj7r3R8bZe5FpI",
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function readRecord(value: unknown): JsonObject {
-  return isRecord(value) ? (value as JsonObject) : {};
-}
-
-function readString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function readStringFromRecord(record: JsonObject, ...keys: string[]) {
-  for (const key of keys) {
-    const value = readString(record[key]);
-    if (value) {
-      return value;
-    }
-  }
-
-  return "";
-}
-
-function getFallbackCategoryImage(slug: string, displayName: string, featuredImage?: string) {
-  if (featuredImage) {
-    return featuredImage;
-  }
-
-  const normalizedSlug = normalizeStorefrontNavigationToken(slug);
-  if (fallbackCategoryImages[normalizedSlug]) {
-    return fallbackCategoryImages[normalizedSlug];
-  }
-
-  return `https://placehold.co/1200x1500/F5F3EE/1B3022?text=${encodeURIComponent(
-    displayName || slug || "Category"
-  )}`;
-}
-
-function getSectionPayload(sections: StorefrontEditorialSection[], sectionTypes: string[]) {
-  const match = sections.find((section) => sectionTypes.includes(section.section_type));
-
-  return readRecord(match?.payload);
-}
-
-function buildHeroSource(pageData: StorefrontCategoryPageData) {
-  return {
-    ...readRecord(pageData.category.hero),
-    ...getSectionPayload(pageData.sections, ["hero-banner"]),
-  };
-}
-
-function isExternalHref(href: string) {
-  return /^https?:\/\//i.test(href);
-}
-
-function resolveHref(href: string, fallbackHref: string) {
-  const trimmed = href.trim();
-  return trimmed || fallbackHref;
-}
-
-function buildFilterLookupValue(filterKey: string, option: string) {
-  return `${filterKey.trim().toLowerCase()}:${option.trim().toLowerCase()}`;
-}
-
-function buildCategoryRoute(categoryPage: HomeWorkbookCategoryPage) {
-  const identifier = categoryPage.routeAliases[0] || categoryPage.slug;
-  return `/categories/${encodeURIComponent(identifier)}`;
-}
-
-function buildInitialFilterState(page: HomeWorkbookCategoryPage) {
-  return Object.fromEntries(
-    page.filters
-      .filter((filter) => filter.defaultValue)
-      .map((filter) => [filter.filterKey, filter.defaultValue])
-  );
-}
-
-function matchesWorkbookProductFilters(
-  product: HomeWorkbookCategoryProduct,
-  activeFilters: Record<string, string>
-) {
-  if (Object.keys(activeFilters).length === 0) {
-    return true;
-  }
-
-  const normalizedTags = product.filterTags.map((tag) => tag.trim().toLowerCase());
-
-  return Object.entries(activeFilters).every(([filterKey, option]) => {
-    if (!option) {
-      return true;
-    }
-
-    return normalizedTags.includes(buildFilterLookupValue(filterKey, option));
-  });
-}
-
-function sortWorkbookCategoryProducts(
-  products: HomeWorkbookCategoryProduct[],
-  sortBy: "latest" | "price_asc" | "price_desc"
-) {
-  const nextProducts = products.slice();
-
-  switch (sortBy) {
-    case "price_asc":
-      return nextProducts.sort((left, right) => left.price - right.price);
-    case "price_desc":
-      return nextProducts.sort((left, right) => right.price - left.price);
-    default:
-      return nextProducts.sort((left, right) => left.position - right.position);
-  }
-}
-
-function formatResultsLabel(template: string, count: number) {
-  if (!template.trim()) {
-    return `Showing ${count} results`;
-  }
-
-  return template.replace("%count%", String(count));
-}
-
-function buildWorkbookProductSearchIndex(product: HomeWorkbookCategoryProduct) {
-  return [product.badge, product.name, product.material, product.imageAlt, ...product.filterTags]
-    .join(" ")
-    .trim()
-    .toLowerCase();
-}
-
-function buildInitialWorkbookSectionState(page: HomeWorkbookCategoryPage) {
-  return Object.fromEntries(page.filters.map((filter) => [filter.filterKey, true]));
-}
-
-function buildWorkbookCategoryProductLookupKey(product: HomeWorkbookCategoryProduct) {
-  return product.productId || normalizeStorefrontNavigationToken(product.name);
-}
-
-function CategoryActionLink({
-  href,
-  fallbackHref,
-  className,
-  children,
-}: {
-  href: string;
-  fallbackHref: string;
-  className: string;
-  children: ReactNode;
-}) {
-  const finalHref = resolveHref(href, fallbackHref);
-
-  if (isExternalHref(finalHref)) {
-    return (
-      <a className={className} href={finalHref} rel="noreferrer" target="_blank">
-        {children}
-      </a>
-    );
-  }
-
-  return (
-    <Link className={className} to={finalHref}>
-      {children}
-    </Link>
-  );
-}
+const categorySortOptions = [
+  { label: "Category Order", value: "latest" },
+  { label: "Price: Low to High", value: "price_asc" },
+  { label: "Price: High to Low", value: "price_desc" },
+] as const;
 
 export function CategoryPage() {
   const { categoryName = "" } = useParams();
@@ -221,197 +45,120 @@ export function CategoryPage() {
 }
 
 function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
-  const navigate = useNavigate();
-  const { addItem } = useCart();
-  const { isAuthenticated } = useAuth();
-  const { content, status: workbookStatus } = useHomeWorkbook();
+  const routeState = useStorefrontCategoryRoute(identifier);
 
-  const [storefrontPage, setStorefrontPage] = useState<StorefrontCategoryPageData | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [feedback, setFeedback] = useState("");
-  const [busyProductId, setBusyProductId] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const workbookCategoryPage = content ? findHomeWorkbookCategoryPage(content, identifier) : null;
-
-  useEffect(() => {
-    if (workbookCategoryPage) {
-      setStorefrontPage(null);
-      setProducts([]);
-      setFeedback("");
-      setIsLoading(false);
-      return undefined;
-    }
-
-    if (workbookStatus === "loading" || workbookStatus === "refreshing") {
-      return undefined;
-    }
-
-    let active = true;
-
-    async function loadCategoryData() {
-      setIsLoading(true);
-      setStorefrontPage(null);
-      setProducts([]);
-      setFeedback("");
-
-      try {
-        const storefrontResponse = await api.getStorefrontCategoryPage(identifier);
-        if (!active) {
-          return;
-        }
-
-        setStorefrontPage(storefrontResponse.data);
-        setProducts(storefrontResponse.data.featured_products.map((item) => item.product));
-      } catch (reason) {
-        if (!active) {
-          return;
-        }
-
-        if (!isHttpError(reason) || reason.status !== 404) {
-          setFeedback(getErrorMessage(reason));
-          setIsLoading(false);
-          return;
-        }
-
-        try {
-          const productResponse = await api.listProducts({
-            category: identifier,
-            limit: 48,
-            status: "active",
-          });
-          if (!active) {
-            return;
-          }
-
-          setProducts(productResponse.data);
-        } catch (fallbackReason) {
-          if (active) {
-            setFeedback(getErrorMessage(fallbackReason));
-          }
-        }
-      } finally {
-        if (active) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadCategoryData();
-
-    return () => {
-      active = false;
-    };
-  }, [identifier, workbookCategoryPage, workbookStatus]);
-
-  async function handleAddToCart(product: Product) {
-    try {
-      setBusyProductId(product.id);
-      await addItem({
-        product_id: product.id,
-        quantity: 1,
-      });
-      setFeedback(`${product.name} đã được thêm vào giỏ hàng.`);
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setBusyProductId("");
-    }
-  }
-
-  async function handleBuyNow(product: Product) {
-    const shouldSyncCart =
-      isAuthenticated && isStorefrontAutoAddCategory(product.category || identifier);
-
-    try {
-      if (shouldSyncCart) {
-        setBusyProductId(product.id);
-        await addItem({
-          product_id: product.id,
-          quantity: 1,
-        });
-      }
-
-      navigate("/checkout", {
-        state: {
-          directProduct: {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            quantity: 1,
-          },
-        },
-      });
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      if (shouldSyncCart) {
-        setBusyProductId("");
-      }
-    }
-  }
-
-  if (workbookCategoryPage && content) {
-    return <WorkbookCategoryPage content={content} pageData={workbookCategoryPage} />;
-  }
-
-  if (storefrontPage) {
+  if (routeState.workbookCategoryPage && routeState.content) {
     return (
-      <EditorialCategoryPage
-        busyProductId={busyProductId}
-        feedback={feedback}
-        isLoading={isLoading}
-        onAddToCart={handleAddToCart}
-        onBuyNow={handleBuyNow}
-        pageData={storefrontPage}
-        products={products}
+      <WorkbookCategoryPage
+        content={routeState.content}
+        pageData={routeState.workbookCategoryPage}
       />
     );
   }
+
+  if (routeState.storefrontPage) {
+    return (
+      <EditorialCategoryPage
+        busyProductId={routeState.busyProductId}
+        feedback={routeState.feedback}
+        isLoading={routeState.isLoading}
+        onAddToCart={routeState.handleAddToCart}
+        onBuyNow={routeState.handleBuyNow}
+        pageData={routeState.storefrontPage}
+        products={routeState.products}
+      />
+    );
+  }
+
+  return (
+    <BasicCategoryPage
+      busyProductId={routeState.busyProductId}
+      feedback={routeState.feedback}
+      identifier={identifier}
+      isLoading={routeState.isLoading}
+      onAddToCart={routeState.handleAddToCart}
+      onBuyNow={routeState.handleBuyNow}
+      products={routeState.products}
+    />
+  );
+}
+
+function BasicCategoryPage({
+  identifier,
+  products,
+  feedback,
+  isLoading,
+  busyProductId,
+  onAddToCart,
+  onBuyNow,
+}: {
+  identifier: string;
+  products: Product[];
+  feedback: string;
+  isLoading: boolean;
+  busyProductId: string;
+  onAddToCart: (product: Product) => Promise<void>;
+  onBuyNow: (product: Product) => Promise<void>;
+}) {
+  const pagination = usePaginatedList(products, {
+    pageSize: 12,
+  });
 
   return (
     <div className="page-stack category-page">
       <section className="content-section category-results-section">
         <div className="section-heading category-results-head">
           <div>
-            <span className="section-kicker">Category Listing</span>
+            <span className="section-kicker">Collection</span>
             <h2>Sản phẩm trong danh mục {identifier}</h2>
           </div>
           <span className="category-results-caption">
             {products.length > 0
-              ? `${products.length} sản phẩm active`
-              : "Chưa có dữ liệu hiển thị"}
+              ? `${pagination.pageStart}-${pagination.pageEnd} of ${products.length} sản phẩm đang có`
+              : "Danh mục đang được cập nhật"}
           </span>
         </div>
 
         {feedback ? (
           <div
-            className={products.length > 0 ? "feedback feedback-info" : "feedback feedback-error"}
+            className={
+              products.length > 0 ? "feedback feedback-info" : "feedback feedback-error"
+            }
           >
             {feedback}
           </div>
         ) : null}
 
         {isLoading ? (
-          <div className="page-state">Đang tải danh mục...</div>
+          <div className="page-state">Đang tải bộ sưu tập...</div>
         ) : products.length > 0 ? (
-          <div className="product-grid category-product-grid">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                busy={busyProductId === product.id}
-                onAddToCart={handleAddToCart}
-                onBuyNow={handleBuyNow}
-                product={product}
-              />
-            ))}
-          </div>
+          <>
+            <div className="product-grid category-product-grid">
+              {pagination.paginatedItems.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  busy={busyProductId === product.id}
+                  onAddToCart={onAddToCart}
+                  onBuyNow={onBuyNow}
+                  product={product}
+                />
+              ))}
+            </div>
+
+            <PaginationControls
+              ariaLabel={`${identifier} category pagination`}
+              currentPage={pagination.currentPage}
+              pageCount={pagination.pageCount}
+              onPageChange={pagination.goToPage}
+            />
+          </>
         ) : feedback ? null : (
           <div className="empty-card category-empty-state">
-            <span className="section-kicker">Empty Category</span>
-            <strong>Danh mục này chưa có sản phẩm active.</strong>
-            <span>Bạn có thể quay lại catalog để xem các mặt hàng khác đang hiển thị.</span>
+            <span className="section-kicker">Collection update</span>
+            <strong>Danh mục này chưa có sản phẩm đang mở bán.</strong>
+            <span>Bạn có thể quay lại archive để khám phá các bộ sưu tập khác.</span>
             <Link className="text-link" to="/products">
-              Quay lại catalog
+              Quay lại archive
             </Link>
           </div>
         )}
@@ -427,152 +174,28 @@ function WorkbookCategoryPage({
   content: HomeWorkbookContent;
   pageData: HomeWorkbookCategoryPage;
 }) {
-  const [activeFilters, setActiveFilters] = useState<Record<string, string>>(() =>
-    buildInitialFilterState(pageData)
-  );
-  const [searchInput, setSearchInput] = useState("");
-  const deferredSearchInput = useDeferredValue(searchInput);
-  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<"latest" | "price_asc" | "price_desc">("latest");
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-    buildInitialWorkbookSectionState(pageData)
-  );
-  const [liveWorkbookProducts, setLiveWorkbookProducts] = useState<Record<string, Product>>({});
-
-  useEffect(() => {
-    setActiveFilters(buildInitialFilterState(pageData));
-    setSearchInput("");
-    setIsFiltersPanelOpen(false);
-    setSortBy("latest");
-    setOpenSections(buildInitialWorkbookSectionState(pageData));
-    setLiveWorkbookProducts({});
-  }, [pageData]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (pageData.products.length === 0) {
-      setLiveWorkbookProducts({});
-      return () => {
-        active = false;
-      };
-    }
-
-    async function loadLiveWorkbookProducts() {
-      const categoryCandidates = deriveWorkbookCategoryCandidatesFromPage(pageData);
-      const candidateBuckets: Product[] = [];
-
-      if (categoryCandidates.length > 0) {
-        const categoryResponses = await Promise.all(
-          categoryCandidates.map((category) =>
-            api
-              .listProducts({
-                status: "active",
-                category,
-                limit: 100,
-              })
-              .then((response) => response.data)
-              .catch(() => [] as Product[])
-          )
-        );
-
-        candidateBuckets.push(...categoryResponses.flat());
-      }
-
-      if (candidateBuckets.length < pageData.products.length) {
-        const fallbackResponse = await api
-          .listProducts({
-            status: "active",
-            limit: 100,
-          })
-          .then((response) => response.data)
-          .catch(() => [] as Product[]);
-
-        candidateBuckets.push(...fallbackResponse);
-      }
-
-      const uniqueCandidates = dedupeWorkbookLiveProducts(candidateBuckets);
-      const nextLookup = Object.fromEntries(
-        pageData.products.flatMap((product) => {
-          const liveProduct = selectLiveProductForWorkbookEntry(
-            {
-              productId: product.productId,
-              name: product.name,
-              brand: pageData.navLabel,
-              categoryLabel: pageData.navLabel,
-              href: product.href,
-            },
-            uniqueCandidates
-          );
-
-          if (!liveProduct) {
-            return [];
-          }
-
-          return [[buildWorkbookCategoryProductLookupKey(product), liveProduct] as const];
-        })
-      );
-
-      if (active) {
-        setLiveWorkbookProducts(nextLookup);
-      }
-    }
-
-    void loadLiveWorkbookProducts().catch(() => {
-      if (active) {
-        setLiveWorkbookProducts({});
-      }
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [pageData]);
-
-  const filteredProducts = useMemo(() => {
-    const normalizedSearch = deferredSearchInput.trim().toLowerCase();
-
-    const nextProducts = pageData.products.filter((product) => {
-      if (!matchesWorkbookProductFilters(product, activeFilters)) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      return buildWorkbookProductSearchIndex(product).includes(normalizedSearch);
-    });
-
-    return sortWorkbookCategoryProducts(nextProducts, sortBy);
-  }, [activeFilters, deferredSearchInput, pageData.products, sortBy]);
+  const categoryState = useWorkbookCategoryPageState(pageData);
+  const pagination = usePaginatedList(categoryState.filteredProducts, {
+    pageSize: 12,
+  });
   const primaryCategoryRoute = buildCategoryRoute(pageData);
-  const activeFilterCount =
-    Object.values(activeFilters).filter(Boolean).length + (searchInput ? 1 : 0);
-  const activeFilterSummary = [
-    searchInput ? `Search: ${searchInput}` : "",
-    ...pageData.filters
-      .map((filter) =>
-        activeFilters[filter.filterKey] ? `${filter.label}: ${activeFilters[filter.filterKey]}` : ""
-      )
-      .filter(Boolean),
-  ].join(" / ");
-
-  function clearWorkbookFilters() {
-    startTransition(() => {
-      setSearchInput("");
-      setActiveFilters(buildInitialFilterState(pageData));
-    });
-  }
-
-  function toggleWorkbookSection(filterKey: string) {
-    startTransition(() => {
-      setOpenSections((current) => ({
-        ...current,
-        [filterKey]: !current[filterKey],
-      }));
-    });
-  }
+  const heroDescription = resolveStorefrontCopy(
+    pageData.heroDescription,
+    `${pageData.navLabel || pageData.heroTitle} selected for easier browsing and confident everyday styling.`
+  );
+  const storyBody = resolveStorefrontCopy(
+    pageData.storyBody,
+    "A closer look at the textures, silhouettes, and details shaping this collection."
+  );
+  const footerNote = resolveStorefrontCopy(
+    pageData.footerNote,
+    "A focused edit designed to be easy to browse and revisit."
+  );
+  const activeSummary =
+    categoryState.activeFilterSummary ||
+    (categoryState.activeFilterCount > 0
+      ? `${categoryState.activeFilterCount} filters active`
+      : undefined);
 
   return (
     <div className="atelier-category-page">
@@ -593,7 +216,7 @@ function WorkbookCategoryPage({
                 {pageData.heroEyebrow || pageData.navLabel}
               </span>
               <h1>{pageData.heroTitle}</h1>
-              <p>{pageData.heroDescription}</p>
+              <p>{heroDescription}</p>
             </div>
 
             {pageData.quoteBody ? (
@@ -609,7 +232,7 @@ function WorkbookCategoryPage({
       <section className="atelier-category-results-layout">
         <aside
           className={
-            isFiltersPanelOpen
+            categoryState.isFiltersPanelOpen
               ? "atelier-category-sidebar atelier-category-sidebar-open"
               : "atelier-category-sidebar"
           }
@@ -617,75 +240,47 @@ function WorkbookCategoryPage({
         >
           {pageData.filters.length > 0 ? (
             pageData.filters.map((filter) => (
-              <article className="atelier-category-sidebar-group" key={filter.filterKey}>
-                <button
-                  aria-expanded={openSections[filter.filterKey] ?? true}
-                  className="atelier-category-sidebar-toggle"
-                  type="button"
-                  onClick={() => toggleWorkbookSection(filter.filterKey)}
-                >
-                  <span className="atelier-category-sidebar-toggle-copy">
-                    <strong>{filter.label.toUpperCase()}</strong>
-                    <small>{activeFilters[filter.filterKey] || `All ${filter.label}`}</small>
-                  </span>
-                  <span aria-hidden="true" className="atelier-category-sidebar-toggle-icon">
-                    {(openSections[filter.filterKey] ?? true) ? "-" : "+"}
-                  </span>
-                </button>
+              <StorefrontFilterSection
+                className="atelier-category-filter-card"
+                expanded={categoryState.openSections[filter.filterKey] ?? true}
+                key={filter.filterKey}
+                summary={categoryState.activeFilters[filter.filterKey] || `All ${filter.label}`}
+                title={filter.label.toUpperCase()}
+                onToggle={() => categoryState.toggleWorkbookSection(filter.filterKey)}
+              >
+                <div className="atelier-category-filter-options">
+                  {filter.options.map((option) => {
+                    const isActive = categoryState.activeFilters[filter.filterKey] === option;
 
-                {(openSections[filter.filterKey] ?? true) ? (
-                  <div className="atelier-category-filter-options">
-                    {filter.options.map((option) => {
-                      const isActive = activeFilters[filter.filterKey] === option;
-                      const isResetOption = option.trim().toLowerCase().startsWith("all");
-
-                      return (
-                        <button
-                          className={
-                            isActive
-                              ? "atelier-category-filter-chip atelier-category-filter-chip-active"
-                              : "atelier-category-filter-chip"
-                          }
-                          key={`${filter.filterKey}-${option}`}
-                          onClick={() => {
-                            startTransition(() => {
-                              setActiveFilters((current) => {
-                                const nextFilters = { ...current };
-
-                                if (current[filter.filterKey] === option || isResetOption) {
-                                  delete nextFilters[filter.filterKey];
-                                  return nextFilters;
-                                }
-
-                                nextFilters[filter.filterKey] = option;
-                                return nextFilters;
-                              });
-                            });
-                          }}
-                          type="button"
-                        >
-                          {option}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </article>
+                    return (
+                      <button
+                        className={
+                          isActive
+                            ? "atelier-category-filter-chip atelier-category-filter-chip-active"
+                            : "atelier-category-filter-chip"
+                        }
+                        key={`${filter.filterKey}-${option}`}
+                        type="button"
+                        onClick={() => categoryState.toggleWorkbookFilter(filter.filterKey, option)}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </StorefrontFilterSection>
             ))
           ) : (
             <div className="atelier-category-sidebar-note">
               <span className="atelier-category-filter-label">Collection Note</span>
-              <p>
-                This category is currently driven by editorial search only. Add workbook filters if
-                you want more facets here.
-              </p>
+              <p>Browse the full edit with search and sort to narrow the selection.</p>
             </div>
           )}
 
           <button
             className="atelier-category-reset-button"
             type="button"
-            onClick={clearWorkbookFilters}
+            onClick={categoryState.clearWorkbookFilters}
           >
             Reset Filters
           </button>
@@ -693,80 +288,52 @@ function WorkbookCategoryPage({
 
         <div className="atelier-category-results-pane">
           <section className="atelier-category-results-surface">
-            <div className="atelier-category-results-head">
-              <span>{formatResultsLabel(pageData.resultsLabel, filteredProducts.length)}</span>
-              <div className="atelier-category-results-controls">
-                <label
-                  className="atelier-category-inline-search"
-                  htmlFor={`category-search-${pageData.slug}`}
-                >
-                  <input
-                    id={`category-search-${pageData.slug}`}
-                    placeholder={`Search within ${pageData.navLabel || pageData.heroTitle}`}
-                    type="search"
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                  />
-                </label>
+            <StorefrontResultsToolbar
+              className="atelier-category-results-toolbar-shell"
+              filterPanelId={`atelier-category-filters-${pageData.slug}`}
+              filterPanelOpen={categoryState.isFiltersPanelOpen}
+              filterToggleClassName="atelier-category-filters-toggle"
+              filterToggleCount={categoryState.activeFilterCount}
+              resultLabel={categoryState.resultsLabel}
+              searchClearClassName="atelier-category-search-clear"
+              searchInputId={`category-search-${pageData.slug}`}
+              searchLabel={`Search products in ${pageData.navLabel || pageData.heroTitle}`}
+              searchPlaceholder={categoryState.searchPlaceholder}
+              searchValue={categoryState.searchInput}
+              sortId={`category-sort-${pageData.slug}`}
+              sortOptions={[...categorySortOptions]}
+              sortValue={categoryState.sortBy}
+              summary={activeSummary}
+              onClearSearch={() => categoryState.setSearchInput("")}
+              onSearchChange={categoryState.setSearchInput}
+              onSortChange={categoryState.setSortBy}
+              onToggleFilters={() => categoryState.setIsFiltersPanelOpen((current) => !current)}
+            />
 
-                {searchInput ? (
-                  <button
-                    className="atelier-category-search-clear"
-                    type="button"
-                    onClick={() => setSearchInput("")}
-                  >
-                    Clear
-                  </button>
-                ) : null}
-
-                <div className="atelier-category-toolbar-sort">
-                  <span className="atelier-category-toolbar-sort-label">
-                    <span>Sort</span>
-                    <span>By</span>
-                  </span>
-                  <label
-                    className="atelier-category-toolbar-sort-field"
-                    htmlFor={`category-sort-${pageData.slug}`}
-                  >
-                    <select
-                      id={`category-sort-${pageData.slug}`}
-                      value={sortBy}
-                      onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-                    >
-                      <option value="latest">Category Order</option>
-                      <option value="price_asc">Price: Low to High</option>
-                      <option value="price_desc">Price: High to Low</option>
-                    </select>
-                  </label>
+            {categoryState.filteredProducts.length > 0 ? (
+              <>
+                <div className="atelier-category-product-grid">
+                  {pagination.paginatedItems.map((product) => (
+                    <WorkbookCategoryProductCard
+                      fallbackHref={primaryCategoryRoute}
+                      key={`${pageData.slug}-${product.position}-${product.name}`}
+                      liveProduct={
+                        categoryState.liveWorkbookProducts[
+                          buildWorkbookCategoryProductLookupKey(product)
+                        ]
+                      }
+                      product={product}
+                    />
+                  ))}
                 </div>
 
-                <button
-                  aria-controls={`atelier-category-filters-${pageData.slug}`}
-                  aria-expanded={isFiltersPanelOpen}
-                  className="atelier-category-filters-toggle"
-                  type="button"
-                  onClick={() => setIsFiltersPanelOpen((current) => !current)}
-                >
-                  Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-                </button>
-              </div>
-            </div>
-
-            {activeFilterSummary ? (
-              <p className="atelier-category-results-summary">{activeFilterSummary}</p>
-            ) : null}
-
-            {filteredProducts.length > 0 ? (
-              <div className="atelier-category-product-grid">
-                {filteredProducts.map((product) => (
-                  <WorkbookCategoryProductCard
-                    fallbackHref={primaryCategoryRoute}
-                    key={`${pageData.slug}-${product.position}-${product.name}`}
-                    liveProduct={liveWorkbookProducts[buildWorkbookCategoryProductLookupKey(product)]}
-                    product={product}
-                  />
-                ))}
-              </div>
+                <PaginationControls
+                  ariaLabel={`${pageData.navLabel || pageData.heroTitle} category pagination`}
+                  currentPage={pagination.currentPage}
+                  pageCount={pagination.pageCount}
+                  onPageChange={pagination.goToPage}
+                />
+              </>
             ) : (
               <div className="empty-card category-empty-state">
                 <span className="section-kicker">Filtered Empty State</span>
@@ -778,23 +345,23 @@ function WorkbookCategoryPage({
         </div>
       </section>
 
-      {(pageData.storyTitle || pageData.storyImageUrl) && (
+      {pageData.storyTitle || pageData.storyImageUrl ? (
         <section className="atelier-category-story-surface">
           <div className="atelier-category-story-copy">
             <span className="atelier-category-filter-label">
               {pageData.storyEyebrow || "Editorial Story"}
             </span>
             <h2>{pageData.storyTitle || "Editorial Story"}</h2>
-            <p>{pageData.storyBody}</p>
+            <p>{storyBody}</p>
 
             {pageData.storyCtaLabel ? (
-              <CategoryActionLink
+              <StorefrontActionLink
                 className="atelier-category-story-link"
                 fallbackHref={primaryCategoryRoute}
                 href={pageData.storyCtaHref || primaryCategoryRoute}
               >
                 {pageData.storyCtaLabel}
-              </CategoryActionLink>
+              </StorefrontActionLink>
             ) : null}
           </div>
 
@@ -808,26 +375,23 @@ function WorkbookCategoryPage({
             />
           </div>
         </section>
-      )}
+      ) : null}
 
       <footer className="atelier-category-footer">
         <div>
           <strong>ND Shop</strong>
-          <p>
-            {pageData.footerNote ||
-              "Workbook-driven category page aligned to the Stitch Atelier direction."}
-          </p>
+          <p>{footerNote}</p>
         </div>
         <div className="atelier-category-footer-links">
           {content.footerLinks.map((link) => (
-            <CategoryActionLink
+            <StorefrontActionLink
               className="atelier-category-footer-link"
               fallbackHref="/"
               href={link.href || "/"}
               key={`${link.position}-${link.label}`}
             >
               {link.label}
-            </CategoryActionLink>
+            </StorefrontActionLink>
           ))}
         </div>
       </footer>
@@ -846,31 +410,19 @@ function WorkbookCategoryProductCard({
 }) {
   const resolvedHref = liveProduct
     ? `/products/${encodeURIComponent(liveProduct.id)}`
-    : resolveHomeWorkbookProductHref({
-        productId: product.productId,
-        productName: product.name,
-        href: product.href,
-        fallbackHref,
-      });
+    : resolveWorkbookProductHref(product, fallbackHref);
   const stockCopy = liveProduct
     ? liveProduct.stock > 0
       ? `${liveProduct.stock} còn lại`
       : "Hết hàng"
-    : "Workbook preview";
+    : "Available in the collection";
 
   return (
-    <CategoryActionLink
+    <StorefrontCollectionCard
+      badge={product.badge}
       className="atelier-category-product-card"
-      fallbackHref={fallbackHref}
-      href={resolvedHref}
-    >
-      <div className="atelier-category-product-media">
-        <img alt={product.imageAlt || product.name} src={product.imageUrl} />
-      </div>
-      <div className="atelier-category-product-copy">
-        <span>{product.badge}</span>
-        <strong>{product.name}</strong>
-        <p>{product.material}</p>
+      description={product.material}
+      footer={
         <small
           className={
             liveProduct && liveProduct.stock === 0
@@ -880,9 +432,14 @@ function WorkbookCategoryProductCard({
         >
           {stockCopy}
         </small>
-        <em>{formatCurrency(liveProduct?.price ?? product.price)}</em>
-      </div>
-    </CategoryActionLink>
+      }
+      href={resolvedHref}
+      imageAlt={product.imageAlt || liveProduct?.name || product.name}
+      imageSrc={liveProduct?.image_urls[0] || liveProduct?.image_url || product.imageUrl}
+      priceLabel={formatCurrency(liveProduct?.price ?? product.price)}
+      title={liveProduct?.name ?? product.name}
+      eyebrow={product.material}
+    />
   );
 }
 
@@ -903,6 +460,9 @@ function EditorialCategoryPage({
   onAddToCart: (product: Product) => Promise<void>;
   onBuyNow: (product: Product) => Promise<void>;
 }) {
+  const pagination = usePaginatedList(products, {
+    pageSize: 12,
+  });
   const heroSource = buildHeroSource(pageData);
   const featureSource = getSectionPayload(pageData.sections, [
     "feature-card",
@@ -922,8 +482,10 @@ function EditorialCategoryPage({
   const heroTitle =
     readStringFromRecord(heroSource, "title", "heading") || pageData.category.display_name;
   const heroDescription =
-    readStringFromRecord(heroSource, "description", "subtitle", "body") ||
-    `${pageData.category.display_name} đang được phục vụ trực tiếp từ storefront API mới.`;
+    resolveStorefrontCopy(
+      readStringFromRecord(heroSource, "description", "subtitle", "body"),
+      `${pageData.category.display_name} selected for the current season.`
+    );
   const heroBadge =
     readStringFromRecord(heroSource, "badge", "eyebrow") || pageData.category.nav_label;
   const featureTitle =
@@ -931,25 +493,26 @@ function EditorialCategoryPage({
     featureProduct?.name ||
     `Curated ${pageData.category.nav_label}`;
   const featureDescription =
-    readStringFromRecord(
-      featureSource,
-      "description",
-      "body",
-      "panelDescription",
-      "panel_description"
-    ) ||
-    featureProduct?.description ||
-    `Editorial content va curated products cho ${pageData.category.display_name} đang bám cùng source dữ liệu backend.`;
+    resolveStorefrontCopy(
+      readStringFromRecord(
+        featureSource,
+        "description",
+        "body",
+        "panelDescription",
+        "panel_description"
+      ) || featureProduct?.description,
+      "A closer look at the textures, shapes, and signatures leading this collection."
+    );
   const metrics = [
     {
-      label: "Curated items",
+      label: "Curated pieces",
       value: String(products.length),
-      description: "featured_products",
+      description: "Ready to browse",
     },
     {
-      label: "Editorial sections",
+      label: "Editorial moments",
       value: String(pageData.sections.length),
-      description: "editorial_sections",
+      description: "Stories shaping the edit",
     },
     {
       label: "Price range",
@@ -959,7 +522,7 @@ function EditorialCategoryPage({
               Math.min(...products.map((product) => product.price))
             )} - ${formatCurrency(Math.max(...products.map((product) => product.price)))}`
           : "--",
-      description: "real-time product pricing",
+      description: "Current collection range",
     },
   ];
 
@@ -970,7 +533,7 @@ function EditorialCategoryPage({
           <StorefrontOverlayHeader />
 
           <div className="category-hero-copy">
-            <span className="section-kicker">{heroBadge || "Storefront category"}</span>
+            <span className="section-kicker">{heroBadge || "Featured collection"}</span>
             <h1>{heroTitle}</h1>
             <p>{heroDescription}</p>
           </div>
@@ -1009,34 +572,27 @@ function EditorialCategoryPage({
           </div>
         </article>
 
-        <article className="category-feature-card">
-          <div className="category-feature-media">
-            {featureImage ? (
-              <img alt={featureTitle} src={featureImage} />
-            ) : (
-              <div className="category-feature-fallback">
-                {(featureTitle || pageData.category.nav_label).slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-          <div className="category-feature-copy">
-            <span className="section-kicker">Editorial block</span>
-            <strong>{featureTitle}</strong>
-            <p>{featureDescription}</p>
-          </div>
-        </article>
+        <StorefrontCollectionCard
+          className="category-feature-card"
+          description={featureDescription}
+          href={heroProduct ? `/products/${heroProduct.id}` : "/products"}
+          imageAlt={featureTitle}
+          imageSrc={featureImage}
+          title={featureTitle}
+          eyebrow="Editorial pick"
+        />
       </section>
 
       <section className="content-section category-results-section">
         <div className="section-heading category-results-head">
           <div>
-            <span className="section-kicker">Storefront API</span>
+            <span className="section-kicker">Collection Edit</span>
             <h2>{pageData.category.display_name}</h2>
           </div>
           <span className="category-results-caption">
             {products.length > 0
-              ? `${products.length} curated products from featured_products`
-              : "Chưa có curated products"}
+              ? `${pagination.pageStart}-${pagination.pageEnd} of ${products.length} curated pieces`
+              : "Collection coming soon"}
           </span>
         </div>
 
@@ -1049,26 +605,35 @@ function EditorialCategoryPage({
         ) : null}
 
         {isLoading ? (
-          <div className="page-state">Đang tải storefront category...</div>
+          <div className="page-state">Đang tải bộ sưu tập...</div>
         ) : products.length > 0 ? (
-          <div className="product-grid category-product-grid">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                busy={busyProductId === product.id}
-                onAddToCart={onAddToCart}
-                onBuyNow={onBuyNow}
-                product={product}
-                variant="archive"
-              />
-            ))}
-          </div>
+          <>
+            <div className="product-grid category-product-grid">
+              {pagination.paginatedItems.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  busy={busyProductId === product.id}
+                  onAddToCart={onAddToCart}
+                  onBuyNow={onBuyNow}
+                  product={product}
+                  variant="archive"
+                />
+              ))}
+            </div>
+
+            <PaginationControls
+              ariaLabel={`${pageData.category.display_name} pagination`}
+              currentPage={pagination.currentPage}
+              pageCount={pagination.pageCount}
+              onPageChange={pagination.goToPage}
+            />
+          </>
         ) : (
           <div className="empty-card category-empty-state">
-            <span className="section-kicker">Editorial category</span>
-            <strong>Category này đã có cấu trúc storefront nhưng chưa có curated products.</strong>
+            <span className="section-kicker">Collection update</span>
+            <strong>This collection is being refreshed.</strong>
             <Link className="text-link" to="/products">
-              Quay lại catalog
+              Quay lại archive
             </Link>
           </div>
         )}

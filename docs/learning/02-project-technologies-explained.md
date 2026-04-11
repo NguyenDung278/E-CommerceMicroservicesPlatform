@@ -242,7 +242,7 @@ Nó dùng:
 
 ### Điểm đáng học trong repo này
 
-- tách `app/`, `routes/`, `features/`, `shared/`
+- tách `app/`, `pages/`, `features/`, `services/`, `components/`
 - dùng API layer + normalizer thay vì `fetch` rải khắp component
 - giữ compatibility layer để refactor dần
 
@@ -258,7 +258,7 @@ TypeScript giúp frontend:
 
 ### Bạn nên chú ý gì?
 
-- `shared/types/api.ts` là hợp đồng type chính ở frontend React + Vite
+- `frontend/src/types/api.ts` là entrypoint type chính ở frontend React + Vite
 - `client/src/types/api.ts` là hợp đồng type phía Next experimental
 
 ## 13. React Router
@@ -267,7 +267,7 @@ TypeScript giúp frontend:
 
 Route tree của frontend chính nằm ở:
 
-- `frontend/src/app/App.tsx`
+- `frontend/src/app/app.tsx`
 
 ### Bạn cần hiểu tới đâu?
 

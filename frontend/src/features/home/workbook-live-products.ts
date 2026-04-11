@@ -1,12 +1,17 @@
+import { api } from "@/services/api";
 import type { Product } from "@/types/api";
 import type { HomeWorkbookCategoryPage, HomeWorkbookProductReference } from "./home-workbook";
 
-type WorkbookLiveLookupInput = {
+export type WorkbookLiveLookupInput = {
   productId?: string;
   name: string;
   brand?: string;
   categoryLabel?: string;
   href?: string;
+};
+
+export type WorkbookLiveLookupEntry = WorkbookLiveLookupInput & {
+  lookupKey: string;
 };
 
 export function normalizeWorkbookLiveLookupValue(value: string) {
@@ -32,11 +37,11 @@ export function dedupeWorkbookLiveProducts(products: Product[]) {
 export function deriveWorkbookCategoryCandidatesFromReference(
   reference: Pick<HomeWorkbookProductReference, "categoryLabel" | "href">
 ) {
-  return buildWorkbookCategoryCandidates([reference.categoryLabel], reference.href);
+  return deriveWorkbookCategoryCandidates([reference.categoryLabel], reference.href);
 }
 
 export function deriveWorkbookCategoryCandidatesFromPage(pageData: HomeWorkbookCategoryPage) {
-  return buildWorkbookCategoryCandidates([pageData.navLabel, ...pageData.routeAliases]);
+  return deriveWorkbookCategoryCandidates([pageData.navLabel, ...pageData.routeAliases]);
 }
 
 export function selectLiveProductForWorkbookEntry(
@@ -69,7 +74,7 @@ export function selectLiveProductForWorkbookEntry(
   }
 
   const targetBrand = normalizeWorkbookLiveLookupValue(entry.brand ?? "");
-  const categoryCandidates = buildWorkbookCategoryCandidates([entry.categoryLabel ?? ""], entry.href);
+  const categoryCandidates = deriveWorkbookCategoryCandidates([entry.categoryLabel ?? ""], entry.href);
 
   return (
     exactNameMatches.find(
@@ -87,7 +92,7 @@ export function selectLiveProductForWorkbookEntry(
   );
 }
 
-function buildWorkbookCategoryCandidates(labels: string[], href = "") {
+export function deriveWorkbookCategoryCandidates(labels: string[], href = "") {
   const candidates = new Map<string, string>();
 
   for (const label of labels) {
@@ -107,6 +112,84 @@ function buildWorkbookCategoryCandidates(labels: string[], href = "") {
   }
 
   return Array.from(candidates.values());
+}
+
+async function loadProductCandidates(category: string, limit: number) {
+  return api
+    .listProducts({
+      status: "active",
+      category,
+      limit,
+    })
+    .then((response) => response.data)
+    .catch(() => [] as Product[]);
+}
+
+export async function loadWorkbookLiveProductLookup({
+  entries,
+  categoryCandidates = [],
+  limit = 100,
+}: {
+  entries: WorkbookLiveLookupEntry[];
+  categoryCandidates?: string[];
+  limit?: number;
+}) {
+  if (entries.length === 0) {
+    return {} as Record<string, Product>;
+  }
+
+  const candidateCategoryLookup = new Map<string, string>();
+
+  const pushCategoryCandidates = (values: string[]) => {
+    values.forEach((value) => {
+      const normalized = normalizeWorkbookLiveLookupValue(value);
+      if (normalized && !candidateCategoryLookup.has(normalized)) {
+        candidateCategoryLookup.set(normalized, value);
+      }
+    });
+  };
+
+  pushCategoryCandidates(categoryCandidates);
+
+  entries.forEach((entry) => {
+    pushCategoryCandidates(deriveWorkbookCategoryCandidates([entry.categoryLabel ?? ""], entry.href));
+  });
+
+  const candidateBuckets =
+    candidateCategoryLookup.size > 0
+      ? await Promise.all(
+          Array.from(candidateCategoryLookup.values()).map((category) =>
+            loadProductCandidates(category, limit)
+          )
+        )
+      : [];
+  const candidateProducts = candidateBuckets.flat();
+
+  if (candidateProducts.length < entries.length) {
+    const fallbackProducts = await api
+      .listProducts({
+        status: "active",
+        limit,
+      })
+      .then((response) => response.data)
+      .catch(() => [] as Product[]);
+
+    candidateProducts.push(...fallbackProducts);
+  }
+
+  const uniqueCandidates = dedupeWorkbookLiveProducts(candidateProducts);
+
+  return Object.fromEntries(
+    entries.flatMap((entry) => {
+      const liveProduct = selectLiveProductForWorkbookEntry(entry, uniqueCandidates);
+
+      if (!liveProduct) {
+        return [];
+      }
+
+      return [[entry.lookupKey, liveProduct] as const];
+    })
+  );
 }
 
 function parseCategoryValueFromHref(href: string) {

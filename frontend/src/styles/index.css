@@ -12,7 +12,10 @@
    
    ============================================ */
 
-/* Base styles - must come first */
+/* Legacy shared styles load first so the modular design system can override them safely. */
+@import "./shared.css";
+
+/* Base styles */
 @import "./base/_index.css";
 
 /* Components */
@@ -26,9 +29,6 @@
 
 /* Page-specific styles */
 @import "./pages/_index.css";
-
-/* Shared global styles still used across routes/components */
-@import "./shared.css";
 
 /* Tailwind utilities for Stitch-derived surfaces. Intentionally skip preflight
    so existing screens keep their current base styling. */

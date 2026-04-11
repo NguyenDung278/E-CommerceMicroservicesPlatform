@@ -23,13 +23,15 @@ export function ProfilePage() {
 
         <section className="profile-route-section profile-route-profile-shell">
           <ProfileHeroPanel
+            avatarUrl={profilePage.user?.avatar_url}
             displayName={profilePage.displayName}
             email={profilePage.user?.email || ""}
+            emailVerified={Boolean(profilePage.user?.email_verified)}
             initials={profilePage.initials}
             locationLabel={profilePage.locationLabel}
             memberSince={profilePage.memberSince}
             phone={profilePage.user?.phone}
-            showDevBadge={profilePage.showDevBadge}
+            phoneVerified={Boolean(profilePage.user?.phone_verified)}
             onToggleEdit={() => profilePage.setIsEditingProfile((current) => !current)}
           />
 

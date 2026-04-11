@@ -93,6 +93,27 @@ function workbookSyncPlugin() {
 }
 export default defineConfig({
     plugins: [react(), workbookSyncPlugin()],
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (!id.includes("node_modules")) {
+                        return undefined;
+                    }
+                    if (id.includes("/xlsx/")) {
+                        return "xlsx-vendor";
+                    }
+                    if (id.includes("/react-router") || id.includes("@remix-run")) {
+                        return "router-vendor";
+                    }
+                    if (id.includes("/react/") || id.includes("/react-dom/")) {
+                        return "react-vendor";
+                    }
+                    return "vendor";
+                },
+            },
+        },
+    },
     resolve: {
         alias: {
             "@": new URL("./src", importMetaUrl).pathname,

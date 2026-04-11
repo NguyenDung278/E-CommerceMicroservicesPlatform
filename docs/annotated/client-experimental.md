@@ -56,15 +56,15 @@ Nói ngắn gọn:
 
 ## 3. Bản đồ thư mục nên nhớ
 
-| Vùng | Vai trò |
-| --- | --- |
-| `client/src/app/*` | route entrypoints theo App Router |
-| `client/src/components/*` | feature/view components lớn |
-| `client/src/providers/*` | app-wide state |
-| `client/src/hooks/*` | hooks consumer |
-| `client/src/lib/api/*` | API boundary |
-| `client/src/types/api.ts` | type contract |
-| `client/src/utils/*` | auth/cart/format helpers |
+| Vùng                      | Vai trò                           |
+| ------------------------- | --------------------------------- |
+| `client/src/app/*`        | route entrypoints theo App Router |
+| `client/src/components/*` | feature/view components lớn       |
+| `client/src/providers/*`  | app-wide state                    |
+| `client/src/hooks/*`      | hooks consumer                    |
+| `client/src/lib/api/*`    | API boundary                      |
+| `client/src/types/api.ts` | type contract                     |
+| `client/src/utils/*`      | auth/cart/format helpers          |
 
 ### Route đáng chú ý
 
@@ -186,4 +186,4 @@ Không nên coi `client/` là nguồn đầu tiên nếu câu hỏi của bạn 
 - [../deep-dive/frontend-architecture.md](../deep-dive/frontend-architecture.md)
 - [frontend-source-map.md](./frontend-source-map.md)
 - [frontend-app.md](./frontend-app.md)
-- [frontend-routes-and-flows.md](./frontend-routes-and-flows.md)
+- [../deep-dive/frontend-refactor-status.md](../deep-dive/frontend-refactor-status.md)

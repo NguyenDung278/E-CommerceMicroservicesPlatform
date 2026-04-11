@@ -17,13 +17,13 @@ function toErrorMessage(reason: unknown) {
     return reason.message;
   }
 
-  return "Khong the dong bo workbook CSV/XLSX.";
+  return "Khong the cap nhat bo suu tap noi bat.";
 }
 
 export async function syncWorkbookProductMutations(mutations: WorkbookProductMutation[]) {
   if (mutations.length === 0) {
     return {
-      message: "Khong co thay doi nao de dong bo workbook CSV/XLSX.",
+      message: "Khong co thay doi nao de cap nhat bo suu tap noi bat.",
     };
   }
 
@@ -45,8 +45,7 @@ export async function syncWorkbookProductMutations(mutations: WorkbookProductMut
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as WorkbookSyncResponse | null;
       throw new Error(
-        payload?.message?.trim() ||
-          `Workbook sync request failed with status ${response.status}.`
+        payload?.message?.trim() || `Workbook sync request failed with status ${response.status}.`
       );
     }
 
@@ -54,7 +53,7 @@ export async function syncWorkbookProductMutations(mutations: WorkbookProductMut
     publishHomeWorkbookSyncSignal();
 
     return {
-      message: payload.message?.trim() || "Workbook CSV/XLSX da duoc cap nhat.",
+      message: payload.message?.trim() || "Bo suu tap noi bat da duoc cap nhat.",
     };
   } catch (reason) {
     throw new Error(toErrorMessage(reason));

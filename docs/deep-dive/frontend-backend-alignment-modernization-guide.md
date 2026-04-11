@@ -2,6 +2,12 @@
 
 Ngày kiểm tra: `2026-04-03`
 
+Lưu ý cập nhật:
+
+- Tài liệu này chứa cả phân tích lịch sử trong giai đoạn frontend còn dùng naming cũ.
+- Source of truth hiện tại của runtime React + Vite là `frontend/src/pages`, `frontend/src/features`, `frontend/src/services`, `frontend/src/components`.
+- Khi thấy path cũ như `frontend/src/shared/api/*` hoặc `frontend/src/routes/*`, hãy map tương ứng sang `frontend/src/services/api/*` và `frontend/src/pages/*`.
+
 Phạm vi tài liệu này:
 
 - `frontend/`
@@ -60,10 +66,10 @@ Những kết luận quan trọng nhất trong tài liệu này chủ yếu dự
 
 - `api-gateway/internal/handler/order_handler.go`
 - `services/order-service/internal/handler/order_handler.go`
-- `frontend/src/shared/api/modules/orderApi.ts`
+- `frontend/src/services/api/modules/order-api.ts`
 - `client/src/lib/api/order.ts`
-- `frontend/src/shared/api/modules/cartApi.ts`
-- `frontend/src/shared/api/modules/paymentApi.ts`
+- `frontend/src/services/api/modules/cart-api.ts`
+- `frontend/src/services/api/modules/payment-api.ts`
 - `services/product-service/internal/handler/product_handler.go`
 - `api-gateway/internal/handler/product_handler.go`
 - `.github/workflows/ci.yml`
@@ -155,7 +161,7 @@ Việc nên làm:
 
 Evidence:
 
-- `frontend/src/shared/api/modules/orderApi.ts` hiện gọi `PUT /api/v1/orders/:id/cancel`
+- `frontend/src/services/api/modules/order-api.ts` hiện gọi `PUT /api/v1/orders/:id/cancel`
 - backend dùng `PUT /api/v1/orders/:id/cancel`
 - `client/src/lib/api/order.ts` cũng đang dùng `PUT`, tức là hai UI đã đồng bộ ở flow này
 
@@ -173,8 +179,8 @@ Việc nên làm:
 
 Hai điểm từng rõ nhất:
 
-- `frontend/src/shared/api/modules/cartApi.ts` trước đây có `POST /api/v1/cart/merge`
-- `frontend/src/shared/api/modules/paymentApi.ts` trước đây có `GET /api/v1/payments/:id/verify`
+- `frontend/src/services/api/modules/cart-api.ts` trước đây có `POST /api/v1/cart/merge`
+- `frontend/src/services/api/modules/payment-api.ts` trước đây có `GET /api/v1/payments/:id/verify`
 
 Hiện trạng:
 
@@ -250,7 +256,7 @@ Tác động:
 
 Evidence:
 
-- `frontend/src/routes/CategoryPage.tsx` render các page riêng cho `Shop Men`, `Shop Women`, `Footwear`, `Accessories`
+- `frontend/src/pages/storefront/category-page.tsx` render các page riêng cho `Shop Men`, `Shop Women`, `Footwear`, `Accessories`
 - `frontend/src/features/shop-men/shopMenData.ts` chứa sản phẩm/filter cứng trong file
 - `client/src/app/editorial/[categoryName]/page.tsx` đọc config tĩnh từ `client/src/components/atelier-page-data.ts`
 
@@ -867,9 +873,9 @@ Theo mức độ ưu tiên:
 ### 11.1. Các file nên sửa đầu tiên
 
 - [x] `api-gateway/internal/handler/order_handler.go`
-- [x] `frontend/src/shared/api/modules/orderApi.ts`
-- [x] `frontend/src/shared/api/modules/cartApi.ts`
-- [x] `frontend/src/shared/api/modules/paymentApi.ts`
+- [x] `frontend/src/services/api/modules/order-api.ts`
+- [x] `frontend/src/services/api/modules/cart-api.ts`
+- [x] `frontend/src/services/api/modules/payment-api.ts`
 - [x] `.github/workflows/ci.yml`
 - [ ] `README.md`
 - [ ] `.github/workflows/docker-publish.yml`

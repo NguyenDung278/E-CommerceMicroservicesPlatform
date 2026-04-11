@@ -123,7 +123,6 @@ func (s *UserService) updateProfileWithDependencies(
 	if err != nil {
 		return nil, err
 	}
-	profilePhoneForAddress := user.Phone
 
 	userChanged := false
 	if firstName, changed, err := resolveOptionalHumanNameUpdate(user.FirstName, req.FirstName, 100); err != nil {
@@ -150,6 +149,8 @@ func (s *UserService) updateProfileWithDependencies(
 		}
 		userChanged = true
 	}
+	profilePhoneForAddress := user.Phone
+	profileRecipientNameForAddress := deriveProfileAddressRecipientName(user)
 
 	var (
 		normalizedAddress *dto.ProfileAddressInput
@@ -161,7 +162,7 @@ func (s *UserService) updateProfileWithDependencies(
 			return nil, err
 		}
 
-		addressCopy, changed := mergeProfileAddressInput(defaultAddress, profilePhoneForAddress, *req.DefaultAddress)
+		addressCopy, changed := mergeProfileAddressInput(defaultAddress, profileRecipientNameForAddress, profilePhoneForAddress, *req.DefaultAddress)
 		if changed {
 			if !isValidProfileAddressInput(addressCopy) {
 				return nil, ErrInvalidProfileAddress
@@ -374,6 +375,28 @@ func resolveOptionalPhone(input *string) (string, bool) {
 	return normalized, true
 }
 
+func deriveProfileAddressRecipientName(user *model.User) string {
+	if user == nil {
+		return "Customer"
+	}
+
+	fullName := normalizeHumanName(strings.TrimSpace(strings.Join([]string{user.FirstName, user.LastName}, " ")))
+	if fullName != "" {
+		return fullName
+	}
+
+	if user.Email != "" {
+		if at := strings.Index(user.Email, "@"); at > 0 {
+			localPart := normalizeHumanName(strings.TrimSpace(user.Email[:at]))
+			if localPart != "" {
+				return localPart
+			}
+		}
+	}
+
+	return "Customer"
+}
+
 // resolveOptionalHumanName extracts a normalized name from an optional patch field.
 //
 // Inputs:
@@ -494,7 +517,7 @@ func hasMeaningfulProfileAddressPatch(input dto.UpdateProfileAddressInput) bool 
 //
 // Performance:
 //   - O(1) across a fixed number of fields.
-func mergeProfileAddressInput(current *model.Address, fallbackPhone string, input dto.UpdateProfileAddressInput) (dto.ProfileAddressInput, bool) {
+func mergeProfileAddressInput(current *model.Address, fallbackRecipientName string, fallbackPhone string, input dto.UpdateProfileAddressInput) (dto.ProfileAddressInput, bool) {
 	merged := dto.ProfileAddressInput{}
 	if current != nil {
 		merged.RecipientName = current.RecipientName
@@ -504,6 +527,7 @@ func mergeProfileAddressInput(current *model.Address, fallbackPhone string, inpu
 		merged.District = current.District
 		merged.City = current.City
 	} else {
+		merged.RecipientName = normalizeHumanName(fallbackRecipientName)
 		merged.Phone = normalizePhone(fallbackPhone)
 	}
 
@@ -599,7 +623,7 @@ func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
 	if !isValidHumanName(input.RecipientName, 100) {
 		return false
 	}
-	if !isValidVNPhone(input.Phone) {
+	if input.Phone != "" && !isValidVNPhone(input.Phone) {
 		return false
 	}
 	if len(input.Street) < 5 || len(input.Street) > 255 {
@@ -608,10 +632,10 @@ func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
 	if len(input.Ward) > 100 {
 		return false
 	}
-	if len(input.District) < 2 || len(input.District) > 100 {
+	if len(input.District) > 0 && (len(input.District) < 2 || len(input.District) > 100) {
 		return false
 	}
-	if len(input.City) < 2 || len(input.City) > 100 {
+	if len(input.City) > 0 && (len(input.City) < 2 || len(input.City) > 100) {
 		return false
 	}
 

@@ -90,9 +90,9 @@ sequenceDiagram
 
 Ở frontend React + Vite:
 
-- API authenticated cart đi qua `frontend/src/shared/api/modules/cartApi.ts`
-- abstraction state nằm ở `frontend/src/features/cart/providers/CartProvider.tsx`
-- guest cart storage nằm ở `frontend/src/features/cart/utils/guestCartStorage.ts`
+- API authenticated cart đi qua `frontend/src/services/api/modules/cart-api.ts`
+- abstraction state nằm ở `frontend/src/features/cart/providers/cart-provider.tsx`
+- guest cart storage nằm ở `frontend/src/features/cart/storage/guest-cart-storage.ts`
 
 ### Vì sao nên đọc song song backend và frontend
 
@@ -107,4 +107,4 @@ Bạn sẽ thấy một bài học rất hay:
 
 - Redis là store cho cart state, không phải catalog database.
 - Giá và stock phải được xác nhận từ `product-service`.
-- nếu sửa cart flow, hãy kiểm tra cả `frontend/src/features/cart/providers/CartProvider.tsx` để xem guest mode và merge sau login có còn hợp logic không.
+- nếu sửa cart flow, hãy kiểm tra cả `frontend/src/features/cart/providers/cart-provider.tsx` để xem guest mode và merge sau login có còn hợp logic không.

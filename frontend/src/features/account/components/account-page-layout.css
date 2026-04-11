@@ -3,23 +3,11 @@
 }
 
 .account-shell {
-  width: min(100%, 1480px);
+  width: min(100%, var(--page-max-width));
   margin: 0 auto;
-  padding: 40px 40px 72px;
+  padding: clamp(28px, 4vw, 44px) var(--page-gutter) clamp(56px, 7vw, 80px);
 }
 
 .account-content {
   min-width: 0;
-}
-
-@media (max-width: 1180px) {
-  .account-shell {
-    padding: 28px 24px 56px;
-  }
-}
-
-@media (max-width: 720px) {
-  .account-shell {
-    padding: 22px 18px 44px;
-  }
 }

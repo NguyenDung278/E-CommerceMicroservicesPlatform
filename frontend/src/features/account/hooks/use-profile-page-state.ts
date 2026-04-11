@@ -56,13 +56,16 @@ export function useProfilePageState() {
   const memberSince = useMemo(() => buildMemberSinceLabel(user?.created_at), [user?.created_at]);
   const initials = useMemo(() => buildProfileInitials(displayName), [displayName]);
   const locationLabel = defaultAddress
-    ? [defaultAddress.city, defaultAddress.district].filter(Boolean).join(", ")
+    ? [defaultAddress.street, defaultAddress.district, defaultAddress.city]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join(", ") || "No saved address yet"
     : "No saved address yet";
   const showDevBadge = isDevelopmentAccount(user);
 
   useEffect(() => {
-    setProfileForm(createProfileFormState(user, defaultAddress, displayName));
-  }, [defaultAddress, displayName, user]);
+    setProfileForm(createProfileFormState(user, defaultAddress));
+  }, [defaultAddress, user]);
 
   useEffect(() => {
     if (!token) {
@@ -131,9 +134,6 @@ export function useProfilePageState() {
   const normalizedCurrentPhone = normalizePhoneDigits(user?.phone || "");
   const normalizedDraftPhone = normalizePhoneDigits(profileForm.phone);
   const verificationPhone = normalizePhoneDigits(phoneVerification?.phone || "");
-  const normalizedCurrentAddressPhone = normalizePhoneDigits(
-    defaultAddress?.phone || user?.phone || ""
-  );
   const phoneChanged = normalizedDraftPhone !== normalizedCurrentPhone;
   const verificationMatchesDraft =
     verificationPhone !== "" && verificationPhone === normalizedDraftPhone;
@@ -145,41 +145,16 @@ export function useProfilePageState() {
 
   const firstNameValue = normalizeProfileText(profileForm.firstName);
   const lastNameValue = normalizeProfileText(profileForm.lastName);
-  const recipientNameValue = normalizeProfileText(profileForm.recipientName);
   const streetValue = profileForm.street.trim();
-  const wardValue = profileForm.ward.trim();
-  const districtValue = profileForm.district.trim();
-  const cityValue = profileForm.city.trim();
   const currentFirstNameValue = normalizeProfileText(user?.first_name || "");
   const currentLastNameValue = normalizeProfileText(user?.last_name || "");
-  const fallbackRecipientName = defaultAddress?.recipient_name || displayName;
   const currentStreetValue = defaultAddress?.street || "";
-  const currentWardValue = defaultAddress?.ward || "";
-  const currentDistrictValue = defaultAddress?.district || "";
-  const currentCityValue = defaultAddress?.city || "";
-  const hasAddressFieldInput =
-    streetValue !== "" ||
-    wardValue !== "" ||
-    districtValue !== "" ||
-    cityValue !== "" ||
-    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName);
   const nameChanged =
     (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) ||
     (lastNameValue !== "" && lastNameValue !== currentLastNameValue);
-  const addressChanged =
-    (!defaultAddress && hasAddressFieldInput) ||
-    (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) ||
-    (streetValue !== "" && streetValue !== currentStreetValue) ||
-    (wardValue !== "" && wardValue !== currentWardValue) ||
-    (districtValue !== "" && districtValue !== currentDistrictValue) ||
-    (cityValue !== "" && cityValue !== currentCityValue);
+  const addressChanged = streetValue !== "" && streetValue !== currentStreetValue;
   const mergedAddressCandidate = {
-    recipientName: recipientNameValue || fallbackRecipientName,
-    phone: normalizedCurrentAddressPhone,
     street: streetValue || currentStreetValue,
-    ward: wardValue || currentWardValue,
-    district: districtValue || currentDistrictValue,
-    city: cityValue || currentCityValue,
   };
   const hasProfileChanges = nameChanged || phoneChanged || addressChanged;
   const clientValidationErrors = buildProfileValidationErrors({
@@ -247,14 +222,9 @@ export function useProfilePageState() {
     }
 
     const profilePatch = buildProfileUpdatePayload({
-      currentCityValue,
-      currentDistrictValue,
       currentFirstNameValue,
       currentLastNameValue,
       currentStreetValue,
-      currentWardValue,
-      defaultAddress,
-      fallbackRecipientName,
       phoneChanged,
       phoneVerification,
       profileForm,
@@ -293,9 +263,7 @@ export function useProfilePageState() {
       setOtpExpiresIn(result?.expires_in_seconds ?? 0);
       setOtpResendIn(result?.resend_in_seconds ?? 0);
       handleFieldChange("otpCode", "");
-      setFeedback(
-        "OTP has been sent to your linked Telegram chat. Enter the 6-digit code to continue."
-      );
+      setFeedback("");
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
@@ -331,7 +299,7 @@ export function useProfilePageState() {
       setPhoneVerification(result ?? null);
       setOtpExpiresIn(result?.expires_in_seconds ?? 0);
       setOtpResendIn(result?.resend_in_seconds ?? 0);
-      setFeedback("Phone verification succeeded. Save the profile to apply the new number.");
+      setFeedback("");
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {

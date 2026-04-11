@@ -19,6 +19,16 @@ vi.mock("../src/features/cart/hooks/use-cart", () => ({
   })),
 }));
 
+const apiMocks = vi.hoisted(() => ({
+  listProducts: vi.fn(),
+}));
+
+vi.mock("@/services/api", () => ({
+  api: {
+    listProducts: apiMocks.listProducts,
+  },
+}));
+
 import { useHomeWorkbook } from "../src/features/home/use-home-workbook";
 import { HomePage } from "@/pages/storefront";
 
@@ -98,6 +108,27 @@ function createSegment(slug: string, label: string, overrides: Record<string, un
   };
 }
 
+function createLiveProduct(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "live-arrival-001",
+    name: "Merino Field Overshirt",
+    description: "Served from backend media.",
+    price: 2490000,
+    stock: 8,
+    category: "All Archive",
+    brand: "Atelier",
+    tags: ["new"],
+    status: "active",
+    sku: "ARRIVAL-001",
+    variants: [],
+    image_url: "https://object-storage.local/products/arrival-001.jpg",
+    image_urls: ["https://object-storage.local/products/arrival-001.jpg"],
+    created_at: "",
+    updated_at: "",
+    ...overrides,
+  };
+}
+
 function renderHomePage() {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -153,6 +184,10 @@ afterEach(() => {
 
 describe("HomePage workbook mode", () => {
   it("renders workbook-driven hero, bento tiles, callout, arrivals, and footer links", async () => {
+    apiMocks.listProducts.mockResolvedValue({
+      data: [createLiveProduct()],
+    });
+
     vi.mocked(useHomeWorkbook).mockReturnValue({
       content: {
         sourceName: "stitchfix-home.xlsx",
@@ -208,11 +243,20 @@ describe("HomePage workbook mode", () => {
     });
 
     const arrivalLink = container.querySelector<HTMLAnchorElement>(".home-stitch-product-card");
+    const arrivalImage = container.querySelector<HTMLImageElement>(".home-stitch-product-card img");
 
-    expect(arrivalLink?.getAttribute("href")).toBe("/products/all-archive-001");
+    expect(apiMocks.listProducts).toHaveBeenCalled();
+    expect(arrivalLink?.getAttribute("href")).toBe("/products/live-arrival-001");
+    expect(arrivalImage?.getAttribute("src")).toBe(
+      "https://object-storage.local/products/arrival-001.jpg"
+    );
   });
 
   it("renders unified storefront navigation links with the required routes", async () => {
+    apiMocks.listProducts.mockResolvedValue({
+      data: [createLiveProduct()],
+    });
+
     vi.mocked(useHomeWorkbook).mockReturnValue({
       content: {
         sourceName: "stitchfix-home.xlsx",

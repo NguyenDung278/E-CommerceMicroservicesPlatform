@@ -4,17 +4,12 @@ import type {
   ProfileAddressPatch,
   UserProfile,
 } from "@/types/api";
-import { getUserDisplayName } from "@/utils/dev-accounts";
 
 export type ProfileFormState = {
   firstName: string;
   lastName: string;
   phone: string;
-  recipientName: string;
   street: string;
-  ward: string;
-  district: string;
-  city: string;
   otpCode: string;
 };
 
@@ -33,11 +28,7 @@ export type ProfileUpdatePayload = {
 type BuildProfileValidationErrorsInput = {
   addressChanged: boolean;
   mergedAddressCandidate: {
-    recipientName: string;
-    phone: string;
     street: string;
-    district: string;
-    city: string;
   };
   normalizedDraftPhone: string;
   phoneChanged: boolean;
@@ -46,14 +37,9 @@ type BuildProfileValidationErrorsInput = {
 };
 
 type BuildProfileUpdatePayloadInput = {
-  currentCityValue: string;
-  currentDistrictValue: string;
   currentFirstNameValue: string;
   currentLastNameValue: string;
   currentStreetValue: string;
-  currentWardValue: string;
-  defaultAddress: Address | null;
-  fallbackRecipientName: string;
   phoneChanged: boolean;
   phoneVerification: PhoneVerificationChallenge | null;
   profileForm: ProfileFormState;
@@ -63,11 +49,7 @@ export const emptyProfileForm: ProfileFormState = {
   firstName: "",
   lastName: "",
   phone: "",
-  recipientName: "",
   street: "",
-  ward: "",
-  district: "",
-  city: "",
   otpCode: "",
 };
 
@@ -77,18 +59,13 @@ export function getDefaultAddress(addresses: Address[]) {
 
 export function createProfileFormState(
   user: UserProfile | null | undefined,
-  defaultAddress: Address | null,
-  displayName = getUserDisplayName(user)
+  defaultAddress: Address | null
 ): ProfileFormState {
   return {
     firstName: user?.first_name || "",
     lastName: user?.last_name || "",
     phone: user?.phone || "",
-    recipientName: defaultAddress?.recipient_name || displayName,
     street: defaultAddress?.street || "",
-    ward: defaultAddress?.ward || "",
-    district: defaultAddress?.district || "",
-    city: defaultAddress?.city || "",
     otpCode: "",
   };
 }
@@ -108,6 +85,21 @@ export function normalizePhoneDigits(value: string) {
 
 export function sanitizePhoneDraft(value: string) {
   return value.replace(/\D/g, "").slice(0, 10);
+}
+
+export function formatPhoneForOtpLabel(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const localPhone = digits.startsWith("84")
+    ? digits.slice(2)
+    : digits.startsWith("0")
+      ? digits.slice(1)
+      : digits;
+  const visibleDigits = localPhone.slice(0, 9);
+  const groups = [visibleDigits.slice(0, 3), visibleDigits.slice(3, 6), visibleDigits.slice(6, 9)]
+    .filter(Boolean)
+    .join(" ");
+
+  return groups ? `+84 ${groups}` : "+84 XXX XXX XXX";
 }
 
 export function isValidVietnamesePhone(value: string) {
@@ -131,20 +123,8 @@ export function buildProfileValidationErrors({
   if (phoneChanged && !isValidVietnamesePhone(normalizedDraftPhone)) {
     errors.phone = "Phone number must contain exactly 10 digits and start with 0.";
   }
-  if (addressChanged && !mergedAddressCandidate.recipientName) {
-    errors.recipientName = "Recipient name is required.";
-  }
-  if (addressChanged && !isValidStoredPhone(mergedAddressCandidate.phone)) {
-    errors.street = "Add a valid profile phone before saving the default address.";
-  }
   if (addressChanged && mergedAddressCandidate.street.length < 5) {
     errors.street = "Street address must be at least 5 characters.";
-  }
-  if (addressChanged && mergedAddressCandidate.district.length < 2) {
-    errors.district = "District is required.";
-  }
-  if (addressChanged && mergedAddressCandidate.city.length < 2) {
-    errors.city = "City is required.";
   }
   if (requireOtp && otpCode.trim().length !== 6) {
     errors.otpCode = "OTP must contain exactly 6 digits.";
@@ -154,25 +134,16 @@ export function buildProfileValidationErrors({
 }
 
 export function buildProfileUpdatePayload({
-  currentCityValue,
-  currentDistrictValue,
   currentFirstNameValue,
   currentLastNameValue,
   currentStreetValue,
-  currentWardValue,
-  defaultAddress,
-  fallbackRecipientName,
   phoneChanged,
   phoneVerification,
   profileForm,
 }: BuildProfileUpdatePayloadInput): ProfileUpdatePayload {
   const firstNameValue = normalizeProfileText(profileForm.firstName);
   const lastNameValue = normalizeProfileText(profileForm.lastName);
-  const recipientNameValue = normalizeProfileText(profileForm.recipientName);
   const streetValue = profileForm.street.trim();
-  const wardValue = profileForm.ward.trim();
-  const districtValue = profileForm.district.trim();
-  const cityValue = profileForm.city.trim();
 
   const payload: ProfileUpdatePayload = {};
 
@@ -187,25 +158,10 @@ export function buildProfileUpdatePayload({
     payload.phone_verification_id = phoneVerification?.verification_id;
   }
 
-  const nextAddressPatch: ProfileAddressPatch = {};
-  if (!defaultAddress && recipientNameValue !== "") {
-    nextAddressPatch.recipient_name = recipientNameValue;
-  } else if (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) {
-    nextAddressPatch.recipient_name = recipientNameValue;
-  }
   if (streetValue !== "" && streetValue !== currentStreetValue) {
-    nextAddressPatch.street = streetValue;
-  }
-  if (wardValue !== "" && wardValue !== currentWardValue) {
-    nextAddressPatch.ward = wardValue;
-  }
-  if (districtValue !== "" && districtValue !== currentDistrictValue) {
-    nextAddressPatch.district = districtValue;
-  }
-  if (cityValue !== "" && cityValue !== currentCityValue) {
-    nextAddressPatch.city = cityValue;
-  }
-  if (Object.keys(nextAddressPatch).length > 0) {
+    const nextAddressPatch: ProfileAddressPatch = {
+      street: streetValue,
+    };
     payload.default_address = nextAddressPatch;
   }
 
@@ -295,4 +251,26 @@ export function getPhoneVerificationDescription(options: {
   }
 
   return "Changing the profile phone requires Telegram OTP verification first.";
+}
+
+export function getPhoneVerificationStatusLabel(options: {
+  phoneChanged: boolean;
+  phoneIsVerifiedForDraft: boolean;
+  verificationPendingForDraft: boolean;
+  userPhoneVerified: boolean;
+}) {
+  const { phoneChanged, phoneIsVerifiedForDraft, verificationPendingForDraft, userPhoneVerified } =
+    options;
+
+  if (!phoneChanged) {
+    return userPhoneVerified ? "Current number verified" : "Current number needs verification";
+  }
+  if (phoneIsVerifiedForDraft) {
+    return "New number verified";
+  }
+  if (verificationPendingForDraft) {
+    return "OTP pending";
+  }
+
+  return "Verification required";
 }

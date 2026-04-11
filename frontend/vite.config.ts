@@ -27,7 +27,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isWorkbookMutationPayload(value: Record<string, unknown>): value is WorkbookMutationPayload {
+function isWorkbookMutationPayload(
+  value: Record<string, unknown>
+): value is WorkbookMutationPayload {
   if (!("operation" in value) || !("product" in value)) {
     return false;
   }
@@ -48,10 +50,16 @@ function isWorkbookBatchPayload(value: Record<string, unknown>): value is Workbo
     return false;
   }
 
-  return value.mutations.every((mutation) => isRecord(mutation) && isWorkbookMutationPayload(mutation));
+  return value.mutations.every(
+    (mutation) => isRecord(mutation) && isWorkbookMutationPayload(mutation)
+  );
 }
 
-function sendJsonResponse(response: JsonResponse, statusCode: number, body: Record<string, unknown>) {
+function sendJsonResponse(
+  response: JsonResponse,
+  statusCode: number,
+  body: Record<string, unknown>
+) {
   response.statusCode = statusCode;
   response.setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(body));
@@ -79,9 +87,7 @@ function readJsonBody(request: JsonRequest) {
 }
 
 function workbookSyncPlugin(): Plugin {
-  const registerWorkbookMiddleware = (middlewares: {
-    use: (...args: unknown[]) => unknown;
-  }) => {
+  const registerWorkbookMiddleware = (middlewares: { use: (...args: unknown[]) => unknown }) => {
     const handler = (request: JsonRequest, response: JsonResponse) => {
       if (request.method !== "POST") {
         sendJsonResponse(response, 405, {
@@ -114,7 +120,10 @@ function workbookSyncPlugin(): Plugin {
         });
     };
 
-    middlewares.use("/__workbook-sync/products", handler as unknown as (...args: unknown[]) => unknown);
+    middlewares.use(
+      "/__workbook-sync/products",
+      handler as unknown as (...args: unknown[]) => unknown
+    );
   };
 
   return {
@@ -130,6 +139,31 @@ function workbookSyncPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), workbookSyncPlugin()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (id.includes("/xlsx/")) {
+            return "xlsx-vendor";
+          }
+
+          if (id.includes("/react-router") || id.includes("@remix-run")) {
+            return "router-vendor";
+          }
+
+          if (id.includes("/react/") || id.includes("/react-dom/")) {
+            return "react-vendor";
+          }
+
+          return "vendor";
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": new URL("./src", importMetaUrl).pathname,

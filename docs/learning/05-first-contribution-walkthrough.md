@@ -27,15 +27,15 @@ Lý do:
 1. [../deep-dive/system-overview.md](../deep-dive/system-overview.md)
 2. [../deep-dive/frontend-architecture.md](../deep-dive/frontend-architecture.md)
 3. [../annotated/frontend-source-map.md](../annotated/frontend-source-map.md)
-4. [../annotated/frontend-auth-cart-providers.md](../annotated/frontend-auth-cart-providers.md)
+4. [../annotated/frontend-app.md](../annotated/frontend-app.md)
 5. [../annotated/cart-service.md](../annotated/cart-service.md)
 6. nếu cần đối chiếu lookup product, đọc thêm [../annotated/product-service.md](../annotated/product-service.md)
 
 ## 4. Nếu sửa auth/profile, hãy đọc theo thứ tự này
 
 1. [../annotated/frontend-app.md](../annotated/frontend-app.md)
-2. [../annotated/frontend-auth-cart-providers.md](../annotated/frontend-auth-cart-providers.md)
-3. [../annotated/frontend-api-layer.md](../annotated/frontend-api-layer.md)
+2. [../annotated/frontend-source-map.md](../annotated/frontend-source-map.md)
+3. [../deep-dive/frontend-architecture.md](../deep-dive/frontend-architecture.md)
 4. [../annotated/auth-go.md](../annotated/auth-go.md)
 5. [../annotated/user-service.md](../annotated/user-service.md)
 
@@ -55,7 +55,7 @@ Lý do:
 flowchart LR
     UI[CatalogPage / ProductDetailPage] --> Hook[useCart]
     Hook --> Provider[CartProvider]
-    Provider --> API[shared/api/modules/cartApi.ts]
+    Provider --> API[services/api/modules/cart-api.ts]
     Provider --> Guest[guestCartStorage]
     API --> Gateway[api-gateway]
     Gateway --> CartService[cart-service]
@@ -76,8 +76,8 @@ flowchart LR
     Page[LoginPage / ProfilePage] --> AuthHook[useAuth]
     Page --> AccountHooks[useOrderPayments / useSavedAddresses]
     AuthHook --> AuthProvider[AuthProvider]
-    AccountHooks --> SharedAPI[shared/api/modules/*]
-    AuthProvider --> AuthAPI[shared/api/modules/authApi.ts]
+    AccountHooks --> SharedAPI[services/api/modules/*]
+    AuthProvider --> AuthAPI[services/api/modules/auth-api.ts]
     AuthAPI --> Gateway[api-gateway]
     SharedAPI --> Gateway
     Gateway --> UserService[user-service]

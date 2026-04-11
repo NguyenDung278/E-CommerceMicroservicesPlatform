@@ -1,22 +1,26 @@
 type ProfileHeroPanelProps = {
+  avatarUrl?: string;
   displayName: string;
   email: string;
+  emailVerified: boolean;
   initials: string;
   locationLabel: string;
   memberSince: string;
   phone?: string;
-  showDevBadge: boolean;
+  phoneVerified: boolean;
   onToggleEdit: () => void;
 };
 
 export function ProfileHeroPanel({
+  avatarUrl,
   displayName,
   email,
+  emailVerified,
   initials,
   locationLabel,
   memberSince,
   phone,
-  showDevBadge,
+  phoneVerified,
   onToggleEdit,
 }: ProfileHeroPanelProps) {
   return (
@@ -24,9 +28,22 @@ export function ProfileHeroPanel({
       <div className="profile-route-avatar-column">
         <div className="profile-route-avatar-shell">
           <div className="profile-route-avatar">
-            <span>{initials}</span>
+            {avatarUrl ? (
+              <img
+                alt={`${displayName} avatar`}
+                className="profile-route-avatar-image"
+                src={avatarUrl}
+              />
+            ) : (
+              <span>{initials}</span>
+            )}
           </div>
-          <button className="profile-route-avatar-action" type="button" onClick={onToggleEdit}>
+          <button
+            aria-label="Edit profile"
+            className="profile-route-avatar-action"
+            type="button"
+            onClick={onToggleEdit}
+          >
             <span className="profile-route-avatar-pencil" aria-hidden="true" />
           </button>
         </div>
@@ -36,15 +53,33 @@ export function ProfileHeroPanel({
         <div className="profile-route-identity-row">
           <div className="profile-route-identity">
             <h1>{displayName}</h1>
-            <p className="profile-route-membership">
-              <span className="profile-route-membership-icon" aria-hidden="true" />
-              <span>{memberSince}</span>
-            </p>
+            <div className="profile-route-identity-meta">
+              <p className="profile-route-membership">
+                <span className="profile-route-membership-icon" aria-hidden="true" />
+                <span>{memberSince}</span>
+              </p>
+              <div className="profile-route-meta-row">
+                <span
+                  className={
+                    emailVerified
+                      ? "profile-route-meta-chip profile-route-meta-chip-success"
+                      : "profile-route-meta-chip"
+                  }
+                >
+                  {emailVerified ? "Email verified" : "Verify email"}
+                </span>
+                <span
+                  className={
+                    phoneVerified
+                      ? "profile-route-meta-chip profile-route-meta-chip-success"
+                      : "profile-route-meta-chip"
+                  }
+                >
+                  {phoneVerified ? "Phone verified" : "Phone pending"}
+                </span>
+              </div>
+            </div>
           </div>
-
-          {showDevBadge ? (
-            <span className="profile-route-dev-badge">Dev Only: Profile_v2</span>
-          ) : null}
         </div>
 
         <div className="profile-route-divider" />
