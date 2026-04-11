@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import {
+  EditorialSignatureFooter,
   PaginationControls,
   ProductCard,
   StorefrontActionLink,
@@ -60,6 +61,7 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
     return (
       <EditorialCategoryPage
         busyProductId={routeState.busyProductId}
+        content={routeState.content}
         feedback={routeState.feedback}
         isLoading={routeState.isLoading}
         onAddToCart={routeState.handleAddToCart}
@@ -73,6 +75,7 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
   return (
     <BasicCategoryPage
       busyProductId={routeState.busyProductId}
+      content={routeState.content}
       feedback={routeState.feedback}
       identifier={identifier}
       isLoading={routeState.isLoading}
@@ -84,6 +87,7 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
 }
 
 function BasicCategoryPage({
+  content,
   identifier,
   products,
   feedback,
@@ -92,6 +96,7 @@ function BasicCategoryPage({
   onAddToCart,
   onBuyNow,
 }: {
+  content: HomeWorkbookContent | null;
   identifier: string;
   products: Product[];
   feedback: string;
@@ -103,6 +108,8 @@ function BasicCategoryPage({
   const pagination = usePaginatedList(products, {
     pageSize: 12,
   });
+  const footerNoteFallback =
+    "An editorial storefront shaped for clear browsing, product discovery, and quick returns.";
 
   return (
     <div className="page-stack category-page">
@@ -163,6 +170,13 @@ function BasicCategoryPage({
           </div>
         )}
       </section>
+
+      <EditorialSignatureFooter
+        brandName={content?.footer.brandName}
+        caption={content?.footer.caption}
+        links={content?.footerLinks}
+        note={resolveStorefrontCopy(content?.footer.note, footerNoteFallback)}
+      />
     </div>
   );
 }
@@ -377,24 +391,12 @@ function WorkbookCategoryPage({
         </section>
       ) : null}
 
-      <footer className="atelier-category-footer">
-        <div>
-          <strong>ND Shop</strong>
-          <p>{footerNote}</p>
-        </div>
-        <div className="atelier-category-footer-links">
-          {content.footerLinks.map((link) => (
-            <StorefrontActionLink
-              className="atelier-category-footer-link"
-              fallbackHref="/"
-              href={link.href || "/"}
-              key={`${link.position}-${link.label}`}
-            >
-              {link.label}
-            </StorefrontActionLink>
-          ))}
-        </div>
-      </footer>
+      <EditorialSignatureFooter
+        brandName={content.footer.brandName}
+        caption={content.footer.caption}
+        links={content.footerLinks}
+        note={footerNote}
+      />
     </div>
   );
 }
@@ -444,6 +446,7 @@ function WorkbookCategoryProductCard({
 }
 
 function EditorialCategoryPage({
+  content,
   pageData,
   products,
   feedback,
@@ -452,6 +455,7 @@ function EditorialCategoryPage({
   onAddToCart,
   onBuyNow,
 }: {
+  content: HomeWorkbookContent | null;
   pageData: StorefrontCategoryPageData;
   products: Product[];
   feedback: string;
@@ -463,6 +467,8 @@ function EditorialCategoryPage({
   const pagination = usePaginatedList(products, {
     pageSize: 12,
   });
+  const footerNoteFallback =
+    "An editorial storefront shaped for clear browsing, product discovery, and quick returns.";
   const heroSource = buildHeroSource(pageData);
   const featureSource = getSectionPayload(pageData.sections, [
     "feature-card",
@@ -638,6 +644,13 @@ function EditorialCategoryPage({
           </div>
         )}
       </section>
+
+      <EditorialSignatureFooter
+        brandName={content?.footer.brandName}
+        caption={content?.footer.caption}
+        links={content?.footerLinks}
+        note={resolveStorefrontCopy(content?.footer.note, footerNoteFallback)}
+      />
     </div>
   );
 }

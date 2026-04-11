@@ -140,6 +140,26 @@
     transform 180ms ease;
 }
 
+.storefront-overlay-account-copy {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.storefront-overlay-account-name {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.storefront-overlay-account-role {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .storefront-overlay-account-pill:hover,
 .storefront-overlay-account-pill:focus-visible {
   transform: translateY(-1px);
@@ -221,5 +241,9 @@
     min-height: 34px;
     padding: 0 14px;
     font-size: 0.68rem;
+  }
+
+  .storefront-overlay-account-name {
+    font-size: 0.76rem;
   }
 }

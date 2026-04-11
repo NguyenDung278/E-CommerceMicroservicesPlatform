@@ -7,6 +7,7 @@ import {
   storefrontCartHref,
   storefrontFallbackNavigation,
 } from "@/constants/storefront-navigation";
+import { getUserDisplayName } from "@/utils/dev-accounts";
 import "./storefront-overlay-header.css";
 
 type StorefrontOverlayHeaderProps = {
@@ -14,10 +15,12 @@ type StorefrontOverlayHeaderProps = {
 };
 
 export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHeaderProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
   const accountHref = isAuthenticated ? "/profile" : "/login";
-  const accountLabel = isAuthenticated ? "Account" : "Login";
+  const hasProfileName = Boolean(user?.first_name?.trim() || user?.last_name?.trim());
+  const profileName = hasProfileName ? getUserDisplayName(user) : "";
+  const accountLabel = isAuthenticated ? profileName || "Account" : "Login";
   const bagHref = isAuthenticated ? storefrontCartHref : "/login";
   const bagState = isAuthenticated
     ? undefined
@@ -67,7 +70,14 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
           <span className="storefront-overlay-bag-count">{itemCount}</span>
         </Link>
         <NavLink className="storefront-overlay-account-pill" to={accountHref}>
-          {accountLabel}
+          {isAuthenticated && profileName ? (
+            <span className="storefront-overlay-account-copy">
+              <span className="storefront-overlay-account-name">{accountLabel}</span>
+              <span className="storefront-overlay-account-role">Account</span>
+            </span>
+          ) : (
+            accountLabel
+          )}
         </NavLink>
       </div>
     </header>

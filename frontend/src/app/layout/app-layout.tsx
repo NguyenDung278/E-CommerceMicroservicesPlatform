@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { EditorialSignatureFooter } from "@/components";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
 import {
@@ -87,7 +88,7 @@ export function AppLayout() {
 
   return (
     <div className={shellClassName}>
-      {isChromelessEditorialSurface ? null : (
+      {isChromelessEditorialSurface || isAccountSurface ? null : (
         <header className={headerClassName}>
           <div className="editorial-header-inner">
             <div className="editorial-header-brand-slot">
@@ -223,35 +224,39 @@ export function AppLayout() {
 
       {isChromelessEditorialSurface ? null : (
         <footer className={footerClassName}>
-          <div className="editorial-footer-inner">
-            <div className="editorial-footer-brand">
-              <strong>ND Shop</strong>
-              <p>
-                {isTransactionalSurface
-                  ? "2026 ND Shop. All rights reserved."
-                  : "2026 ND Shop. Editorial storefront layered on the current Go commerce platform."}
-              </p>
+          {isTransactionalSurface ? (
+            <div className="editorial-footer-inner">
+              <div className="editorial-footer-brand">
+                <strong>ND Shop</strong>
+                <p>2026 ND Shop. All rights reserved.</p>
+              </div>
+              <div className="editorial-footer-links">
+                {transactionalNavigation.map((item) => (
+                  <NavLink key={item.label} to={item.to}>
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
             </div>
-            <div className="editorial-footer-links">
-              {isTransactionalSurface ? (
-                <>
-                  {transactionalNavigation.map((item) => (
-                    <NavLink key={item.label} to={item.to}>
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </>
-              ) : (
-                <>
-                  <NavLink to="/">Home</NavLink>
-                  <NavLink to={storefrontArchiveHref}>Archive</NavLink>
-                  <NavLink to="/cart">Bag</NavLink>
-                  <NavLink to={accountHref}>{accountLabel}</NavLink>
-                  {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}
-                </>
-              )}
+          ) : isAccountSurface ? (
+            <div className="editorial-signature-footer-frame">
+              <EditorialSignatureFooter variant="layout" />
             </div>
-          </div>
+          ) : (
+            <div className="editorial-footer-inner">
+              <div className="editorial-footer-brand">
+                <strong>ND Shop</strong>
+                <p>2026 ND Shop. Editorial storefront layered on the current Go commerce platform.</p>
+              </div>
+              <div className="editorial-footer-links">
+                <NavLink to="/">Home</NavLink>
+                <NavLink to={storefrontArchiveHref}>Archive</NavLink>
+                <NavLink to="/cart">Bag</NavLink>
+                <NavLink to={accountHref}>{accountLabel}</NavLink>
+                {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}
+              </div>
+            </div>
+          )}
         </footer>
       )}
     </div>

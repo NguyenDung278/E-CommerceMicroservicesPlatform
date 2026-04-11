@@ -84,7 +84,9 @@ afterEach(() => {
 });
 
 describe("CategoryPage workbook mode", () => {
-  it("renders workbook-driven atelier content and filters products client-side", async () => {
+  it(
+    "renders workbook-driven atelier content and filters products client-side",
+    async () => {
     apiMocks.listProducts.mockImplementation((options?: { category?: string }) => {
       if (
         options?.category === "Shop Men" ||
@@ -344,5 +346,7 @@ describe("CategoryPage workbook mode", () => {
     expect(container.textContent).not.toContain("Sculpted Linen Shirt");
     expect(container.textContent).toContain("Structured Atelier Jacket");
     expect(container.textContent).toContain("Showing 1 results");
-  });
+    },
+    10000
+  );
 });

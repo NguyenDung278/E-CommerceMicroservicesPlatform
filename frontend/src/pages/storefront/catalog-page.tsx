@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 
 import {
+  EditorialSignatureFooter,
   PaginationControls,
   StorefrontCollectionCard,
   StorefrontFilterSection,
@@ -11,6 +12,7 @@ import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { archiveCategorySources } from "@/features/storefront/archive/archive-utils";
 import { useArchiveCatalogState } from "@/features/storefront/archive/use-archive-catalog-state";
 import { usePaginatedList } from "@/features/storefront/listing/use-paginated-list";
+import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
 import { formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/catalog-page.css";
 
@@ -36,6 +38,8 @@ export function CatalogPage() {
     (archiveState.activeFilterCount > 0
       ? `${archiveState.activeFilterCount} filters active`
       : undefined);
+  const footerNoteFallback =
+    "An editorial storefront shaped for clear browsing, product discovery, and quick returns.";
 
   return (
     <div className="archive-shell">
@@ -254,6 +258,13 @@ export function CatalogPage() {
           )}
         </section>
       </div>
+
+      <EditorialSignatureFooter
+        brandName={content?.footer.brandName}
+        caption={content?.footer.caption}
+        links={content?.footerLinks}
+        note={resolveStorefrontCopy(content?.footer.note, footerNoteFallback)}
+      />
     </div>
   );
 }

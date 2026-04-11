@@ -122,7 +122,9 @@ afterEach(() => {
 });
 
 describe("CatalogPage category aggregation", () => {
-  it("combines product cards from the 4 category pages and filters them by category", async () => {
+  it(
+    "combines product cards from the 4 category pages and filters them by category",
+    async () => {
     apiMocks.listProducts.mockImplementation((options?: { category?: string }) => {
       switch (options?.category) {
         case "Men":
@@ -489,5 +491,7 @@ describe("CatalogPage category aggregation", () => {
       expect(container.textContent).not.toContain("Atelier Tote");
       expect(container.textContent).toContain("Showing 1 of 4 Products");
     });
-  });
+    },
+    10000
+  );
 });

@@ -14,6 +14,7 @@ import {
   type HomeWorkbookProduct,
   type HomeWorkbookSegment,
 } from "@/features/home/home-workbook";
+import { EditorialSignatureFooter } from "@/components";
 import { loadWorkbookLiveProductLookup } from "@/features/home/workbook-live-products";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
@@ -385,33 +386,12 @@ export function HomePage() {
         )}
       </section>
 
-      <footer className="home-stitch-footer">
-        <div className="home-stitch-footer-brand">
-          <strong>{footer.brandName}</strong>
-          <p>{footer.caption}</p>
-        </div>
-
-        <nav aria-label="Footer" className="home-stitch-footer-links">
-          {footerLinks.length > 0 ? (
-            footerLinks.map((link) => (
-              <ActionLink
-                className="home-stitch-footer-link"
-                fallbackHref="/products"
-                href={link.href}
-                key={`${link.position}-${link.label}`}
-              >
-                {link.label}
-              </ActionLink>
-            ))
-          ) : (
-            <span className="home-stitch-footer-link is-muted">More links coming soon</span>
-          )}
-        </nav>
-
-        <div className="home-stitch-footer-note">
-          {resolveStorefrontCopy(footer.note, footerNoteFallback)}
-        </div>
-      </footer>
+      <EditorialSignatureFooter
+        brandName={footer.brandName}
+        caption={footer.caption}
+        links={footerLinks}
+        note={resolveStorefrontCopy(footer.note, footerNoteFallback)}
+      />
     </div>
   );
 }

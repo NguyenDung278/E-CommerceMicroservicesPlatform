@@ -108,6 +108,7 @@ describe("LoginPage storefront header", () => {
   it("switches the right-side action to account when the user is authenticated", () => {
     authMocks.useAuth.mockReturnValue({
       isAuthenticated: true,
+      user: null,
       login: vi.fn(),
       beginOAuthLogin: vi.fn(),
       error: "",
@@ -122,6 +123,27 @@ describe("LoginPage storefront header", () => {
 
     expect(accountLink?.getAttribute("href")).toBe("/profile");
     expect(bagLink?.getAttribute("href")).toBe("/cart");
+  });
+
+  it("shows the user name in the shared header when profile data is available", () => {
+    authMocks.useAuth.mockReturnValue({
+      isAuthenticated: true,
+      user: {
+        first_name: "Nguyen",
+        last_name: "Dung",
+      },
+      login: vi.fn(),
+      beginOAuthLogin: vi.fn(),
+      error: "",
+      clearError: vi.fn(),
+    });
+
+    const { container } = renderLoginPage();
+    const accountLink = container.querySelector<HTMLAnchorElement>(".storefront-overlay-account-pill");
+
+    expect(accountLink?.textContent).toContain("Nguyen Dung");
+    expect(accountLink?.textContent).toContain("Account");
+    expect(accountLink?.getAttribute("href")).toBe("/profile");
   });
 
   it("shows a login-required notification when redirected from a protected cart action", () => {

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useAuth } from "../../auth/hooks/use-auth";
 import { accountNavigationItems } from "../constants/account-navigation";
 import { AccountSidebar } from "./account-sidebar";
+import { StorefrontOverlayHeader } from "@/components";
 import "./account-page-layout.css";
 
 type AccountPageLayoutProps = {
@@ -14,6 +15,10 @@ export function AccountPageLayout({ children }: AccountPageLayoutProps) {
 
   return (
     <div className="page-stack account-page">
+      <section className="account-shell account-shell-header">
+        <StorefrontOverlayHeader tone="light" />
+      </section>
+
       <section className="account-shell">
         <div className="account-layout">
           <AccountSidebar items={accountNavigationItems} onLogout={logout} />

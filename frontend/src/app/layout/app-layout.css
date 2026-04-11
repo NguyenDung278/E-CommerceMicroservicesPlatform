@@ -356,6 +356,12 @@
   margin-top: 88px;
 }
 
+.editorial-signature-footer-frame {
+  width: min(100%, var(--page-max-width));
+  margin: 0 auto;
+  padding-inline: var(--page-gutter);
+}
+
 .editorial-footer-inner {
   display: flex;
   justify-content: space-between;

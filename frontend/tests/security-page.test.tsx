@@ -19,6 +19,12 @@ vi.mock("../src/features/account/hooks/use-order-payments", () => ({
   useOrderPayments: orderPaymentMocks.useOrderPayments,
 }));
 
+vi.mock("../src/features/cart/hooks/use-cart", () => ({
+  useCart: vi.fn(() => ({
+    itemCount: 2,
+  })),
+}));
+
 import { SecurityPage } from "@/pages/account";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,6 +81,7 @@ describe("SecurityPage password updates", () => {
 
     authMocks.useAuth.mockReturnValue({
       token: "jwt-token",
+      isAuthenticated: true,
       user: {
         email: "demo@example.com",
         email_verified: true,
@@ -92,6 +99,11 @@ describe("SecurityPage password updates", () => {
     });
 
     const { container } = renderSecurityPage();
+    const headerLinks = Array.from(
+      container.querySelectorAll<HTMLAnchorElement>(
+        ".storefront-overlay-link, .storefront-overlay-brand, .storefront-overlay-account-pill"
+      )
+    );
     const passwordInputs = Array.from(
       container.querySelectorAll<HTMLInputElement>('input[type="password"]')
     );
@@ -99,6 +111,10 @@ describe("SecurityPage password updates", () => {
 
     expect(passwordInputs).toHaveLength(3);
     expect(form).toBeTruthy();
+    expect(headerLinks.map((link) => link.textContent?.trim())).toEqual(
+      expect.arrayContaining(["ND Shop", "All Archive", "Men", "Women", "Footwear", "Accessories"])
+    );
+    expect(container.textContent).toContain("Account");
 
     act(() => {
       fillPasswordInput(passwordInputs[0]!, "OldPass123");

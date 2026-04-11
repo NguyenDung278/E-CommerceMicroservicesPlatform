@@ -1,0 +1,99 @@
+.editorial-signature-footer {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1fr) minmax(240px, 0.95fr);
+  gap: 28px clamp(24px, 3vw, 44px);
+  align-items: center;
+}
+
+.editorial-signature-footer-page {
+  width: min(100%, var(--page-max-width));
+  margin: 88px auto 0;
+  padding: 28px var(--page-gutter) 0;
+  border-top: 1px solid rgba(22, 32, 20, 0.12);
+}
+
+.editorial-signature-footer-layout {
+  min-height: 112px;
+}
+
+.editorial-signature-footer-brand {
+  display: grid;
+  gap: 10px;
+}
+
+.editorial-signature-footer-brand strong {
+  margin: 0;
+  color: #162014;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 3.4vw, 3rem);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+}
+
+.editorial-signature-footer-brand p,
+.editorial-signature-footer-note {
+  margin: 0;
+  color: rgba(22, 32, 20, 0.66);
+  font-size: clamp(0.96rem, 1.05vw, 1.08rem);
+  line-height: 1.58;
+}
+
+.editorial-signature-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px 28px;
+}
+
+.editorial-signature-footer-link {
+  color: #162014;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.editorial-signature-footer-link:hover {
+  color: #0b2013;
+  transform: translateY(-1px);
+}
+
+.editorial-signature-footer-note {
+  max-width: 34ch;
+  justify-self: end;
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .editorial-signature-footer,
+  .editorial-signature-footer-page {
+    grid-template-columns: 1fr;
+  }
+
+  .editorial-signature-footer {
+    align-items: flex-start;
+  }
+
+  .editorial-signature-footer-links {
+    justify-content: flex-start;
+  }
+
+  .editorial-signature-footer-note {
+    justify-self: start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .editorial-signature-footer-page {
+    margin-top: 68px;
+    padding-top: 24px;
+  }
+
+  .editorial-signature-footer-links {
+    gap: 14px 20px;
+  }
+}

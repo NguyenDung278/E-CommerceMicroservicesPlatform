@@ -8,6 +8,11 @@
   padding: clamp(28px, 4vw, 44px) var(--page-gutter) clamp(56px, 7vw, 80px);
 }
 
+.account-shell-header {
+  padding-top: clamp(20px, 3vw, 28px);
+  padding-bottom: 0;
+}
+
 .account-content {
   min-width: 0;
 }
