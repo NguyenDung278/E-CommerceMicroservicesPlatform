@@ -6,7 +6,7 @@ import { useCart } from "@/features/cart/hooks/use-cart";
 import { canSyncProductToWorkbook } from "@/features/home/workbook-sync-catalog";
 import { syncWorkbookProductMutations } from "@/features/home/workbook-sync-client";
 import { api, getErrorMessage } from "@/services/api";
-import type { Address, OrderPreview, Product } from "@/types/api";
+import type { Address, OrderPreview, Product, ShippingAddress, ShippingOption } from "@/types/api";
 import { formatCurrency, formatShippingMethodLabel } from "@/utils/format";
 import { sanitizeText } from "@/utils/sanitize";
 import "@/styles/pages/storefront/checkout-page.css";
@@ -27,8 +27,9 @@ type ShippingMethodChoice = "standard" | "express" | "pickup";
 type CheckoutFormState = {
   fullName: string;
   street: string;
+  ward: string;
+  district: string;
   city: string;
-  postcode: string;
   phone: string;
 };
 
@@ -44,8 +45,9 @@ type CheckoutDisplayItem = {
 const emptyCheckoutForm: CheckoutFormState = {
   fullName: "",
   street: "",
+  ward: "",
+  district: "",
   city: "",
-  postcode: "",
   phone: "",
 };
 
@@ -154,8 +156,9 @@ export function CheckoutPage() {
       ...current,
       fullName: defaultAddress.recipient_name,
       street: defaultAddress.street,
+      ward: defaultAddress.ward || "",
+      district: defaultAddress.district,
       city: defaultAddress.city,
-      postcode: defaultAddress.ward || defaultAddress.district,
       phone: defaultAddress.phone,
     }));
   }, [addresses, form]);
@@ -375,19 +378,20 @@ export function CheckoutPage() {
 
     const normalizedFullName = sanitizeText(form.fullName);
     const normalizedStreet = sanitizeText(form.street);
+    const normalizedDistrict = sanitizeText(form.district);
     const normalizedCity = sanitizeText(form.city);
-    const normalizedPostcode = sanitizeText(form.postcode);
     const normalizedPhone = sanitizeText(form.phone);
 
     if (
       !normalizedFullName ||
       !normalizedPhone ||
-      (selectedShippingMethod !== "pickup" && (!normalizedStreet || !normalizedCity))
+      (selectedShippingMethod !== "pickup" &&
+        (!normalizedStreet || !normalizedDistrict || !normalizedCity))
     ) {
       setFeedback(
         selectedShippingMethod === "pickup"
           ? "Vui lòng điền đủ họ tên và số điện thoại để xác nhận lượt nhận tại quầy."
-          : "Vui lòng điền đủ họ tên, địa chỉ giao hàng, thành phố và số điện thoại."
+          : "Vui lòng điền đủ họ tên, địa chỉ giao hàng, quận/huyện, thành phố và số điện thoại."
       );
       return;
     }
@@ -490,20 +494,29 @@ export function CheckoutPage() {
                   </label>
 
                   <label className="checkout-field">
-                    <span>City</span>
+                    <span>Ward (Optional)</span>
                     <input
-                      placeholder="Portland"
-                      value={form.city}
-                      onChange={(event) => updateForm("city", event.target.value)}
+                      placeholder="Ben Nghe"
+                      value={form.ward}
+                      onChange={(event) => updateForm("ward", event.target.value)}
                     />
                   </label>
 
                   <label className="checkout-field">
-                    <span>Postcode</span>
+                    <span>District</span>
                     <input
-                      placeholder="97205"
-                      value={form.postcode}
-                      onChange={(event) => updateForm("postcode", event.target.value)}
+                      placeholder="District 1"
+                      value={form.district}
+                      onChange={(event) => updateForm("district", event.target.value)}
+                    />
+                  </label>
+
+                  <label className="checkout-field checkout-field-full">
+                    <span>City</span>
+                    <input
+                      placeholder="Ho Chi Minh City"
+                      value={form.city}
+                      onChange={(event) => updateForm("city", event.target.value)}
                     />
                   </label>
 
@@ -788,7 +801,9 @@ async function syncPurchasedProductsToWorkbook(items: Array<{ product_id: string
 }
 
 function hasCheckoutFormValue(form: CheckoutFormState) {
-  return Boolean(form.fullName || form.street || form.city || form.postcode || form.phone);
+  return Boolean(
+    form.fullName || form.street || form.ward || form.district || form.city || form.phone
+  );
 }
 
 function buildCheckoutItemSubtitle(product?: Product) {
@@ -803,11 +818,12 @@ function buildCheckoutItemSubtitle(product?: Product) {
 function buildCheckoutPreviewAddress(
   form: CheckoutFormState,
   shippingMethod: ShippingMethodChoice
-) {
+): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
   const street = sanitizeText(form.street);
+  const ward = sanitizeText(form.ward);
+  const district = sanitizeText(form.district);
   const city = sanitizeText(form.city);
-  const postcode = sanitizeText(form.postcode);
   const phone = sanitizeText(form.phone);
 
   if (shippingMethod === "pickup") {
@@ -819,22 +835,22 @@ function buildCheckoutPreviewAddress(
       recipient_name: recipientName,
       phone,
       street: street || "Pickup counter",
-      ward: postcode || undefined,
-      district: postcode || city || "Pickup counter",
+      ward: ward || undefined,
+      district: district || "Pickup counter",
       city: city || "Pickup counter",
     };
   }
 
-  if (!recipientName || !street || !city || !phone) {
-    return null;
+  if (!recipientName || !street || !district || !city || !phone) {
+    return undefined;
   }
 
   return {
     recipient_name: recipientName,
     phone,
     street,
-    ward: postcode || undefined,
-    district: postcode || city,
+    ward: ward || undefined,
+    district,
     city,
   };
 }
@@ -842,11 +858,12 @@ function buildCheckoutPreviewAddress(
 function buildCheckoutSubmissionAddress(
   form: CheckoutFormState,
   shippingMethod: ShippingMethodChoice
-) {
+): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
   const street = sanitizeText(form.street);
+  const ward = sanitizeText(form.ward);
+  const district = sanitizeText(form.district);
   const city = sanitizeText(form.city);
-  const postcode = sanitizeText(form.postcode);
   const phone = sanitizeText(form.phone);
 
   if (!recipientName || !phone) {
@@ -857,12 +874,16 @@ function buildCheckoutSubmissionAddress(
     return undefined;
   }
 
+  if (!street || !district || !city) {
+    return undefined;
+  }
+
   return {
     recipient_name: recipientName,
     phone,
     street,
-    ward: postcode || undefined,
-    district: postcode || city,
+    ward: ward || undefined,
+    district,
     city,
   };
 }
@@ -904,7 +925,7 @@ function buildLocalVoucherPreview(
   };
 }
 
-function buildFallbackShippingOptions(subtotal: number) {
+function buildFallbackShippingOptions(subtotal: number): ShippingOption[] {
   return [
     {
       method: "standard",
@@ -936,7 +957,7 @@ function buildFallbackShippingOptions(subtotal: number) {
       eta_label: "Ready for pickup within 2 hours",
       delivery_promise: "We will hold the order and confirm pickup readiness by message.",
     },
-  ] as const;
+  ];
 }
 
 function roundCurrencyAmount(value: number) {

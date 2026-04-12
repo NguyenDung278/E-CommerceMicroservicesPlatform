@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -726,7 +726,10 @@ export function ProductDetailPage() {
       : activePrice >= 100
       ? "Complimentary standard delivery on this order."
       : "Free standard delivery unlocks from $100.";
-  const variantGallery = product ? buildVariantImageGallery(product, selectedVariant) : [];
+  const variantGallery = useMemo(
+    () => (product ? buildVariantImageGallery(product, selectedVariant) : []),
+    [product, selectedVariant]
+  );
   const selectedVariantBadge = selectedVariant?.badge || product?.tags[0] || "";
   const selectedVariantFitNote =
     selectedVariant?.fit_note ||

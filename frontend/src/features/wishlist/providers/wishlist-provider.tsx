@@ -2,7 +2,6 @@ import {
   createContext,
   startTransition,
   useEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -213,19 +212,16 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const value = useMemo<WishlistContextValue>(
-    () => ({
-      wishlist,
-      wishlistCount: wishlist.length,
-      isLoading,
-      error,
-      toggleWishlist,
-      isSaved: (productId: string) => wishlist.includes(productId),
-      clearWishlist,
-      refreshWishlist,
-    }),
-    [error, isLoading, wishlist]
-  );
+  const value: WishlistContextValue = {
+    wishlist,
+    wishlistCount: wishlist.length,
+    isLoading,
+    error,
+    toggleWishlist,
+    isSaved: (productId: string) => wishlist.includes(productId),
+    clearWishlist,
+    refreshWishlist,
+  };
 
   return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>;
 }

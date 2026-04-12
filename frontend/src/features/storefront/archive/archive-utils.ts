@@ -167,6 +167,27 @@ export function buildApiArchiveItem(
 ): ArchiveItem {
   const filterTags = product.tags.filter((tag) => tag.trim().includes(":"));
   const filterMap = buildArchiveFilterMap(filterTags);
+  const sizeValues = new Set(getArchiveFilterValues(filterMap, "size"));
+  const colorValues = new Set(getArchiveFilterValues(filterMap, "color"));
+
+  product.variants.forEach((variant) => {
+    const normalizedSize = variant.size?.trim();
+    const normalizedColor = variant.color?.trim();
+
+    if (normalizedSize) {
+      sizeValues.add(normalizedSize);
+    }
+    if (normalizedColor) {
+      colorValues.add(normalizedColor);
+    }
+  });
+
+  if (sizeValues.size > 0) {
+    filterMap.size = Array.from(sizeValues.values());
+  }
+  if (colorValues.size > 0) {
+    filterMap.color = Array.from(colorValues.values());
+  }
 
   return {
     id: product.id,
@@ -175,9 +196,9 @@ export function buildApiArchiveItem(
     price: product.price,
     imageUrl: product.image_urls[0] || product.image_url,
     imageAlt: product.name,
-    href: `/products/${product.id}`,
+    href: `/products/${encodeURIComponent(product.id)}`,
     categoryLabel,
-    badge: product.tags[0] ? `#${product.tags[0]}` : "",
+    badge: product.variants.find((variant) => variant.badge)?.badge || product.tags[0] || "",
     subtitle: product.brand || product.category || categoryLabel,
     searchIndex: normalizeArchiveText(
       [
@@ -187,6 +208,8 @@ export function buildApiArchiveItem(
         product.category,
         categoryLabel,
         ...product.tags,
+        ...Array.from(sizeValues.values()),
+        ...Array.from(colorValues.values()),
       ].join(" ")
     ),
     sequence,

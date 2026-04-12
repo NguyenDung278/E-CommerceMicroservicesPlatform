@@ -58,7 +58,10 @@ export function WishlistPage() {
   }, [wishlist]);
 
   const savedProducts = useMemo(
-    () => wishlist.map((productId) => productsById[productId]).filter(Boolean),
+    () =>
+      wishlist
+        .map((productId) => productsById[productId])
+        .filter((product): product is Product => Boolean(product)),
     [productsById, wishlist]
   );
 

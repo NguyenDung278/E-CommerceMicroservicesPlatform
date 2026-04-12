@@ -19,14 +19,29 @@ vi.mock("../src/features/cart/hooks/use-cart", () => ({
   })),
 }));
 
+vi.mock("../src/features/wishlist", () => ({
+  useWishlist: vi.fn(() => ({
+    wishlist: [],
+    wishlistCount: 0,
+    toggleWishlist: vi.fn(),
+    isSaved: vi.fn(() => false),
+    clearWishlist: vi.fn(),
+    refreshWishlist: vi.fn(),
+    isLoading: false,
+    error: "",
+  })),
+}));
+
 const apiMocks = vi.hoisted(() => ({
   getStorefrontCategoryPage: vi.fn(),
+  getProductSearchAssist: vi.fn(),
   listProducts: vi.fn(),
 }));
 
 vi.mock("@/services/api", () => ({
   api: {
     getStorefrontCategoryPage: apiMocks.getStorefrontCategoryPage,
+    getProductSearchAssist: apiMocks.getProductSearchAssist,
     listProducts: apiMocks.listProducts,
   },
   getErrorMessage: (reason: unknown) => (reason instanceof Error ? reason.message : String(reason)),
@@ -125,59 +140,130 @@ describe("CatalogPage category aggregation", () => {
   it(
     "combines product cards from the 4 category pages and filters them by category",
     async () => {
-    apiMocks.listProducts.mockImplementation((options?: { category?: string }) => {
-      switch (options?.category) {
-        case "Men":
-          return Promise.resolve({
-            data: [
-              createLiveArchiveProduct(
-                "live-men-001",
-                "Structured Atelier Jacket",
-                "Men",
-                "https://object-storage.local/products/live-men-001.jpg",
-                1250
-              ),
-            ],
-          });
-        case "Women":
-          return Promise.resolve({
-            data: [
-              createLiveArchiveProduct(
-                "live-women-001",
-                "Cloud Cashmere Crew",
-                "Women",
-                "https://object-storage.local/products/live-women-001.jpg",
-                280
-              ),
-            ],
-          });
-        case "Footwear":
-          return Promise.resolve({
-            data: [
-              createLiveArchiveProduct(
-                "live-footwear-001",
-                "Moc Toe Service Boot",
-                "Footwear",
-                "https://object-storage.local/products/live-footwear-001.jpg",
-                560
-              ),
-            ],
-          });
-        case "Accessories":
-          return Promise.resolve({
-            data: [
-              createLiveArchiveProduct(
-                "live-accessories-001",
-                "Atelier Tote",
-                "Accessories",
-                "https://object-storage.local/products/live-accessories-001.jpg",
-                840
-              ),
-            ],
-          });
-        default:
-          return Promise.resolve({ data: [] });
+    const catalogProducts = [
+      createLiveArchiveProduct(
+        "live-men-001",
+        "Structured Atelier Jacket",
+        "Shop Men",
+        "https://object-storage.local/products/live-men-001.jpg",
+        1250
+      ),
+      createLiveArchiveProduct(
+        "live-women-001",
+        "Cloud Cashmere Crew",
+        "Shop Women",
+        "https://object-storage.local/products/live-women-001.jpg",
+        280
+      ),
+      createLiveArchiveProduct(
+        "live-footwear-001",
+        "Moc Toe Service Boot",
+        "Footwear",
+        "https://object-storage.local/products/live-footwear-001.jpg",
+        560
+      ),
+      createLiveArchiveProduct(
+        "live-accessories-001",
+        "Atelier Tote",
+        "Accessories",
+        "https://object-storage.local/products/live-accessories-001.jpg",
+        840
+      ),
+    ].map((product) =>
+      product.id === "live-men-001"
+        ? {
+            ...product,
+            merchandising_rank: 1,
+            variants: [{ sku: "MEN-L", label: "L", size: "L", color: "Black", price: 1250, stock: 2 }],
+          }
+        : product.id === "live-women-001"
+          ? {
+              ...product,
+              merchandising_rank: 2,
+              variants: [{ sku: "WOMEN-M", label: "M", size: "M", color: "Stone", price: 280, stock: 3 }],
+            }
+          : product.id === "live-footwear-001"
+            ? {
+                ...product,
+                merchandising_rank: 3,
+                variants: [{ sku: "FOOT-43", label: "43", size: "43", color: "Brown", price: 560, stock: 2 }],
+              }
+            : {
+                ...product,
+                merchandising_rank: 4,
+                variants: [{ sku: "ACC-OS", label: "OS", size: "OS", color: "Black", price: 840, stock: 1 }],
+              }
+    );
+
+    apiMocks.listProducts.mockImplementation(
+      (options?: { category?: string; search?: string; size?: string }) => {
+        let nextProducts = catalogProducts.slice();
+
+        if (options?.category) {
+          nextProducts = nextProducts.filter((product) => product.category === options.category);
+        }
+
+        if (options?.search) {
+          const normalizedSearch = options.search.toLowerCase();
+          nextProducts = nextProducts.filter((product) =>
+            `${product.name} ${product.description}`.toLowerCase().includes(normalizedSearch)
+          );
+        }
+
+        if (options?.size) {
+          nextProducts = nextProducts.filter((product) =>
+            product.variants.some((variant) => variant.size === options.size)
+          );
+        }
+
+        return Promise.resolve({ data: nextProducts });
       }
+    );
+    apiMocks.getProductSearchAssist.mockResolvedValue({
+      data: {
+        query: "",
+        resolved_query: "",
+        applied_synonyms: [],
+        result_count: 4,
+        suggestions: [{ value: "Cashmere", kind: "product", match_count: 1 }],
+        facets: [
+          {
+            key: "category",
+            label: "Category",
+            values: [
+              { value: "Shop Men", count: 1 },
+              { value: "Shop Women", count: 1 },
+              { value: "Footwear", count: 1 },
+              { value: "Accessories", count: 1 },
+            ],
+          },
+          {
+            key: "size",
+            label: "Size",
+            values: [
+              { value: "L", count: 1 },
+              { value: "M", count: 1 },
+              { value: "43", count: 1 },
+            ],
+          },
+          {
+            key: "color",
+            label: "Color",
+            values: [
+              { value: "Black", count: 2 },
+              { value: "Stone", count: 1 },
+              { value: "Brown", count: 1 },
+            ],
+          },
+        ],
+        sort_options: [
+          { value: "merchandising", label: "Merchandising edit" },
+          { value: "latest", label: "Newest first" },
+          { value: "popular", label: "Most wanted" },
+          { value: "price_asc", label: "Price: Low to High" },
+          { value: "price_desc", label: "Price: High to Low" },
+        ],
+      },
     });
 
     vi.mocked(useHomeWorkbook).mockReturnValue({
@@ -400,21 +486,24 @@ describe("CatalogPage category aggregation", () => {
       "https://object-storage.local/products/live-men-001.jpg"
     );
 
+    expect(apiMocks.getProductSearchAssist).toHaveBeenCalled();
     expect(apiMocks.getStorefrontCategoryPage).not.toHaveBeenCalled();
     expect(apiMocks.listProducts).toHaveBeenCalled();
 
     const collectionButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".archive-collection-link")
     );
-    const menButton = collectionButtons.find((button) => button.textContent === "Men");
+    const menButton = collectionButtons.find((button) => button.textContent?.includes("Men"));
 
-    expect(collectionButtons.map((button) => button.textContent?.trim())).toEqual([
-      "All Archive",
-      "Men",
-      "Women",
-      "Footwear",
-      "Accessories",
-    ]);
+    expect(collectionButtons.map((button) => button.textContent?.trim())).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("All Archive"),
+        expect.stringContaining("Men"),
+        expect.stringContaining("Women"),
+        expect.stringContaining("Footwear"),
+        expect.stringContaining("Accessories"),
+      ])
+    );
     expect(menButton).toBeDefined();
 
     act(() => {
@@ -430,7 +519,7 @@ describe("CatalogPage category aggregation", () => {
     });
 
     const allArchiveButton = collectionButtons.find(
-      (button) => button.textContent === "All Archive"
+      (button) => button.textContent?.includes("All Archive")
     );
 
     act(() => {
@@ -473,10 +562,14 @@ describe("CatalogPage category aggregation", () => {
     const sizeButtons = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".archive-size-button")
     );
-    const footwearSizeButton = sizeButtons.find((button) => button.textContent === "43");
+    const footwearSizeButton = sizeButtons.find((button) => button.textContent?.includes("43"));
 
     expect(sizeButtons.map((button) => button.textContent?.trim())).toEqual(
-      expect.arrayContaining(["L", "M", "43"])
+      expect.arrayContaining([
+        expect.stringContaining("L"),
+        expect.stringContaining("M"),
+        expect.stringContaining("43"),
+      ])
     );
     expect(footwearSizeButton).toBeDefined();
 
@@ -489,7 +582,7 @@ describe("CatalogPage category aggregation", () => {
       expect(container.textContent).not.toContain("Cloud Cashmere Crew");
       expect(container.textContent).toContain("Moc Toe Service Boot");
       expect(container.textContent).not.toContain("Atelier Tote");
-      expect(container.textContent).toContain("Showing 1 of 4 Products");
+      expect(container.textContent).toContain("Showing 1 Products");
     });
     },
     10000

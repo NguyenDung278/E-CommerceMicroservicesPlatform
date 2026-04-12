@@ -18,6 +18,9 @@ const wishlistMocks = vi.hoisted(() => ({
     toggleWishlist: vi.fn(),
     isSaved: vi.fn(() => false),
     clearWishlist: vi.fn(),
+    refreshWishlist: vi.fn(),
+    isLoading: false,
+    error: "",
   })),
 }));
 
@@ -307,6 +310,9 @@ afterEach(() => {
     toggleWishlist: vi.fn(),
     isSaved: vi.fn(() => false),
     clearWishlist: vi.fn(),
+    refreshWishlist: vi.fn(),
+    isLoading: false,
+    error: "",
   });
   document.body.innerHTML = "";
 });
@@ -638,6 +644,9 @@ describe("ProductDetailPage auth redirect flow", () => {
       toggleWishlist,
       isSaved: vi.fn(() => false),
       clearWishlist: vi.fn(),
+      refreshWishlist: vi.fn(),
+      isLoading: false,
+      error: "",
     });
     authMocks.useAuth.mockReturnValue({
       token: "",

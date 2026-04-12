@@ -10,6 +10,13 @@ type StorefrontSortOption<TSort extends string> = {
 type StorefrontResultsToolbarProps<TSort extends string> = {
   resultLabel: string;
   searchInputId: string;
+  searchSuggestions?: Array<{
+    count?: number;
+    kind?: string;
+    match_count?: number;
+    value: string;
+  }>;
+  searchHint?: string;
   searchLabel: string;
   searchPlaceholder: string;
   searchValue: string;
@@ -27,6 +34,7 @@ type StorefrontResultsToolbarProps<TSort extends string> = {
   summary?: string;
   onClearSearch?: () => void;
   onSearchChange: (value: string) => void;
+  onSelectSearchSuggestion?: (value: string) => void;
   onSortChange: (value: TSort) => void;
   onToggleFilters?: () => void;
 };
@@ -34,6 +42,8 @@ type StorefrontResultsToolbarProps<TSort extends string> = {
 export function StorefrontResultsToolbar<TSort extends string>({
   resultLabel,
   searchInputId,
+  searchSuggestions = [],
+  searchHint,
   searchLabel,
   searchPlaceholder,
   searchValue,
@@ -51,6 +61,7 @@ export function StorefrontResultsToolbar<TSort extends string>({
   summary,
   onClearSearch,
   onSearchChange,
+  onSelectSearchSuggestion,
   onSortChange,
   onToggleFilters,
 }: StorefrontResultsToolbarProps<TSort>) {
@@ -69,18 +80,44 @@ export function StorefrontResultsToolbar<TSort extends string>({
         <span className="storefront-results-count">{resultLabel}</span>
 
         <div className="storefront-results-toolbar-controls">
-          <div className="storefront-inline-search">
-            <label className="storefront-inline-search-field" htmlFor={searchInputId}>
-              <span className="sr-only">{searchLabel}</span>
-              <input
-                id={searchInputId}
-                placeholder={searchPlaceholder}
-                ref={searchInputRef}
-                type="search"
-                value={searchValue}
-                onChange={(event) => onSearchChange(event.target.value)}
-              />
-            </label>
+          <div className="storefront-inline-search-stack">
+            <div className="storefront-inline-search">
+              <label className="storefront-inline-search-field" htmlFor={searchInputId}>
+                <span className="sr-only">{searchLabel}</span>
+                <input
+                  id={searchInputId}
+                  placeholder={searchPlaceholder}
+                  ref={searchInputRef}
+                  type="search"
+                  value={searchValue}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                />
+              </label>
+            </div>
+
+            {searchSuggestions.length > 0 && onSelectSearchSuggestion ? (
+              <div className="storefront-search-suggestions" role="listbox">
+                {searchSuggestions.map((suggestion) => (
+                  <button
+                    className="storefront-search-suggestion"
+                    key={`${suggestion.kind || "suggestion"}-${suggestion.value}`}
+                    type="button"
+                    onClick={() => onSelectSearchSuggestion(suggestion.value)}
+                  >
+                    <span>{suggestion.value}</span>
+                    {suggestion.count || suggestion.match_count ? (
+                      <small>
+                        {suggestion.kind || "match"} {suggestion.count ?? suggestion.match_count}
+                      </small>
+                    ) : suggestion.kind ? (
+                      <small>{suggestion.kind}</small>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {searchHint ? <p className="storefront-search-hint">{searchHint}</p> : null}
           </div>
 
           {searchValue && onClearSearch ? (

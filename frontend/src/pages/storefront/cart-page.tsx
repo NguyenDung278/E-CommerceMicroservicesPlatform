@@ -400,6 +400,20 @@ function buildCartVoucherPreview(subtotal: number, couponCode: string): OrderPre
         : undefined,
     shipping_method: "standard",
     shipping_fee: 0,
+    eta_label: "3-5 business days",
+    delivery_promise: "Tracked delivery with complimentary shipping on the standard lane.",
+    supported_shipping_methods: [
+      {
+        method: "standard",
+        label: "Standard delivery",
+        description: "Best value for everyday orders.",
+        fee: 0,
+        eta_min_days: 3,
+        eta_max_days: 5,
+        eta_label: "3-5 business days",
+        delivery_promise: "Tracked delivery with complimentary shipping on the standard lane.",
+      },
+    ],
     total_price: Math.max(roundCartCurrencyAmount(subtotal - discountAmount), 0),
   };
 }

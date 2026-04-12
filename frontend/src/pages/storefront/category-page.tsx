@@ -49,15 +49,6 @@ export function CategoryPage() {
 function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
   const routeState = useStorefrontCategoryRoute(identifier);
 
-  if (routeState.workbookCategoryPage && routeState.content) {
-    return (
-      <WorkbookCategoryPage
-        content={routeState.content}
-        pageData={routeState.workbookCategoryPage}
-      />
-    );
-  }
-
   if (routeState.storefrontPage) {
     return (
       <EditorialCategoryPage
@@ -69,6 +60,15 @@ function StorefrontCategoryRoute({ identifier }: { identifier: string }) {
         onBuyNow={routeState.handleBuyNow}
         pageData={routeState.storefrontPage}
         products={routeState.products}
+      />
+    );
+  }
+
+  if (routeState.workbookCategoryPage && routeState.content) {
+    return (
+      <WorkbookCategoryPage
+        content={routeState.content}
+        pageData={routeState.workbookCategoryPage}
       />
     );
   }

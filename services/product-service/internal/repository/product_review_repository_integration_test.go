@@ -356,7 +356,7 @@ func resetReviewSchemaForBackfillTest(db *sql.DB) error {
 	statements := []string{
 		`DROP TABLE IF EXISTS product_review_summaries`,
 		`DROP TABLE IF EXISTS product_reviews`,
-		`DROP TABLE IF EXISTS products`,
+		`DROP TABLE IF EXISTS products CASCADE`,
 		`DROP INDEX IF EXISTS idx_product_reviews_product_created_at_id`,
 		`DROP INDEX IF EXISTS idx_product_reviews_product_created_at`,
 	}

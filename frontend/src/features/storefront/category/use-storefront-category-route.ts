@@ -37,18 +37,6 @@ export function useStorefrontCategoryRoute(identifier: string): UseStorefrontCat
   const workbookCategoryPage = content ? findHomeWorkbookCategoryPage(content, identifier) : null;
 
   useEffect(() => {
-    if (workbookCategoryPage) {
-      setStorefrontPage(null);
-      setProducts([]);
-      setFeedback("");
-      setIsLoading(false);
-      return undefined;
-    }
-
-    if (workbookStatus === "loading" || workbookStatus === "refreshing") {
-      return undefined;
-    }
-
     let active = true;
 
     async function loadCategoryData() {
@@ -65,14 +53,24 @@ export function useStorefrontCategoryRoute(identifier: string): UseStorefrontCat
 
         setStorefrontPage(storefrontResponse.data);
         setProducts(storefrontResponse.data.featured_products.map((item) => item.product));
+        setFeedback("");
       } catch (reason) {
         if (!active) {
           return;
         }
 
         if (!isHttpError(reason) || reason.status !== 404) {
+          if (workbookCategoryPage) {
+            setFeedback("");
+            return;
+          }
+
           setFeedback(getErrorMessage(reason));
-          setIsLoading(false);
+          return;
+        }
+
+        if (workbookCategoryPage || workbookStatus === "loading" || workbookStatus === "refreshing") {
+          setFeedback("");
           return;
         }
 
@@ -87,6 +85,7 @@ export function useStorefrontCategoryRoute(identifier: string): UseStorefrontCat
           }
 
           setProducts(productResponse.data);
+          setFeedback("");
         } catch (fallbackReason) {
           if (active) {
             setFeedback(getErrorMessage(fallbackReason));

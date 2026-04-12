@@ -192,7 +192,8 @@ func (r *postgresProductRepository) querySimpleFacet(
 		LIMIT $%d
 	`, column, whereClause, column, column, column, len(args))
 
-	return scanFacetValues(r.db.QueryContext(ctx, query, args...), kind)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	return scanFacetValues(rows, err, kind)
 }
 
 func (r *postgresProductRepository) queryVariantFacet(
@@ -217,7 +218,8 @@ func (r *postgresProductRepository) queryVariantFacet(
 		LIMIT $%d
 	`, len(args)-1, whereClause, len(args))
 
-	return scanFacetValues(r.db.QueryContext(ctx, query, args...), key)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	return scanFacetValues(rows, err, key)
 }
 
 func scanFacetValues(rows *sql.Rows, err error, kind string) ([]model.ProductSearchFacetValue, error) {

@@ -5,11 +5,16 @@ export type ArchiveCategorySource = {
   identifier: string;
 };
 
-export type ArchiveFilterSection = "category" | "size" | "price";
+export type ArchiveFilterSection = "category" | "size" | "color" | "price";
 
 export type ArchiveFilterMap = Record<string, string[]>;
 
-export type ArchiveSortOption = "latest" | "price_asc" | "price_desc";
+export type ArchiveSortOption =
+  | "latest"
+  | "price_asc"
+  | "price_desc"
+  | "popular"
+  | "merchandising";
 
 export type ArchiveItem = {
   id: string;

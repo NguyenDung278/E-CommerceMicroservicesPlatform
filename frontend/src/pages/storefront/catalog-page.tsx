@@ -9,26 +9,18 @@ import {
   StorefrontResultsToolbar,
 } from "@/components";
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
-import { archiveCategorySources } from "@/features/storefront/archive/archive-utils";
 import { useArchiveCatalogState } from "@/features/storefront/archive/use-archive-catalog-state";
 import { usePaginatedList } from "@/features/storefront/listing/use-paginated-list";
 import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
 import { formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/catalog-page.css";
 
-const archiveSortOptions = [
-  { label: "Category Order", value: "latest" },
-  { label: "Price: Low to High", value: "price_asc" },
-  { label: "Price: High to Low", value: "price_desc" },
-] as const;
-
 export function CatalogPage() {
   const [searchParams] = useSearchParams();
-  const { content, status: workbookStatus } = useHomeWorkbook();
+  const { content } = useHomeWorkbook();
   const archiveState = useArchiveCatalogState({
     content,
     searchQuery: searchParams.get("search") ?? "",
-    workbookStatus,
   });
   const archivePagination = usePaginatedList(archiveState.filteredItems, {
     pageSize: 12,
@@ -86,20 +78,26 @@ export function CatalogPage() {
                 onClick={() => archiveState.handleCategorySelection("")}
               >
                 All Archive
+                {archiveState.archiveIndex.length > 0 ? (
+                  <span className="archive-option-count">{archiveState.archiveIndex.length}</span>
+                ) : null}
               </button>
 
-              {archiveCategorySources.map((source) => (
+              {archiveState.categoryOptions.map((source) => (
                 <button
                   className={
-                    archiveState.selectedCategory === source.label
+                    archiveState.selectedCategory === source.identifier
                       ? "archive-collection-link archive-collection-link-active"
                       : "archive-collection-link"
                   }
-                  key={source.label}
+                  key={source.identifier}
                   type="button"
-                  onClick={() => archiveState.handleCategorySelection(source.label)}
+                  onClick={() => archiveState.handleCategorySelection(source.identifier)}
                 >
                   {source.label}
+                  {source.count > 0 ? (
+                    <span className="archive-option-count">{source.count}</span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -125,12 +123,52 @@ export function CatalogPage() {
                     onClick={() => archiveState.handleSizeSelection(size)}
                   >
                     {size}
+                    {(archiveState.sizeCounts[size.toLowerCase()] ?? 0) > 0 ? (
+                      <span className="archive-option-count">
+                        {archiveState.sizeCounts[size.toLowerCase()]}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
             ) : (
               <p className="archive-filter-empty">
                 Size options will appear here as soon as collection metadata is available.
+              </p>
+            )}
+          </StorefrontFilterSection>
+
+          <StorefrontFilterSection
+            expanded={archiveState.openSections.color}
+            summary={archiveState.selectedColor || "All colors"}
+            title="COLOR"
+            onToggle={() => archiveState.toggleFilterSection("color")}
+          >
+            {archiveState.availableColorOptions.length > 0 ? (
+              <div className="archive-collection-list">
+                {archiveState.availableColorOptions.map((color) => (
+                  <button
+                    className={
+                      archiveState.selectedColor === color
+                        ? "archive-collection-link archive-collection-link-active"
+                        : "archive-collection-link"
+                    }
+                    key={color}
+                    type="button"
+                    onClick={() => archiveState.handleColorSelection(color)}
+                  >
+                    {color}
+                    {(archiveState.colorCounts[color.toLowerCase()] ?? 0) > 0 ? (
+                      <span className="archive-option-count">
+                        {archiveState.colorCounts[color.toLowerCase()]}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="archive-filter-empty">
+                Color options will appear here as soon as search facets are available.
               </p>
             )}
           </StorefrontFilterSection>
@@ -193,15 +231,18 @@ export function CatalogPage() {
             resultLabel={archiveState.resultCountLabel}
             searchClearClassName="archive-search-clear"
             searchInputId="archive-search"
+            searchSuggestions={archiveState.searchSuggestions}
+            searchHint={archiveState.searchHint}
             searchLabel="Search across archive categories"
             searchPlaceholder={archiveState.searchPlaceholder}
             searchValue={archiveState.searchInput}
             sortId="archive-sort"
-            sortOptions={[...archiveSortOptions]}
+            sortOptions={archiveState.sortOptions}
             sortValue={archiveState.sortBy}
             summary={activeSummary}
             onClearSearch={() => archiveState.setSearchInput("")}
             onSearchChange={archiveState.setSearchInput}
+            onSelectSearchSuggestion={(suggestion) => archiveState.setSearchInput(suggestion)}
             onSortChange={archiveState.setSortBy}
             onToggleFilters={() => archiveState.setIsFiltersPanelOpen((current) => !current)}
           />
@@ -216,25 +257,18 @@ export function CatalogPage() {
             <>
               <div className="archive-product-grid">
                 {archivePagination.paginatedItems.map((item) => {
-                  const liveProduct = archiveState.liveArchiveProducts[item.id];
-                  const imageSrc =
-                    liveProduct?.image_urls[0] || liveProduct?.image_url || item.imageUrl;
-                  const href = liveProduct
-                    ? `/products/${encodeURIComponent(liveProduct.id)}`
-                    : item.href;
-
                   return (
                     <StorefrontCollectionCard
                       badge={item.badge}
                       className="archive-editorial-card"
                       description={item.subtitle}
-                      href={href}
-                      imageAlt={item.imageAlt || liveProduct?.name || item.name}
-                      imageSrc={imageSrc}
+                      href={item.href}
+                      imageAlt={item.imageAlt || item.name}
+                      imageSrc={item.imageUrl}
                       key={item.id}
-                      priceLabel={formatCurrency(liveProduct?.price ?? item.price)}
-                      title={liveProduct?.name ?? item.name}
-                      eyebrow={item.badge || liveProduct?.brand || item.categoryLabel}
+                      priceLabel={formatCurrency(item.price)}
+                      title={item.name}
+                      eyebrow={item.badge || item.categoryLabel}
                     />
                   );
                 })}

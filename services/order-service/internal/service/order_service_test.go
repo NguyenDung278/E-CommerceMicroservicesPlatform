@@ -231,6 +231,18 @@ func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
 	if preview.CouponCode != "SAVE10" {
 		t.Fatalf("expected normalized coupon code SAVE10, got %q", preview.CouponCode)
 	}
+	if preview.ShippingMethod != string(model.ShippingMethodPickup) {
+		t.Fatalf("expected shipping method pickup, got %q", preview.ShippingMethod)
+	}
+	if preview.ETALabel != "Ready for pickup within 2 hours" {
+		t.Fatalf("expected pickup ETA, got %q", preview.ETALabel)
+	}
+	if preview.DeliveryPromise != "We will hold the order and confirm pickup readiness by message." {
+		t.Fatalf("expected pickup delivery promise, got %q", preview.DeliveryPromise)
+	}
+	if len(preview.SupportedShippingMethods) != 3 {
+		t.Fatalf("expected 3 supported shipping methods, got %d", len(preview.SupportedShippingMethods))
+	}
 }
 
 func TestPreviewOrderRejectsCouponWhenMinimumNotMet(t *testing.T) {
@@ -442,7 +454,7 @@ func TestCreateOrderReturnsInsufficientStockWhenReservationFails(t *testing.T) {
 		},
 		ShippingMethod: "pickup",
 	})
-	if err != ErrInsufficientStock {
+	if !errors.Is(err, ErrInsufficientStock) {
 		t.Fatalf("expected ErrInsufficientStock, got %v", err)
 	}
 	if repo.createdOrder != nil {
@@ -486,6 +498,95 @@ func TestPreviewOrderAddsShippingFeeForStandardDelivery(t *testing.T) {
 	}
 	if preview.TotalPrice != 65.99 {
 		t.Fatalf("expected total 65.99, got %.2f", preview.TotalPrice)
+	}
+	if preview.ShippingMethod != string(model.ShippingMethodStandard) {
+		t.Fatalf("expected standard shipping method, got %q", preview.ShippingMethod)
+	}
+	if preview.ETALabel != "3-5 business days" {
+		t.Fatalf("expected standard ETA, got %q", preview.ETALabel)
+	}
+	if preview.DeliveryPromise != "Tracked delivery with complimentary shipping from $100." {
+		t.Fatalf("expected standard delivery promise, got %q", preview.DeliveryPromise)
+	}
+
+	standardOption, ok := findShippingOption(preview.SupportedShippingMethods, string(model.ShippingMethodStandard))
+	if !ok {
+		t.Fatal("expected supported shipping methods to include standard delivery")
+	}
+	if standardOption.Fee != 5.99 {
+		t.Fatalf("expected standard option fee 5.99, got %.2f", standardOption.Fee)
+	}
+
+	expressOption, ok := findShippingOption(preview.SupportedShippingMethods, string(model.ShippingMethodExpress))
+	if !ok {
+		t.Fatal("expected supported shipping methods to include express delivery")
+	}
+	if expressOption.Fee != 14.99 {
+		t.Fatalf("expected express option fee 14.99, got %.2f", expressOption.Fee)
+	}
+
+	pickupOption, ok := findShippingOption(preview.SupportedShippingMethods, string(model.ShippingMethodPickup))
+	if !ok {
+		t.Fatal("expected supported shipping methods to include pickup")
+	}
+	if pickupOption.Fee != 0 {
+		t.Fatalf("expected pickup option fee 0, got %.2f", pickupOption.Fee)
+	}
+}
+
+func TestPreviewOrderSupportsExpressDeliveryFromBackendContract(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Travel Case",
+				Price:         60,
+				StockQuantity: 10,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "express",
+		ShippingAddress: &dto.ShippingAddressRequest{
+			RecipientName: "Nguyen Van C",
+			Phone:         "0901234567",
+			Street:        "88 Le Loi",
+			District:      "District 1",
+			City:          "Ho Chi Minh",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PreviewOrder returned error: %v", err)
+	}
+
+	if preview.ShippingMethod != string(model.ShippingMethodExpress) {
+		t.Fatalf("expected express shipping method, got %q", preview.ShippingMethod)
+	}
+	if preview.ShippingFee != 14.99 {
+		t.Fatalf("expected express fee 14.99, got %.2f", preview.ShippingFee)
+	}
+	if preview.TotalPrice != 74.99 {
+		t.Fatalf("expected total 74.99, got %.2f", preview.TotalPrice)
+	}
+	if preview.ETALabel != "1-2 business days" {
+		t.Fatalf("expected express ETA, got %q", preview.ETALabel)
+	}
+	if preview.DeliveryPromise != "Priority pick, pack, and dispatch on the next fulfillment window." {
+		t.Fatalf("expected express delivery promise, got %q", preview.DeliveryPromise)
+	}
+
+	expressOption, ok := findShippingOption(preview.SupportedShippingMethods, string(model.ShippingMethodExpress))
+	if !ok {
+		t.Fatal("expected express option in supported shipping methods")
+	}
+	if expressOption.ETALabel != preview.ETALabel {
+		t.Fatalf("expected express option ETA to match preview ETA, got %q", expressOption.ETALabel)
 	}
 }
 
@@ -605,4 +706,14 @@ func TestPreviewOrderReusesProductLookupWithinSingleQuote(t *testing.T) {
 
 func ptrTime(value time.Time) *time.Time {
 	return &value
+}
+
+func findShippingOption(options []model.ShippingOption, method string) (model.ShippingOption, bool) {
+	for _, option := range options {
+		if option.Method == method {
+			return option, true
+		}
+	}
+
+	return model.ShippingOption{}, false
 }

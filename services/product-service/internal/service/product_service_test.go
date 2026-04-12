@@ -104,6 +104,10 @@ func (r *fakeProductServiceRepo) ListForSearchIndex(_ context.Context) ([]*model
 	return results, nil
 }
 
+func (r *fakeProductServiceRepo) SearchAssist(_ context.Context, _ repository.SearchAssistParams) (*model.ProductSearchAssist, error) {
+	return &model.ProductSearchAssist{}, nil
+}
+
 func (r *fakeProductServiceRepo) UpdateStock(_ context.Context, id string, quantity int) error {
 	product, ok := r.products[id]
 	if !ok {

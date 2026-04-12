@@ -36,12 +36,12 @@ type ListProductsParams struct {
 }
 
 type SearchAssistParams struct {
-	Limit          int
-	Query          string
-	ResolvedQuery  string
-	Category       string
-	Status         string
-	SearchTerms    []string
+	Limit           int
+	Query           string
+	ResolvedQuery   string
+	Category        string
+	Status          string
+	SearchTerms     []string
 	AppliedSynonyms []string
 }
 
@@ -465,12 +465,12 @@ func mustJSON(value any) string {
 }
 
 type productListCursor struct {
-	Sort               string    `json:"sort"`
-	ID                 string    `json:"id"`
-	CreatedAt          time.Time `json:"created_at"`
-	Price              float64   `json:"price,omitempty"`
-	Stock              int       `json:"stock,omitempty"`
-	MerchandisingRank  int       `json:"merchandising_rank,omitempty"`
+	Sort              string    `json:"sort"`
+	ID                string    `json:"id"`
+	CreatedAt         time.Time `json:"created_at"`
+	Price             float64   `json:"price,omitempty"`
+	Stock             int       `json:"stock,omitempty"`
+	MerchandisingRank int       `json:"merchandising_rank,omitempty"`
 }
 
 func decodeProductListCursor(encoded string) (*productListCursor, error) {
@@ -497,11 +497,11 @@ func decodeProductListCursor(encoded string) (*productListCursor, error) {
 
 func encodeProductListCursor(product *model.Product, sort string) (string, error) {
 	cursor := productListCursor{
-		Sort:      sort,
-		ID:        product.ID,
-		CreatedAt: product.CreatedAt.UTC(),
-		Price:     product.Price,
-		Stock:     product.Stock,
+		Sort:              sort,
+		ID:                product.ID,
+		CreatedAt:         product.CreatedAt.UTC(),
+		Price:             product.Price,
+		Stock:             product.Stock,
 		MerchandisingRank: product.MerchandisingRank,
 	}
 
