@@ -59,6 +59,10 @@ func (h *UserHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	users.PUT("/addresses/:id", h.forward)
 	users.DELETE("/addresses/:id", h.forward)
 	users.PUT("/addresses/:id/default", h.forward)
+	users.GET("/wishlist", h.forward)
+	users.POST("/wishlist", h.forward)
+	users.POST("/wishlist/sync", h.forward)
+	users.DELETE("/wishlist/:productId", h.forward)
 
 	adminUsers := e.Group("/api/v1/admin/users")
 	adminUsers.Use(appmw.JWTAuth(jwtSecret))

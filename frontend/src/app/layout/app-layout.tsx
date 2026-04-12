@@ -4,12 +4,14 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { EditorialSignatureFooter } from "@/components";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
+import { useWishlist } from "@/features/wishlist";
 import {
   normalizeStorefrontNavigationToken,
   storefrontArchiveHref,
   storefrontBrandHref,
   storefrontCartHref,
   storefrontFallbackNavigation,
+  storefrontWishlistHref,
 } from "@/constants/storefront-navigation";
 import { getUserDisplayName, isDevelopmentAccount } from "@/utils/dev-accounts";
 import "./app-layout.css";
@@ -29,6 +31,7 @@ export function AppLayout() {
   const location = useLocation();
   const { isAuthenticated, canAccessAdmin, logout, user } = useAuth();
   const { itemCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const categoryNavigation = storefrontFallbackNavigation;
   const isTransactionalSurface =
     location.pathname === "/checkout" || location.pathname.startsWith("/orders/");
@@ -143,6 +146,14 @@ export function AppLayout() {
               {isTransactionalSurface ? (
                 <div className="editorial-account-area editorial-account-area-transactional">
                   <NavLink
+                    aria-label="Wishlist"
+                    className="editorial-wishlist-link"
+                    to={storefrontWishlistHref}
+                  >
+                    <span className="editorial-wishlist-icon" aria-hidden="true" />
+                    <span className="editorial-wishlist-count">{wishlistCount}</span>
+                  </NavLink>
+                  <NavLink
                     aria-label="Cart"
                     className="editorial-bag-link"
                     state={cartState}
@@ -164,6 +175,14 @@ export function AppLayout() {
                   <NavLink className="editorial-profile-pill" to="/profile">
                     <span>{profileDisplayName}</span>
                     <span className="editorial-profile-pill-dot" aria-hidden="true" />
+                  </NavLink>
+                  <NavLink
+                    aria-label="Wishlist"
+                    className="editorial-wishlist-link"
+                    to={storefrontWishlistHref}
+                  >
+                    <span className="editorial-wishlist-icon" aria-hidden="true" />
+                    <span className="editorial-wishlist-count">{wishlistCount}</span>
                   </NavLink>
                   <NavLink
                     aria-label="Cart"
@@ -206,6 +225,10 @@ export function AppLayout() {
                     {showDevBadge ? (
                       <span className="editorial-account-badge">Dev Only</span>
                     ) : null}
+                  </NavLink>
+                  <NavLink className="editorial-wishlist-link" to={storefrontWishlistHref}>
+                    <span className="editorial-wishlist-icon" aria-hidden="true" />
+                    <span className="editorial-wishlist-count">{wishlistCount}</span>
                   </NavLink>
                   <NavLink className="editorial-bag-link" state={cartState} to={cartHref}>
                     <span className="editorial-bag-icon" aria-hidden="true" />
@@ -251,6 +274,7 @@ export function AppLayout() {
               <div className="editorial-footer-links">
                 <NavLink to="/">Home</NavLink>
                 <NavLink to={storefrontArchiveHref}>Archive</NavLink>
+                <NavLink to={storefrontWishlistHref}>Wishlist</NavLink>
                 <NavLink to="/cart">Bag</NavLink>
                 <NavLink to={accountHref}>{accountLabel}</NavLink>
                 {canAccessAdmin ? <NavLink to="/admin">Admin</NavLink> : null}

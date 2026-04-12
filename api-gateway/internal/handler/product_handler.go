@@ -23,6 +23,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public := e.Group("/api/v1/products")
 	public.GET("", h.forward)
 	public.GET("/batch", h.forward)
+	public.GET("/search/assist", h.forward)
 	public.GET("/:id", h.forward)
 	public.GET("/:id/reviews", h.forward)
 

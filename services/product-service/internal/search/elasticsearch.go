@@ -276,6 +276,7 @@ func buildDocument(product *model.Product) map[string]any {
 		"sku":            product.SKU,
 		"price":          product.Price,
 		"stock":          product.Stock,
+		"merchandising_rank": product.MerchandisingRank,
 		"created_at":     product.CreatedAt,
 		"updated_at":     product.UpdatedAt,
 		"variant_sizes":  collectVariantSizes(product.Variants),
@@ -320,6 +321,11 @@ func buildSearchRequest(query dto.ListProductsQuery, from, limit int) map[string
 		sorts = []map[string]any{{"price": map[string]any{"order": "asc"}}, {"created_at": map[string]any{"order": "desc"}}}
 	case "price_desc":
 		sorts = []map[string]any{{"price": map[string]any{"order": "desc"}}, {"created_at": map[string]any{"order": "desc"}}}
+	case "merchandising":
+		sorts = []map[string]any{
+			{"merchandising_rank": map[string]any{"order": "asc"}},
+			{"created_at": map[string]any{"order": "desc"}},
+		}
 	}
 
 	return map[string]any{
@@ -401,6 +407,7 @@ const productIndexMapping = `{
       "sku": { "type": "keyword" },
       "price": { "type": "double" },
       "stock": { "type": "integer" },
+      "merchandising_rank": { "type": "integer" },
       "created_at": { "type": "date" },
       "updated_at": { "type": "date" },
       "variant_sizes": { "type": "keyword" },

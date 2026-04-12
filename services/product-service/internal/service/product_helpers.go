@@ -71,12 +71,18 @@ func normalizeVariants(variants []dto.ProductVariantRequest) []model.ProductVari
 	normalized := make([]model.ProductVariant, 0, len(variants))
 	for _, variant := range variants {
 		normalized = append(normalized, model.ProductVariant{
-			SKU:   trimText(variant.SKU),
-			Label: trimText(variant.Label),
-			Size:  trimText(variant.Size),
-			Color: trimText(variant.Color),
-			Price: variant.Price,
-			Stock: variant.Stock,
+			SKU:         trimText(variant.SKU),
+			Label:       trimText(variant.Label),
+			Size:        trimText(variant.Size),
+			Color:       trimText(variant.Color),
+			Price:       variant.Price,
+			Stock:       variant.Stock,
+			ImageURLs:   normalizeImageURLs(variant.ImageURLs, ""),
+			FitNote:     trimText(variant.FitNote),
+			SizeGuideID: trimText(variant.SizeGuideID),
+			Restockable: variant.Restockable,
+			LeadTime:    trimText(variant.LeadTime),
+			Badge:       trimText(variant.Badge),
 		})
 	}
 	return normalized
@@ -271,7 +277,7 @@ func resolvePrimaryImage(urls []string) string {
 //   - O(n) over the input length due to trimming and lowercasing.
 func normalizeSort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "price_asc", "price_desc", "popular":
+	case "price_asc", "price_desc", "popular", "merchandising":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "latest"

@@ -43,6 +43,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public := e.Group("/api/v1/products")
 	public.GET("", h.List)
 	public.GET("/batch", h.ListByIDs)
+	public.GET("/search/assist", h.SearchAssist)
 	public.GET("/:id", h.GetByID)
 	public.GET("/:id/reviews", h.ListReviews)
 
@@ -207,6 +208,35 @@ func (h *ProductHandler) List(c echo.Context) error {
 		NextCursor: pageInfo.NextCursor,
 		HasNext:    &hasNext,
 	})
+}
+
+func (h *ProductHandler) SearchAssist(c echo.Context) error {
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	query := dto.SearchAssistQuery{
+		Query:    c.QueryParam("q"),
+		Category: c.QueryParam("category"),
+		Status:   c.QueryParam("status"),
+		Limit:    limit,
+	}
+
+	assist, err := h.productService.GetSearchAssist(c.Request().Context(), query)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if assist == nil {
+		assist = &model.ProductSearchAssist{}
+	}
+	if assist.Suggestions == nil {
+		assist.Suggestions = []model.ProductSearchSuggestion{}
+	}
+	if assist.Facets == nil {
+		assist.Facets = []model.ProductSearchFacet{}
+	}
+	if assist.SortOptions == nil {
+		assist.SortOptions = []model.ProductSearchSortOption{}
+	}
+
+	return response.Success(c, http.StatusOK, "search assist retrieved", assist)
 }
 
 func parseRequestedProductIDs(values []string) []string {

@@ -5,10 +5,12 @@ import { prefetchRouteIntent, scheduleRoutePrefetch } from "@/app/router/route-p
 import { warmCommonStorefrontRoutes } from "@/app/router/route-preloaders";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useCart } from "@/features/cart/hooks/use-cart";
+import { useWishlist } from "@/features/wishlist";
 import {
   storefrontBrandHref,
   storefrontCartHref,
   storefrontFallbackNavigation,
+  storefrontWishlistHref,
 } from "@/constants/storefront-navigation";
 import { getUserDisplayName } from "@/utils/dev-accounts";
 import "./storefront-overlay-header-critical.css";
@@ -21,6 +23,7 @@ type StorefrontOverlayHeaderProps = {
 export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHeaderProps) {
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const hasProfileName = Boolean(user?.first_name?.trim() || user?.last_name?.trim());
   const profileName = hasProfileName ? getUserDisplayName(user) : "";
@@ -83,6 +86,17 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
       </nav>
 
       <div className="storefront-overlay-actions">
+        <Link
+          aria-label="Wishlist"
+          className="storefront-overlay-wishlist-link"
+          onFocus={() => handlePrefetch(storefrontWishlistHref)}
+          onMouseEnter={() => handlePrefetch(storefrontWishlistHref)}
+          onTouchStart={() => handlePrefetch(storefrontWishlistHref)}
+          to={storefrontWishlistHref}
+        >
+          <span className="storefront-overlay-wishlist-icon" aria-hidden="true" />
+          <span className="storefront-overlay-wishlist-count">{wishlistCount}</span>
+        </Link>
         <Link
           aria-label="Cart"
           className="storefront-overlay-bag-link"

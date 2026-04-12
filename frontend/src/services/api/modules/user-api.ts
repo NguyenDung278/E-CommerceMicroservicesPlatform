@@ -5,12 +5,14 @@
  */
 
 import { request } from "../http-client";
-import type { ApiEnvelope, Address, UserProfile } from "@/types/api";
+import type { ApiEnvelope, Address, UserProfile, WishlistItem } from "@/types/api";
 import {
   normalizeAddress,
   normalizeAddressList,
   normalizeUserProfile,
   normalizeUserProfileList,
+  normalizeWishlistItem,
+  normalizeWishlistItemList,
 } from "../normalizers";
 
 /**
@@ -31,6 +33,14 @@ export interface CreateAddressData {
  */
 export interface UpdateUserRoleData {
   role: string;
+}
+
+export interface AddWishlistItemData {
+  product_id: string;
+}
+
+export interface SyncWishlistData {
+  product_ids: string[];
 }
 
 export interface UploadAvatarResult {
@@ -87,6 +97,42 @@ export const userApi = {
       ...response,
       data: normalizeAddress(response.data),
     }));
+  },
+
+  listWishlist(token: string): Promise<ApiEnvelope<WishlistItem[]>> {
+    return request<unknown>("/api/v1/users/wishlist", { token }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItemList(response.data),
+    }));
+  },
+
+  addWishlistItem(token: string, body: AddWishlistItemData): Promise<ApiEnvelope<WishlistItem>> {
+    return request<unknown>("/api/v1/users/wishlist", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItem(response.data),
+    }));
+  },
+
+  syncWishlist(token: string, body: SyncWishlistData): Promise<ApiEnvelope<WishlistItem[]>> {
+    return request<unknown>("/api/v1/users/wishlist/sync", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItemList(response.data),
+    }));
+  },
+
+  removeWishlistItem(token: string, productId: string): Promise<ApiEnvelope<null>> {
+    return request<null>(`/api/v1/users/wishlist/${encodeURIComponent(productId)}`, {
+      method: "DELETE",
+      token,
+    });
   },
 
   /**

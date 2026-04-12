@@ -122,7 +122,7 @@ export function ProductCard({
               {product.stock === 0
                 ? "Out of stock"
                 : product.stock <= 2
-                  ? "Low stock - real-time sync"
+                  ? "Low stock - almost gone"
                   : "In stock - ready to ship"}
             </span>
           </div>

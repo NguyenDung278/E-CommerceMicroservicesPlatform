@@ -117,8 +117,10 @@ func main() {
 	emailVerificationRepo := repository.NewEmailVerificationRepository(db)
 	avatarRepo := repository.NewUserAvatarRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
+	wishlistRepo := repository.NewWishlistRepository(db)
 	profileTxManager := repository.NewProfileTxManager(db)
 	addressService := service.NewAddressService(addressRepo)
+	wishlistService := service.NewWishlistService(wishlistRepo)
 	oauthClient := service.NewOAuthProviderClient(cfg.OAuth)
 	userService := service.NewUserService(
 		userRepo,
@@ -141,6 +143,7 @@ func main() {
 	)
 	userHandler := handler.NewUserHandler(userService)
 	addressHandler := handler.NewAddressHandler(addressService)
+	wishlistHandler := handler.NewWishlistHandler(wishlistService)
 
 	// 7. Set up Echo and register routes.
 	e := echo.New()
@@ -166,6 +169,7 @@ func main() {
 
 	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	addressHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	wishlistHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 8. Set up gRPC server.
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("user-service")))

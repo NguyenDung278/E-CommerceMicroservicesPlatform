@@ -44,6 +44,9 @@ type OrderPreview struct {
 	CouponDescription string  `json:"coupon_description,omitempty"`
 	ShippingMethod    string  `json:"shipping_method"`
 	ShippingFee       float64 `json:"shipping_fee"`
+	ETALabel          string  `json:"eta_label,omitempty"`
+	DeliveryPromise   string  `json:"delivery_promise,omitempty"`
+	SupportedShippingMethods []ShippingOption `json:"supported_shipping_methods,omitempty"`
 	TotalPrice        float64 `json:"total_price"`
 }
 
@@ -63,6 +66,17 @@ const (
 	ShippingMethodExpress  ShippingMethod = "express"
 	ShippingMethodPickup   ShippingMethod = "pickup"
 )
+
+type ShippingOption struct {
+	Method          string  `json:"method"`
+	Label           string  `json:"label"`
+	Description     string  `json:"description,omitempty"`
+	Fee             float64 `json:"fee"`
+	ETAMinDays      int     `json:"eta_min_days"`
+	ETAMaxDays      int     `json:"eta_max_days"`
+	ETALabel        string  `json:"eta_label"`
+	DeliveryPromise string  `json:"delivery_promise"`
+}
 
 // OrderItem represents a single item within an order.
 type OrderItem struct {

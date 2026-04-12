@@ -100,6 +100,12 @@ export type ProductVariant = {
   color?: string;
   price: number;
   stock: number;
+  image_urls?: string[];
+  fit_note?: string;
+  size_guide_id?: string;
+  restockable?: boolean;
+  lead_time?: string;
+  badge?: string;
 };
 
 export type Product = {
@@ -116,8 +122,41 @@ export type Product = {
   variants: ProductVariant[];
   image_url: string;
   image_urls: string[];
+  merchandising_rank?: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductSearchSuggestion = {
+  value: string;
+  kind: string;
+  match_count: number;
+};
+
+export type ProductSearchFacetValue = {
+  value: string;
+  count: number;
+};
+
+export type ProductSearchFacet = {
+  key: string;
+  label: string;
+  values: ProductSearchFacetValue[];
+};
+
+export type ProductSearchSortOption = {
+  value: string;
+  label: string;
+};
+
+export type ProductSearchAssist = {
+  query: string;
+  resolved_query: string;
+  applied_synonyms: string[];
+  result_count: number;
+  suggestions: ProductSearchSuggestion[];
+  facets: ProductSearchFacet[];
+  sort_options: ProductSearchSortOption[];
 };
 
 export type StorefrontProduct = Product & {
@@ -234,6 +273,13 @@ export type Address = {
   updated_at: string;
 };
 
+export type WishlistItem = {
+  user_id: string;
+  product_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ShippingAddress = {
   recipient_name: string;
   phone: string;
@@ -275,7 +321,21 @@ export type OrderPreview = {
   coupon_description?: string;
   shipping_method: string;
   shipping_fee: number;
+  eta_label?: string;
+  delivery_promise?: string;
+  supported_shipping_methods: ShippingOption[];
   total_price: number;
+};
+
+export type ShippingOption = {
+  method: string;
+  label: string;
+  description?: string;
+  fee: number;
+  eta_min_days: number;
+  eta_max_days: number;
+  eta_label: string;
+  delivery_promise: string;
 };
 
 export type OrderEvent = {

@@ -373,6 +373,56 @@ func calculateShippingFee(method string, subtotal float64) float64 {
 	}
 }
 
+func buildShippingOptions(subtotal float64) []model.ShippingOption {
+	return []model.ShippingOption{
+		{
+			Method:          string(model.ShippingMethodStandard),
+			Label:           "Standard delivery",
+			Description:     "Best value for everyday orders.",
+			Fee:             calculateShippingFee(string(model.ShippingMethodStandard), subtotal),
+			ETAMinDays:      3,
+			ETAMaxDays:      5,
+			ETALabel:        "3-5 business days",
+			DeliveryPromise: "Tracked delivery with complimentary shipping from $100.",
+		},
+		{
+			Method:          string(model.ShippingMethodExpress),
+			Label:           "Express delivery",
+			Description:     "Priority handling for time-sensitive orders.",
+			Fee:             calculateShippingFee(string(model.ShippingMethodExpress), subtotal),
+			ETAMinDays:      1,
+			ETAMaxDays:      2,
+			ETALabel:        "1-2 business days",
+			DeliveryPromise: "Priority pick, pack, and dispatch on the next fulfillment window.",
+		},
+		{
+			Method:          string(model.ShippingMethodPickup),
+			Label:           "Store pickup",
+			Description:     "Collect from the atelier desk when it suits you.",
+			Fee:             calculateShippingFee(string(model.ShippingMethodPickup), subtotal),
+			ETAMinDays:      0,
+			ETAMaxDays:      1,
+			ETALabel:        "Ready for pickup within 2 hours",
+			DeliveryPromise: "We will hold the order and confirm pickup readiness by message.",
+		},
+	}
+}
+
+func resolveShippingPromise(method string, options []model.ShippingOption) (string, string) {
+	for _, option := range options {
+		if option.Method == method {
+			return option.ETALabel, option.DeliveryPromise
+		}
+	}
+
+	if len(options) == 0 {
+		return "", ""
+	}
+
+	fallback := options[0]
+	return fallback.ETALabel, fallback.DeliveryPromise
+}
+
 // roundCurrency normalizes floating-point currency values to two decimal places.
 //
 // Inputs:

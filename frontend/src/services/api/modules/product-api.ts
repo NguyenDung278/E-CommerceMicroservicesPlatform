@@ -11,6 +11,7 @@ import type {
   ProductPopularity,
   ProductReview,
   ProductReviewList,
+  ProductSearchAssist,
   UploadedProductImages,
 } from "@/types/api";
 import {
@@ -19,6 +20,7 @@ import {
   normalizeProductPopularity,
   normalizeProductReview,
   normalizeProductReviewList,
+  normalizeProductSearchAssist,
 } from "../normalizers";
 
 /**
@@ -34,9 +36,16 @@ export interface ProductListOptions {
   maxPrice?: number;
   size?: string;
   color?: string;
-  sort?: "latest" | "price_asc" | "price_desc" | "popular";
+  sort?: "latest" | "price_asc" | "price_desc" | "popular" | "merchandising";
   limit?: number;
   cursor?: string;
+}
+
+export interface ProductSearchAssistOptions {
+  query?: string;
+  category?: string;
+  status?: string;
+  limit?: number;
 }
 
 export interface ProductReviewListOptions {
@@ -69,6 +78,12 @@ export interface CreateProductData {
     color?: string;
     price: number;
     stock: number;
+    image_urls?: string[];
+    fit_note?: string;
+    size_guide_id?: string;
+    restockable?: boolean;
+    lead_time?: string;
+    badge?: string;
   }>;
   image_url: string;
   image_urls: string[];
@@ -159,6 +174,47 @@ export const productApi = {
           data: normalizeProduct(response.data),
         };
       }
+    );
+  },
+
+  listProductsByIds(productIds: string[]): Promise<ApiEnvelope<Product[]>> {
+    const normalizedIds = Array.from(
+      new Set(productIds.map((productId) => productId.trim()).filter(Boolean))
+    );
+    if (normalizedIds.length === 0) {
+      return Promise.resolve({
+        success: true,
+        message: "products retrieved",
+        data: [],
+      });
+    }
+
+    const params = new URLSearchParams();
+    params.set("ids", normalizedIds.join(","));
+
+    return request<unknown>(`/api/v1/products/batch?${params.toString()}`).then((response) => ({
+      ...response,
+      data: normalizeProductList(response.data),
+    }));
+  },
+
+  getSearchAssist(options?: ProductSearchAssistOptions): Promise<ApiEnvelope<ProductSearchAssist>> {
+    const params = new URLSearchParams();
+    params.set("status", options?.status?.trim() || "active");
+    params.set("limit", String(options?.limit ?? 8));
+
+    if (options?.query) {
+      params.set("q", options.query);
+    }
+    if (options?.category) {
+      params.set("category", options.category);
+    }
+
+    return request<unknown>(`/api/v1/products/search/assist?${params.toString()}`).then(
+      (response) => ({
+        ...response,
+        data: normalizeProductSearchAssist(response.data),
+      })
     );
   },
 

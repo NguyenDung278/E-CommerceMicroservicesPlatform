@@ -8,6 +8,7 @@ export type StorefrontNavigationItem = {
 export const storefrontBrandHref = "/";
 export const storefrontArchiveHref = "/products";
 export const storefrontCartHref = "/cart";
+export const storefrontWishlistHref = "/wishlist";
 
 export function normalizeStorefrontNavigationToken(value: string) {
   return value.trim().toLowerCase();

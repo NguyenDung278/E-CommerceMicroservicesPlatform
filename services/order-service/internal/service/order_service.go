@@ -103,14 +103,20 @@ type pricedOrderQuote struct {
 // Performance:
 //   - O(1) time and allocation cost for one preview object.
 func (q *pricedOrderQuote) ToPreview() *model.OrderPreview {
+	shippingOptions := buildShippingOptions(q.SubtotalPrice)
+	etaLabel, deliveryPromise := resolveShippingPromise(q.ShippingMethod, shippingOptions)
+
 	return &model.OrderPreview{
-		SubtotalPrice:     q.SubtotalPrice,
-		DiscountAmount:    q.DiscountAmount,
-		CouponCode:        q.CouponCode,
-		CouponDescription: q.CouponDescription,
-		ShippingMethod:    q.ShippingMethod,
-		ShippingFee:       q.ShippingFee,
-		TotalPrice:        q.TotalPrice,
+		SubtotalPrice:            q.SubtotalPrice,
+		DiscountAmount:           q.DiscountAmount,
+		CouponCode:               q.CouponCode,
+		CouponDescription:        q.CouponDescription,
+		ShippingMethod:           q.ShippingMethod,
+		ShippingFee:              q.ShippingFee,
+		ETALabel:                 etaLabel,
+		DeliveryPromise:          deliveryPromise,
+		SupportedShippingMethods: shippingOptions,
+		TotalPrice:               q.TotalPrice,
 	}
 }
 

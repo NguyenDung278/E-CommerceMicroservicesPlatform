@@ -52,6 +52,10 @@
   color: #061b0e;
 }
 
+.storefront-overlay-header-light .storefront-overlay-wishlist-link {
+  color: #061b0e;
+}
+
 .storefront-overlay-header-light .storefront-overlay-account-pill {
   border-color: rgba(6, 27, 14, 0.1);
   background: rgba(255, 255, 255, 0.74);

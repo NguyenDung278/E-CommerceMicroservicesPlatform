@@ -1,12 +1,18 @@
 package dto
 
 type ProductVariantRequest struct {
-	SKU   string  `json:"sku" validate:"required,min=1"`
-	Label string  `json:"label" validate:"required,min=1"`
-	Size  string  `json:"size"`
-	Color string  `json:"color"`
-	Price float64 `json:"price" validate:"gt=0"`
-	Stock int     `json:"stock" validate:"gte=0"`
+	SKU         string   `json:"sku" validate:"required,min=1"`
+	Label       string   `json:"label" validate:"required,min=1"`
+	Size        string   `json:"size"`
+	Color       string   `json:"color"`
+	Price       float64  `json:"price" validate:"gt=0"`
+	Stock       int      `json:"stock" validate:"gte=0"`
+	ImageURLs   []string `json:"image_urls"`
+	FitNote     string   `json:"fit_note"`
+	SizeGuideID string   `json:"size_guide_id"`
+	Restockable bool     `json:"restockable"`
+	LeadTime    string   `json:"lead_time"`
+	Badge       string   `json:"badge"`
 }
 
 // CreateProductRequest is the request body for creating a product.
@@ -60,4 +66,11 @@ type ListProductsQuery struct {
 	Size     string  `query:"size"`
 	Color    string  `query:"color"`
 	Sort     string  `query:"sort"`
+}
+
+type SearchAssistQuery struct {
+	Query    string `query:"q"`
+	Category string `query:"category"`
+	Status   string `query:"status"`
+	Limit    int    `query:"limit"`
 }

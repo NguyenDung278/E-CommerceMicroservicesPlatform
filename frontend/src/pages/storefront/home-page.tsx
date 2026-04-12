@@ -17,7 +17,8 @@ import { loadWorkbookLiveProductLookup } from "@/features/home/workbook-live-pro
 import { useHomeWorkbook } from "@/features/home/use-home-workbook";
 import { resolveStorefrontCopy } from "@/features/storefront/storefront-copy";
 import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
-import type { Product } from "@/types/api";
+import { api } from "@/services/api";
+import type { JsonValue, Product, StorefrontHomeData } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/home-page.css";
 
@@ -64,11 +65,39 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 export function HomePage() {
   const productRailRef = useRef<HTMLDivElement | null>(null);
   const { content, error } = useHomeWorkbook();
+  const [storefrontHome, setStorefrontHome] = useState<StorefrontHomeData | null>(null);
+  const [storefrontError, setStorefrontError] = useState("");
 
   const navItems = useMemo(() => content?.navItems ?? [], [content?.navItems]);
   const segments = useMemo(() => content?.segments ?? [], [content?.segments]);
   const [activeSegmentSlug, setActiveSegmentSlug] = useState("");
   const [liveArrivalProducts, setLiveArrivalProducts] = useState<Record<string, Product>>({});
+
+  useEffect(() => {
+    let active = true;
+
+    void api
+      .getStorefrontHome(4)
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        if (response.data.category_pages.length > 0) {
+          setStorefrontHome(response.data);
+          setStorefrontError("");
+        }
+      })
+      .catch((reason) => {
+        if (active) {
+          setStorefrontError(reason instanceof Error ? reason.message : "");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const defaultSegmentSlug =
@@ -152,6 +181,10 @@ export function HomePage() {
       left: direction === "prev" ? -distance : distance,
       behavior: "smooth",
     });
+  }
+
+  if (storefrontHome?.category_pages.length) {
+    return <ApiFirstHomePage feedback={storefrontError} homeData={storefrontHome} />;
   }
 
   return (
@@ -370,4 +403,217 @@ export function HomePage() {
       />
     </div>
   );
+}
+
+function ApiFirstHomePage({
+  homeData,
+  feedback,
+}: {
+  homeData: StorefrontHomeData;
+  feedback: string;
+}) {
+  const heroPage = homeData.category_pages[0];
+  const heroCategory = heroPage?.category;
+  const heroProduct = heroPage?.featured_products[0]?.product;
+  const heroRecord = asJsonRecord(heroCategory?.hero);
+  const railProducts = homeData.category_pages
+    .flatMap((page) => page.featured_products.map((item) => item.product))
+    .filter((product, index, collection) => collection.findIndex((item) => item.id === product.id) === index)
+    .slice(0, 8);
+
+  return (
+    <div className="home-stitch-page">
+      {feedback ? <div className="feedback feedback-info home-stitch-feedback">{feedback}</div> : null}
+
+      <section className="home-stitch-hero">
+        <img
+          alt={readJsonString(heroRecord, "title", "hero_title") || heroCategory?.display_name || "Storefront hero"}
+          className="home-stitch-hero-image"
+          decoding="async"
+          src={
+            readJsonString(heroRecord, "background_image", "backgroundImage", "image_url") ||
+            heroProduct?.image_urls[0] ||
+            heroProduct?.image_url ||
+            fallbackHeroImage
+          }
+          {...highPriorityImageAttribute}
+        />
+        <div className="home-stitch-hero-scrim" />
+
+        <div className="home-stitch-hero-inner">
+          <StorefrontOverlayHeader />
+
+          <div className="home-stitch-hero-grid">
+            <div className="home-stitch-hero-copy">
+              <span className="home-stitch-kicker">
+                {readJsonString(heroRecord, "eyebrow", "collection_kicker") ||
+                  heroCategory?.nav_label ||
+                  "Storefront Edit"}
+              </span>
+              <h1>{readJsonString(heroRecord, "title", "hero_title") || heroCategory?.display_name}</h1>
+              <p>
+                {resolveStorefrontCopy(
+                  readJsonString(heroRecord, "description", "hero_description"),
+                  "Category-led storytelling and live catalog data now come from the storefront API first."
+                )}
+              </p>
+
+              <div className="home-stitch-action-row">
+                <StorefrontActionLink
+                  className="home-stitch-primary-button"
+                  fallbackHref="/products"
+                  href={`/categories/${encodeURIComponent(heroCategory?.slug || heroCategory?.display_name || "products")}`}
+                >
+                  Explore {heroCategory?.display_name || "Collection"}
+                </StorefrontActionLink>
+                <StorefrontActionLink
+                  className="home-stitch-secondary-button"
+                  fallbackHref="/products"
+                  href={heroProduct ? `/products/${encodeURIComponent(heroProduct.id)}` : "/products"}
+                >
+                  Shop Featured Look
+                </StorefrontActionLink>
+              </div>
+            </div>
+
+            <aside className="home-stitch-quote-card">
+              <span>{heroCategory?.nav_label || "Editorial Note"}</span>
+              <p>
+                {heroProduct?.description ||
+                  "The storefront home now hydrates directly from public category and featured-product APIs."}
+              </p>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-stitch-bento-section">
+        <div className="home-stitch-bento-grid">
+          {homeData.category_pages.slice(0, 4).map((page, index) => {
+            const pageHero = asJsonRecord(page.category.hero);
+            const tileProduct = page.featured_products[0]?.product;
+            return (
+              <StorefrontActionLink
+                className={`home-stitch-bento-card home-stitch-bento-card-${index + 1}`}
+                fallbackHref="/products"
+                href={`/categories/${encodeURIComponent(page.category.slug || page.category.display_name)}`}
+                key={page.category.slug}
+              >
+                <img
+                  alt={page.category.display_name}
+                  decoding="async"
+                  loading="lazy"
+                  src={
+                    readJsonString(pageHero, "background_image", "image_url") ||
+                    tileProduct?.image_urls[0] ||
+                    tileProduct?.image_url ||
+                    fallbackTileImage
+                  }
+                />
+                <div className="home-stitch-bento-scrim" />
+                <div className="home-stitch-bento-copy">
+                  <span>{page.category.nav_label}</span>
+                  <h2>{page.category.display_name}</h2>
+                  <p>
+                    {resolveStorefrontCopy(
+                      readJsonString(pageHero, "description", "hero_description"),
+                      tileProduct?.description || "Live category storytelling from the storefront API."
+                    )}
+                  </p>
+                  <strong>Open collection</strong>
+                </div>
+              </StorefrontActionLink>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="home-stitch-callout-section">
+        <div className="home-stitch-callout-copy">
+          <span className="home-stitch-section-label">API-First Storefront</span>
+          <h2>Editorial direction, live inventory, one public contract.</h2>
+          <p>
+            Featured products, category hero assets, and merchandising order now flow from the
+            storefront service instead of workbook-only composition.
+          </p>
+        </div>
+
+        <div className="home-stitch-callout-media">
+          <img
+            alt={heroProduct?.name || "Storefront highlight"}
+            decoding="async"
+            loading="lazy"
+            src={heroProduct?.image_urls[0] || heroProduct?.image_url || fallbackCalloutImage}
+          />
+        </div>
+      </section>
+
+      <section className="home-stitch-arrivals-section">
+        <div className="home-stitch-arrivals-head">
+          <div>
+            <span className="home-stitch-section-label">Featured Across Categories</span>
+            <h2>Live storefront picks</h2>
+          </div>
+        </div>
+
+        <div className="home-stitch-product-rail">
+          {railProducts.map((product) => (
+            <StorefrontActionLink
+              className="home-stitch-product-card"
+              fallbackHref="/products"
+              href={`/products/${encodeURIComponent(product.id)}`}
+              key={product.id}
+            >
+              <div className="home-stitch-product-media">
+                <img
+                  alt={product.name}
+                  decoding="async"
+                  loading="lazy"
+                  src={product.image_urls[0] || product.image_url || fallbackTileImage}
+                />
+              </div>
+              <div className="home-stitch-product-copy">
+                <p>{product.brand || product.category || "Storefront pick"}</p>
+                <h3>{product.name}</h3>
+                <div className="home-stitch-product-meta">
+                  <span>{product.category || "Live catalog"}</span>
+                  <span>{formatCurrency(product.price)}</span>
+                </div>
+                <small>
+                  {product.description || "Hydrated from storefront featured products and live catalog records."}
+                </small>
+              </div>
+            </StorefrontActionLink>
+          ))}
+        </div>
+      </section>
+
+      <EditorialSignatureFooter
+        brandName="ND Shop"
+        caption="Crafted for the Discerning"
+        links={homeData.categories.map((category) => ({
+          label: category.display_name,
+          href: `/categories/${encodeURIComponent(category.slug || category.display_name)}`,
+        }))}
+        note="Storefront home is now reading public category and featured-product APIs first, with workbook content retained as a fallback layer."
+      />
+    </div>
+  );
+}
+
+function asJsonRecord(value: JsonValue | undefined) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, JsonValue>)
+    : {};
+}
+
+function readJsonString(source: Record<string, JsonValue>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return "";
 }

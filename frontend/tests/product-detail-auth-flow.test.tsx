@@ -11,6 +11,16 @@ const cartMocks = vi.hoisted(() => ({
   useCart: vi.fn(),
 }));
 
+const wishlistMocks = vi.hoisted(() => ({
+  useWishlist: vi.fn(() => ({
+    wishlist: [],
+    wishlistCount: 0,
+    toggleWishlist: vi.fn(),
+    isSaved: vi.fn(() => false),
+    clearWishlist: vi.fn(),
+  })),
+}));
+
 const workbookMocks = vi.hoisted(() => ({
   useHomeWorkbook: vi.fn(() => ({
     content: null,
@@ -52,6 +62,10 @@ vi.mock("../src/features/auth/hooks/use-auth", () => ({
 
 vi.mock("../src/features/cart/hooks/use-cart", () => ({
   useCart: cartMocks.useCart,
+}));
+
+vi.mock("../src/features/wishlist", () => ({
+  useWishlist: wishlistMocks.useWishlist,
 }));
 
 vi.mock("../src/features/home/use-home-workbook", () => ({
@@ -99,6 +113,47 @@ const baseProduct = {
   variants: [],
   created_at: "2026-04-07T00:00:00Z",
   updated_at: "2026-04-07T00:00:00Z",
+};
+
+const productWithColorVariants = {
+  ...baseProduct,
+  id: "p-variant",
+  name: "Sculpted Wool Jacket",
+  category: "Shop Men",
+  variants: [
+    {
+      sku: "WOOL-BLK-S",
+      label: "Small",
+      size: "S",
+      color: "black",
+      price: 149,
+      stock: 4,
+    },
+    {
+      sku: "WOOL-BLK-M",
+      label: "Medium",
+      size: "M",
+      color: "black",
+      price: 149,
+      stock: 0,
+    },
+    {
+      sku: "WOOL-ESP-S",
+      label: "Small",
+      size: "S",
+      color: "espresso",
+      price: 159,
+      stock: 0,
+    },
+    {
+      sku: "WOOL-ESP-M",
+      label: "Medium",
+      size: "M",
+      color: "espresso",
+      price: 159,
+      stock: 3,
+    },
+  ],
 };
 
 const workbookContent = {
@@ -246,6 +301,13 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  wishlistMocks.useWishlist.mockReturnValue({
+    wishlist: [],
+    wishlistCount: 0,
+    toggleWishlist: vi.fn(),
+    isSaved: vi.fn(() => false),
+    clearWishlist: vi.fn(),
+  });
   document.body.innerHTML = "";
 });
 
@@ -520,8 +582,88 @@ describe("ProductDetailPage auth redirect flow", () => {
     );
 
     expect(container.textContent).toContain("12 còn lại");
-    expect(container.textContent).not.toContain("Workbook preview only");
+    expect(container.textContent).not.toContain("Preview only");
     expect(addToCartButton?.hasAttribute("disabled")).toBe(false);
     expect(buyNowButton?.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("switches color swatches and auto-selects the first available size for that finish", async () => {
+    authMocks.useAuth.mockReturnValue({
+      token: "",
+      isAuthenticated: false,
+      isBootstrapping: false,
+    });
+    cartMocks.useCart.mockReturnValue({
+      addItem: vi.fn(),
+    });
+    apiMocks.api.getProductById.mockResolvedValue({ data: productWithColorVariants });
+    apiMocks.api.listProductReviews.mockResolvedValue({ data: emptyReviewList });
+    apiMocks.api.listProducts.mockResolvedValue({ data: [] });
+
+    const { container } = renderProductDetail("/products/p-variant");
+    await flushAsync();
+
+    const blackButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Black")
+    );
+    const espressoButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Espresso")
+    );
+
+    expect(blackButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(espressoButton?.getAttribute("aria-pressed")).toBe("false");
+
+    act(() => {
+      espressoButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushAsync();
+
+    const sizeButtons = Array.from(container.querySelectorAll(".detail-size-button"));
+    const smallButton = sizeButtons.find((button) => button.textContent?.includes("S"));
+    const mediumButton = sizeButtons.find((button) => button.textContent?.includes("M"));
+
+    expect(espressoButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(smallButton?.hasAttribute("disabled")).toBe(true);
+    expect(mediumButton?.hasAttribute("disabled")).toBe(false);
+    expect(mediumButton?.getAttribute("class")).toContain("detail-size-button-active");
+    expect(container.textContent).toContain("Espresso hiện còn 1 lựa chọn để đặt mua.");
+  });
+
+  it("toggles save-for-later from product detail", async () => {
+    const toggleWishlist = vi.fn();
+
+    wishlistMocks.useWishlist.mockReturnValue({
+      wishlist: [],
+      wishlistCount: 0,
+      toggleWishlist,
+      isSaved: vi.fn(() => false),
+      clearWishlist: vi.fn(),
+    });
+    authMocks.useAuth.mockReturnValue({
+      token: "",
+      isAuthenticated: false,
+      isBootstrapping: false,
+    });
+    cartMocks.useCart.mockReturnValue({
+      addItem: vi.fn(),
+    });
+    apiMocks.api.getProductById.mockResolvedValue({ data: baseProduct });
+    apiMocks.api.listProductReviews.mockResolvedValue({ data: emptyReviewList });
+    apiMocks.api.listProducts.mockResolvedValue({ data: [] });
+
+    const { container } = renderProductDetail();
+    await flushAsync();
+
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Save for later"
+    );
+
+    expect(saveButton).toBeTruthy();
+
+    act(() => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(toggleWishlist).toHaveBeenCalledWith("p-1");
   });
 });

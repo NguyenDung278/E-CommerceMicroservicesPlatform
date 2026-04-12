@@ -35,6 +35,16 @@ type ListProductsParams struct {
 	Sort     string
 }
 
+type SearchAssistParams struct {
+	Limit          int
+	Query          string
+	ResolvedQuery  string
+	Category       string
+	Status         string
+	SearchTerms    []string
+	AppliedSynonyms []string
+}
+
 // ProductRepository defines the interface for product data access.
 type ProductRepository interface {
 	Create(ctx context.Context, product *model.Product) error
@@ -44,6 +54,7 @@ type ProductRepository interface {
 	List(ctx context.Context, params ListProductsParams) ([]*model.Product, string, bool, error)
 	ListByIDs(ctx context.Context, ids []string) ([]*model.Product, error)
 	ListForSearchIndex(ctx context.Context) ([]*model.Product, error)
+	SearchAssist(ctx context.Context, params SearchAssistParams) (*model.ProductSearchAssist, error)
 	UpdateStock(ctx context.Context, id string, quantity int) error
 	RestoreStock(ctx context.Context, id string, quantity int) error
 	ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error)
@@ -91,6 +102,7 @@ func (r *postgresProductRepository) Create(ctx context.Context, product *model.P
 func (r *postgresProductRepository) GetByID(ctx context.Context, id string) (*model.Product, error) {
 	query := `
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		       , merchandising_rank
 		FROM products
 		WHERE id = $1
 	`
@@ -227,6 +239,7 @@ func (r *postgresProductRepository) List(ctx context.Context, params ListProduct
 
 	selectQuery := fmt.Sprintf(`
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		       , merchandising_rank
 		%s
 		ORDER BY %s
 		LIMIT $%d
@@ -272,6 +285,7 @@ func (r *postgresProductRepository) ListByIDs(ctx context.Context, ids []string)
 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		       , merchandising_rank
 		FROM products
 		WHERE id = ANY($1)
 	`, pq.Array(ids))
@@ -305,6 +319,7 @@ func (r *postgresProductRepository) ListByIDs(ctx context.Context, ids []string)
 func (r *postgresProductRepository) ListForSearchIndex(ctx context.Context) ([]*model.Product, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		       , merchandising_rank
 		FROM products
 		ORDER BY updated_at DESC, created_at DESC
 	`)
@@ -365,6 +380,7 @@ func (r *postgresProductRepository) RestoreStock(ctx context.Context, id string,
 func (r *postgresProductRepository) ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error) {
 	query := `
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
+		       , merchandising_rank
 		FROM products
 		WHERE status = $1 AND stock <= $2
 		ORDER BY stock ASC, updated_at DESC
@@ -414,6 +430,7 @@ func (r *postgresProductRepository) scanProductRow(scanner productScanner) (*mod
 		&rawImageURLs,
 		&product.CreatedAt,
 		&product.UpdatedAt,
+		&product.MerchandisingRank,
 	)
 	if err != nil {
 		return nil, err
@@ -448,11 +465,12 @@ func mustJSON(value any) string {
 }
 
 type productListCursor struct {
-	Sort      string    `json:"sort"`
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	Price     float64   `json:"price,omitempty"`
-	Stock     int       `json:"stock,omitempty"`
+	Sort               string    `json:"sort"`
+	ID                 string    `json:"id"`
+	CreatedAt          time.Time `json:"created_at"`
+	Price              float64   `json:"price,omitempty"`
+	Stock              int       `json:"stock,omitempty"`
+	MerchandisingRank  int       `json:"merchandising_rank,omitempty"`
 }
 
 func decodeProductListCursor(encoded string) (*productListCursor, error) {
@@ -484,6 +502,7 @@ func encodeProductListCursor(product *model.Product, sort string) (string, error
 		CreatedAt: product.CreatedAt.UTC(),
 		Price:     product.Price,
 		Stock:     product.Stock,
+		MerchandisingRank: product.MerchandisingRank,
 	}
 
 	payload, err := json.Marshal(cursor)
@@ -520,6 +539,14 @@ func appendCursorClause(baseQuery string, args []interface{}, argIdx int, sort s
 		)`, argIdx, argIdx, argIdx+1, argIdx, argIdx+1, argIdx+2)
 		args = append(args, cursor.Stock, cursor.CreatedAt, cursor.ID)
 		argIdx += 3
+	case "merchandising":
+		baseQuery += fmt.Sprintf(` AND (
+			merchandising_rank > $%d
+			OR (merchandising_rank = $%d AND created_at < $%d)
+			OR (merchandising_rank = $%d AND created_at = $%d AND id < $%d)
+		)`, argIdx, argIdx, argIdx+1, argIdx, argIdx+1, argIdx+2)
+		args = append(args, cursor.MerchandisingRank, cursor.CreatedAt, cursor.ID)
+		argIdx += 3
 	default:
 		baseQuery += fmt.Sprintf(` AND (
 			created_at < $%d
@@ -540,6 +567,8 @@ func orderByClauseForSort(sort string) string {
 		return "price DESC, created_at DESC, id DESC"
 	case "popular":
 		return "stock DESC, created_at DESC, id DESC"
+	case "merchandising":
+		return "merchandising_rank ASC, created_at DESC, id DESC"
 	default:
 		return "created_at DESC, id DESC"
 	}
@@ -547,7 +576,7 @@ func orderByClauseForSort(sort string) string {
 
 func normalizeListSort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "price_asc", "price_desc", "popular":
+	case "price_asc", "price_desc", "popular", "merchandising":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "latest"

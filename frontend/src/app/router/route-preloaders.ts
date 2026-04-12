@@ -4,6 +4,7 @@ const routeModuleLoaders = {
   product: () => import("@/pages/storefront/product-detail-page"),
   category: () => import("@/pages/storefront/category-page"),
   cart: () => import("@/pages/storefront/cart-page"),
+  wishlist: () => import("@/pages/storefront/wishlist-page"),
   checkout: () => import("@/pages/storefront/checkout-page"),
   login: () => import("@/pages/auth/login-page"),
   profile: () => import("@/pages/account/profile-page"),
@@ -60,6 +61,10 @@ export function preloadRouteByPath(href: string) {
     return preloadRouteModule("cart");
   }
 
+  if (pathname === "/wishlist") {
+    return preloadRouteModule("wishlist");
+  }
+
   if (pathname === "/checkout") {
     return preloadRouteModule("checkout");
   }
@@ -104,7 +109,7 @@ export function preloadRouteByPath(href: string) {
 }
 
 export function warmCommonStorefrontRoutes(isAuthenticated: boolean) {
-  const commonRoutes: RouteModuleKey[] = ["home", "catalog", "category", "cart"];
+  const commonRoutes: RouteModuleKey[] = ["home", "catalog", "category", "cart", "wishlist"];
   const accountRoutes: RouteModuleKey[] = isAuthenticated
     ? ["profile", "orders", "addresses", "payments", "security", "notifications"]
     : ["login"];

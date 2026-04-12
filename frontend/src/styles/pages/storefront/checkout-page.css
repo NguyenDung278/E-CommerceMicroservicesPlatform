@@ -164,6 +164,20 @@
   color: #575d79;
 }
 
+.checkout-method-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #061b0e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .checkout-payment-icon {
   display: inline-flex;
   align-items: center;

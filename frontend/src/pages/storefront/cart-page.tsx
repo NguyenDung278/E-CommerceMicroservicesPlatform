@@ -166,10 +166,7 @@ export function CartPage() {
       <header className="cart-editorial-header">
         <div>
           <h1>Shopping Bag</h1>
-          <p className="cart-editorial-subtitle">
-            ND_S26 / EDITORIAL COLLECTION
-            <span className="cart-editorial-badge">Dev Note: Cart Microservice Active</span>
-          </p>
+          <p className="cart-editorial-subtitle">Curated pieces selected for checkout.</p>
         </div>
       </header>
 
@@ -221,7 +218,7 @@ export function CartPage() {
                         <h3>{item.name}</h3>
                         <p>
                           {product?.brand || "ND Atelier"} /{" "}
-                          {product?.sku || "Catalog sync pending"}
+                          {product?.sku || "Signature piece"}
                         </p>
                       </div>
                       <strong>{formatCurrency(item.price * item.quantity)}</strong>

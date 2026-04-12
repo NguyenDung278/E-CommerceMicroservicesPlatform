@@ -52,6 +52,11 @@ const CategoryPage = lazy(() =>
 const CartPage = lazy(() =>
   import("@/pages/storefront/cart-page").then((module) => ({ default: module.CartPage }))
 );
+const WishlistPage = lazy(() =>
+  import("@/pages/storefront/wishlist-page").then((module) => ({
+    default: module.WishlistPage,
+  }))
+);
 const CheckoutPage = lazy(() =>
   import("@/pages/storefront/checkout-page").then((module) => ({
     default: module.CheckoutPage,
@@ -121,6 +126,7 @@ export default function App() {
             <Route element={withSuspense(<ProductDetailPage />)} path="products/:productId" />
             <Route element={withSuspense(<CategoryPage />)} path="categories/:categoryName" />
             <Route element={withSuspense(<CartPage />)} path="cart" />
+            <Route element={withSuspense(<WishlistPage />)} path="wishlist" />
             <Route element={withSuspense(<CheckoutPage />)} path="checkout" />
             <Route
               element={<ProtectedRoute>{withSuspense(<ProfilePage />)}</ProtectedRoute>}

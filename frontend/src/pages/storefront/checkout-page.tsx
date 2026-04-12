@@ -7,7 +7,7 @@ import { canSyncProductToWorkbook } from "@/features/home/workbook-sync-catalog"
 import { syncWorkbookProductMutations } from "@/features/home/workbook-sync-client";
 import { api, getErrorMessage } from "@/services/api";
 import type { Address, OrderPreview, Product } from "@/types/api";
-import { formatCurrency } from "@/utils/format";
+import { formatCurrency, formatShippingMethodLabel } from "@/utils/format";
 import { sanitizeText } from "@/utils/sanitize";
 import "@/styles/pages/storefront/checkout-page.css";
 
@@ -22,6 +22,7 @@ type DirectProductState = {
 };
 
 type PaymentChoice = "manual" | "momo";
+type ShippingMethodChoice = "standard" | "express" | "pickup";
 
 type CheckoutFormState = {
   fullName: string;
@@ -63,6 +64,8 @@ export function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [form, setForm] = useState<CheckoutFormState>(emptyCheckoutForm);
+  const [selectedShippingMethod, setSelectedShippingMethod] =
+    useState<ShippingMethodChoice>("standard");
   const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("manual");
   const [feedback, setFeedback] = useState("");
   const [couponCode, setCouponCode] = useState(
@@ -206,7 +209,18 @@ export function CheckoutPage() {
   });
 
   const subtotal = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shippingFee = subtotal >= 100 || subtotal === 0 ? 0 : 5.99;
+  const fallbackShippingOptions = buildFallbackShippingOptions(subtotal);
+  const selectedFallbackShippingOption =
+    fallbackShippingOptions.find((option) => option.method === selectedShippingMethod) ??
+    fallbackShippingOptions[0];
+  const shippingOptions =
+    pricingPreview?.supported_shipping_methods.length
+      ? pricingPreview.supported_shipping_methods
+      : fallbackShippingOptions;
+  const selectedShippingOption =
+    shippingOptions.find((option) => option.method === selectedShippingMethod) ??
+    selectedFallbackShippingOption;
+  const shippingFee = selectedFallbackShippingOption?.fee ?? 0;
   const grossTotal = subtotal + shippingFee;
   const hardcodedVoucherApplied = normalizeCheckoutCouponCode(appliedCouponCode) === HARD_CODED_CHECKOUT_VOUCHER_CODE;
   const voucherDiscount =
@@ -215,27 +229,34 @@ export function CheckoutPage() {
       : 0;
   const total = Math.max(grossTotal - voucherDiscount, 0);
   const displayedSubtotal = pricingPreview?.subtotal_price ?? subtotal;
-  const displayedShippingFee = pricingPreview?.shipping_fee ?? shippingFee;
+  const displayedShippingFee = pricingPreview?.shipping_fee ?? (selectedShippingOption?.fee ?? shippingFee);
   const displayedDiscount = pricingPreview?.discount_amount ?? voucherDiscount;
   const displayedTotal = pricingPreview?.total_price ?? total;
   const displayedCouponCode = pricingPreview?.coupon_code ?? appliedCouponCode;
+  const displayedEtaLabel = pricingPreview?.eta_label ?? selectedShippingOption?.eta_label ?? "";
+  const displayedDeliveryPromise =
+    pricingPreview?.delivery_promise ??
+    selectedShippingOption?.delivery_promise ??
+    "Tracked delivery and clear post-purchase updates.";
   const savedAddressLabel =
-    addresses.length > 0
+    selectedShippingMethod === "pickup"
+      ? "Pickup only requires your contact details. Shipping address can stay optional."
+      : addresses.length > 0
       ? "Pre-filled from your saved address book."
       : "Fill in the shipping details for this order.";
 
   useEffect(() => {
     let active = true;
 
-    if (!token || draftItems.length === 0 || !appliedCouponCode) {
+    if (!token || draftItems.length === 0) {
       setPricingPreview(null);
       return () => {
         active = false;
       };
     }
 
-    const shippingAddress = buildCheckoutPreviewAddress(form);
-    if (!shippingAddress) {
+    const shippingAddress = buildCheckoutPreviewAddress(form, selectedShippingMethod);
+    if (selectedShippingMethod !== "pickup" && !shippingAddress) {
       setPricingPreview(null);
       return () => {
         active = false;
@@ -248,8 +269,8 @@ export function CheckoutPage() {
           product_id: item.product_id,
           quantity: item.quantity,
         })),
-        coupon_code: appliedCouponCode,
-        shipping_method: "standard",
+        coupon_code: appliedCouponCode || undefined,
+        shipping_method: selectedShippingMethod,
         shipping_address: shippingAddress,
       })
       .then((response) => {
@@ -266,7 +287,7 @@ export function CheckoutPage() {
     return () => {
       active = false;
     };
-  }, [appliedCouponCode, draftItems, form, token]);
+  }, [appliedCouponCode, draftItems, form, selectedShippingMethod, token]);
 
   function updateForm<Key extends keyof CheckoutFormState>(
     field: Key,
@@ -302,15 +323,13 @@ export function CheckoutPage() {
 
     setCouponCode(normalizedCouponCode);
     setAppliedCouponCode(normalizedCouponCode);
-    setPricingPreview(
-      buildLocalVoucherPreview(subtotal, shippingFee, normalizedCouponCode)
-    );
+    setPricingPreview(buildLocalVoucherPreview(subtotal, selectedShippingMethod, normalizedCouponCode));
     setCouponFeedback(
       `Voucher ${normalizedCouponCode} đã được áp dụng. Giá trị đơn hàng đang được cập nhật.`
     );
 
-    const shippingAddress = buildCheckoutPreviewAddress(form);
-    if (!token || !shippingAddress) {
+    const shippingAddress = buildCheckoutPreviewAddress(form, selectedShippingMethod);
+    if (!token || (selectedShippingMethod !== "pickup" && !shippingAddress)) {
       return;
     }
 
@@ -322,7 +341,7 @@ export function CheckoutPage() {
           quantity: item.quantity,
         })),
         coupon_code: normalizedCouponCode,
-        shipping_method: "standard",
+        shipping_method: selectedShippingMethod,
         shipping_address: shippingAddress,
       });
       setPricingPreview(response.data);
@@ -360,8 +379,16 @@ export function CheckoutPage() {
     const normalizedPostcode = sanitizeText(form.postcode);
     const normalizedPhone = sanitizeText(form.phone);
 
-    if (!normalizedFullName || !normalizedStreet || !normalizedCity || !normalizedPhone) {
-      setFeedback("Vui lòng điền đủ họ tên, địa chỉ giao hàng, thành phố và số điện thoại.");
+    if (
+      !normalizedFullName ||
+      !normalizedPhone ||
+      (selectedShippingMethod !== "pickup" && (!normalizedStreet || !normalizedCity))
+    ) {
+      setFeedback(
+        selectedShippingMethod === "pickup"
+          ? "Vui lòng điền đủ họ tên và số điện thoại để xác nhận lượt nhận tại quầy."
+          : "Vui lòng điền đủ họ tên, địa chỉ giao hàng, thành phố và số điện thoại."
+      );
       return;
     }
 
@@ -374,15 +401,8 @@ export function CheckoutPage() {
           quantity: item.quantity,
         })),
         coupon_code: appliedCouponCode || undefined,
-        shipping_method: "standard",
-        shipping_address: {
-          recipient_name: normalizedFullName,
-          phone: normalizedPhone,
-          street: normalizedStreet,
-          ward: normalizedPostcode || undefined,
-          district: normalizedPostcode || normalizedCity,
-          city: normalizedCity,
-        },
+        shipping_method: selectedShippingMethod,
+        shipping_address: buildCheckoutSubmissionAddress(form, selectedShippingMethod),
       });
 
       const paymentResponse = await api.processPayment(token, {
@@ -502,6 +522,53 @@ export function CheckoutPage() {
               <section className="checkout-editorial-section">
                 <div className="checkout-section-title">
                   <span className="checkout-step-badge">2</span>
+                  <h2>Shipping Method</h2>
+                </div>
+
+                <div className="checkout-payment-choice-list">
+                  {shippingOptions.map((option) => (
+                    <label
+                      className={
+                        selectedShippingMethod === option.method
+                          ? "checkout-payment-choice checkout-payment-choice-active"
+                          : "checkout-payment-choice"
+                      }
+                      key={option.method}
+                    >
+                      <div className="checkout-payment-choice-copy">
+                        <input
+                          checked={selectedShippingMethod === option.method}
+                          name="shipping-method"
+                          type="radio"
+                          value={option.method}
+                          onChange={() =>
+                            setSelectedShippingMethod(option.method as ShippingMethodChoice)
+                          }
+                        />
+                        <div>
+                          <strong>{option.label}</strong>
+                          <span>
+                            {option.description}
+                            {option.description ? " " : ""}
+                            {option.fee === 0 ? "Free" : formatCurrency(option.fee)} •{" "}
+                            {option.eta_label}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="checkout-method-pill">{formatShippingMethodLabel(option.method)}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <p className="checkout-section-note">
+                  {displayedDeliveryPromise}
+                  {displayedEtaLabel ? ` ETA: ${displayedEtaLabel}.` : ""}
+                </p>
+              </section>
+
+              <section className="checkout-editorial-section">
+                <div className="checkout-section-title">
+                  <span className="checkout-step-badge">3</span>
                   <h2>Payment Method</h2>
                 </div>
 
@@ -628,6 +695,16 @@ export function CheckoutPage() {
 
                 <div className="checkout-summary-totals">
                   <div className="checkout-summary-line">
+                    <span>Method</span>
+                    <span>{formatShippingMethodLabel(selectedShippingMethod)}</span>
+                  </div>
+                  {displayedEtaLabel ? (
+                    <div className="checkout-summary-line">
+                      <span>ETA</span>
+                      <span>{displayedEtaLabel}</span>
+                    </div>
+                  ) : null}
+                  <div className="checkout-summary-line">
                     <span>Subtotal</span>
                     <span>{formatCurrency(displayedSubtotal)}</span>
                   </div>
@@ -665,6 +742,7 @@ export function CheckoutPage() {
                   {displayedCouponCode
                     ? `Voucher ${displayedCouponCode} đang được áp dụng cho đơn hàng này. `
                     : ""}
+                  {displayedDeliveryPromise ? `${displayedDeliveryPromise} ` : ""}
                   By placing your order, you agree to our Terms of Service.
                 </p>
               </div>
@@ -722,15 +800,61 @@ function buildCheckoutItemSubtitle(product?: Product) {
   return subtitle || "Curated piece";
 }
 
-function buildCheckoutPreviewAddress(form: CheckoutFormState) {
+function buildCheckoutPreviewAddress(
+  form: CheckoutFormState,
+  shippingMethod: ShippingMethodChoice
+) {
   const recipientName = sanitizeText(form.fullName);
   const street = sanitizeText(form.street);
   const city = sanitizeText(form.city);
   const postcode = sanitizeText(form.postcode);
   const phone = sanitizeText(form.phone);
 
+  if (shippingMethod === "pickup") {
+    if (!recipientName || !phone) {
+      return undefined;
+    }
+
+    return {
+      recipient_name: recipientName,
+      phone,
+      street: street || "Pickup counter",
+      ward: postcode || undefined,
+      district: postcode || city || "Pickup counter",
+      city: city || "Pickup counter",
+    };
+  }
+
   if (!recipientName || !street || !city || !phone) {
     return null;
+  }
+
+  return {
+    recipient_name: recipientName,
+    phone,
+    street,
+    ward: postcode || undefined,
+    district: postcode || city,
+    city,
+  };
+}
+
+function buildCheckoutSubmissionAddress(
+  form: CheckoutFormState,
+  shippingMethod: ShippingMethodChoice
+) {
+  const recipientName = sanitizeText(form.fullName);
+  const street = sanitizeText(form.street);
+  const city = sanitizeText(form.city);
+  const postcode = sanitizeText(form.postcode);
+  const phone = sanitizeText(form.phone);
+
+  if (!recipientName || !phone) {
+    return undefined;
+  }
+
+  if (shippingMethod === "pickup") {
+    return undefined;
   }
 
   return {
@@ -749,9 +873,13 @@ function normalizeCheckoutCouponCode(value: string) {
 
 function buildLocalVoucherPreview(
   subtotal: number,
-  shippingFee: number,
+  shippingMethod: ShippingMethodChoice,
   couponCode: string
 ): OrderPreview {
+  const shippingOptions = buildFallbackShippingOptions(subtotal);
+  const selectedShippingOption =
+    shippingOptions.find((option) => option.method === shippingMethod) ?? shippingOptions[0];
+  const shippingFee = selectedShippingOption?.fee ?? 0;
   const normalizedCouponCode = normalizeCheckoutCouponCode(couponCode);
   const grossTotal = roundCurrencyAmount(subtotal + shippingFee);
   const discountAmount =
@@ -767,10 +895,48 @@ function buildLocalVoucherPreview(
       normalizedCouponCode === HARD_CODED_CHECKOUT_VOUCHER_CODE
         ? "Giảm 25% cho toàn bộ giá trị đơn hàng."
         : undefined,
-    shipping_method: "standard",
+    shipping_method: shippingMethod,
     shipping_fee: shippingFee,
+    eta_label: selectedShippingOption?.eta_label,
+    delivery_promise: selectedShippingOption?.delivery_promise,
+    supported_shipping_methods: shippingOptions,
     total_price: Math.max(roundCurrencyAmount(grossTotal - discountAmount), 0),
   };
+}
+
+function buildFallbackShippingOptions(subtotal: number) {
+  return [
+    {
+      method: "standard",
+      label: "Standard delivery",
+      description: "Best value for everyday orders.",
+      fee: subtotal >= 100 || subtotal === 0 ? 0 : 5.99,
+      eta_min_days: 3,
+      eta_max_days: 5,
+      eta_label: "3-5 business days",
+      delivery_promise: "Tracked delivery with complimentary shipping from $100.",
+    },
+    {
+      method: "express",
+      label: "Express delivery",
+      description: "Priority handling for time-sensitive orders.",
+      fee: 14.99,
+      eta_min_days: 1,
+      eta_max_days: 2,
+      eta_label: "1-2 business days",
+      delivery_promise: "Priority pick, pack, and dispatch on the next fulfillment window.",
+    },
+    {
+      method: "pickup",
+      label: "Store pickup",
+      description: "Collect from the atelier desk when it suits you.",
+      fee: 0,
+      eta_min_days: 0,
+      eta_max_days: 1,
+      eta_label: "Ready for pickup within 2 hours",
+      delivery_promise: "We will hold the order and confirm pickup readiness by message.",
+    },
+  ] as const;
 }
 
 function roundCurrencyAmount(value: number) {

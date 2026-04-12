@@ -27,8 +27,14 @@ import type {
   ProductReview,
   ProductReviewList,
   ProductReviewSummary,
+  ProductSearchAssist,
+  ProductSearchFacet,
+  ProductSearchFacetValue,
+  ProductSearchSortOption,
+  ProductSearchSuggestion,
   ProductVariant,
   ShippingAddress,
+  ShippingOption,
   StorefrontCategory,
   StorefrontCategoryPageData,
   StorefrontEditorialSection,
@@ -36,6 +42,7 @@ import type {
   StorefrontHomeData,
   StorefrontProduct,
   UserProfile,
+  WishlistItem,
 } from "@/types/api";
 
 /**
@@ -111,6 +118,16 @@ export function normalizeProductVariant(value: unknown): ProductVariant {
     color: normalizeString(variant.color) || undefined,
     price: normalizeNumber(variant.price),
     stock: normalizeNumber(variant.stock),
+    image_urls: Array.isArray(variant.image_urls)
+      ? variant.image_urls.filter(
+          (url): url is string => typeof url === "string" && url.trim().length > 0
+        )
+      : [],
+    fit_note: normalizeString(variant.fit_note) || undefined,
+    size_guide_id: normalizeString(variant.size_guide_id) || undefined,
+    restockable: normalizeBoolean(variant.restockable),
+    lead_time: normalizeString(variant.lead_time) || undefined,
+    badge: normalizeString(variant.badge) || undefined,
   };
 }
 
@@ -144,8 +161,73 @@ export function normalizeProduct(value: unknown): Product {
           (url): url is string => typeof url === "string" && url.trim().length > 0
         )
       : [],
+    merchandising_rank: normalizeNumber(product.merchandising_rank) || undefined,
     created_at: normalizeString(product.created_at),
     updated_at: normalizeString(product.updated_at),
+  };
+}
+
+export function normalizeProductSearchSuggestion(value: unknown): ProductSearchSuggestion {
+  const suggestion = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(suggestion.value),
+    kind: normalizeString(suggestion.kind),
+    match_count: normalizeNumber(suggestion.match_count),
+  };
+}
+
+export function normalizeProductSearchFacetValue(value: unknown): ProductSearchFacetValue {
+  const facetValue = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(facetValue.value),
+    count: normalizeNumber(facetValue.count),
+  };
+}
+
+export function normalizeProductSearchFacet(value: unknown): ProductSearchFacet {
+  const facet = isRecord(value) ? value : {};
+
+  return {
+    key: normalizeString(facet.key),
+    label: normalizeString(facet.label),
+    values: Array.isArray(facet.values)
+      ? facet.values.map((entry) => normalizeProductSearchFacetValue(entry))
+      : [],
+  };
+}
+
+export function normalizeProductSearchSortOption(value: unknown): ProductSearchSortOption {
+  const sortOption = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(sortOption.value),
+    label: normalizeString(sortOption.label),
+  };
+}
+
+export function normalizeProductSearchAssist(value: unknown): ProductSearchAssist {
+  const assist = isRecord(value) ? value : {};
+
+  return {
+    query: normalizeString(assist.query),
+    resolved_query: normalizeString(assist.resolved_query),
+    applied_synonyms: Array.isArray(assist.applied_synonyms)
+      ? assist.applied_synonyms.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+        )
+      : [],
+    result_count: normalizeNumber(assist.result_count),
+    suggestions: Array.isArray(assist.suggestions)
+      ? assist.suggestions.map((entry) => normalizeProductSearchSuggestion(entry))
+      : [],
+    facets: Array.isArray(assist.facets)
+      ? assist.facets.map((entry) => normalizeProductSearchFacet(entry))
+      : [],
+    sort_options: Array.isArray(assist.sort_options)
+      ? assist.sort_options.map((entry) => normalizeProductSearchSortOption(entry))
+      : [],
   };
 }
 
@@ -324,6 +406,21 @@ export function normalizeAddressList(value: unknown): Address[] {
   return Array.isArray(value) ? value.map((item) => normalizeAddress(item)) : [];
 }
 
+export function normalizeWishlistItem(value: unknown): WishlistItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    user_id: normalizeString(item.user_id),
+    product_id: normalizeString(item.product_id),
+    created_at: normalizeString(item.created_at),
+    updated_at: normalizeString(item.updated_at),
+  };
+}
+
+export function normalizeWishlistItemList(value: unknown): WishlistItem[] {
+  return Array.isArray(value) ? value.map((item) => normalizeWishlistItem(item)) : [];
+}
+
 /**
  * Normalize shipping address
  */
@@ -455,7 +552,27 @@ export function normalizeOrderPreview(value: unknown): OrderPreview {
     coupon_description: normalizeString(preview.coupon_description) || undefined,
     shipping_method: normalizeString(preview.shipping_method),
     shipping_fee: normalizeNumber(preview.shipping_fee),
+    eta_label: normalizeString(preview.eta_label) || undefined,
+    delivery_promise: normalizeString(preview.delivery_promise) || undefined,
+    supported_shipping_methods: Array.isArray(preview.supported_shipping_methods)
+      ? preview.supported_shipping_methods.map((item) => normalizeShippingOption(item))
+      : [],
     total_price: normalizeNumber(preview.total_price),
+  };
+}
+
+export function normalizeShippingOption(value: unknown): ShippingOption {
+  const option = isRecord(value) ? value : {};
+
+  return {
+    method: normalizeString(option.method),
+    label: normalizeString(option.label),
+    description: normalizeString(option.description) || undefined,
+    fee: normalizeNumber(option.fee),
+    eta_min_days: normalizeNumber(option.eta_min_days),
+    eta_max_days: normalizeNumber(option.eta_max_days),
+    eta_label: normalizeString(option.eta_label),
+    delivery_promise: normalizeString(option.delivery_promise),
   };
 }
 
@@ -672,10 +789,18 @@ export default {
   normalizeProductReview,
   normalizeProductReviewList,
   normalizeProductReviewSummary,
+  normalizeProductSearchAssist,
+  normalizeProductSearchFacet,
+  normalizeProductSearchFacetValue,
+  normalizeProductSearchSortOption,
+  normalizeProductSearchSuggestion,
   normalizeProductVariant,
   normalizeAddress,
   normalizeAddressList,
   normalizeShippingAddress,
+  normalizeShippingOption,
+  normalizeWishlistItem,
+  normalizeWishlistItemList,
   normalizeCartItem,
   normalizeCart,
   normalizeOrderItem,

@@ -21,6 +21,7 @@ import {
   type PendingProductDetailActionIntent,
 } from "@/features/auth/storage/post-login-action-storage";
 import { useCart } from "@/features/cart/hooks/use-cart";
+import { useWishlist } from "@/features/wishlist";
 import { api, getErrorMessage, isHttpError } from "@/services/api";
 import type {
   Product,
@@ -87,6 +88,7 @@ export function ProductDetailPage() {
   const { content } = useHomeWorkbook();
   const { token, isAuthenticated, isBootstrapping } = useAuth();
   const { addItem } = useCart();
+  const { isSaved, toggleWishlist } = useWishlist();
   const resumedActionRef = useRef("");
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -95,6 +97,7 @@ export function ProductDetailPage() {
   const [feedback, setFeedback] = useState("");
   const [isBusy, setIsBusy] = useState(false);
   const [activeImage, setActiveImage] = useState("");
+  const [selectedColorKey, setSelectedColorKey] = useState("");
   const [selectedVariantSku, setSelectedVariantSku] = useState("");
   const [reviewList, setReviewList] = useState<ProductReviewList>(emptyReviewList);
   const [myReview, setMyReview] = useState<ProductReview | null>(null);
@@ -108,16 +111,14 @@ export function ProductDetailPage() {
   const applyProductSnapshot = useCallback((nextProduct: Product) => {
     setProduct(nextProduct);
 
-    const images =
-      nextProduct.image_urls.length > 0
-        ? nextProduct.image_urls
-        : nextProduct.image_url
-          ? [nextProduct.image_url]
-          : [];
-    setActiveImage(images[0] ?? "");
-
     const defaultVariant =
       nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
+    const images = buildVariantImageGallery(nextProduct, defaultVariant);
+    setActiveImage(images[0] ?? "");
+    setSelectedColorKey(
+      normalizeColorLabel(defaultVariant?.color) ||
+        normalizeColorLabel(nextProduct.variants[0]?.color)
+    );
     setSelectedVariantSku(defaultVariant?.sku ?? "");
     setQuantity(1);
   }, []);
@@ -212,7 +213,7 @@ export function ProductDetailPage() {
           applyProductSnapshot(buildWorkbookFallbackProduct(workbookReference, productId));
           setIsWorkbookFallback(true);
           setFeedback(
-            "San pham nay hien duoc render tu workbook CSV/XLSX. Hay dong bo product live trong trang admin de bat gio hang, ton kho va danh gia."
+            "Mẫu này hiện mới ở chế độ xem trước. Bạn vẫn có thể xem hình ảnh và phom dáng, còn mua hàng sẽ mở khi sản phẩm được phát hành."
           );
           setIsReviewLoading(false);
           return;
@@ -287,6 +288,53 @@ export function ProductDetailPage() {
       active = false;
     };
   }, [isWorkbookFallback, product]);
+
+  useEffect(() => {
+    if (!product || product.variants.length === 0) {
+      if (selectedColorKey) {
+        setSelectedColorKey("");
+      }
+      return;
+    }
+
+    const currentVariant = product.variants.find((variant) => variant.sku === selectedVariantSku);
+    const currentColorKey = normalizeColorLabel(currentVariant?.color);
+
+    if (!selectedColorKey) {
+      const defaultColorKey =
+        currentColorKey ||
+        normalizeColorLabel(product.variants.find((variant) => variant.stock > 0)?.color) ||
+        normalizeColorLabel(product.variants[0]?.color);
+
+      if (defaultColorKey) {
+        setSelectedColorKey(defaultColorKey);
+      }
+      return;
+    }
+
+    const matchingVariants = product.variants.filter(
+      (variant) => normalizeColorLabel(variant.color) === selectedColorKey
+    );
+
+    if (matchingVariants.length === 0) {
+      const fallbackColorKey =
+        normalizeColorLabel(product.variants.find((variant) => variant.stock > 0)?.color) ||
+        normalizeColorLabel(product.variants[0]?.color);
+
+      if (fallbackColorKey && fallbackColorKey !== selectedColorKey) {
+        setSelectedColorKey(fallbackColorKey);
+      }
+      return;
+    }
+
+    if (!currentVariant || currentColorKey !== selectedColorKey) {
+      const nextVariant =
+        matchingVariants.find((variant) => variant.stock > 0) ?? matchingVariants[0];
+      if (nextVariant && nextVariant.sku !== selectedVariantSku) {
+        setSelectedVariantSku(nextVariant.sku);
+      }
+    }
+  }, [product, selectedColorKey, selectedVariantSku]);
 
   function redirectToLoginForProductAction(intent: PendingProductDetailActionIntent) {
     if (!product) {
@@ -429,7 +477,7 @@ export function ProductDetailPage() {
 
     if (isWorkbookFallback) {
       setFeedback(
-        "Muc nay dang hien thi tu workbook nen chua the them vao gio hang. Hay dong bo sang product live trong admin."
+        "Sản phẩm này chưa mở bán nên hiện chưa thể thêm vào giỏ hàng."
       );
       return;
     }
@@ -454,7 +502,7 @@ export function ProductDetailPage() {
 
     if (isWorkbookFallback) {
       setFeedback(
-        "Muc nay dang hien thi tu workbook nen chua the mua ngay. Hay dong bo sang product live trong admin."
+        "Sản phẩm này chưa mở bán nên hiện chưa thể mua ngay."
       );
       return;
     }
@@ -513,7 +561,7 @@ export function ProductDetailPage() {
   function handleReviewCallToAction() {
     if (isWorkbookFallback) {
       setReviewFeedback(
-        "Danh gia chi kha dung sau khi san pham workbook duoc dong bo voi product live."
+        "Đánh giá sẽ mở khi sản phẩm được phát hành chính thức."
       );
       return;
     }
@@ -602,11 +650,6 @@ export function ProductDetailPage() {
     }
   }
 
-  const productImages = product?.image_urls.length
-    ? product.image_urls
-    : product?.image_url
-      ? [product.image_url]
-      : [];
   const normalizedCategory = (product?.category ?? "").trim().toLowerCase();
   const isFootwear = normalizedCategory.includes("footwear");
   const isApparel =
@@ -621,19 +664,23 @@ export function ProductDetailPage() {
     null;
   const activeStock = selectedVariant?.stock ?? product?.stock ?? 0;
   const activePrice = selectedVariant?.price ?? product?.price ?? 0;
+  const colorOptions = buildColorOptions(product?.variants ?? []);
+  const selectedColorOption =
+    colorOptions.find((option) => option.key === selectedColorKey) ?? colorOptions[0] ?? null;
   const stockToneClass =
     isWorkbookFallback || activeStock === 0
       ? "detail-stock-line detail-stock-line-out"
       : "detail-stock-line detail-stock-line-in";
   const stockToneCopy =
     isWorkbookFallback
-      ? "Workbook preview only"
+      ? "Preview only"
       : activeStock === 0
-      ? "Hết hàng"
+      ? selectedVariant?.restockable && selectedVariant.lead_time
+        ? `Tạm hết • ${selectedVariant.lead_time}`
+        : "Hết hàng"
       : activeStock <= 2
         ? `Chỉ còn ${activeStock}`
-        : `Còn hàng • ${activeStock} size/units`;
-  const finishOptions = buildFinishOptions(product?.variants ?? []);
+        : `Còn hàng • ${activeStock} lựa chọn khả dụng`;
   const detailHighlights = product
     ? [
         {
@@ -642,7 +689,7 @@ export function ProductDetailPage() {
         },
         {
           label: "Status",
-          value: isWorkbookFallback ? "workbook-preview" : product.status || "active",
+          value: isWorkbookFallback ? "Preview" : product.status || "active",
         },
         {
           label: "SKU",
@@ -651,7 +698,7 @@ export function ProductDetailPage() {
         {
           label: "Stock",
           value: isWorkbookFallback
-            ? "Workbook preview"
+            ? "Preview only"
             : activeStock > 0
               ? `${activeStock} còn lại`
               : "Hết hàng",
@@ -659,9 +706,31 @@ export function ProductDetailPage() {
       ]
     : [];
   const alphaScale = ["XS", "S", "M", "L", "XL"];
+  const variantsForSelectedColor =
+    product && selectedColorKey
+      ? product.variants.filter(
+          (variant) => normalizeColorLabel(variant.color) === selectedColorKey
+        )
+      : product?.variants ?? [];
   const sizeOptions = product
-    ? buildSizeOptions(product.variants, { isApparel, isFootwear, alphaScale })
+    ? buildSizeOptions(product.variants, variantsForSelectedColor, {
+        isApparel,
+        isFootwear,
+        alphaScale,
+      })
     : [];
+  const savedForLater = product ? isSaved(product.id) : false;
+  const deliveryPromise =
+    selectedVariant?.lead_time
+      ? selectedVariant.lead_time
+      : activePrice >= 100
+      ? "Complimentary standard delivery on this order."
+      : "Free standard delivery unlocks from $100.";
+  const variantGallery = product ? buildVariantImageGallery(product, selectedVariant) : [];
+  const selectedVariantBadge = selectedVariant?.badge || product?.tags[0] || "";
+  const selectedVariantFitNote =
+    selectedVariant?.fit_note ||
+    "A considered silhouette selected to feel effortless on first wear.";
   const averageRatingLabel =
     reviewList.summary.review_count > 0 ? reviewList.summary.average_rating.toFixed(1) : "0.0";
   const reviewSummaryStars = renderStars(Math.round(reviewList.summary.average_rating || 0));
@@ -688,6 +757,16 @@ export function ProductDetailPage() {
     }
   }, [activeStock, quantity]);
 
+  useEffect(() => {
+    if (variantGallery.length === 0) {
+      return;
+    }
+
+    if (!variantGallery.includes(activeImage)) {
+      setActiveImage(variantGallery[0]);
+    }
+  }, [activeImage, variantGallery]);
+
   if (!product && !feedback) {
     return <div className="page-state">Đang tải thông tin sản phẩm...</div>;
   }
@@ -709,9 +788,9 @@ export function ProductDetailPage() {
                   )}
                 </div>
 
-                {productImages.length > 1 ? (
+                {variantGallery.length > 1 ? (
                   <div className="detail-thumbnail-row detail-thumbnail-row-editorial">
-                    {productImages.map((imageUrl, index) => (
+                    {variantGallery.map((imageUrl, index) => (
                       <button
                         className={
                           imageUrl === activeImage
@@ -728,13 +807,6 @@ export function ProductDetailPage() {
                   </div>
                 ) : null}
 
-                <div className="detail-support-inline">
-                  <span className="detail-support-note">
-                    {isWorkbookFallback
-                      ? "Media dang duoc hien thi tu workbook storefront. Khi sync sang product live, anh se lay tu media URL/backend hien tai."
-                      : "Media tu backend object storage / URL duoc cau hinh trong product service."}
-                  </span>
-                </div>
               </div>
 
               <div className="detail-copy detail-copy-editorial">
@@ -755,8 +827,8 @@ export function ProductDetailPage() {
                 <div className="detail-heading-block">
                   <div className="detail-badge-row">
                     <span className="section-kicker">{product.category || "atelier item"}</span>
-                    {product.tags[0] ? (
-                      <span className="product-tag-chip">#{product.tags[0]}</span>
+                    {selectedVariantBadge ? (
+                      <span className="product-tag-chip">#{selectedVariantBadge}</span>
                     ) : null}
                   </div>
                   <h1>{product.name}</h1>
@@ -765,28 +837,81 @@ export function ProductDetailPage() {
 
                 <p className="detail-description-editorial">
                   {product.description ||
-                    "Không có mô tả chi tiết. Bạn vẫn có thể dùng trang này để test media, add-to-cart và checkout flow."}
+                    "Một thiết kế tối giản với phom dáng linh hoạt, phù hợp để mặc riêng hoặc phối theo lớp."}
                 </p>
 
-                {finishOptions.length > 0 ? (
+                <p className="detail-variant-fit-note">{selectedVariantFitNote}</p>
+
+                <div className="detail-utility-row">
+                  <button
+                    aria-pressed={savedForLater}
+                    className={
+                      savedForLater
+                        ? "detail-save-button detail-save-button-active"
+                        : "detail-save-button"
+                    }
+                    type="button"
+                    onClick={() => toggleWishlist(product.id)}
+                  >
+                    {savedForLater ? "Saved for later" : "Save for later"}
+                  </button>
+                  <span className="detail-utility-note">{deliveryPromise}</span>
+                </div>
+
+                {colorOptions.length > 0 ? (
                   <div className="detail-option-panel">
                     <div className="detail-option-head">
-                      <label>Finish</label>
+                      <label>{colorOptions.length > 1 ? "Color" : "Finish"}</label>
+                      {selectedColorOption ? <span>{selectedColorOption.label}</span> : null}
                     </div>
                     <div className="detail-finish-row">
-                      {finishOptions.map((finish) => (
-                        <span
-                          key={finish.name}
-                          className={
-                            selectedVariant?.color === finish.name
-                              ? "detail-finish-swatch detail-finish-swatch-active"
-                              : "detail-finish-swatch"
-                          }
-                          style={{ backgroundColor: finish.swatch }}
-                          title={finish.name}
-                        />
-                      ))}
+                      {colorOptions.map((option) => {
+                        const isSelected = option.key === selectedColorKey;
+
+                        return (
+                          <button
+                            aria-label={`Select ${option.label}`}
+                            aria-pressed={isSelected}
+                            className={
+                              isSelected
+                                ? "detail-finish-button detail-finish-button-active"
+                                : "detail-finish-button"
+                            }
+                            key={option.key}
+                            type="button"
+                            onClick={() => {
+                              setSelectedColorKey(option.key);
+                              const nextVariant =
+                                option.variants.find((variant) => variant.stock > 0) ??
+                                option.variants[0];
+                              setSelectedVariantSku(nextVariant?.sku ?? "");
+                            }}
+                          >
+                            <span
+                              className={
+                                isSelected
+                                  ? "detail-finish-swatch detail-finish-swatch-active"
+                                  : "detail-finish-swatch"
+                              }
+                              style={{ backgroundColor: option.swatch }}
+                            />
+                            <span className="detail-finish-label">{option.label}</span>
+                            <small className="detail-finish-stock">
+                              {option.availableCount > 0
+                                ? `${option.availableCount} size khả dụng`
+                                : "Tạm hết ở màu này"}
+                            </small>
+                          </button>
+                        );
+                      })}
                     </div>
+                    {selectedColorOption ? (
+                      <p className="detail-option-summary">
+                        {selectedColorOption.availableCount > 0
+                          ? `${selectedColorOption.label} hiện còn ${selectedColorOption.availableCount} lựa chọn để đặt mua.`
+                          : `${selectedColorOption.label} hiện chưa có sẵn. Hãy thử màu khác để tiếp tục mua ngay.`}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -813,10 +938,10 @@ export function ProductDetailPage() {
                   <div className="detail-option-panel">
                     <div className="detail-option-head">
                       <label>
-                        {isFootwear ? "Standard Size" : isApparel ? "Size Còn Hàng" : "Kích cỡ"}
+                        {isFootwear ? "Standard Size" : isApparel ? "Size đang mở" : "Kích cỡ"}
                       </label>
                       {isFootwear ? (
-                        <span>Size Chart</span>
+                        <span>EU sizing</span>
                       ) : selectedVariant?.sku ? (
                         <span>{selectedVariant.sku}</span>
                       ) : null}
@@ -847,7 +972,16 @@ export function ProductDetailPage() {
                             className={classes}
                             disabled={!option.variant || option.variant.stock === 0}
                             type="button"
-                            onClick={() => setSelectedVariantSku(option.variant?.sku ?? "")}
+                            onClick={() => {
+                              if (!option.variant) {
+                                return;
+                              }
+
+                              setSelectedVariantSku(option.variant.sku);
+                              if (option.variant.color) {
+                                setSelectedColorKey(normalizeColorLabel(option.variant.color));
+                              }
+                            }}
                           >
                             <strong>{option.label}</strong>
                             {!isFootwear ? (
@@ -892,6 +1026,29 @@ export function ProductDetailPage() {
                     />
                   </label>
 
+                  <div className="detail-assurance-grid">
+                    <article className="detail-assurance-card">
+                      <span>Delivery</span>
+                      <strong>{deliveryPromise}</strong>
+                    </article>
+                    <article className="detail-assurance-card">
+                      <span>Selected finish</span>
+                      <strong>{selectedColorOption?.label || "Signature finish"}</strong>
+                    </article>
+                    <article className="detail-assurance-card">
+                      <span>Variant note</span>
+                      <strong>{selectedVariant?.lead_time || "Ready to ship now"}</strong>
+                    </article>
+                    <article className="detail-assurance-card">
+                      <span>Review signal</span>
+                      <strong>
+                        {reviewList.summary.review_count > 0
+                          ? `${averageRatingLabel}/5 from customers`
+                          : "Be the first to review"}
+                      </strong>
+                    </article>
+                  </div>
+
                   <div className="product-actions detail-actions-editorial">
                     <button
                       className="primary-button"
@@ -918,18 +1075,19 @@ export function ProductDetailPage() {
               <section className="detail-review-section">
                 <div className="detail-review-head">
                   <div>
-                    <h2>Workbook Preview</h2>
+                    <h2>Preview Only</h2>
                     <p className="detail-review-summary">
-                      Muc nay dang hien thi tu workbook storefront nen review live tam thoi chua mo.
+                      Mẫu này đang được chuẩn bị cho đợt mở bán tiếp theo, nên phần đánh giá và mua
+                      hàng chưa được mở.
                     </p>
                   </div>
                 </div>
 
                 <div className="detail-review-empty">
-                  <strong>Route chi tiet da san sang cho card workbook.</strong>
+                  <strong>Khám phá phom dáng và bảng màu trước.</strong>
                   <span>
-                    Khi san pham duoc dong bo bang ID live tu trang admin, khu vuc danh gia, ton kho
-                    va mua hang se hoat dong day du.
+                    Khi sản phẩm được phát hành chính thức, bạn sẽ có thể chọn size, thêm vào giỏ
+                    và xem đánh giá từ khách hàng khác.
                   </span>
                 </div>
               </section>
@@ -1138,6 +1296,35 @@ export function ProductDetailPage() {
                 ))}
               </div>
             </section>
+
+            <div className="detail-mobile-buy-bar">
+              <div className="detail-mobile-buy-copy">
+                <strong>{formatCurrency(activePrice)}</strong>
+                <span>
+                  {[selectedColorOption?.label, selectedVariant?.size || selectedVariant?.label]
+                    .filter(Boolean)
+                    .join(" / ") || "Select your finish"}
+                </span>
+              </div>
+              <div className="detail-mobile-buy-actions">
+                <button
+                  className="secondary-button"
+                  disabled={isWorkbookFallback || isBusy || activeStock === 0}
+                  type="button"
+                  onClick={() => void handleAddToCart()}
+                >
+                  Add
+                </button>
+                <button
+                  className="primary-button"
+                  disabled={isWorkbookFallback || isBusy || activeStock === 0}
+                  type="button"
+                  onClick={() => void handleBuyNow()}
+                >
+                  Buy now
+                </button>
+              </div>
+            </div>
           </>
         ) : null}
       </section>
@@ -1227,7 +1414,8 @@ function resolveWorkbookReferenceLiveProduct(
 }
 
 function buildSizeOptions(
-  variants: ProductVariant[],
+  allVariants: ProductVariant[],
+  visibleVariants: ProductVariant[],
   options: {
     isApparel: boolean;
     isFootwear: boolean;
@@ -1235,17 +1423,22 @@ function buildSizeOptions(
   }
 ) {
   const variantsBySize = new Map(
-    variants.map((variant) => [normalizeSizeLabel(variant.size || variant.label), variant] as const)
+    visibleVariants.map(
+      (variant) => [normalizeSizeLabel(variant.size || variant.label), variant] as const
+    )
   );
-  const hasAlphaSizes = variants.some((variant) =>
+  const sizeScale = Array.from(
+    new Set(
+      allVariants.map((variant) => normalizeSizeLabel(variant.size || variant.label)).filter(Boolean)
+    )
+  );
+  const hasAlphaSizes = allVariants.some((variant) =>
     /^[A-Za-z]+$/.test(normalizeSizeLabel(variant.size || variant.label))
   );
   const baseSizes =
     options.isApparel && hasAlphaSizes
-      ? options.alphaScale
-      : Array.from(
-          new Set(variants.map((variant) => normalizeSizeLabel(variant.size || variant.label)))
-        );
+      ? options.alphaScale.filter((size) => sizeScale.includes(size))
+      : sizeScale;
 
   return baseSizes.map((size) => ({
     key: size,
@@ -1261,7 +1454,19 @@ function normalizeSizeLabel(value?: string) {
     .replace(/^EU\s+/i, "");
 }
 
-function buildFinishOptions(variants: ProductVariant[]) {
+function normalizeColorLabel(value?: string) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function formatColorLabel(value: string) {
+  return value
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function buildColorOptions(variants: ProductVariant[]) {
   const swatchMap: Record<string, string> = {
     black: "#1b1c19",
     espresso: "#4a3728",
@@ -1278,10 +1483,58 @@ function buildFinishOptions(variants: ProductVariant[]) {
     oak: "#8c6a44",
   };
 
-  return Array.from(
-    new Set(variants.map((variant) => (variant.color ?? "").trim().toLowerCase()).filter(Boolean))
-  ).map((name) => ({
-    name,
-    swatch: swatchMap[name] ?? "#737973",
+  const variantsByColor = new Map<string, ProductVariant[]>();
+
+  variants.forEach((variant) => {
+    const colorKey = normalizeColorLabel(variant.color);
+    if (!colorKey) {
+      return;
+    }
+
+    const bucket = variantsByColor.get(colorKey);
+    if (bucket) {
+      bucket.push(variant);
+      return;
+    }
+
+    variantsByColor.set(colorKey, [variant]);
+  });
+
+  return Array.from(variantsByColor.entries()).map(([key, entries]) => ({
+    key,
+    label: formatColorLabel(key),
+    swatch: swatchMap[key] ?? "#737973",
+    availableCount: entries.filter((variant) => variant.stock > 0).length,
+    variants: entries,
   }));
+}
+
+function buildVariantImageGallery(product: Product, selectedVariant: ProductVariant | null) {
+  const productImages = product.image_urls.length
+    ? product.image_urls
+    : product.image_url
+      ? [product.image_url]
+      : [];
+
+  const variantImages =
+    selectedVariant?.image_urls?.filter((imageUrl) => imageUrl.trim().length > 0) ?? [];
+  if (variantImages.length > 0) {
+    return Array.from(new Set([...variantImages, ...productImages]));
+  }
+
+  const selectedColorKey = normalizeColorLabel(selectedVariant?.color);
+  if (!selectedColorKey) {
+    return productImages;
+  }
+
+  const colorImages = product.variants
+    .filter((variant) => normalizeColorLabel(variant.color) === selectedColorKey)
+    .flatMap((variant) => variant.image_urls ?? [])
+    .filter((imageUrl) => imageUrl.trim().length > 0);
+
+  if (colorImages.length === 0) {
+    return productImages;
+  }
+
+  return Array.from(new Set([...colorImages, ...productImages]));
 }
