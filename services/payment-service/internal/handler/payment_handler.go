@@ -60,6 +60,7 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 		claims.UserID,
 		claims.Email,
 		c.Request().Header.Get(echo.HeaderAuthorization),
+		c.Request().Header.Get("Idempotency-Key"),
 		req,
 	)
 	if err != nil {
@@ -77,6 +78,12 @@ func (h *PaymentHandler) ProcessPayment(c echo.Context) error {
 		}
 		if errors.Is(err, service.ErrUnsupportedPaymentMethod) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "payment method is not supported")
+		}
+		if errors.Is(err, service.ErrInvalidIdempotencyKey) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "idempotency key is invalid")
+		}
+		if errors.Is(err, service.ErrIdempotencyKeyConflict) {
+			return response.Error(c, http.StatusConflict, "idempotency conflict", "idempotency key is already used for a different payment request")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "payment processing failed")
 	}
@@ -143,7 +150,9 @@ func (h *PaymentHandler) RefundPayment(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role, claims.Email, req)
+	// Admin/staff-triggered refunds should not reuse the actor email as the
+	// customer notification recipient.
+	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role, "", req)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")

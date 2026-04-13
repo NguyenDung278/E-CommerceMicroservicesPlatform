@@ -87,6 +87,18 @@ type PaymentEvent struct {
 	RequestID string  `json:"request_id,omitempty"`
 }
 
+type ReturnEvent struct {
+	EventID      string  `json:"event_id,omitempty"`
+	ReturnID     string  `json:"return_id"`
+	OrderID      string  `json:"order_id"`
+	UserID       string  `json:"user_id"`
+	UserEmail    string  `json:"user_email"`
+	Status       string  `json:"status"`
+	Reason       string  `json:"reason,omitempty"`
+	RefundAmount float64 `json:"refund_amount,omitempty"`
+	RequestID    string  `json:"request_id,omitempty"`
+}
+
 // HandleMessage processes one RabbitMQ delivery with duplicate protection,
 // retry scheduling, and DLQ handoff for permanent failures.
 //
@@ -230,6 +242,14 @@ func (h *EventHandler) processMessage(msg amqp.Delivery) error {
 		return h.handleOrderCancelled(event)
 	}
 
+	if strings.HasPrefix(msg.RoutingKey, "return.") {
+		var event ReturnEvent
+		if err := json.Unmarshal(msg.Body, &event); err != nil {
+			return newPermanentDeliveryError(fmt.Errorf("failed to decode return event: %w", err))
+		}
+		return h.handleReturnEvent(event)
+	}
+
 	return newPermanentDeliveryError(fmt.Errorf("unsupported routing key %s", msg.RoutingKey))
 }
 
@@ -300,6 +320,72 @@ func (h *EventHandler) handleOrderCancelled(event OrderEvent) error {
 		event.OrderID,
 		event.TotalPrice,
 	))
+}
+
+func (h *EventHandler) handleReturnEvent(event ReturnEvent) error {
+	h.log.Info("notification: return updated",
+		zap.String("user_id", event.UserID),
+		zap.String("order_id", event.OrderID),
+		zap.String("return_id", event.ReturnID),
+		zap.String("status", event.Status),
+	)
+
+	subject, body := returnEmailContent(event)
+	return h.sendEmail(event.UserEmail, subject, body)
+}
+
+func returnEmailContent(event ReturnEvent) (string, string) {
+	switch strings.ToLower(strings.TrimSpace(event.Status)) {
+	case "requested":
+		return "Da tiep nhan yeu cau tra hang", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da duoc tiep nhan.\nLy do: %s\n\nChung toi se cap nhat som nhat khi yeu cau duoc xem xet.",
+			event.ReturnID,
+			event.OrderID,
+			event.Reason,
+		)
+	case "approved":
+		return "Yeu cau tra hang da duoc duyet", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da duoc duyet.\nLy do: %s\n\nVui long gui hang ve kho theo huong dan cua chung toi.",
+			event.ReturnID,
+			event.OrderID,
+			event.Reason,
+		)
+	case "received":
+		return "Kho da nhan hang tra ve", fmt.Sprintf(
+			"Chao ban,\n\nChung toi da nhan hang tra ve cho yeu cau %s cua don hang %s.\nLy do: %s\n\nHe thong se tien hanh buoc hoan tien tiep theo.",
+			event.ReturnID,
+			event.OrderID,
+			event.Reason,
+		)
+	case "rejected":
+		return "Yeu cau tra hang bi tu choi", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s khong duoc chap nhan.\nLy do: %s\n\nNeu ban can ho tro them, vui long lien he chung toi.",
+			event.ReturnID,
+			event.OrderID,
+			event.Reason,
+		)
+	case "cancelled":
+		return "Yeu cau tra hang da bi huy", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da duoc huy.\nLy do: %s",
+			event.ReturnID,
+			event.OrderID,
+			event.Reason,
+		)
+	case "refunded":
+		return "Tra hang da hoan tat", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da hoan tat.\nSo tien hoan du kien: %.2f\n\nCam on ban da cho chung toi co hoi ho tro.",
+			event.ReturnID,
+			event.OrderID,
+			event.RefundAmount,
+		)
+	default:
+		return "Cap nhat yeu cau tra hang", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da duoc cap nhat sang trang thai %s.",
+			event.ReturnID,
+			event.OrderID,
+			event.Status,
+		)
+	}
 }
 
 func (h *EventHandler) sendEmail(to, subject, body string) error {

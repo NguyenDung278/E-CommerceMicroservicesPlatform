@@ -422,10 +422,6 @@ describe("CheckoutPage shipping selector", () => {
           shipping_address: expect.objectContaining({
             recipient_name: "Nguyen Van E",
             phone: "0901234567",
-            street: "12 Nguyen Hue",
-            ward: "Ben Nghe",
-            district: "District 1",
-            city: "Ho Chi Minh",
           }),
         })
       );
@@ -595,10 +591,6 @@ describe("CheckoutPage shipping selector", () => {
         shipping_address: {
           recipient_name: "Nguyen Van E",
           phone: "0901234567",
-          street: "12 Nguyen Hue",
-          ward: "Ben Nghe",
-          district: "District 1",
-          city: "Ho Chi Minh",
         },
       });
       expect(container.textContent).toContain("Voucher ND2026 đã được áp dụng.");
@@ -664,14 +656,7 @@ describe("CheckoutPage shipping selector", () => {
       expect(lastPreviewCall?.[1]).toMatchObject({
         coupon_code: "ND2026",
         shipping_method: "pickup",
-        shipping_address: {
-          recipient_name: "Nguyen Van E",
-          phone: "0901234567",
-          street: "12 Nguyen Hue",
-          ward: "Ben Nghe",
-          district: "District 1",
-          city: "Ho Chi Minh",
-        },
+        shipping_address: undefined,
       });
       expect(container.textContent).toContain("Ready in 30 minutes");
       expect(container.textContent).toContain(

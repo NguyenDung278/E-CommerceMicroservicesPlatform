@@ -70,6 +70,45 @@ func buildCancelledOrderOutbox(ctx context.Context, order *model.Order) (*model.
 	return buildOrderOutboxMessage(ctx, order, "", "order.cancelled", string(model.OrderStatusCancelled))
 }
 
+func buildReturnOutboxMessage(
+	ctx context.Context,
+	returnRequest *model.ReturnRequest,
+	status model.ReturnStatus,
+	refundAmount float64,
+) (*model.OutboxMessage, error) {
+	eventID := uuid.NewString()
+	requestID := appobs.RequestIDFromContext(ctx)
+	now := time.Now()
+	routingKey := "return." + string(status)
+	payload, err := json.Marshal(ReturnLifecycleEvent{
+		EventID:      eventID,
+		ReturnID:     returnRequest.ID,
+		OrderID:      returnRequest.OrderID,
+		UserID:       returnRequest.UserID,
+		UserEmail:    returnRequest.UserEmail,
+		Status:       string(status),
+		Reason:       returnRequest.Reason,
+		RefundAmount: refundAmount,
+		RequestID:    requestID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal return outbox payload: %w", err)
+	}
+
+	return &model.OutboxMessage{
+		ID:            eventID,
+		AggregateType: "return",
+		AggregateID:   returnRequest.ID,
+		EventType:     routingKey,
+		RoutingKey:    routingKey,
+		Payload:       payload,
+		RequestID:     requestID,
+		AvailableAt:   now,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}, nil
+}
+
 func buildOrderOutboxMessage(ctx context.Context, order *model.Order, userEmail, routingKey, status string) (*model.OutboxMessage, error) {
 	eventID := uuid.NewString()
 	requestID := appobs.RequestIDFromContext(ctx)

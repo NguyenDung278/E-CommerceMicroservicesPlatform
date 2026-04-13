@@ -47,6 +47,8 @@ type LiveWorkbookCache = {
   loadedAt: number;
   /** Prevents duplicate concurrent network requests if multiple components mount */
   pendingRequest: Promise<HomeWorkbookContent> | null;
+  /** Tracks which pending request currently owns the shared request slot */
+  pendingRequestToken: number;
 };
 
 /**
@@ -60,6 +62,7 @@ const liveWorkbookCache: LiveWorkbookCache = {
   signature: "",
   loadedAt: 0,
   pendingRequest: null,
+  pendingRequestToken: 0,
 };
 
 // ==========================================
@@ -118,13 +121,22 @@ export function publishHomeWorkbookSyncSignal() {
  * Shared fetch function. If a fetch is already in-flight, it returns the existing Promise.
  * This ensures multiple consumers won't spam the server at the exact same time.
  */
-async function fetchLiveWorkbookShared(): Promise<HomeWorkbookContent> {
-  if (!liveWorkbookCache.pendingRequest) {
-    liveWorkbookCache.pendingRequest = loadLiveHomeWorkbook().finally(() => {
-      // Clear the pending request lock once it's done (success or failure)
-      liveWorkbookCache.pendingRequest = null;
-    });
+async function fetchLiveWorkbookShared(options: { forceRefresh?: boolean } = {}): Promise<HomeWorkbookContent> {
+  const forceRefresh = options.forceRefresh ?? false;
+
+  if (!forceRefresh && liveWorkbookCache.pendingRequest) {
+    return liveWorkbookCache.pendingRequest;
   }
+
+  const nextPendingRequestToken = liveWorkbookCache.pendingRequestToken + 1;
+  liveWorkbookCache.pendingRequestToken = nextPendingRequestToken;
+  liveWorkbookCache.pendingRequest = loadLiveHomeWorkbook().finally(() => {
+    // Only the newest request is allowed to clear the shared pending slot.
+    if (liveWorkbookCache.pendingRequestToken === nextPendingRequestToken) {
+      liveWorkbookCache.pendingRequest = null;
+    }
+  });
+
   return liveWorkbookCache.pendingRequest;
 }
 
@@ -245,7 +257,7 @@ export function useHomeWorkbook(): HomeWorkbookState {
 
       try {
         // 4. Fetch the data:
-        const nextContent = await fetchLiveWorkbookShared();
+        const nextContent = await fetchLiveWorkbookShared({ forceRefresh });
 
         // Bail out if component unmounted or a newer request started
         if (!isComponentMounted || requestVersionRef.current !== currentRequestVersion) {

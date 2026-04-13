@@ -10,6 +10,8 @@ var (
 	ErrPaymentAlreadySettled    = errors.New("order is already fully paid")
 	ErrInvalidPaymentAmount     = errors.New("payment amount is invalid")
 	ErrUnsupportedPaymentMethod = errors.New("payment method is not supported")
+	ErrInvalidIdempotencyKey    = errors.New("idempotency key is invalid")
+	ErrIdempotencyKeyConflict   = errors.New("idempotency key is already used for a different payment request")
 	ErrRefundNotAllowed         = errors.New("payment is not refundable")
 	ErrRefundAmountExceeded     = errors.New("refund amount exceeds refundable balance")
 	ErrInvalidWebhookSignature  = errors.New("invalid webhook signature")

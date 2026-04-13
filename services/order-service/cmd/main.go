@@ -96,7 +96,7 @@ func main() {
 	}
 	defer productClient.Close()
 
-	paymentClient := paymentclient.NewPaymentClient(cfg.Services.PaymentService, log)
+	paymentClient := paymentclient.NewPaymentClient(cfg.Services.PaymentService, log, cfg.JWT.Secret)
 
 	orderRepo := repository.NewOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient, paymentClient)

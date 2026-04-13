@@ -24,19 +24,69 @@ import (
 )
 
 type fakeOrderHandlerRepo struct {
-	coupons map[string]*model.Coupon
+	coupons     map[string]*model.Coupon
+	ordersByID  map[string]*model.Order
+	returnsByID map[string]*model.ReturnRequest
 }
 
 func (r *fakeOrderHandlerRepo) Create(_ context.Context, _ *model.Order, _ *model.OutboxMessage) error {
 	return nil
 }
 
-func (r *fakeOrderHandlerRepo) GetByID(_ context.Context, _ string) (*model.Order, error) {
-	return nil, nil
+func (r *fakeOrderHandlerRepo) GetByID(_ context.Context, id string) (*model.Order, error) {
+	order, ok := r.ordersByID[id]
+	if !ok {
+		return nil, nil
+	}
+
+	copyValue := *order
+	copyValue.Items = append([]model.OrderItem(nil), order.Items...)
+	return &copyValue, nil
 }
 
 func (r *fakeOrderHandlerRepo) GetByUserID(_ context.Context, _ string) ([]*model.Order, error) {
 	return nil, nil
+}
+
+func (r *fakeOrderHandlerRepo) CreateReturn(_ context.Context, returnRequest *model.ReturnRequest, _ *model.OutboxMessage) error {
+	if r.returnsByID == nil {
+		r.returnsByID = map[string]*model.ReturnRequest{}
+	}
+	r.returnsByID[returnRequest.ID] = cloneHandlerReturnRequest(returnRequest)
+	return nil
+}
+
+func (r *fakeOrderHandlerRepo) GetReturnByID(_ context.Context, id string) (*model.ReturnRequest, error) {
+	return cloneHandlerReturnRequest(r.returnsByID[id]), nil
+}
+
+func (r *fakeOrderHandlerRepo) ListReturnsByOrderID(_ context.Context, orderID string) ([]*model.ReturnRequest, error) {
+	var returns []*model.ReturnRequest
+	for _, returnRequest := range r.returnsByID {
+		if returnRequest.OrderID == orderID {
+			returns = append(returns, cloneHandlerReturnRequest(returnRequest))
+		}
+	}
+	return returns, nil
+}
+
+func (r *fakeOrderHandlerRepo) UpdateReturnStatus(_ context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, _ *model.OutboxMessage) error {
+	returnRequest, ok := r.returnsByID[id]
+	if !ok {
+		return nil
+	}
+	returnRequest.Status = status
+	returnRequest.UpdatedAt = time.Now()
+	returnRequest.Events = append(returnRequest.Events, model.ReturnEvent{
+		ID:        "event-" + id,
+		ReturnID:  id,
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (r *fakeOrderHandlerRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*model.Order, int64, error) {
@@ -103,6 +153,17 @@ func (r *fakeOrderHandlerRepo) ApplyInboxStatusTransition(
 	_, _, _ string,
 ) (*model.InboxTransitionResult, error) {
 	return &model.InboxTransitionResult{}, nil
+}
+
+func cloneHandlerReturnRequest(returnRequest *model.ReturnRequest) *model.ReturnRequest {
+	if returnRequest == nil {
+		return nil
+	}
+
+	copyValue := *returnRequest
+	copyValue.Items = append([]model.ReturnItem(nil), returnRequest.Items...)
+	copyValue.Events = append([]model.ReturnEvent(nil), returnRequest.Events...)
+	return &copyValue
 }
 
 var _ repository.OrderRepository = (*fakeOrderHandlerRepo)(nil)
@@ -259,6 +320,109 @@ func TestPreviewOrderRequiresAddressForDelivery(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte("shipping address is required")) {
 		t.Fatalf("expected missing shipping address message, got %s", rec.Body.String())
+	}
+}
+
+func TestCreateReturnRouteCreatesRequestedReturn(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: model.OrderStatusDelivered,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Archive Coat",
+						Price:     60,
+						Quantity:  1,
+					},
+				},
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	body, _ := json.Marshal(map[string]any{
+		"reason": "Received the wrong size item",
+		"items": []map[string]any{
+			{
+				"order_item_id": "item-1",
+				"quantity":      1,
+				"reason":        "Need the correct size",
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/order-1/returns", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"requested"`)) {
+		t.Fatalf("expected requested return status, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminUpdateReturnStatusRouteUpdatesReturn(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Package arrived damaged",
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    1,
+					},
+				},
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	body, _ := json.Marshal(map[string]any{
+		"status":  "approved",
+		"message": "Approved after QA review",
+	})
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/returns/return-1/status", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"approved"`)) {
+		t.Fatalf("expected approved return status, got %s", rec.Body.String())
 	}
 }
 

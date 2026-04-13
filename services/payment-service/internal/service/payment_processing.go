@@ -22,6 +22,7 @@ import (
 //   - ctx carries cancellation to order lookup, repository calls, and event publication.
 //   - userID and userEmail identify the payer and downstream notification target.
 //   - authHeader is forwarded to order-service for ownership-safe order lookup.
+//   - idempotencyKey, when present, deduplicates completed requests per user.
 //   - req contains the target order, payment method, and optional amount.
 //
 // Returns:
@@ -39,7 +40,30 @@ import (
 //
 // Performance:
 //   - dominated by one remote order lookup, one payment-history query, and one insert.
-func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, authHeader string, req dto.ProcessPaymentRequest) (*model.Payment, error) {
+func (s *PaymentService) ProcessPayment(
+	ctx context.Context,
+	userID, userEmail, authHeader, idempotencyKey string,
+	req dto.ProcessPaymentRequest,
+) (*model.Payment, error) {
+	normalizedKey, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	requestHash := hashProcessPaymentRequest(req)
+	replayedPayment, err := s.findIdempotentPayment(ctx, userID, normalizedKey, requestHash)
+	if err != nil || replayedPayment != nil {
+		return replayedPayment, err
+	}
+
+	return s.processPaymentCore(ctx, userID, userEmail, authHeader, normalizedKey, requestHash, req)
+}
+
+func (s *PaymentService) processPaymentCore(
+	ctx context.Context,
+	userID, userEmail, authHeader, idempotencyKey, requestHash string,
+	req dto.ProcessPaymentRequest,
+) (*model.Payment, error) {
 	startedAt := time.Now()
 	outcome := appobs.OutcomeSuccess
 	requestLog := appobs.LoggerWithContext(s.log, ctx,
@@ -144,8 +168,37 @@ func (s *PaymentService) ProcessPayment(ctx context.Context, userID, userEmail, 
 		}
 	}
 
-	if err := s.repo.Create(ctx, payment, outbox); err != nil {
+	if idempotencyKey != "" {
+		err = s.repo.CreateWithIdempotency(ctx, payment, outbox, &model.PaymentIdempotencyRecord{
+			UserID:         userID,
+			IdempotencyKey: idempotencyKey,
+			RequestHash:    requestHash,
+			PaymentID:      payment.ID,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		})
+	} else {
+		err = s.repo.Create(ctx, payment, outbox)
+	}
+	if err != nil {
 		outcome = appobs.OutcomeSystemError
+		if idempotencyKey != "" && isUniqueViolation(err) {
+			replayedPayment, replayErr := s.findIdempotentPayment(ctx, userID, idempotencyKey, requestHash)
+			if replayErr == nil && replayedPayment != nil {
+				requestLog.Info("payment request replayed from idempotency key",
+					zap.String("idempotency_key", idempotencyKey),
+					zap.String("payment_id", replayedPayment.ID),
+				)
+				return replayedPayment, nil
+			}
+			if replayErr != nil {
+				requestLog.Error("payment idempotency replay failed after unique violation",
+					zap.String("idempotency_key", idempotencyKey),
+					zap.Error(replayErr),
+				)
+				return nil, replayErr
+			}
+		}
 		if isUniqueViolation(err) {
 			outcome = appobs.OutcomeBusinessError
 			requestLog.Warn("payment processing rejected due to duplicate payment record",

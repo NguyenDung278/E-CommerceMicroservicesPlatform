@@ -21,6 +21,7 @@ Thư mục `deep-dive/` dành cho việc hiểu repo ở mức kiến trúc và 
 10. [order-service.md](./order-service.md)
 11. [payment-service.md](./payment-service.md)
 12. [notification-service.md](./notification-service.md)
+13. [payment-idempotency-scaffold.md](./payment-idempotency-scaffold.md)
 
 ## Mục tiêu của tầng tài liệu này
 

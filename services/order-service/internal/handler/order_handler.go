@@ -37,8 +37,14 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.GET("/summary", h.GetUserOrderSummary)
 	orders.GET("", h.GetUserOrders)
 	orders.GET("/:id/events", h.GetOrderTimeline)
+	orders.POST("/:id/returns", h.CreateReturn)
+	orders.GET("/:id/returns", h.ListOrderReturns)
 	orders.GET("/:id", h.GetOrder)
 	orders.PUT("/:id/cancel", h.CancelOrder)
+
+	returns := e.Group("/api/v1/returns")
+	returns.Use(middleware.JWTAuth(jwtSecret))
+	returns.GET("/:id", h.GetReturn)
 
 	legacyAdmin := orders.Group("/admin")
 	legacyAdmin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
@@ -53,6 +59,11 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminOrders.GET("/:id", h.GetAdminOrder)
 	adminOrders.PUT("/:id/cancel", h.CancelOrderAsAdmin)
 	adminOrders.PUT("/:id/status", h.UpdateOrderStatus)
+
+	adminReturns := e.Group("/api/v1/admin/returns")
+	adminReturns.Use(middleware.JWTAuth(jwtSecret))
+	adminReturns.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	adminReturns.PUT("/:id/status", h.UpdateReturnStatus)
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
 	adminCoupons.Use(middleware.JWTAuth(jwtSecret))
@@ -115,6 +126,47 @@ func (h *OrderHandler) GetOrder(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	return response.Success(c, http.StatusOK, "order retrieved", order)
+}
+
+func (h *OrderHandler) CreateReturn(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	var req dto.CreateReturnRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	returnRequest, err := h.orderService.CreateReturn(c.Request().Context(), c.Param("id"), claims.UserID, claims.Email, req)
+	if err != nil {
+		return writeReturnError(c, err, "failed to create return")
+	}
+
+	return response.Success(c, http.StatusCreated, "return created", returnRequest)
+}
+
+func (h *OrderHandler) ListOrderReturns(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	returns, err := h.orderService.ListReturnsByOrder(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role)
+	if err != nil {
+		return writeReturnError(c, err, "failed to list returns")
+	}
+	if returns == nil {
+		returns = []*model.ReturnRequest{}
+	}
+
+	return response.Success(c, http.StatusOK, "returns retrieved", returns)
+}
+
+func (h *OrderHandler) GetReturn(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	returnRequest, err := h.orderService.GetReturn(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role)
+	if err != nil {
+		return writeReturnError(c, err, "failed to load return")
+	}
+
+	return response.Success(c, http.StatusOK, "return retrieved", returnRequest)
 }
 
 func (h *OrderHandler) GetUserOrders(c echo.Context) error {
@@ -283,6 +335,36 @@ func (h *OrderHandler) UpdateOrderStatus(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "order status updated", order)
 }
 
+func (h *OrderHandler) UpdateReturnStatus(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	var req dto.UpdateReturnStatusRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	err := h.orderService.UpdateReturnStatus(
+		c.Request().Context(),
+		c.Param("id"),
+		model.ReturnStatus(req.Status),
+		claims.UserID,
+		claims.Role,
+		req.Message,
+	)
+	if err != nil {
+		return writeReturnError(c, err, "failed to update return status")
+	}
+
+	returnRequest, err := h.orderService.GetReturn(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load updated return")
+	}
+
+	return response.Success(c, http.StatusOK, "return status updated", returnRequest)
+}
+
 func (h *OrderHandler) CreateCoupon(c echo.Context) error {
 	var req dto.CreateCouponRequest
 	if err := c.Bind(&req); err != nil {
@@ -409,6 +491,33 @@ func writePricingError(c echo.Context, err error, fallbackMessage string) error 
 	}
 	if errors.Is(err, service.ErrCouponUsageLimit) {
 		return response.Error(c, http.StatusConflict, "coupon unavailable", err.Error())
+	}
+
+	return response.Error(c, http.StatusInternalServerError, "error", fallbackMessage)
+}
+
+func writeReturnError(c echo.Context, err error, fallbackMessage string) error {
+	if errors.Is(err, service.ErrOrderNotFound) {
+		return response.Error(c, http.StatusNotFound, "not found", "order not found")
+	}
+	if errors.Is(err, service.ErrReturnNotFound) {
+		return response.Error(c, http.StatusNotFound, "not found", "return not found")
+	}
+	if errors.Is(err, service.ErrReturnStatusTransition) {
+		return response.Error(c, http.StatusConflict, "transition not allowed", err.Error())
+	}
+	if errors.Is(err, service.ErrReturnRefundUnavailable) {
+		return response.Error(c, http.StatusConflict, "refund unavailable", err.Error())
+	}
+	if errors.Is(err, service.ErrReturnReasonRequired) ||
+		errors.Is(err, service.ErrReturnItemsRequired) ||
+		errors.Is(err, service.ErrReturnNotAllowed) ||
+		errors.Is(err, service.ErrReturnOrderItemNotFound) ||
+		errors.Is(err, service.ErrReturnQuantityExceeded) ||
+		errors.Is(err, service.ErrDuplicateReturnItem) ||
+		errors.Is(err, service.ErrReturnRefundAmount) ||
+		errors.Is(err, service.ErrInvalidReturnStatus) {
+		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
 	}
 
 	return response.Error(c, http.StatusInternalServerError, "error", fallbackMessage)

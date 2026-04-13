@@ -17,11 +17,15 @@ import (
 )
 
 type fakeOrderRepo struct {
-	createdOrder  *model.Order
-	createdOutbox *model.OutboxMessage
-	coupons       map[string]*model.Coupon
-	userOrders    []*model.Order
-	createErr     error
+	createdOrder        *model.Order
+	createdOutbox       *model.OutboxMessage
+	createdReturnOutbox *model.OutboxMessage
+	updatedReturnOutbox *model.OutboxMessage
+	coupons             map[string]*model.Coupon
+	userOrders          []*model.Order
+	createErr           error
+	ordersByID          map[string]*model.Order
+	returnsByID         map[string]*model.ReturnRequest
 }
 
 func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *model.OutboxMessage) error {
@@ -33,12 +37,62 @@ func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *mo
 	return nil
 }
 
-func (r *fakeOrderRepo) GetByID(_ context.Context, _ string) (*model.Order, error) {
-	return nil, nil
+func (r *fakeOrderRepo) GetByID(_ context.Context, id string) (*model.Order, error) {
+	order, ok := r.ordersByID[id]
+	if !ok {
+		return nil, nil
+	}
+
+	copyValue := *order
+	copyValue.Items = append([]model.OrderItem(nil), order.Items...)
+	return &copyValue, nil
 }
 
 func (r *fakeOrderRepo) GetByUserID(_ context.Context, _ string) ([]*model.Order, error) {
 	return r.userOrders, nil
+}
+
+func (r *fakeOrderRepo) CreateReturn(_ context.Context, returnRequest *model.ReturnRequest, outbox *model.OutboxMessage) error {
+	if r.returnsByID == nil {
+		r.returnsByID = map[string]*model.ReturnRequest{}
+	}
+	r.returnsByID[returnRequest.ID] = cloneReturnRequest(returnRequest)
+	r.createdReturnOutbox = outbox
+	return nil
+}
+
+func (r *fakeOrderRepo) GetReturnByID(_ context.Context, id string) (*model.ReturnRequest, error) {
+	return cloneReturnRequest(r.returnsByID[id]), nil
+}
+
+func (r *fakeOrderRepo) ListReturnsByOrderID(_ context.Context, orderID string) ([]*model.ReturnRequest, error) {
+	var returns []*model.ReturnRequest
+	for _, returnRequest := range r.returnsByID {
+		if returnRequest.OrderID == orderID {
+			returns = append(returns, cloneReturnRequest(returnRequest))
+		}
+	}
+	return returns, nil
+}
+
+func (r *fakeOrderRepo) UpdateReturnStatus(_ context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error {
+	returnRequest, ok := r.returnsByID[id]
+	if !ok {
+		return nil
+	}
+	returnRequest.Status = status
+	returnRequest.UpdatedAt = time.Now()
+	r.updatedReturnOutbox = outbox
+	returnRequest.Events = append(returnRequest.Events, model.ReturnEvent{
+		ID:        "event-" + id,
+		ReturnID:  id,
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (r *fakeOrderRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*model.Order, int64, error) {
@@ -111,6 +165,17 @@ func (r *fakeOrderRepo) ApplyInboxStatusTransition(
 	return &model.InboxTransitionResult{}, nil
 }
 
+func cloneReturnRequest(returnRequest *model.ReturnRequest) *model.ReturnRequest {
+	if returnRequest == nil {
+		return nil
+	}
+
+	copyValue := *returnRequest
+	copyValue.Items = append([]model.ReturnItem(nil), returnRequest.Items...)
+	copyValue.Events = append([]model.ReturnEvent(nil), returnRequest.Events...)
+	return &copyValue
+}
+
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {
@@ -171,8 +236,14 @@ func (c *fakeProductCatalog) RestoreStock(_ context.Context, productID string, q
 }
 
 type fakePaymentHistoryClient struct {
-	payments []model.PaymentSummary
-	err      error
+	payments        []model.PaymentSummary
+	paymentsByOrder map[string][]model.PaymentSummary
+	refunded        []struct {
+		paymentID string
+		amount    float64
+		message   string
+	}
+	err error
 }
 
 func (c *fakePaymentHistoryClient) ListPaymentHistory(_ context.Context, _ string) ([]model.PaymentSummary, error) {
@@ -180,6 +251,32 @@ func (c *fakePaymentHistoryClient) ListPaymentHistory(_ context.Context, _ strin
 		return nil, c.err
 	}
 	return c.payments, nil
+}
+
+func (c *fakePaymentHistoryClient) ListPaymentsByOrder(_ context.Context, orderID string) ([]model.PaymentSummary, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	return c.paymentsByOrder[orderID], nil
+}
+
+func (c *fakePaymentHistoryClient) RefundPayment(_ context.Context, paymentID string, amount float64, message string) (*model.PaymentSummary, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	c.refunded = append(c.refunded, struct {
+		paymentID string
+		amount    float64
+		message   string
+	}{paymentID: paymentID, amount: amount, message: message})
+	return &model.PaymentSummary{
+		ID:                 "refund-" + paymentID,
+		OrderID:            "order-1",
+		Amount:             amount,
+		Status:             "refunded",
+		TransactionType:    "refund",
+		ReferencePaymentID: paymentID,
+	}, nil
 }
 
 func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
@@ -281,6 +378,222 @@ func TestPreviewOrderRejectsCouponWhenMinimumNotMet(t *testing.T) {
 	}
 	if err != ErrCouponMinimumNotMet {
 		t.Fatalf("expected ErrCouponMinimumNotMet, got %v", err)
+	}
+}
+
+func TestCreateReturnCreatesRequestedReturnForDeliveredOrder(t *testing.T) {
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: model.OrderStatusDelivered,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Desk Lamp",
+						Price:     49.99,
+						Quantity:  2,
+					},
+				},
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	returnRequest, err := svc.CreateReturn(context.Background(), "order-1", "user-1", "user@example.com", dto.CreateReturnRequest{
+		Reason: "Product arrived damaged on delivery",
+		Items: []dto.ReturnItemRequest{
+			{
+				OrderItemID: "item-1",
+				Quantity:    1,
+				Reason:      "Shade was cracked",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateReturn returned error: %v", err)
+	}
+
+	if returnRequest.Status != model.ReturnStatusRequested {
+		t.Fatalf("expected requested return status, got %s", returnRequest.Status)
+	}
+	if len(returnRequest.Items) != 1 {
+		t.Fatalf("expected 1 return item, got %d", len(returnRequest.Items))
+	}
+	if repo.returnsByID[returnRequest.ID] == nil {
+		t.Fatal("expected return to be persisted in repository")
+	}
+	if repo.createdReturnOutbox == nil || repo.createdReturnOutbox.RoutingKey != "return.requested" {
+		t.Fatalf("expected requested return outbox message, got %#v", repo.createdReturnOutbox)
+	}
+}
+
+func TestCreateReturnRejectsQuantityAbovePurchasedAmount(t *testing.T) {
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: model.OrderStatusDelivered,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Desk Lamp",
+						Price:     49.99,
+						Quantity:  1,
+					},
+				},
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	_, err := svc.CreateReturn(context.Background(), "order-1", "user-1", "user@example.com", dto.CreateReturnRequest{
+		Reason: "Need to return both units",
+		Items: []dto.ReturnItemRequest{
+			{
+				OrderItemID: "item-1",
+				Quantity:    2,
+			},
+		},
+	})
+	if !errors.Is(err, ErrReturnQuantityExceeded) {
+		t.Fatalf("expected ErrReturnQuantityExceeded, got %v", err)
+	}
+}
+
+func TestCreateReturnRejectsAlreadyReturnedQuantity(t *testing.T) {
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: model.OrderStatusDelivered,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Desk Lamp",
+						Price:     49.99,
+						Quantity:  2,
+					},
+				},
+			},
+		},
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    2,
+					},
+				},
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	_, err := svc.CreateReturn(context.Background(), "order-1", "user-1", "user@example.com", dto.CreateReturnRequest{
+		Reason: "Trying to return beyond available quantity",
+		Items: []dto.ReturnItemRequest{
+			{
+				OrderItemID: "item-1",
+				Quantity:    1,
+			},
+		},
+	})
+	if !errors.Is(err, ErrReturnQuantityExceeded) {
+		t.Fatalf("expected ErrReturnQuantityExceeded for already returned items, got %v", err)
+	}
+}
+
+func TestUpdateReturnStatusRefundedTriggersPaymentRefundAndOutbox(t *testing.T) {
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:             "order-1",
+				UserID:         "user-1",
+				Status:         model.OrderStatusDelivered,
+				SubtotalPrice:  100,
+				DiscountAmount: 10,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Desk Lamp",
+						Price:     100,
+						Quantity:  1,
+					},
+				},
+			},
+		},
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:        "return-1",
+				OrderID:   "order-1",
+				UserID:    "user-1",
+				UserEmail: "user@example.com",
+				Status:    model.ReturnStatusApproved,
+				Reason:    "Damaged item",
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    1,
+					},
+				},
+			},
+		},
+	}
+	paymentClient := &fakePaymentHistoryClient{
+		paymentsByOrder: map[string][]model.PaymentSummary{
+			"order-1": {
+				{
+					ID:              "payment-1",
+					OrderID:         "order-1",
+					Amount:          90,
+					Status:          "completed",
+					TransactionType: "charge",
+				},
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient)
+
+	if err := svc.UpdateReturnStatus(context.Background(), "return-1", model.ReturnStatusRefunded, "admin-1", "admin", "Refund approved"); err != nil {
+		t.Fatalf("UpdateReturnStatus returned error: %v", err)
+	}
+
+	if len(paymentClient.refunded) != 1 {
+		t.Fatalf("expected 1 refund call, got %d", len(paymentClient.refunded))
+	}
+	if paymentClient.refunded[0].paymentID != "payment-1" {
+		t.Fatalf("expected refund against payment-1, got %q", paymentClient.refunded[0].paymentID)
+	}
+	if paymentClient.refunded[0].amount != 90 {
+		t.Fatalf("expected refund amount 90, got %.2f", paymentClient.refunded[0].amount)
+	}
+	if repo.returnsByID["return-1"].Status != model.ReturnStatusRefunded {
+		t.Fatalf("expected return status refunded, got %s", repo.returnsByID["return-1"].Status)
+	}
+	if repo.updatedReturnOutbox == nil || repo.updatedReturnOutbox.RoutingKey != "return.refunded" {
+		t.Fatalf("expected refunded return outbox message, got %#v", repo.updatedReturnOutbox)
 	}
 }
 

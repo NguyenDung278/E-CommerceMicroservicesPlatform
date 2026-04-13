@@ -5,26 +5,28 @@
 .checkout-shell {
   width: min(100%, 1360px);
   margin: 0 auto;
-  padding-top: 40px;
+  padding-top: 48px;
 }
 
 .checkout-shell-heading {
   display: grid;
-  gap: 10px;
-  margin-bottom: 44px;
+  gap: 14px;
+  margin-bottom: 48px;
 }
 
 .checkout-shell-heading h1 {
   margin: 0;
   font-size: clamp(3.6rem, 8vw, 5rem);
-  line-height: 0.92;
+  line-height: 0.98;
   letter-spacing: -0.06em;
 }
 
 .checkout-shell-heading p {
   margin: 0;
+  max-width: 40rem;
   color: #575d79;
   font-size: 1.05rem;
+  line-height: 1.72;
 }
 
 .checkout-editorial-grid {
@@ -41,13 +43,13 @@
 
 .checkout-editorial-section {
   display: grid;
-  gap: 24px;
+  gap: 28px;
 }
 
 .checkout-section-title {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
 }
 
 .checkout-step-badge {
@@ -66,14 +68,16 @@
 .checkout-section-title h2 {
   margin: 0;
   font-size: clamp(2rem, 3vw, 2.8rem);
-  line-height: 1;
+  line-height: 1.06;
   letter-spacing: -0.04em;
 }
 
 .checkout-section-note {
   margin: 0;
+  max-width: 42rem;
   color: rgba(87, 93, 121, 0.88);
   font-size: 0.95rem;
+  line-height: 1.72;
 }
 
 .checkout-field-grid {
@@ -84,7 +88,7 @@
 
 .checkout-field {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .checkout-field-full {
@@ -101,12 +105,13 @@
 
 .checkout-field input {
   width: 100%;
-  padding: 0 0 14px;
+  padding: 0 0 16px;
   border: 0;
   border-bottom: 1px solid rgba(115, 121, 115, 0.36);
   background: transparent;
   color: #061b0e;
   font-size: 1rem;
+  line-height: 1.6;
 }
 
 .checkout-field input::placeholder {
@@ -121,9 +126,9 @@
 .checkout-payment-choice {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
+  gap: 22px;
   align-items: center;
-  padding: 24px 26px;
+  padding: 28px 30px;
   border: 2px solid transparent;
   border-radius: 18px;
   background: rgba(245, 243, 238, 0.74);
@@ -142,8 +147,8 @@
 
 .checkout-payment-choice-copy {
   display: flex;
-  gap: 16px;
-  align-items: center;
+  gap: 18px;
+  align-items: flex-start;
 }
 
 .checkout-payment-choice-copy input {
@@ -152,16 +157,18 @@
 
 .checkout-payment-choice-copy div {
   display: grid;
-  gap: 4px;
+  gap: 8px;
 }
 
 .checkout-payment-choice-copy strong {
   font-size: 1.2rem;
   font-weight: 600;
+  line-height: 1.28;
 }
 
 .checkout-payment-choice-copy span {
   color: #575d79;
+  line-height: 1.68;
 }
 
 .checkout-method-pill {
@@ -234,29 +241,29 @@
 }
 
 .checkout-summary-card {
-  padding: 34px;
+  padding: 38px;
   border-radius: 22px;
   background: rgba(245, 243, 238, 0.76);
   box-shadow: 0 18px 38px -28px rgba(27, 28, 25, 0.25);
 }
 
 .checkout-summary-card h3 {
-  margin: 0 0 30px;
+  margin: 0 0 32px;
   font-size: clamp(1.9rem, 2.4vw, 2.5rem);
-  line-height: 1;
+  line-height: 1.08;
   letter-spacing: -0.04em;
 }
 
 .checkout-summary-items {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .checkout-voucher-panel {
   display: grid;
-  gap: 12px;
-  margin-top: 26px;
-  padding-top: 24px;
+  gap: 14px;
+  margin-top: 30px;
+  padding-top: 28px;
   border-top: 1px solid rgba(115, 121, 115, 0.22);
 }
 
@@ -271,18 +278,20 @@
 .checkout-voucher-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 14px;
+  align-items: start;
 }
 
 .checkout-voucher-row input {
   width: 100%;
-  min-height: 50px;
-  padding: 0 16px;
+  min-height: 54px;
+  padding: 0 18px;
   border: 1px solid rgba(115, 121, 115, 0.24);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.76);
   color: #061b0e;
   font-size: 0.98rem;
+  line-height: 1.5;
 }
 
 .checkout-voucher-row input::placeholder {
@@ -290,8 +299,9 @@
 }
 
 .checkout-voucher-action {
-  min-width: 156px;
-  min-height: 50px;
+  min-width: 164px;
+  min-height: 54px;
+  padding-inline: 22px;
 }
 
 .checkout-voucher-clear {
@@ -338,32 +348,34 @@
 
 .checkout-summary-copy {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   align-content: center;
 }
 
 .checkout-summary-copy h4 {
   margin: 0;
   font-size: 1.35rem;
-  line-height: 1.08;
+  line-height: 1.18;
 }
 
 .checkout-summary-copy p {
   margin: 0;
   color: #575d79;
+  line-height: 1.62;
 }
 
 .checkout-summary-meta {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: flex-end;
-  margin-top: 8px;
+  align-items: center;
+  margin-top: 12px;
 }
 
 .checkout-summary-meta span {
   color: #575d79;
   font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 .checkout-summary-meta strong {
@@ -372,9 +384,9 @@
 
 .checkout-summary-totals {
   display: grid;
-  gap: 12px;
-  margin-top: 30px;
-  padding-top: 28px;
+  gap: 14px;
+  margin-top: 32px;
+  padding-top: 30px;
   border-top: 1px solid rgba(115, 121, 115, 0.22);
 }
 
@@ -384,6 +396,7 @@
   gap: 12px;
   color: #575d79;
   font-size: 1rem;
+  line-height: 1.6;
 }
 
 .checkout-shipping-free {
@@ -403,17 +416,17 @@
 
 .checkout-place-order {
   width: 100%;
-  margin-top: 32px;
-  padding-block: 18px;
+  margin-top: 34px;
+  padding-block: 20px;
   font-size: 1rem;
 }
 
 .checkout-summary-caption {
-  margin: 22px 0 0;
+  margin: 24px 0 0;
   color: rgba(87, 93, 121, 0.52);
   font-size: 0.68rem;
   font-weight: 700;
-  line-height: 1.7;
+  line-height: 1.9;
   letter-spacing: 0.18em;
   text-align: center;
   text-transform: uppercase;
@@ -422,23 +435,28 @@
 .checkout-summary-trust {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
   color: rgba(87, 93, 121, 0.78);
   font-size: 0.8rem;
   font-weight: 700;
+  line-height: 1.4;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .checkout-summary-trust span {
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-radius: 999px;
   background: rgba(245, 243, 238, 0.7);
 }
 
 .checkout-empty-state {
   gap: 16px;
+}
+
+.checkout-empty-state p {
+  line-height: 1.72;
 }
 
 @media (max-width: 1100px) {
@@ -462,11 +480,12 @@
 
 @media (max-width: 720px) {
   .checkout-shell {
-    padding-top: 12px;
+    padding-top: 18px;
   }
 
   .checkout-shell-heading {
-    margin-bottom: 28px;
+    gap: 12px;
+    margin-bottom: 30px;
   }
 
   .checkout-field-grid {
@@ -475,7 +494,7 @@
   }
 
   .checkout-summary-card {
-    padding: 24px;
+    padding: 28px 24px;
   }
 
   .checkout-summary-item {

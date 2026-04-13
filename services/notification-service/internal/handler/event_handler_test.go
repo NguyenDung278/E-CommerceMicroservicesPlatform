@@ -201,3 +201,40 @@ func TestHandleMessageRejectsPermanentDecodeFailuresToDLQ(t *testing.T) {
 		t.Fatalf("expected inbox claim release on permanent failure, got %#v", inboxStore.released)
 	}
 }
+
+func TestHandleMessageReturnApprovedAcknowledgesAndSendsEmail(t *testing.T) {
+	sender := &stubSender{}
+	inboxStore := &fakeInboxStore{claimStatus: inbox.Claimed}
+	handler := NewEventHandler(zap.NewNop(), sender, inboxStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
+	ack := &fakeAcknowledger{}
+
+	body, err := json.Marshal(ReturnEvent{
+		ReturnID:  "return-1",
+		OrderID:   "order-1",
+		UserID:    "user-1",
+		UserEmail: "alice@example.com",
+		Status:    "approved",
+		Reason:    "Received damaged item",
+	})
+	if err != nil {
+		t.Fatalf("failed to marshal return approved event: %v", err)
+	}
+
+	handler.HandleMessage(context.Background(), amqp.Delivery{
+		Acknowledger: ack,
+		DeliveryTag:  1,
+		MessageId:    "msg-5",
+		RoutingKey:   "return.approved",
+		Body:         body,
+	})
+
+	if !ack.acked || ack.nacked || ack.rejected {
+		t.Fatalf("expected return approved event to be acked once, got acked=%v nacked=%v rejected=%v", ack.acked, ack.nacked, ack.rejected)
+	}
+	if len(sender.messages) != 1 {
+		t.Fatalf("expected 1 return email, got %d", len(sender.messages))
+	}
+	if sender.messages[0].Subject == "" {
+		t.Fatal("expected return approved email subject to be set")
+	}
+}

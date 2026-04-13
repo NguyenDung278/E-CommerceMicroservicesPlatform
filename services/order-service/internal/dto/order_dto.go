@@ -28,6 +28,22 @@ type UpdateOrderStatusRequest struct {
 	Message string `json:"message" validate:"omitempty,max=255"`
 }
 
+type CreateReturnRequest struct {
+	Reason string              `json:"reason" validate:"required,min=5,max=255"`
+	Items  []ReturnItemRequest `json:"items" validate:"required,min=1,dive"`
+}
+
+type ReturnItemRequest struct {
+	OrderItemID string `json:"order_item_id" validate:"required"`
+	Quantity    int    `json:"quantity" validate:"required,gt=0"`
+	Reason      string `json:"reason" validate:"omitempty,max=255"`
+}
+
+type UpdateReturnStatusRequest struct {
+	Status  string `json:"status" validate:"required,oneof=approved rejected received refunded cancelled"`
+	Message string `json:"message" validate:"omitempty,max=255"`
+}
+
 type AdminCancelOrderRequest struct {
 	Message string `json:"message" validate:"omitempty,max=255"`
 }

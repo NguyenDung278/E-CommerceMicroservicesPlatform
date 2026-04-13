@@ -186,8 +186,8 @@ type ParsedRows = {
 };
 
 const liveWorkbookCandidates = [
-  { url: "/content/stitchfix-home.xlsx", kind: "xlsx" as const },
   { url: "/content/stitchfix-home.csv", kind: "csv" as const },
+  { url: "/content/stitchfix-home.xlsx", kind: "xlsx" as const },
 ];
 
 async function loadXlsxModule() {

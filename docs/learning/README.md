@@ -13,6 +13,7 @@
 7. [09-how-to-add-new-feature.md](./09-how-to-add-new-feature.md)
 8. [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md)
 9. [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md)
+10. [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 

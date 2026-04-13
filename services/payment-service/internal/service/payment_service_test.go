@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -17,14 +18,27 @@ import (
 )
 
 type fakePaymentRepo struct {
-	payments      []*model.Payment
-	createdOutbox *model.OutboxMessage
+	payments           []*model.Payment
+	createdOutbox      *model.OutboxMessage
+	idempotencyRecords map[string]*model.PaymentIdempotencyRecord
 }
 
 func (r *fakePaymentRepo) Create(_ context.Context, payment *model.Payment, outbox *model.OutboxMessage) error {
 	copyValue := *payment
 	r.payments = append([]*model.Payment{&copyValue}, r.payments...)
 	r.createdOutbox = outbox
+	return nil
+}
+
+func (r *fakePaymentRepo) CreateWithIdempotency(_ context.Context, payment *model.Payment, outbox *model.OutboxMessage, record *model.PaymentIdempotencyRecord) error {
+	if err := r.Create(context.Background(), payment, outbox); err != nil {
+		return err
+	}
+	if r.idempotencyRecords == nil {
+		r.idempotencyRecords = map[string]*model.PaymentIdempotencyRecord{}
+	}
+	copyRecord := *record
+	r.idempotencyRecords[fakePaymentIdempotencyMapKey(record.UserID, record.IdempotencyKey)] = &copyRecord
 	return nil
 }
 
@@ -56,6 +70,15 @@ func (r *fakePaymentRepo) GetByGatewayOrderID(_ context.Context, gatewayOrderID 
 		}
 	}
 	return nil, nil
+}
+
+func (r *fakePaymentRepo) GetIdempotencyKey(_ context.Context, userID, idempotencyKey string) (*model.PaymentIdempotencyRecord, error) {
+	record, ok := r.idempotencyRecords[fakePaymentIdempotencyMapKey(userID, idempotencyKey)]
+	if !ok {
+		return nil, nil
+	}
+	copyValue := *record
+	return &copyValue, nil
 }
 
 func (r *fakePaymentRepo) GetByIDForUser(ctx context.Context, id, userID string) (*model.Payment, error) {
@@ -142,6 +165,10 @@ func (r *fakePaymentRepo) MarkOutboxFailed(_ context.Context, _ string, _ string
 	return nil
 }
 
+func fakePaymentIdempotencyMapKey(userID, idempotencyKey string) string {
+	return userID + "|" + idempotencyKey
+}
+
 type fakeOrderLookup struct {
 	order *client.Order
 	err   error
@@ -197,7 +224,7 @@ func TestProcessPaymentDefaultsToOutstandingAmount(t *testing.T) {
 	}
 	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
 
-	payment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", dto.ProcessPaymentRequest{
+	payment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "", dto.ProcessPaymentRequest{
 		OrderID:       "order-1",
 		PaymentMethod: "manual",
 	})
@@ -216,6 +243,74 @@ func TestProcessPaymentDefaultsToOutstandingAmount(t *testing.T) {
 	}
 	if repo.createdOutbox == nil {
 		t.Fatal("expected completed payment to enqueue an outbox message")
+	}
+}
+
+func TestProcessPaymentReplaysCompletedRequestByIdempotencyKey(t *testing.T) {
+	repo := &fakePaymentRepo{}
+	orderLookup := &fakeOrderLookup{
+		order: &client.Order{
+			ID:         "order-1",
+			UserID:     "user-1",
+			TotalPrice: 120,
+			Status:     "pending",
+		},
+	}
+	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
+
+	firstPayment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
+		OrderID:       "order-1",
+		PaymentMethod: "manual",
+		Amount:        120,
+	})
+	if err != nil {
+		t.Fatalf("first ProcessPayment returned error: %v", err)
+	}
+
+	replayedPayment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
+		OrderID:       "order-1",
+		PaymentMethod: "manual",
+		Amount:        120,
+	})
+	if err != nil {
+		t.Fatalf("replayed ProcessPayment returned error: %v", err)
+	}
+
+	if len(repo.payments) != 1 {
+		t.Fatalf("expected 1 persisted payment, got %d", len(repo.payments))
+	}
+	if replayedPayment.ID != firstPayment.ID {
+		t.Fatalf("expected replayed payment id %q, got %q", firstPayment.ID, replayedPayment.ID)
+	}
+}
+
+func TestProcessPaymentRejectsIdempotencyKeyReuseForDifferentPayload(t *testing.T) {
+	repo := &fakePaymentRepo{}
+	orderLookup := &fakeOrderLookup{
+		order: &client.Order{
+			ID:         "order-1",
+			UserID:     "user-1",
+			TotalPrice: 120,
+			Status:     "pending",
+		},
+	}
+	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
+
+	if _, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
+		OrderID:       "order-1",
+		PaymentMethod: "manual",
+		Amount:        120,
+	}); err != nil {
+		t.Fatalf("initial ProcessPayment returned error: %v", err)
+	}
+
+	_, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
+		OrderID:       "order-1",
+		PaymentMethod: "manual",
+		Amount:        60,
+	})
+	if !errors.Is(err, ErrIdempotencyKeyConflict) {
+		t.Fatalf("expected ErrIdempotencyKeyConflict, got %v", err)
 	}
 }
 

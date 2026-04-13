@@ -29,6 +29,17 @@ var (
 	ErrCouponUsageLimit        = repository.ErrCouponUsageLimitReached
 	ErrInvalidShippingMethod   = errors.New("invalid shipping method")
 	ErrShippingAddressRequired = errors.New("shipping address is required")
+	ErrReturnNotFound          = errors.New("return not found")
+	ErrReturnReasonRequired    = errors.New("return reason is required")
+	ErrReturnItemsRequired     = errors.New("return items are required")
+	ErrReturnNotAllowed        = errors.New("only delivered orders can start a return")
+	ErrReturnOrderItemNotFound = errors.New("return item does not belong to the order")
+	ErrReturnQuantityExceeded  = errors.New("return quantity exceeds purchased quantity")
+	ErrDuplicateReturnItem     = errors.New("return request contains duplicate order item")
+	ErrInvalidReturnStatus     = errors.New("invalid return status")
+	ErrReturnStatusTransition  = errors.New("return status transition is not allowed")
+	ErrReturnRefundUnavailable = errors.New("return refund could not be matched to a refundable payment")
+	ErrReturnRefundAmount      = errors.New("return refund amount is invalid")
 )
 
 // OrderEvent is published to RabbitMQ when an order is created or cancelled so
@@ -41,6 +52,18 @@ type OrderEvent struct {
 	TotalPrice float64 `json:"total_price"`
 	Status     string  `json:"status"`
 	RequestID  string  `json:"request_id,omitempty"`
+}
+
+type ReturnLifecycleEvent struct {
+	EventID      string  `json:"event_id"`
+	ReturnID     string  `json:"return_id"`
+	OrderID      string  `json:"order_id"`
+	UserID       string  `json:"user_id"`
+	UserEmail    string  `json:"user_email"`
+	Status       string  `json:"status"`
+	Reason       string  `json:"reason,omitempty"`
+	RefundAmount float64 `json:"refund_amount,omitempty"`
+	RequestID    string  `json:"request_id,omitempty"`
 }
 
 // OrderService coordinates order pricing, persistence, and event publication.
@@ -64,6 +87,8 @@ type productCatalog interface {
 // user order summaries without coupling the service to a concrete client.
 type paymentHistorySource interface {
 	ListPaymentHistory(ctx context.Context, authHeader string) ([]model.PaymentSummary, error)
+	ListPaymentsByOrder(ctx context.Context, orderID string) ([]model.PaymentSummary, error)
+	RefundPayment(ctx context.Context, paymentID string, amount float64, message string) (*model.PaymentSummary, error)
 }
 
 type pricedOrderItem struct {

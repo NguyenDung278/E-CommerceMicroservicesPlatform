@@ -12,9 +12,11 @@ import (
 
 type PaymentRepository interface {
 	Create(ctx context.Context, payment *model.Payment, outbox *model.OutboxMessage) error
+	CreateWithIdempotency(ctx context.Context, payment *model.Payment, outbox *model.OutboxMessage, record *model.PaymentIdempotencyRecord) error
 	GetByID(ctx context.Context, id string) (*model.Payment, error)
 	GetByOrderID(ctx context.Context, orderID string) (*model.Payment, error)
 	GetByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*model.Payment, error)
+	GetIdempotencyKey(ctx context.Context, userID, idempotencyKey string) (*model.PaymentIdempotencyRecord, error)
 	GetByIDForUser(ctx context.Context, id, userID string) (*model.Payment, error)
 	GetByOrderIDForUser(ctx context.Context, orderID, userID string) (*model.Payment, error)
 	ListByOrderID(ctx context.Context, orderID string) ([]*model.Payment, error)
@@ -43,21 +45,37 @@ func (r *postgresPaymentRepository) Create(ctx context.Context, payment *model.P
 	}
 	defer tx.Rollback()
 
-	query := `
-		INSERT INTO payments (
-			id, order_id, user_id, order_total, amount, status, transaction_type, reference_payment_id,
-			payment_method, gateway_provider, gateway_transaction_id, gateway_order_id, checkout_url,
-			signature_verified, failure_reason, created_at, updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-	`
-	_, err = tx.ExecContext(ctx, query, paymentCreateArgs(payment)...)
-	if err != nil {
-		return fmt.Errorf("failed to create payment: %w", err)
+	if err := r.insertPaymentTx(ctx, tx, payment); err != nil {
+		return err
 	}
 	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
 		return err
 	}
+	return tx.Commit()
+}
+
+func (r *postgresPaymentRepository) CreateWithIdempotency(
+	ctx context.Context,
+	payment *model.Payment,
+	outbox *model.OutboxMessage,
+	record *model.PaymentIdempotencyRecord,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin idempotent payment create transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := r.insertPaymentTx(ctx, tx, payment); err != nil {
+		return err
+	}
+	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
+		return err
+	}
+	if err := r.insertIdempotencyRecordTx(ctx, tx, record); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -117,6 +135,24 @@ func (r *postgresPaymentRepository) GetByGatewayOrderID(ctx context.Context, gat
 		return nil, fmt.Errorf("failed to get payment by gateway order: %w", err)
 	}
 	return payment, nil
+}
+
+func (r *postgresPaymentRepository) GetIdempotencyKey(ctx context.Context, userID, idempotencyKey string) (*model.PaymentIdempotencyRecord, error) {
+	query := `
+		SELECT user_id, idempotency_key, request_hash, payment_id, created_at, updated_at
+		FROM payment_idempotency_keys
+		WHERE user_id = $1 AND idempotency_key = $2
+	`
+
+	record, err := scanPaymentIdempotencyRecord(r.db.QueryRowContext(ctx, query, userID, idempotencyKey))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get payment idempotency key: %w", err)
+	}
+
+	return record, nil
 }
 
 func (r *postgresPaymentRepository) GetByIDForUser(ctx context.Context, id, userID string) (*model.Payment, error) {
@@ -421,6 +457,51 @@ func (r *postgresPaymentRepository) MarkOutboxFailed(ctx context.Context, id, la
 	return nil
 }
 
+func (r *postgresPaymentRepository) insertPaymentTx(ctx context.Context, tx *sql.Tx, payment *model.Payment) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO payments (
+			id, order_id, user_id, order_total, amount, status, transaction_type, reference_payment_id,
+			payment_method, gateway_provider, gateway_transaction_id, gateway_order_id, checkout_url,
+			signature_verified, failure_reason, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+	`, paymentCreateArgs(payment)...)
+	if err != nil {
+		return fmt.Errorf("failed to create payment: %w", err)
+	}
+
+	return nil
+}
+
+func (r *postgresPaymentRepository) insertIdempotencyRecordTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	record *model.PaymentIdempotencyRecord,
+) error {
+	if record == nil {
+		return nil
+	}
+
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO payment_idempotency_keys (
+			user_id, idempotency_key, request_hash, payment_id, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`,
+		record.UserID,
+		record.IdempotencyKey,
+		record.RequestHash,
+		record.PaymentID,
+		record.CreatedAt,
+		record.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert payment idempotency record: %w", err)
+	}
+
+	return nil
+}
+
 func (r *postgresPaymentRepository) insertOutboxMessageTx(ctx context.Context, tx *sql.Tx, outbox *model.OutboxMessage) error {
 	if outbox == nil {
 		return nil
@@ -561,6 +642,24 @@ func scanPayment(scanner paymentScanner) (*model.Payment, error) {
 	}
 
 	return payment, nil
+}
+
+func scanPaymentIdempotencyRecord(scanner paymentScanner) (*model.PaymentIdempotencyRecord, error) {
+	record := &model.PaymentIdempotencyRecord{}
+
+	err := scanner.Scan(
+		&record.UserID,
+		&record.IdempotencyKey,
+		&record.RequestHash,
+		&record.PaymentID,
+		&record.CreatedAt,
+		&record.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return record, nil
 }
 
 func scanPayments(rows *sql.Rows) ([]*model.Payment, error) {

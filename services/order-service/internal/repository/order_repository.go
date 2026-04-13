@@ -26,6 +26,10 @@ type OrderRepository interface {
 	Create(ctx context.Context, order *model.Order, outbox *model.OutboxMessage) error
 	GetByID(ctx context.Context, id string) (*model.Order, error)
 	GetByUserID(ctx context.Context, userID string) ([]*model.Order, error)
+	CreateReturn(ctx context.Context, returnRequest *model.ReturnRequest, outbox *model.OutboxMessage) error
+	GetReturnByID(ctx context.Context, id string) (*model.ReturnRequest, error)
+	ListReturnsByOrderID(ctx context.Context, orderID string) ([]*model.ReturnRequest, error)
+	UpdateReturnStatus(ctx context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
 	ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error)
 	GetEventsByOrderID(ctx context.Context, orderID string) ([]*model.OrderEvent, error)
 	UpdateStatus(ctx context.Context, id string, status model.OrderStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
@@ -203,6 +207,114 @@ func (r *postgresOrderRepository) GetByUserID(ctx context.Context, userID string
 	return orders, nil
 }
 
+func (r *postgresOrderRepository) CreateReturn(ctx context.Context, returnRequest *model.ReturnRequest, outbox *model.OutboxMessage) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin return transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO returns (id, order_id, user_id, user_email, status, reason, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`,
+		returnRequest.ID,
+		returnRequest.OrderID,
+		returnRequest.UserID,
+		returnRequest.UserEmail,
+		returnRequest.Status,
+		returnRequest.Reason,
+		returnRequest.CreatedAt,
+		returnRequest.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create return: %w", err)
+	}
+
+	for _, item := range returnRequest.Items {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO return_items (id, return_id, order_item_id, product_id, quantity, reason, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`,
+			item.ID,
+			item.ReturnID,
+			item.OrderItemID,
+			item.ProductID,
+			item.Quantity,
+			item.Reason,
+			item.CreatedAt,
+			item.UpdatedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create return item: %w", err)
+		}
+	}
+
+	for _, event := range returnRequest.Events {
+		if err := r.insertReturnEventTx(ctx, tx, &event); err != nil {
+			return err
+		}
+	}
+
+	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresOrderRepository) GetReturnByID(ctx context.Context, id string) (*model.ReturnRequest, error) {
+	returnRequest, err := scanReturn(r.db.QueryRowContext(ctx, `
+		SELECT id, order_id, user_id, user_email, status, reason, created_at, updated_at
+		FROM returns
+		WHERE id = $1
+	`, id))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get return: %w", err)
+	}
+	if err := r.loadReturnDetails(ctx, returnRequest); err != nil {
+		return nil, err
+	}
+
+	return returnRequest, nil
+}
+
+func (r *postgresOrderRepository) ListReturnsByOrderID(ctx context.Context, orderID string) ([]*model.ReturnRequest, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, order_id, user_id, user_email, status, reason, created_at, updated_at
+		FROM returns
+		WHERE order_id = $1
+		ORDER BY created_at DESC, id DESC
+	`, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list returns by order: %w", err)
+	}
+	defer rows.Close()
+
+	var returns []*model.ReturnRequest
+	for rows.Next() {
+		returnRequest, err := scanReturn(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan return: %w", err)
+		}
+		returns = append(returns, returnRequest)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate returns: %w", err)
+	}
+
+	for _, returnRequest := range returns {
+		if err := r.loadReturnDetails(ctx, returnRequest); err != nil {
+			return nil, err
+		}
+	}
+
+	return returns, nil
+}
+
 func (r *postgresOrderRepository) ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error) {
 	baseQuery := `FROM orders WHERE 1=1`
 	args := make([]interface{}, 0, 6)
@@ -339,6 +451,53 @@ func (r *postgresOrderRepository) UpdateStatus(ctx context.Context, id string, s
 		ID:        uuid.New().String(),
 		OrderID:   id,
 		Type:      "status_changed",
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresOrderRepository) UpdateReturnStatus(ctx context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin return status transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE returns
+		SET status = $1,
+		    updated_at = NOW()
+		WHERE id = $2
+	`, status, id)
+	if err != nil {
+		return fmt.Errorf("failed to update return status: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read return status rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return tx.Commit()
+	}
+
+	if strings.TrimSpace(message) == "" {
+		message = fmt.Sprintf("return status changed to %s", status)
+	}
+	if err := r.insertReturnEventTx(ctx, tx, &model.ReturnEvent{
+		ID:        uuid.New().String(),
+		ReturnID:  id,
 		Status:    status,
 		ActorID:   actorID,
 		ActorRole: actorRole,
@@ -654,6 +813,66 @@ func scanCoupon(scanner rowScanner) (*model.Coupon, error) {
 	return coupon, nil
 }
 
+func scanReturn(scanner rowScanner) (*model.ReturnRequest, error) {
+	returnRequest := &model.ReturnRequest{}
+	if err := scanner.Scan(
+		&returnRequest.ID,
+		&returnRequest.OrderID,
+		&returnRequest.UserID,
+		&returnRequest.UserEmail,
+		&returnRequest.Status,
+		&returnRequest.Reason,
+		&returnRequest.CreatedAt,
+		&returnRequest.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	return returnRequest, nil
+}
+
+func scanReturnItem(scanner rowScanner) (model.ReturnItem, error) {
+	item := model.ReturnItem{}
+	err := scanner.Scan(
+		&item.ID,
+		&item.ReturnID,
+		&item.OrderItemID,
+		&item.ProductID,
+		&item.Quantity,
+		&item.Reason,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	return item, err
+}
+
+func scanReturnEvent(scanner rowScanner) (model.ReturnEvent, error) {
+	event := model.ReturnEvent{}
+	var actorID sql.NullString
+	var actorRole sql.NullString
+
+	err := scanner.Scan(
+		&event.ID,
+		&event.ReturnID,
+		&event.Status,
+		&actorID,
+		&actorRole,
+		&event.Message,
+		&event.CreatedAt,
+	)
+	if err != nil {
+		return model.ReturnEvent{}, err
+	}
+	if actorID.Valid {
+		event.ActorID = actorID.String
+	}
+	if actorRole.Valid {
+		event.ActorRole = actorRole.String
+	}
+
+	return event, nil
+}
+
 func (r *postgresOrderRepository) lockAndConsumeCoupon(ctx context.Context, tx *sql.Tx, code string, subtotal float64) error {
 	query := `
 		SELECT id, code, description, discount_type, discount_value, min_order_amount, usage_limit, used_count, active, expires_at, created_at, updated_at
@@ -710,6 +929,95 @@ func (r *postgresOrderRepository) insertOrderEventTx(ctx context.Context, tx *sq
 		return fmt.Errorf("failed to insert order event: %w", err)
 	}
 	return nil
+}
+
+func (r *postgresOrderRepository) insertReturnEventTx(ctx context.Context, tx *sql.Tx, event *model.ReturnEvent) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO return_events (id, return_id, status, actor_id, actor_role, message, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`,
+		event.ID,
+		event.ReturnID,
+		event.Status,
+		nullIfEmpty(event.ActorID),
+		nullIfEmpty(event.ActorRole),
+		event.Message,
+		event.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert return event: %w", err)
+	}
+
+	return nil
+}
+
+func (r *postgresOrderRepository) loadReturnDetails(ctx context.Context, returnRequest *model.ReturnRequest) error {
+	items, err := r.listReturnItems(ctx, returnRequest.ID)
+	if err != nil {
+		return err
+	}
+	events, err := r.listReturnEvents(ctx, returnRequest.ID)
+	if err != nil {
+		return err
+	}
+
+	returnRequest.Items = items
+	returnRequest.Events = events
+	return nil
+}
+
+func (r *postgresOrderRepository) listReturnItems(ctx context.Context, returnID string) ([]model.ReturnItem, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, return_id, order_item_id, product_id, quantity, reason, created_at, updated_at
+		FROM return_items
+		WHERE return_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, returnID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list return items: %w", err)
+	}
+	defer rows.Close()
+
+	var items []model.ReturnItem
+	for rows.Next() {
+		item, err := scanReturnItem(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan return item: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate return items: %w", err)
+	}
+
+	return items, nil
+}
+
+func (r *postgresOrderRepository) listReturnEvents(ctx context.Context, returnID string) ([]model.ReturnEvent, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, return_id, status, actor_id, actor_role, message, created_at
+		FROM return_events
+		WHERE return_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, returnID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list return events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []model.ReturnEvent
+	for rows.Next() {
+		event, err := scanReturnEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan return event: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate return events: %w", err)
+	}
+
+	return events, nil
 }
 
 func (r *postgresOrderRepository) ClaimPendingOutbox(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.OutboxMessage, error) {

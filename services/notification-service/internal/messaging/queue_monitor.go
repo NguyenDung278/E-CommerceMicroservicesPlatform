@@ -95,7 +95,7 @@ func DeclareQueues(ch *amqp.Channel, retryDelay time.Duration) error {
 		return fmt.Errorf("failed to declare notification retry queue: %w", err)
 	}
 
-	for _, key := range []string{"order.created", "order.cancelled", "payment.completed", "payment.failed", "payment.refunded"} {
+	for _, key := range []string{"order.created", "order.cancelled", "payment.completed", "payment.failed", "payment.refunded", "return.*"} {
 		if err := ch.QueueBind(MainQueue, key, MainExchange, false, nil); err != nil {
 			return fmt.Errorf("failed to bind notification queue to %s: %w", key, err)
 		}
