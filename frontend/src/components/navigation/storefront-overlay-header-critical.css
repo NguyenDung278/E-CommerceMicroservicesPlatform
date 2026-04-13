@@ -81,6 +81,17 @@
   height: var(--storefront-header-bag-size);
   color: #fff9f3;
   text-decoration: none;
+  transition:
+    color var(--transition-base),
+    transform var(--transition-base);
+}
+
+.storefront-overlay-wishlist-link:hover {
+  transform: translateY(-1px);
+}
+
+.storefront-overlay-wishlist-link[data-has-items="true"] {
+  color: #ffe4d2;
 }
 
 .storefront-overlay-wishlist-icon {
@@ -91,6 +102,14 @@
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-right-color: transparent;
+  transition:
+    transform var(--transition-base),
+    border-color var(--transition-base);
+}
+
+.storefront-overlay-wishlist-link:hover .storefront-overlay-wishlist-icon,
+.storefront-overlay-wishlist-link[data-has-items="true"] .storefront-overlay-wishlist-icon {
+  transform: rotate(-45deg) scale(1.04);
 }
 
 .storefront-overlay-wishlist-icon::before,
@@ -175,6 +194,7 @@
   font-size: 0.62rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 3px rgba(6, 27, 14, 0.16);
 }
 
 .storefront-overlay-account-pill {

@@ -9,7 +9,6 @@ export type ProfileFormState = {
   firstName: string;
   lastName: string;
   phone: string;
-  street: string;
   otpCode: string;
 };
 
@@ -26,10 +25,6 @@ export type ProfileUpdatePayload = {
 };
 
 type BuildProfileValidationErrorsInput = {
-  addressChanged: boolean;
-  mergedAddressCandidate: {
-    street: string;
-  };
   normalizedDraftPhone: string;
   phoneChanged: boolean;
   otpCode: string;
@@ -39,7 +34,6 @@ type BuildProfileValidationErrorsInput = {
 type BuildProfileUpdatePayloadInput = {
   currentFirstNameValue: string;
   currentLastNameValue: string;
-  currentStreetValue: string;
   phoneChanged: boolean;
   phoneVerification: PhoneVerificationChallenge | null;
   profileForm: ProfileFormState;
@@ -49,7 +43,6 @@ export const emptyProfileForm: ProfileFormState = {
   firstName: "",
   lastName: "",
   phone: "",
-  street: "",
   otpCode: "",
 };
 
@@ -64,8 +57,7 @@ export function createProfileFormState(
   return {
     firstName: user?.first_name || "",
     lastName: user?.last_name || "",
-    phone: user?.phone || "",
-    street: defaultAddress?.street || "",
+    phone: user?.phone || defaultAddress?.phone || "",
     otpCode: "",
   };
 }
@@ -111,8 +103,6 @@ export function isValidStoredPhone(value: string) {
 }
 
 export function buildProfileValidationErrors({
-  addressChanged,
-  mergedAddressCandidate,
   normalizedDraftPhone,
   otpCode,
   phoneChanged,
@@ -122,9 +112,6 @@ export function buildProfileValidationErrors({
 
   if (phoneChanged && !isValidVietnamesePhone(normalizedDraftPhone)) {
     errors.phone = "Phone number must contain exactly 10 digits and start with 0.";
-  }
-  if (addressChanged && mergedAddressCandidate.street.length < 5) {
-    errors.street = "Street address must be at least 5 characters.";
   }
   if (requireOtp && otpCode.trim().length !== 6) {
     errors.otpCode = "OTP must contain exactly 6 digits.";
@@ -136,14 +123,12 @@ export function buildProfileValidationErrors({
 export function buildProfileUpdatePayload({
   currentFirstNameValue,
   currentLastNameValue,
-  currentStreetValue,
   phoneChanged,
   phoneVerification,
   profileForm,
 }: BuildProfileUpdatePayloadInput): ProfileUpdatePayload {
   const firstNameValue = normalizeProfileText(profileForm.firstName);
   const lastNameValue = normalizeProfileText(profileForm.lastName);
-  const streetValue = profileForm.street.trim();
 
   const payload: ProfileUpdatePayload = {};
 
@@ -156,13 +141,6 @@ export function buildProfileUpdatePayload({
   if (phoneChanged) {
     payload.phone = normalizePhoneDigits(profileForm.phone);
     payload.phone_verification_id = phoneVerification?.verification_id;
-  }
-
-  if (streetValue !== "" && streetValue !== currentStreetValue) {
-    const nextAddressPatch: ProfileAddressPatch = {
-      street: streetValue,
-    };
-    payload.default_address = nextAddressPatch;
   }
 
   return payload;

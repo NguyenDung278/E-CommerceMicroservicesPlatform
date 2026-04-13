@@ -38,25 +38,21 @@ type Order struct {
 }
 
 type OrderPreview struct {
-	SubtotalPrice     float64 `json:"subtotal_price"`
-	DiscountAmount    float64 `json:"discount_amount"`
-	CouponCode        string  `json:"coupon_code,omitempty"`
-	CouponDescription string  `json:"coupon_description,omitempty"`
-	ShippingMethod    string  `json:"shipping_method"`
-	ShippingFee       float64 `json:"shipping_fee"`
-	ETALabel          string  `json:"eta_label,omitempty"`
-	DeliveryPromise   string  `json:"delivery_promise,omitempty"`
+	SubtotalPrice            float64          `json:"subtotal_price"`
+	DiscountAmount           float64          `json:"discount_amount"`
+	CouponCode               string           `json:"coupon_code,omitempty"`
+	CouponDescription        string           `json:"coupon_description,omitempty"`
+	ShippingMethod           string           `json:"shipping_method"`
+	ShippingFee              float64          `json:"shipping_fee"`
+	ETALabel                 string           `json:"eta_label,omitempty"`
+	DeliveryPromise          string           `json:"delivery_promise,omitempty"`
 	SupportedShippingMethods []ShippingOption `json:"supported_shipping_methods,omitempty"`
-	TotalPrice        float64 `json:"total_price"`
+	TotalPrice               float64          `json:"total_price"`
 }
 
 type ShippingAddress struct {
 	RecipientName string `json:"recipient_name"`
 	Phone         string `json:"phone"`
-	Street        string `json:"street"`
-	Ward          string `json:"ward,omitempty"`
-	District      string `json:"district"`
-	City          string `json:"city"`
 }
 
 type ShippingMethod string

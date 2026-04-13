@@ -9,26 +9,38 @@ import { useWishlist } from "@/features/wishlist";
 import {
   storefrontBrandHref,
   storefrontCartHref,
+  storefrontCoreCategoryNavigation,
   storefrontFallbackNavigation,
   storefrontWishlistHref,
 } from "@/constants/storefront-navigation";
 import { getUserDisplayName } from "@/utils/dev-accounts";
+import { formatCompactCount } from "@/utils/format";
 import "./storefront-overlay-header-critical.css";
 import "./storefront-overlay-header.css";
 
 type StorefrontOverlayHeaderProps = {
+  navigation?: "core" | "fallback";
   tone?: "dark" | "light";
 };
 
-export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHeaderProps) {
+export function StorefrontOverlayHeader({
+  navigation = "fallback",
+  tone = "dark",
+}: StorefrontOverlayHeaderProps) {
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
   const { wishlistCount } = useWishlist();
+  const navigationItems =
+    navigation === "fallback" ? storefrontFallbackNavigation : storefrontCoreCategoryNavigation;
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const hasProfileName = Boolean(user?.first_name?.trim() || user?.last_name?.trim());
   const profileName = hasProfileName ? getUserDisplayName(user) : "";
   const accountLabel = isAuthenticated ? profileName || "Account" : "Login";
   const bagHref = isAuthenticated ? storefrontCartHref : "/login";
+  const wishlistBadgeCount = formatCompactCount(wishlistCount);
+  const bagBadgeCount = formatCompactCount(itemCount);
+  const wishlistAriaLabel =
+    wishlistCount > 0 ? `Wishlist with ${wishlistCount} saved pieces` : "Wishlist";
   const bagState = isAuthenticated
     ? undefined
     : {
@@ -66,7 +78,7 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
       </Link>
 
       <nav className="storefront-overlay-nav" aria-label="Storefront navigation">
-        {storefrontFallbackNavigation.map((item) => (
+        {navigationItems.map((item) => (
           <NavLink
             className={({ isActive }) =>
               isActive
@@ -87,15 +99,20 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
 
       <div className="storefront-overlay-actions">
         <Link
-          aria-label="Wishlist"
+          aria-label={wishlistAriaLabel}
           className="storefront-overlay-wishlist-link"
+          data-has-items={wishlistCount > 0 ? "true" : "false"}
           onFocus={() => handlePrefetch(storefrontWishlistHref)}
           onMouseEnter={() => handlePrefetch(storefrontWishlistHref)}
           onTouchStart={() => handlePrefetch(storefrontWishlistHref)}
           to={storefrontWishlistHref}
         >
           <span className="storefront-overlay-wishlist-icon" aria-hidden="true" />
-          <span className="storefront-overlay-wishlist-count">{wishlistCount}</span>
+          {wishlistCount > 0 ? (
+            <span className="storefront-overlay-wishlist-count" aria-hidden="true">
+              {wishlistBadgeCount}
+            </span>
+          ) : null}
         </Link>
         <Link
           aria-label="Cart"
@@ -107,7 +124,7 @@ export function StorefrontOverlayHeader({ tone = "dark" }: StorefrontOverlayHead
           to={bagHref}
         >
           <span className="storefront-overlay-bag-icon" aria-hidden="true" />
-          <span className="storefront-overlay-bag-count">{itemCount}</span>
+          <span className="storefront-overlay-bag-count">{bagBadgeCount}</span>
         </Link>
         <NavLink
           className="storefront-overlay-account-pill"

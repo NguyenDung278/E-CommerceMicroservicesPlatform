@@ -389,10 +389,6 @@ export function normalizeAddress(value: unknown): Address {
     user_id: normalizeString(address.user_id),
     recipient_name: normalizeString(address.recipient_name),
     phone: normalizeString(address.phone),
-    street: normalizeString(address.street),
-    ward: normalizeString(address.ward) || undefined,
-    district: normalizeString(address.district),
-    city: normalizeString(address.city),
     is_default: normalizeBoolean(address.is_default),
     created_at: normalizeString(address.created_at),
     updated_at: normalizeString(address.updated_at),
@@ -432,10 +428,6 @@ export function normalizeShippingAddress(value: unknown): ShippingAddress | unde
   return {
     recipient_name: normalizeString(value.recipient_name),
     phone: normalizeString(value.phone),
-    street: normalizeString(value.street),
-    ward: normalizeString(value.ward) || undefined,
-    district: normalizeString(value.district),
-    city: normalizeString(value.city),
   };
 }
 

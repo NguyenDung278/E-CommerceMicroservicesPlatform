@@ -16,8 +16,8 @@ export function AddressesPage() {
           <div>
             <h1>Addresses</h1>
             <p>
-              Manage your delivery locations for a faster checkout experience. Set your default home
-              and office addresses.
+              Manage your saved delivery contacts for a faster checkout experience and easier
+              order follow-up.
             </p>
           </div>
 
@@ -62,9 +62,10 @@ export function AddressesPage() {
                 </div>
 
                 <div className="addresses-route-block">
-                  <span>Location</span>
-                  <p>{address.street}</p>
-                  <p>{[address.ward, address.district, address.city].filter(Boolean).join(", ")}</p>
+                  <span>Saved Contact</span>
+                  <p>
+                    {address.recipient_name} · {address.phone || "No phone saved"}
+                  </p>
                 </div>
 
                 <div className="addresses-route-actions">

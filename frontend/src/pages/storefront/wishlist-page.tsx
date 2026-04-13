@@ -6,17 +6,19 @@ import { useCart } from "@/features/cart/hooks/use-cart";
 import { useWishlist } from "@/features/wishlist";
 import { api, getErrorMessage } from "@/services/api";
 import type { Product } from "@/types/api";
-import { formatCurrency } from "@/utils/format";
+import { formatCompactCount, formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/wishlist-page.css";
 
 export function WishlistPage() {
   const { token } = useAuth();
   const { addItem } = useCart();
-  const { wishlist, wishlistCount, toggleWishlist, isLoading } = useWishlist();
+  const { wishlist, wishlistCount, toggleWishlist, clearWishlist, isLoading, error } =
+    useWishlist();
   const [productsById, setProductsById] = useState<Record<string, Product>>({});
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [bulkAction, setBulkAction] = useState<"" | "bag" | "clear">("");
 
   useEffect(() => {
     let active = true;
@@ -64,6 +66,11 @@ export function WishlistPage() {
         .filter((product): product is Product => Boolean(product)),
     [productsById, wishlist]
   );
+  const availableProducts = useMemo(
+    () => savedProducts.filter((product) => getWishlistAvailableStock(product) > 0),
+    [savedProducts]
+  );
+  const wishlistSummary = useMemo(() => buildWishlistSummary(savedProducts), [savedProducts]);
 
   async function handleAddToCart(product: Product) {
     try {
@@ -80,11 +87,59 @@ export function WishlistPage() {
     }
   }
 
+  async function handleAddAvailableToCart() {
+    if (availableProducts.length === 0) {
+      setFeedback("Chưa có món nào sẵn sàng để thêm vào giỏ hàng.");
+      return;
+    }
+
+    try {
+      setBulkAction("bag");
+      const results = await Promise.allSettled(
+        availableProducts.map((product) =>
+          addItem({
+            product_id: product.id,
+            quantity: 1,
+          })
+        )
+      );
+      const successCount = results.filter((result) => result.status === "fulfilled").length;
+      const failedCount = availableProducts.length - successCount;
+
+      if (successCount === 0) {
+        setFeedback("Chưa thể thêm các món đã lưu vào giỏ hàng ngay lúc này.");
+        return;
+      }
+
+      setFeedback(
+        failedCount === 0
+          ? `Đã thêm ${successCount} món sẵn sàng giao ngay vào giỏ hàng.`
+          : `Đã thêm ${successCount} món vào giỏ hàng. ${failedCount} món còn lại cần kiểm tra lại tồn kho.`
+      );
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBulkAction("");
+    }
+  }
+
+  async function handleClearSavedPieces() {
+    try {
+      setBulkAction("clear");
+      await clearWishlist();
+      setFeedback("Wishlist đã được làm trống.");
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBulkAction("");
+    }
+  }
+
   return (
     <div className="page-stack wishlist-page">
       <section className="content-section wishlist-shell">
         <div className="wishlist-heading">
-          <div>
+          <div className="wishlist-heading-copy">
             <span className="section-kicker">Wishlist</span>
             <h1>Saved for later</h1>
             <p>
@@ -93,13 +148,65 @@ export function WishlistPage() {
                 : "Các món đã lưu hiện được giữ trong trình duyệt này và sẽ được hợp nhất khi bạn đăng nhập."}
             </p>
           </div>
-          <div className="wishlist-heading-meta">
-            <strong>{wishlistCount}</strong>
-            <span>{wishlistCount === 1 ? "saved piece" : "saved pieces"}</span>
+          <div className="wishlist-heading-side">
+            <div className="wishlist-heading-meta">
+              <strong>{formatCompactCount(wishlistCount)}</strong>
+              <span>{wishlistCount === 1 ? "saved piece" : "saved pieces"}</span>
+            </div>
+
+            <div className="wishlist-heading-actions">
+              <Link className="secondary-button" to="/products">
+                Continue browsing
+              </Link>
+              <button
+                className="primary-button"
+                disabled={bulkAction !== "" || availableProducts.length === 0}
+                type="button"
+                onClick={() => void handleAddAvailableToCart()}
+              >
+                {bulkAction === "bag" ? "Adding pieces..." : "Add ready pieces to bag"}
+              </button>
+              {savedProducts.length > 0 ? (
+                <button
+                  className="wishlist-toolbar-link"
+                  disabled={bulkAction !== ""}
+                  type="button"
+                  onClick={() => void handleClearSavedPieces()}
+                >
+                  {bulkAction === "clear" ? "Clearing..." : "Clear saved pieces"}
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
 
+        {savedProducts.length > 0 ? (
+          <div className="wishlist-insight-grid">
+            <article className="wishlist-insight-card">
+              <span>Ready to bag</span>
+              <strong>{formatCompactCount(wishlistSummary.readyToBagCount)}</strong>
+              <p>Saved pieces currently available for immediate checkout.</p>
+            </article>
+            <article className="wishlist-insight-card">
+              <span>Collections</span>
+              <strong>{formatCompactCount(wishlistSummary.categoryCount)}</strong>
+              <p>Distinct product groups represented inside your saved edit.</p>
+            </article>
+            <article className="wishlist-insight-card">
+              <span>Variant-rich</span>
+              <strong>{formatCompactCount(wishlistSummary.variantReadyCount)}</strong>
+              <p>Pieces with size or finish options ready for comparison.</p>
+            </article>
+            <article className="wishlist-insight-card">
+              <span>Saved value</span>
+              <strong>{formatCurrency(wishlistSummary.totalValue)}</strong>
+              <p>Total list value across your current shortlist.</p>
+            </article>
+          </div>
+        ) : null}
+
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
+        {error ? <div className="feedback feedback-info">{error}</div> : null}
 
         {isLoading || isLoadingProducts ? (
           <div className="page-state">Đang tải wishlist...</div>
@@ -118,10 +225,35 @@ export function WishlistPage() {
                 <div className="wishlist-card-copy">
                   <div className="wishlist-card-copy-head">
                     <div>
-                      <span>{product.brand || product.category || "ND Shop"}</span>
+                      <div className="wishlist-card-copy-kicker">
+                        <span>{product.brand || product.category || "ND Shop"}</span>
+                        <span
+                          className={
+                            getWishlistAvailableStock(product) > 0
+                              ? "wishlist-stock-pill"
+                              : "wishlist-stock-pill wishlist-stock-pill-out"
+                          }
+                        >
+                          {buildWishlistAvailabilityLabel(product)}
+                        </span>
+                      </div>
                       <h2>{product.name}</h2>
                     </div>
                     <strong>{formatCurrency(product.price)}</strong>
+                  </div>
+
+                  <div className="wishlist-card-meta-row">
+                    <span className="wishlist-meta-chip">
+                      {product.category || "General archive"}
+                    </span>
+                    <span className="wishlist-meta-chip">
+                      {product.variants.length > 0
+                        ? `${product.variants.length} selectable options`
+                        : "Single configuration"}
+                    </span>
+                    {product.tags[0] ? (
+                      <span className="wishlist-meta-chip">#{product.tags[0]}</span>
+                    ) : null}
                   </div>
 
                   <p>
@@ -135,18 +267,24 @@ export function WishlistPage() {
                     </Link>
                     <button
                       className="primary-button"
-                      disabled={busyProductId === product.id || product.stock <= 0}
+                      disabled={
+                        bulkAction === "bag" ||
+                        bulkAction === "clear" ||
+                        busyProductId === product.id ||
+                        getWishlistAvailableStock(product) <= 0
+                      }
                       type="button"
                       onClick={() => void handleAddToCart(product)}
                     >
                       {busyProductId === product.id
                         ? "Đang thêm..."
-                        : product.stock > 0
+                        : getWishlistAvailableStock(product) > 0
                           ? "Add to cart"
                           : "Out of stock"}
                     </button>
                     <button
                       className="wishlist-remove-button"
+                      disabled={bulkAction !== ""}
                       type="button"
                       onClick={() => void toggleWishlist(product.id)}
                     >
@@ -173,4 +311,33 @@ export function WishlistPage() {
       </section>
     </div>
   );
+}
+
+function getWishlistAvailableStock(product: Product) {
+  const variantStock = product.variants.reduce((sum, variant) => sum + Math.max(variant.stock, 0), 0);
+  return variantStock > 0 ? variantStock : Math.max(product.stock, 0);
+}
+
+function buildWishlistAvailabilityLabel(product: Product) {
+  const availableStock = getWishlistAvailableStock(product);
+  if (availableStock <= 0) {
+    return "Waitlist";
+  }
+  if (availableStock <= 2) {
+    return `Only ${availableStock} left`;
+  }
+  return "Ready now";
+}
+
+function buildWishlistSummary(products: Product[]) {
+  const categoryCount = new Set(
+    products.map((product) => product.category.trim()).filter(Boolean)
+  ).size;
+
+  return {
+    totalValue: products.reduce((sum, product) => sum + product.price, 0),
+    readyToBagCount: products.filter((product) => getWishlistAvailableStock(product) > 0).length,
+    categoryCount,
+    variantReadyCount: products.filter((product) => product.variants.length > 0).length,
+  };
 }

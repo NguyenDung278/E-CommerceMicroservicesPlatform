@@ -14,6 +14,7 @@ import {
   storefrontWishlistHref,
 } from "@/constants/storefront-navigation";
 import { getUserDisplayName, isDevelopmentAccount } from "@/utils/dev-accounts";
+import { formatCompactCount } from "@/utils/format";
 import "./app-layout.css";
 
 const atelierCategoryTokens = new Set([
@@ -67,6 +68,10 @@ export function AppLayout() {
       };
   const profileDisplayName = getUserDisplayName(user);
   const showDevBadge = isAuthenticated && isDevelopmentAccount(user);
+  const wishlistBadgeCount = formatCompactCount(wishlistCount);
+  const bagBadgeCount = formatCompactCount(itemCount);
+  const wishlistAriaLabel =
+    wishlistCount > 0 ? `Wishlist with ${wishlistCount} saved pieces` : "Wishlist";
   const isHomeSurface = location.pathname === "/";
   const currentCategory = location.pathname.startsWith("/categories/")
     ? decodeURIComponent(location.pathname.replace("/categories/", ""))
@@ -146,12 +151,17 @@ export function AppLayout() {
               {isTransactionalSurface ? (
                 <div className="editorial-account-area editorial-account-area-transactional">
                   <NavLink
-                    aria-label="Wishlist"
+                    aria-label={wishlistAriaLabel}
                     className="editorial-wishlist-link"
+                    data-has-items={wishlistCount > 0 ? "true" : "false"}
                     to={storefrontWishlistHref}
                   >
                     <span className="editorial-wishlist-icon" aria-hidden="true" />
-                    <span className="editorial-wishlist-count">{wishlistCount}</span>
+                    {wishlistCount > 0 ? (
+                      <span className="editorial-wishlist-count" aria-hidden="true">
+                        {wishlistBadgeCount}
+                      </span>
+                    ) : null}
                   </NavLink>
                   <NavLink
                     aria-label="Cart"
@@ -160,7 +170,7 @@ export function AppLayout() {
                     to={cartHref}
                   >
                     <span className="editorial-bag-icon" aria-hidden="true" />
-                    <span className="editorial-bag-count">{itemCount}</span>
+                    <span className="editorial-bag-count">{bagBadgeCount}</span>
                   </NavLink>
                   <NavLink
                     aria-label={accountLabel}
@@ -177,12 +187,17 @@ export function AppLayout() {
                     <span className="editorial-profile-pill-dot" aria-hidden="true" />
                   </NavLink>
                   <NavLink
-                    aria-label="Wishlist"
+                    aria-label={wishlistAriaLabel}
                     className="editorial-wishlist-link"
+                    data-has-items={wishlistCount > 0 ? "true" : "false"}
                     to={storefrontWishlistHref}
                   >
                     <span className="editorial-wishlist-icon" aria-hidden="true" />
-                    <span className="editorial-wishlist-count">{wishlistCount}</span>
+                    {wishlistCount > 0 ? (
+                      <span className="editorial-wishlist-count" aria-hidden="true">
+                        {wishlistBadgeCount}
+                      </span>
+                    ) : null}
                   </NavLink>
                   <NavLink
                     aria-label="Cart"
@@ -191,7 +206,7 @@ export function AppLayout() {
                     to={cartHref}
                   >
                     <span className="editorial-bag-icon" aria-hidden="true" />
-                    <span className="editorial-bag-count">{itemCount}</span>
+                    <span className="editorial-bag-count">{bagBadgeCount}</span>
                   </NavLink>
                   <NavLink
                     aria-label={accountLabel}
@@ -226,13 +241,22 @@ export function AppLayout() {
                       <span className="editorial-account-badge">Dev Only</span>
                     ) : null}
                   </NavLink>
-                  <NavLink className="editorial-wishlist-link" to={storefrontWishlistHref}>
+                  <NavLink
+                    aria-label={wishlistAriaLabel}
+                    className="editorial-wishlist-link"
+                    data-has-items={wishlistCount > 0 ? "true" : "false"}
+                    to={storefrontWishlistHref}
+                  >
                     <span className="editorial-wishlist-icon" aria-hidden="true" />
-                    <span className="editorial-wishlist-count">{wishlistCount}</span>
+                    {wishlistCount > 0 ? (
+                      <span className="editorial-wishlist-count" aria-hidden="true">
+                        {wishlistBadgeCount}
+                      </span>
+                    ) : null}
                   </NavLink>
                   <NavLink className="editorial-bag-link" state={cartState} to={cartHref}>
                     <span className="editorial-bag-icon" aria-hidden="true" />
-                    <span className="editorial-bag-count">{itemCount}</span>
+                    <span className="editorial-bag-count">{bagBadgeCount}</span>
                   </NavLink>
                 </div>
               )}

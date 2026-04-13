@@ -195,16 +195,6 @@ export function OrderDetailPage() {
                 {order.shipping_address ? (
                   <address>
                     <strong>{order.shipping_address.recipient_name}</strong>
-                    <span>{order.shipping_address.street}</span>
-                    <span>
-                      {[
-                        order.shipping_address.ward,
-                        order.shipping_address.district,
-                        order.shipping_address.city,
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </span>
                     <span>{order.shipping_address.phone}</span>
                   </address>
                 ) : (

@@ -313,7 +313,7 @@ func normalizeShippingMethod(value string) (string, error) {
 //   - nil when required delivery fields are missing.
 //
 // Edge cases:
-//   - the ward field remains optional to match current API behavior.
+//   - incomplete delivery contact details are treated as missing.
 //
 // Side effects:
 //   - allocates one normalized address object when input is present.
@@ -328,13 +328,9 @@ func normalizeShippingAddress(address *dto.ShippingAddressRequest) *model.Shippi
 	normalized := &model.ShippingAddress{
 		RecipientName: strings.TrimSpace(address.RecipientName),
 		Phone:         strings.TrimSpace(address.Phone),
-		Street:        strings.TrimSpace(address.Street),
-		Ward:          strings.TrimSpace(address.Ward),
-		District:      strings.TrimSpace(address.District),
-		City:          strings.TrimSpace(address.City),
 	}
 
-	if normalized.RecipientName == "" || normalized.Phone == "" || normalized.Street == "" || normalized.District == "" || normalized.City == "" {
+	if normalized.RecipientName == "" || normalized.Phone == "" {
 		return nil
 	}
 

@@ -196,17 +196,6 @@ export function ProfileEditorForm({
             />
           </ProfileField>
 
-          <ProfileField
-            className="profile-route-form-field-full"
-            error={formErrors.street}
-            label="Street Address"
-          >
-            <input
-              placeholder="Apartment, street, or delivery note"
-              value={form.street}
-              onChange={(event) => onFieldChange("street", event.target.value)}
-            />
-          </ProfileField>
         </div>
       </section>
 

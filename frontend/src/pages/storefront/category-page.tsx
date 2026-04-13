@@ -540,60 +540,63 @@ function EditorialCategoryPage({
   return (
     <div className="page-stack category-page">
       <section className="category-hero">
-        <article className="category-hero-panel">
+        <article className="category-hero-shell">
           <StorefrontOverlayHeader />
 
-          <div className="category-hero-copy">
-            <span className="section-kicker">{heroBadge || "Featured collection"}</span>
-            <h1>{heroTitle}</h1>
-            <p>{heroDescription}</p>
-          </div>
+          <div className="category-hero-grid">
+            <div className="category-hero-panel">
+              <div className="category-hero-copy">
+                <span className="section-kicker">{heroBadge || "Featured collection"}</span>
+                <h1>{heroTitle}</h1>
+                <p>{heroDescription}</p>
+              </div>
 
-          <div className="hero-actions">
-            <Link
-              className="primary-link"
-              to={heroProduct ? `/products/${heroProduct.id}` : "/products"}
-            >
-              {heroProduct ? "Shop featured piece" : "Explore archive"}
-            </Link>
-            <Link className="secondary-link" to="/products">
-              View full catalog
-            </Link>
-          </div>
+              <div className="hero-actions">
+                <Link
+                  className="primary-link"
+                  to={heroProduct ? `/products/${heroProduct.id}` : "/products"}
+                >
+                  {heroProduct ? "Shop featured piece" : "Explore archive"}
+                </Link>
+                <Link className="secondary-link" to="/products">
+                  View full catalog
+                </Link>
+              </div>
 
-          <div className="category-chip-row">
-            {[pageData.category.slug, ...pageData.category.aliases]
-              .filter(Boolean)
-              .slice(0, 4)
-              .map((item) => (
-                <span className="product-card-badge" key={item}>
-                  {item}
-                </span>
-              ))}
-          </div>
+              <div className="category-chip-row">
+                {[pageData.category.slug, ...pageData.category.aliases]
+                  .filter(Boolean)
+                  .slice(0, 4)
+                  .map((item) => (
+                    <span className="product-card-badge" key={item}>
+                      {item}
+                    </span>
+                  ))}
+              </div>
 
-          <div className="category-metric-grid">
-            {metrics.map((metric) => (
-              <article className="surface-card category-metric-card" key={metric.label}>
-                <span className="section-kicker">{metric.label}</span>
-                <strong>{metric.value}</strong>
-                <p>{metric.description}</p>
-              </article>
-            ))}
+              <div className="category-metric-grid">
+                {metrics.map((metric) => (
+                  <article className="surface-card category-metric-card" key={metric.label}>
+                    <span className="section-kicker">{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                    <p>{metric.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <StorefrontCollectionCard
+              className="category-feature-card"
+              description={featureDescription}
+              href={heroProduct ? `/products/${heroProduct.id}` : "/products"}
+              imageAlt={featureTitle}
+              imageSrc={featureImage}
+              title={featureTitle}
+              eyebrow="Editorial pick"
+            />
           </div>
         </article>
-
-        <StorefrontCollectionCard
-          className="category-feature-card"
-          description={featureDescription}
-          href={heroProduct ? `/products/${heroProduct.id}` : "/products"}
-          imageAlt={featureTitle}
-          imageSrc={featureImage}
-          title={featureTitle}
-          eyebrow="Editorial pick"
-        />
       </section>
-
       <section className="content-section category-results-section">
         <div className="section-heading category-results-head">
           <div>

@@ -56,11 +56,11 @@ export function useProfilePageState() {
   const memberSince = useMemo(() => buildMemberSinceLabel(user?.created_at), [user?.created_at]);
   const initials = useMemo(() => buildProfileInitials(displayName), [displayName]);
   const locationLabel = defaultAddress
-    ? [defaultAddress.street, defaultAddress.district, defaultAddress.city]
+    ? [defaultAddress.recipient_name, defaultAddress.phone]
         .map((part) => part.trim())
         .filter(Boolean)
-        .join(", ") || "No saved address yet"
-    : "No saved address yet";
+        .join(" · ") || "No saved delivery contact yet"
+    : "No saved delivery contact yet";
   const showDevBadge = isDevelopmentAccount(user);
 
   useEffect(() => {
@@ -145,21 +145,13 @@ export function useProfilePageState() {
 
   const firstNameValue = normalizeProfileText(profileForm.firstName);
   const lastNameValue = normalizeProfileText(profileForm.lastName);
-  const streetValue = profileForm.street.trim();
   const currentFirstNameValue = normalizeProfileText(user?.first_name || "");
   const currentLastNameValue = normalizeProfileText(user?.last_name || "");
-  const currentStreetValue = defaultAddress?.street || "";
   const nameChanged =
     (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) ||
     (lastNameValue !== "" && lastNameValue !== currentLastNameValue);
-  const addressChanged = streetValue !== "" && streetValue !== currentStreetValue;
-  const mergedAddressCandidate = {
-    street: streetValue || currentStreetValue,
-  };
-  const hasProfileChanges = nameChanged || phoneChanged || addressChanged;
+  const hasProfileChanges = nameChanged || phoneChanged;
   const clientValidationErrors = buildProfileValidationErrors({
-    addressChanged,
-    mergedAddressCandidate,
     normalizedDraftPhone,
     otpCode: profileForm.otpCode,
     phoneChanged,
@@ -224,7 +216,6 @@ export function useProfilePageState() {
     const profilePatch = buildProfileUpdatePayload({
       currentFirstNameValue,
       currentLastNameValue,
-      currentStreetValue,
       phoneChanged,
       phoneVerification,
       profileForm,
@@ -277,8 +268,6 @@ export function useProfilePageState() {
     }
 
     const nextErrors = buildProfileValidationErrors({
-      addressChanged,
-      mergedAddressCandidate,
       normalizedDraftPhone,
       otpCode: profileForm.otpCode,
       phoneChanged,

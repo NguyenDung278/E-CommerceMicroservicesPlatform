@@ -21,10 +21,6 @@ import {
 export interface CreateAddressData {
   recipient_name: string;
   phone: string;
-  street: string;
-  ward?: string;
-  district: string;
-  city: string;
   is_default?: boolean;
 }
 

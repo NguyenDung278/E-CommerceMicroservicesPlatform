@@ -474,24 +474,12 @@ func resolveOptionalTrimmedText(input *string) (string, bool) {
 //   - none.
 //
 // Performance:
-//   - O(k) across the small fixed number of address fields.
+//   - O(k) across the small fixed number of contact fields.
 func hasMeaningfulProfileAddressPatch(input dto.UpdateProfileAddressInput) bool {
 	if _, ok := resolveOptionalHumanName(input.RecipientName); ok {
 		return true
 	}
 	if _, ok := resolveOptionalPhone(input.Phone); ok {
-		return true
-	}
-	if _, ok := resolveOptionalTrimmedText(input.Street); ok {
-		return true
-	}
-	if _, ok := resolveOptionalTrimmedText(input.Ward); ok {
-		return true
-	}
-	if _, ok := resolveOptionalTrimmedText(input.District); ok {
-		return true
-	}
-	if _, ok := resolveOptionalTrimmedText(input.City); ok {
 		return true
 	}
 	return false
@@ -522,10 +510,6 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 	if current != nil {
 		merged.RecipientName = current.RecipientName
 		merged.Phone = current.Phone
-		merged.Street = current.Street
-		merged.Ward = current.Ward
-		merged.District = current.District
-		merged.City = current.City
 	} else {
 		merged.RecipientName = normalizeHumanName(fallbackRecipientName)
 		merged.Phone = normalizePhone(fallbackPhone)
@@ -540,22 +524,6 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 		merged.Phone = phone
 		hasPatch = true
 	}
-	if street, ok := resolveOptionalTrimmedText(input.Street); ok {
-		merged.Street = street
-		hasPatch = true
-	}
-	if ward, ok := resolveOptionalTrimmedText(input.Ward); ok {
-		merged.Ward = ward
-		hasPatch = true
-	}
-	if district, ok := resolveOptionalTrimmedText(input.District); ok {
-		merged.District = district
-		hasPatch = true
-	}
-	if city, ok := resolveOptionalTrimmedText(input.City); ok {
-		merged.City = city
-		hasPatch = true
-	}
 
 	if !hasPatch {
 		return merged, false
@@ -565,11 +533,7 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 	}
 
 	changed := merged.RecipientName != current.RecipientName ||
-		merged.Phone != current.Phone ||
-		merged.Street != current.Street ||
-		merged.Ward != current.Ward ||
-		merged.District != current.District ||
-		merged.City != current.City
+		merged.Phone != current.Phone
 
 	return merged, changed
 }
@@ -584,7 +548,7 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 //   - the normalized address payload.
 //
 // Edge cases:
-//   - optional ward fields remain optional after normalization.
+//   - blank fields are collapsed before persistence.
 //
 // Side effects:
 //   - none.
@@ -595,10 +559,6 @@ func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddr
 	return dto.ProfileAddressInput{
 		RecipientName: normalizeHumanName(input.RecipientName),
 		Phone:         normalizePhone(input.Phone),
-		Street:        strings.TrimSpace(input.Street),
-		Ward:          strings.TrimSpace(input.Ward),
-		District:      strings.TrimSpace(input.District),
-		City:          strings.TrimSpace(input.City),
 	}
 }
 
@@ -612,7 +572,7 @@ func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddr
 //   - true when the payload satisfies all address requirements.
 //
 // Edge cases:
-//   - ward remains optional while all other major fields are required.
+//   - phone may be empty when the profile has no stored phone yet.
 //
 // Side effects:
 //   - none.
@@ -624,18 +584,6 @@ func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
 		return false
 	}
 	if input.Phone != "" && !isValidVNPhone(input.Phone) {
-		return false
-	}
-	if len(input.Street) < 5 || len(input.Street) > 255 {
-		return false
-	}
-	if len(input.Ward) > 100 {
-		return false
-	}
-	if len(input.District) > 0 && (len(input.District) < 2 || len(input.District) > 100) {
-		return false
-	}
-	if len(input.City) > 0 && (len(input.City) < 2 || len(input.City) > 100) {
 		return false
 	}
 

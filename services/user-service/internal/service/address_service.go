@@ -53,10 +53,6 @@ func (s *AddressService) CreateAddress(ctx context.Context, userID string, req d
 		UserID:        userID,
 		RecipientName: req.RecipientName,
 		Phone:         req.Phone,
-		Street:        req.Street,
-		Ward:          req.Ward,
-		District:      req.District,
-		City:          req.City,
 		IsDefault:     isDefault,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -104,25 +100,17 @@ func (s *AddressService) UpsertDefaultAddress(ctx context.Context, userID string
 		return s.CreateAddress(ctx, userID, dto.CreateAddressRequest{
 			RecipientName: input.RecipientName,
 			Phone:         input.Phone,
-			Street:        input.Street,
-			Ward:          input.Ward,
-			District:      input.District,
-			City:          input.City,
 			IsDefault:     true,
 		})
 	}
 
 	defaultAddress.RecipientName = input.RecipientName
 	defaultAddress.Phone = input.Phone
-	defaultAddress.Street = input.Street
-	defaultAddress.Ward = input.Ward
-	defaultAddress.District = input.District
-	defaultAddress.City = input.City
-	defaultAddress.IsDefault = true
 	defaultAddress.UpdatedAt = time.Now()
 	if err := s.repo.ClearDefault(ctx, userID); err != nil {
 		return nil, err
 	}
+	defaultAddress.IsDefault = true
 	if err := s.repo.Update(ctx, defaultAddress); err != nil {
 		return nil, err
 	}
@@ -145,18 +133,6 @@ func (s *AddressService) UpdateAddress(ctx context.Context, userID, addressID st
 	}
 	if req.Phone != nil {
 		addr.Phone = *req.Phone
-	}
-	if req.Street != nil {
-		addr.Street = *req.Street
-	}
-	if req.Ward != nil {
-		addr.Ward = *req.Ward
-	}
-	if req.District != nil {
-		addr.District = *req.District
-	}
-	if req.City != nil {
-		addr.City = *req.City
 	}
 	if req.IsDefault != nil && *req.IsDefault {
 		if err := s.repo.ClearDefault(ctx, userID); err != nil {

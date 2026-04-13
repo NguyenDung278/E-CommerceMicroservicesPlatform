@@ -38,6 +38,10 @@ export function CartPage() {
   );
 
   const totalUnits = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalDue = couponPreview?.total_price ?? cart.total;
+  const checkoutState = {
+    appliedCouponCode: couponPreview?.coupon_code ?? normalizeCartCouponCode(couponCode),
+  };
 
   useEffect(() => {
     setCouponPreview(null);
@@ -355,10 +359,7 @@ export function CartPage() {
               <Link
                 className="secondary-link cart-editorial-cta"
                 to="/checkout"
-                state={{
-                  appliedCouponCode:
-                    couponPreview?.coupon_code ?? normalizeCartCouponCode(couponCode),
-                }}
+                state={checkoutState}
               >
                 Proceed to Checkout
               </Link>
@@ -375,6 +376,18 @@ export function CartPage() {
           </aside>
         </div>
       )}
+
+      {cart.items.length > 0 ? (
+        <div className="cart-mobile-checkout-bar">
+          <div className="cart-mobile-checkout-copy">
+            <span>{totalUnits === 1 ? "1 piece ready" : `${totalUnits} pieces ready`}</span>
+            <strong>{formatCurrency(totalDue)}</strong>
+          </div>
+          <Link className="primary-button cart-mobile-checkout-button" state={checkoutState} to="/checkout">
+            Checkout
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

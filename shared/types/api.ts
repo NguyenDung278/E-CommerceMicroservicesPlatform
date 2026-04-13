@@ -44,19 +44,11 @@ export type UserProfile = {
 export type ProfileAddressInput = {
   recipient_name: string;
   phone: string;
-  street: string;
-  ward?: string;
-  district: string;
-  city: string;
 };
 
 export type ProfileAddressPatch = {
   recipient_name?: string;
   phone?: string;
-  street?: string;
-  ward?: string;
-  district?: string;
-  city?: string;
 };
 
 export type PhoneVerificationChallenge = {
@@ -264,10 +256,6 @@ export type Address = {
   user_id: string;
   recipient_name: string;
   phone: string;
-  street: string;
-  ward?: string;
-  district: string;
-  city: string;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -283,10 +271,6 @@ export type WishlistItem = {
 export type ShippingAddress = {
   recipient_name: string;
   phone: string;
-  street: string;
-  ward?: string;
-  district: string;
-  city: string;
 };
 
 export type OrderItem = {

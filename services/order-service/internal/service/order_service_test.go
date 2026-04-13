@@ -375,9 +375,6 @@ func TestPreviewOrderAppliesND2026ToSubtotalAndShipping(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van B",
 			Phone:         "0901234567",
-			Street:        "42 Tran Hung Dao",
-			District:      "District 1",
-			City:          "Ho Chi Minh",
 		},
 	})
 	if err != nil {
@@ -484,9 +481,6 @@ func TestPreviewOrderAddsShippingFeeForStandardDelivery(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van A",
 			Phone:         "0901234567",
-			Street:        "123 Nguyen Trai",
-			District:      "District 1",
-			City:          "Ho Chi Minh",
 		},
 	})
 	if err != nil {
@@ -556,9 +550,6 @@ func TestPreviewOrderSupportsExpressDeliveryFromBackendContract(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van C",
 			Phone:         "0901234567",
-			Street:        "88 Le Loi",
-			District:      "District 1",
-			City:          "Ho Chi Minh",
 		},
 	})
 	if err != nil {

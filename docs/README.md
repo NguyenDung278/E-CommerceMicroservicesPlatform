@@ -50,6 +50,7 @@ Ba lớp tài liệu chính:
 - [09-how-to-add-new-feature.md](./learning/09-how-to-add-new-feature.md): thêm feature mới theo path và layering thật của repo
 - [10-guide-to-debugging.md](./learning/10-guide-to-debugging.md): debug Docker, gateway, service, trace và DB
 - [11-senior-source-code-review-guide.md](./learning/11-senior-source-code-review-guide.md): review toàn repo theo góc nhìn senior
+- [12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md): lộ trình học để biến hiểu biết repo thành năng lực xây sản phẩm commerce thực chiến
 
 ### `deep-dive/`
 

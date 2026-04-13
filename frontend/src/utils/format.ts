@@ -30,6 +30,11 @@ export function formatCurrency(value: number) {
   return currencyFormatter.format(value);
 }
 
+export function formatCompactCount(value: number, maxVisible = 99) {
+  const normalized = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  return normalized > maxVisible ? `${maxVisible}+` : String(normalized);
+}
+
 export function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }

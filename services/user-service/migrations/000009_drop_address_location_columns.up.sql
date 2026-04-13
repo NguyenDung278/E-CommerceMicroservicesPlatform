@@ -1,0 +1,5 @@
+ALTER TABLE addresses
+    DROP COLUMN IF EXISTS street,
+    DROP COLUMN IF EXISTS ward,
+    DROP COLUMN IF EXISTS district,
+    DROP COLUMN IF EXISTS city;

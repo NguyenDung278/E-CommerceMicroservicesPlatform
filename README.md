@@ -392,11 +392,20 @@ Khi debug end-to-end, hãy bám flow:
 - đừng assume `http://localhost` là frontend chính; trong compose hiện tại frontend chính là `http://localhost:4173`
 - đừng assume Postgres ở `localhost:5432` khi chỉ dùng compose mặc định; database nằm trong network nội bộ compose
 
+## Nếu mục tiêu của bạn là build một e-commerce production-ready
+
+Ba điểm bắt đầu thực dụng nhất:
+
+1. hiểu runtime và boundary thật của repo này qua [docs/learning/03-source-reading-roadmap.md](./docs/learning/03-source-reading-roadmap.md)
+2. học cách verify, debug và review thay đổi như một senior qua [docs/learning/06-testing-and-verification.md](./docs/learning/06-testing-and-verification.md) và [docs/learning/11-senior-source-code-review-guide.md](./docs/learning/11-senior-source-code-review-guide.md)
+3. nối việc đọc code với lộ trình học sản phẩm commerce thực chiến qua [docs/learning/12-production-readiness-roadmap.md](./docs/learning/12-production-readiness-roadmap.md)
+
 ## Tài liệu liên quan
 
 - [feature_tracker.md](./feature_tracker.md): feature inventory và roadmap gợi ý bám theo source hiện tại
 - [DOCKER_GUIDE.md](./DOCKER_GUIDE.md): hướng dẫn Docker/Compose thực chiến cho chính repo này
 - [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể
 - [docs/learning/README.md](./docs/learning/README.md): lộ trình onboarding
+- [docs/learning/12-production-readiness-roadmap.md](./docs/learning/12-production-readiness-roadmap.md): codebase map, learning path, production hardening checklist và gợi ý feature tiếp theo
 - [docs/deep-dive/README.md](./docs/deep-dive/README.md): đọc sâu hơn về kiến trúc và runtime
 - [docs/annotated/README.md](./docs/annotated/README.md): đọc source theo block quan trọng

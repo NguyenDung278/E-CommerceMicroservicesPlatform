@@ -30,19 +30,11 @@ type UpdateProfileRequest struct {
 type UpdateProfileAddressInput struct {
 	RecipientName *string `json:"recipient_name" validate:"omitempty,min=2,max=100"`
 	Phone         *string `json:"phone" validate:"omitempty,min=10,max=20"`
-	Street        *string `json:"street" validate:"omitempty,min=5,max=255"`
-	Ward          *string `json:"ward" validate:"omitempty,max=100"`
-	District      *string `json:"district" validate:"omitempty,min=2,max=100"`
-	City          *string `json:"city" validate:"omitempty,min=2,max=100"`
 }
 
 type ProfileAddressInput struct {
 	RecipientName string `json:"recipient_name" validate:"required,min=2,max=100"`
-	Phone         string `json:"phone" validate:"required,min=10,max=20"`
-	Street        string `json:"street" validate:"required,min=5,max=255"`
-	Ward          string `json:"ward" validate:"omitempty,max=100"`
-	District      string `json:"district" validate:"required,min=2,max=100"`
-	City          string `json:"city" validate:"required,min=2,max=100"`
+	Phone         string `json:"phone" validate:"omitempty,min=10,max=20"`
 }
 
 type SendPhoneOTPRequest struct {

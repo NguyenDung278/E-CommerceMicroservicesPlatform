@@ -40,6 +40,13 @@ type ReviewFormState = {
   comment: string;
 };
 
+type VariantGalleryFrame = {
+  url: string;
+  scope: "selected" | "finish" | "collection";
+  label: string;
+  caption: string;
+};
+
 const emptyReviewSummary: ProductReviewSummary = {
   average_rating: 0,
   review_count: 0,
@@ -114,7 +121,7 @@ export function ProductDetailPage() {
     const defaultVariant =
       nextProduct.variants.find((variant) => variant.stock > 0) ?? nextProduct.variants[0];
     const images = buildVariantImageGallery(nextProduct, defaultVariant);
-    setActiveImage(images[0] ?? "");
+    setActiveImage(images[0]?.url ?? "");
     setSelectedColorKey(
       normalizeColorLabel(defaultVariant?.color) ||
         normalizeColorLabel(nextProduct.variants[0]?.color)
@@ -730,10 +737,36 @@ export function ProductDetailPage() {
     () => (product ? buildVariantImageGallery(product, selectedVariant) : []),
     [product, selectedVariant]
   );
+  const activeGalleryFrame =
+    variantGallery.find((frame) => frame.url === activeImage) ?? variantGallery[0] ?? null;
+  const activeGalleryIndex = activeGalleryFrame
+    ? variantGallery.findIndex((frame) => frame.url === activeGalleryFrame.url)
+    : -1;
+  const selectedVariantDescriptor = buildSelectedVariantDescriptor(
+    selectedVariant,
+    selectedColorOption?.label
+  );
   const selectedVariantBadge = selectedVariant?.badge || product?.tags[0] || "";
   const selectedVariantFitNote =
     selectedVariant?.fit_note ||
     "A considered silhouette selected to feel effortless on first wear.";
+  const galleryInsightCards = [
+    {
+      label: "Gallery focus",
+      value: activeGalleryFrame?.label || "Collection view",
+    },
+    {
+      label: "Selected edit",
+      value: selectedVariantDescriptor || "Signature finish",
+    },
+    {
+      label: "Frame",
+      value:
+        activeGalleryIndex >= 0
+          ? `${String(activeGalleryIndex + 1).padStart(2, "0")} / ${String(variantGallery.length).padStart(2, "0")}`
+          : "00 / 00",
+    },
+  ];
   const averageRatingLabel =
     reviewList.summary.review_count > 0 ? reviewList.summary.average_rating.toFixed(1) : "0.0";
   const reviewSummaryStars = renderStars(Math.round(reviewList.summary.average_rating || 0));
@@ -754,6 +787,16 @@ export function ProductDetailPage() {
         ? "Cập nhật đánh giá"
         : "Gửi đánh giá";
 
+  function handleStepGallery(direction: number) {
+    if (variantGallery.length < 2) {
+      return;
+    }
+
+    const currentIndex = Math.max(activeGalleryIndex, 0);
+    const nextIndex = (currentIndex + direction + variantGallery.length) % variantGallery.length;
+    setActiveImage(variantGallery[nextIndex]?.url ?? variantGallery[0].url);
+  }
+
   useEffect(() => {
     if (activeStock > 0 && quantity > activeStock) {
       setQuantity(activeStock);
@@ -765,8 +808,8 @@ export function ProductDetailPage() {
       return;
     }
 
-    if (!variantGallery.includes(activeImage)) {
-      setActiveImage(variantGallery[0]);
+    if (!variantGallery.some((frame) => frame.url === activeImage)) {
+      setActiveImage(variantGallery[0].url);
     }
   }, [activeImage, variantGallery]);
 
@@ -784,6 +827,24 @@ export function ProductDetailPage() {
             <div className="detail-layout detail-layout-editorial">
               <div className="detail-media detail-media-editorial">
                 <div className="detail-main-frame">
+                  {variantGallery.length > 1 ? (
+                    <div className="detail-gallery-nav" aria-label="Gallery controls">
+                      <button
+                        className="detail-gallery-nav-button"
+                        type="button"
+                        onClick={() => handleStepGallery(-1)}
+                      >
+                        Prev
+                      </button>
+                      <button
+                        className="detail-gallery-nav-button"
+                        type="button"
+                        onClick={() => handleStepGallery(1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  ) : null}
                   {activeImage ? (
                     <img className="detail-main-image" alt={product.name} src={activeImage} />
                   ) : (
@@ -791,20 +852,45 @@ export function ProductDetailPage() {
                   )}
                 </div>
 
+                {activeGalleryFrame ? (
+                  <div className="detail-gallery-caption">
+                    <div>
+                      <span>{activeGalleryFrame.label}</span>
+                      <strong>{activeGalleryFrame.caption}</strong>
+                    </div>
+                    {activeGalleryIndex >= 0 ? (
+                      <small>
+                        {String(activeGalleryIndex + 1).padStart(2, "0")} /{" "}
+                        {String(variantGallery.length).padStart(2, "0")}
+                      </small>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="detail-gallery-insight-grid">
+                  {galleryInsightCards.map((item) => (
+                    <article className="detail-gallery-insight-card" key={item.label}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </article>
+                  ))}
+                </div>
+
                 {variantGallery.length > 1 ? (
                   <div className="detail-thumbnail-row detail-thumbnail-row-editorial">
-                    {variantGallery.map((imageUrl, index) => (
+                    {variantGallery.map((frame, index) => (
                       <button
                         className={
-                          imageUrl === activeImage
+                          frame.url === activeImage
                             ? "detail-thumbnail-button detail-thumbnail-button-active"
                             : "detail-thumbnail-button"
                         }
-                        key={imageUrl}
+                        key={`${frame.url}-${frame.scope}-${index}`}
                         type="button"
-                        onClick={() => setActiveImage(imageUrl)}
+                        onClick={() => setActiveImage(frame.url)}
                       >
-                        <img alt={`${product.name} ${index + 1}`} src={imageUrl} />
+                        <img alt={`${product.name} ${frame.caption}`} src={frame.url} />
+                        <span className="detail-thumbnail-meta">{frame.label}</span>
                       </button>
                     ))}
                   </div>
@@ -854,7 +940,7 @@ export function ProductDetailPage() {
                         : "detail-save-button"
                     }
                     type="button"
-                    onClick={() => toggleWishlist(product.id)}
+                    onClick={() => void toggleWishlist(product.id)}
                   >
                     {savedForLater ? "Saved for later" : "Save for later"}
                   </button>
@@ -1302,12 +1388,11 @@ export function ProductDetailPage() {
 
             <div className="detail-mobile-buy-bar">
               <div className="detail-mobile-buy-copy">
-                <strong>{formatCurrency(activePrice)}</strong>
-                <span>
-                  {[selectedColorOption?.label, selectedVariant?.size || selectedVariant?.label]
-                    .filter(Boolean)
-                    .join(" / ") || "Select your finish"}
+                <span className="detail-mobile-buy-kicker">
+                  {activeGalleryFrame?.label || "Selected edit"}
                 </span>
+                <strong>{formatCurrency(activePrice)}</strong>
+                <span>{selectedVariantDescriptor || "Select your finish"}</span>
               </div>
               <div className="detail-mobile-buy-actions">
                 <button
@@ -1512,32 +1597,91 @@ function buildColorOptions(variants: ProductVariant[]) {
   }));
 }
 
-function buildVariantImageGallery(product: Product, selectedVariant: ProductVariant | null) {
+function buildSelectedVariantDescriptor(
+  selectedVariant: ProductVariant | null,
+  selectedColorLabel?: string
+) {
+  return [
+    selectedColorLabel,
+    selectedVariant?.size || selectedVariant?.label || selectedVariant?.sku,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function buildVariantImageGallery(
+  product: Product,
+  selectedVariant: ProductVariant | null
+): VariantGalleryFrame[] {
+  const frames: VariantGalleryFrame[] = [];
+  const seen = new Set<string>();
+  const selectedColorKey = normalizeColorLabel(selectedVariant?.color);
+  const selectedVariantLabel =
+    buildSelectedVariantDescriptor(
+      selectedVariant,
+      selectedVariant?.color ? formatColorLabel(normalizeColorLabel(selectedVariant.color)) : ""
+    ) || "Selected variant";
+
+  const variantImages =
+    selectedVariant?.image_urls?.filter((imageUrl) => imageUrl.trim().length > 0) ?? [];
+  variantImages.forEach((imageUrl, index) => {
+    pushVariantGalleryFrame(frames, seen, {
+      url: imageUrl,
+      scope: "selected",
+      label: "Selected variant",
+      caption:
+        index === 0
+          ? `${selectedVariantLabel} front view`
+          : `${selectedVariantLabel} detail ${index + 1}`,
+    });
+  });
+
+  if (selectedColorKey) {
+    const colorImages = product.variants
+      .filter((variant) => normalizeColorLabel(variant.color) === selectedColorKey)
+      .flatMap((variant) => variant.image_urls ?? [])
+      .filter((imageUrl) => imageUrl.trim().length > 0);
+
+    colorImages.forEach((imageUrl, index) => {
+      pushVariantGalleryFrame(frames, seen, {
+        url: imageUrl,
+        scope: "finish",
+        label: "Same finish",
+        caption: `${formatColorLabel(selectedColorKey)} edit ${index + 1}`,
+      });
+    });
+  }
+
   const productImages = product.image_urls.length
     ? product.image_urls
     : product.image_url
       ? [product.image_url]
       : [];
+  productImages.forEach((imageUrl, index) => {
+    pushVariantGalleryFrame(frames, seen, {
+      url: imageUrl,
+      scope: "collection",
+      label: "Collection view",
+      caption: `${product.name} look ${index + 1}`,
+    });
+  });
 
-  const variantImages =
-    selectedVariant?.image_urls?.filter((imageUrl) => imageUrl.trim().length > 0) ?? [];
-  if (variantImages.length > 0) {
-    return Array.from(new Set([...variantImages, ...productImages]));
+  return frames;
+}
+
+function pushVariantGalleryFrame(
+  frames: VariantGalleryFrame[],
+  seen: Set<string>,
+  frame: VariantGalleryFrame
+) {
+  const normalizedUrl = frame.url.trim();
+  if (!normalizedUrl || seen.has(normalizedUrl)) {
+    return;
   }
 
-  const selectedColorKey = normalizeColorLabel(selectedVariant?.color);
-  if (!selectedColorKey) {
-    return productImages;
-  }
-
-  const colorImages = product.variants
-    .filter((variant) => normalizeColorLabel(variant.color) === selectedColorKey)
-    .flatMap((variant) => variant.image_urls ?? [])
-    .filter((imageUrl) => imageUrl.trim().length > 0);
-
-  if (colorImages.length === 0) {
-    return productImages;
-  }
-
-  return Array.from(new Set([...colorImages, ...productImages]));
+  seen.add(normalizedUrl);
+  frames.push({
+    ...frame,
+    url: normalizedUrl,
+  });
 }

@@ -12,6 +12,7 @@
 6. [10-guide-to-debugging.md](./10-guide-to-debugging.md)
 7. [09-how-to-add-new-feature.md](./09-how-to-add-new-feature.md)
 8. [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md)
+9. [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 
@@ -32,3 +33,4 @@
 - [03-source-reading-roadmap.md](./03-source-reading-roadmap.md): biết phải mở file nào trước khi sửa code
 - [06-testing-and-verification.md](./06-testing-and-verification.md): biết verify gì trước khi tin rằng mình đã sửa xong
 - [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md): nhìn repo như một senior engineer thay vì chỉ như người học syntax
+- [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md): nối từ hiểu source code sang biết mình cần học gì để ship một sản phẩm e-commerce production-ready

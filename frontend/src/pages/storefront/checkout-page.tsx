@@ -26,10 +26,6 @@ type ShippingMethodChoice = "standard" | "express" | "pickup";
 
 type CheckoutFormState = {
   fullName: string;
-  street: string;
-  ward: string;
-  district: string;
-  city: string;
   phone: string;
 };
 
@@ -44,10 +40,6 @@ type CheckoutDisplayItem = {
 
 const emptyCheckoutForm: CheckoutFormState = {
   fullName: "",
-  street: "",
-  ward: "",
-  district: "",
-  city: "",
   phone: "",
 };
 
@@ -155,10 +147,6 @@ export function CheckoutPage() {
     setForm((current) => ({
       ...current,
       fullName: defaultAddress.recipient_name,
-      street: defaultAddress.street,
-      ward: defaultAddress.ward || "",
-      district: defaultAddress.district,
-      city: defaultAddress.city,
       phone: defaultAddress.phone,
     }));
   }, [addresses, form]);
@@ -243,10 +231,10 @@ export function CheckoutPage() {
     "Tracked delivery and clear post-purchase updates.";
   const savedAddressLabel =
     selectedShippingMethod === "pickup"
-      ? "Pickup only requires your contact details. Shipping address can stay optional."
+      ? "Pickup only requires your contact details."
       : addresses.length > 0
-      ? "Pre-filled from your saved address book."
-      : "Fill in the shipping details for this order.";
+      ? "Pre-filled from your saved contact book."
+      : "Fill in the delivery contact details for this order.";
 
   useEffect(() => {
     let active = true;
@@ -377,21 +365,13 @@ export function CheckoutPage() {
     }
 
     const normalizedFullName = sanitizeText(form.fullName);
-    const normalizedStreet = sanitizeText(form.street);
-    const normalizedDistrict = sanitizeText(form.district);
-    const normalizedCity = sanitizeText(form.city);
     const normalizedPhone = sanitizeText(form.phone);
 
-    if (
-      !normalizedFullName ||
-      !normalizedPhone ||
-      (selectedShippingMethod !== "pickup" &&
-        (!normalizedStreet || !normalizedDistrict || !normalizedCity))
-    ) {
+    if (!normalizedFullName || !normalizedPhone) {
       setFeedback(
         selectedShippingMethod === "pickup"
           ? "Vui lòng điền đủ họ tên và số điện thoại để xác nhận lượt nhận tại quầy."
-          : "Vui lòng điền đủ họ tên, địa chỉ giao hàng, quận/huyện, thành phố và số điện thoại."
+          : "Vui lòng điền đủ họ tên và số điện thoại để xác nhận giao hàng."
       );
       return;
     }
@@ -467,7 +447,7 @@ export function CheckoutPage() {
               <section className="checkout-editorial-section">
                 <div className="checkout-section-title">
                   <span className="checkout-step-badge">1</span>
-                  <h2>Shipping Address</h2>
+                  <h2>Delivery Contact</h2>
                 </div>
 
                 <p className="checkout-section-note">
@@ -481,42 +461,6 @@ export function CheckoutPage() {
                       placeholder="Julian Thorne"
                       value={form.fullName}
                       onChange={(event) => updateForm("fullName", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field checkout-field-full">
-                    <span>Street Address</span>
-                    <input
-                      placeholder="1242 Forest Avenue, Suite 400"
-                      value={form.street}
-                      onChange={(event) => updateForm("street", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field">
-                    <span>Ward (Optional)</span>
-                    <input
-                      placeholder="Ben Nghe"
-                      value={form.ward}
-                      onChange={(event) => updateForm("ward", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field">
-                    <span>District</span>
-                    <input
-                      placeholder="District 1"
-                      value={form.district}
-                      onChange={(event) => updateForm("district", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="checkout-field checkout-field-full">
-                    <span>City</span>
-                    <input
-                      placeholder="Ho Chi Minh City"
-                      value={form.city}
-                      onChange={(event) => updateForm("city", event.target.value)}
                     />
                   </label>
 
@@ -801,9 +745,7 @@ async function syncPurchasedProductsToWorkbook(items: Array<{ product_id: string
 }
 
 function hasCheckoutFormValue(form: CheckoutFormState) {
-  return Boolean(
-    form.fullName || form.street || form.ward || form.district || form.city || form.phone
-  );
+  return Boolean(form.fullName || form.phone);
 }
 
 function buildCheckoutItemSubtitle(product?: Product) {
@@ -820,38 +762,15 @@ function buildCheckoutPreviewAddress(
   shippingMethod: ShippingMethodChoice
 ): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
-  const street = sanitizeText(form.street);
-  const ward = sanitizeText(form.ward);
-  const district = sanitizeText(form.district);
-  const city = sanitizeText(form.city);
   const phone = sanitizeText(form.phone);
 
-  if (shippingMethod === "pickup") {
-    if (!recipientName || !phone) {
-      return undefined;
-    }
-
-    return {
-      recipient_name: recipientName,
-      phone,
-      street: street || "Pickup counter",
-      ward: ward || undefined,
-      district: district || "Pickup counter",
-      city: city || "Pickup counter",
-    };
-  }
-
-  if (!recipientName || !street || !district || !city || !phone) {
+  if (shippingMethod === "pickup" || !recipientName || !phone) {
     return undefined;
   }
 
   return {
     recipient_name: recipientName,
     phone,
-    street,
-    ward: ward || undefined,
-    district,
-    city,
   };
 }
 
@@ -860,10 +779,6 @@ function buildCheckoutSubmissionAddress(
   shippingMethod: ShippingMethodChoice
 ): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
-  const street = sanitizeText(form.street);
-  const ward = sanitizeText(form.ward);
-  const district = sanitizeText(form.district);
-  const city = sanitizeText(form.city);
   const phone = sanitizeText(form.phone);
 
   if (!recipientName || !phone) {
@@ -874,17 +789,9 @@ function buildCheckoutSubmissionAddress(
     return undefined;
   }
 
-  if (!street || !district || !city) {
-    return undefined;
-  }
-
   return {
     recipient_name: recipientName,
     phone,
-    street,
-    ward: ward || undefined,
-    district,
-    city,
   };
 }
 

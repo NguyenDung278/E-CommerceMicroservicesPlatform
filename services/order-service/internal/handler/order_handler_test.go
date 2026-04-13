@@ -158,9 +158,6 @@ func TestPreviewOrderReturnsShippingMethodsContract(t *testing.T) {
 		"shipping_address": map[string]any{
 			"recipient_name": "Nguyen Van D",
 			"phone":          "0901234567",
-			"street":         "15 Hai Ba Trung",
-			"district":       "District 1",
-			"city":           "Ho Chi Minh",
 		},
 	})
 

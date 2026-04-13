@@ -96,7 +96,7 @@ export function ProfileHeroPanel({
           </div>
 
           <div className="profile-route-field">
-            <label>Location</label>
+            <label>Saved Contact</label>
             <p>{locationLabel}</p>
           </div>
         </div>
