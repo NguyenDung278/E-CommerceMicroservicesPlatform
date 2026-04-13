@@ -40,7 +40,11 @@ type ReturnItemRequest struct {
 }
 
 type UpdateReturnStatusRequest struct {
-	Status  string `json:"status" validate:"required,oneof=approved rejected received refunded cancelled"`
+	Status  string `json:"status" validate:"required,oneof=approved rejected received cancelled"`
+	Message string `json:"message" validate:"omitempty,max=255"`
+}
+
+type RequestReturnRefundRequest struct {
 	Message string `json:"message" validate:"omitempty,max=255"`
 }
 

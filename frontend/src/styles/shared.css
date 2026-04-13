@@ -637,6 +637,12 @@ select:focus-visible {
   color: var(--color-error);
 }
 
+.feedback-warning {
+  background: rgba(255, 246, 238, 0.95);
+  border-color: rgba(255, 163, 91, 0.3);
+  color: #7e3d14;
+}
+
 .category-filter-row {
   margin-bottom: 18px;
 }

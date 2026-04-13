@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { api, getErrorMessage } from "@/services/api";
-import type { Order, Payment, Product } from "@/types/api";
-import { formatCurrency } from "@/utils/format";
+import type { Order, Payment, Product, ReturnRequest } from "@/types/api";
+import { formatCurrency, formatDateTime, formatStatusLabel } from "@/utils/format";
 import "@/styles/pages/account/order-detail-page.css";
 
 type ConfirmationLocationState = {
@@ -30,8 +30,15 @@ export function OrderDetailPage() {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [orderReturns, setOrderReturns] = useState<ReturnRequest[]>([]);
   const [feedback, setFeedback] = useState("");
+  const [returnFeedback, setReturnFeedback] = useState("");
   const [productLookup, setProductLookup] = useState<Record<string, Product>>({});
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+  const [returnItemReasons, setReturnItemReasons] = useState<Record<string, string>>({});
+  const [isLoadingReturns, setIsLoadingReturns] = useState(false);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,31 +49,40 @@ export function OrderDetailPage() {
       };
     }
 
-    void api
-      .getOrderById(token, orderId)
-      .then(async (response) => {
+    async function loadOrderSnapshot() {
+      try {
+        setIsLoadingReturns(true);
+        setFeedback("");
+        const orderResponse = await api.getOrderById(token, orderId);
         if (!active) {
           return;
         }
 
-        setOrder(response.data);
+        setOrder(orderResponse.data);
 
-        try {
-          const paymentResponse = await api.listPaymentsByOrder(token, orderId);
-          if (active) {
-            setPayments(paymentResponse.data);
-          }
-        } catch {
-          if (active) {
-            setPayments([]);
-          }
+        const [paymentResult, returnResult] = await Promise.allSettled([
+          api.listPaymentsByOrder(token, orderId),
+          api.listOrderReturns(token, orderId),
+        ]);
+
+        if (!active) {
+          return;
         }
-      })
-      .catch((reason) => {
+
+        setPayments(paymentResult.status === "fulfilled" ? paymentResult.value.data : []);
+        setOrderReturns(returnResult.status === "fulfilled" ? returnResult.value.data : []);
+      } catch (reason) {
         if (active) {
           setFeedback(getErrorMessage(reason));
         }
-      });
+      } finally {
+        if (active) {
+          setIsLoadingReturns(false);
+        }
+      }
+    }
+
+    void loadOrderSnapshot();
 
     return () => {
       active = false;
@@ -119,6 +135,22 @@ export function OrderDetailPage() {
     };
   }, [order]);
 
+  const sortedReturns = useMemo(
+    () => [...orderReturns].sort((left, right) => right.created_at.localeCompare(left.created_at)),
+    [orderReturns]
+  );
+  const returnedQuantities = useMemo(() => buildReturnedQuantityMap(sortedReturns), [sortedReturns]);
+  const returnableItems = useMemo(
+    () =>
+      (order?.items ?? []).map((item) => ({
+        ...item,
+        remainingQuantity: Math.max(item.quantity - (returnedQuantities[item.id] ?? 0), 0),
+      })),
+    [order, returnedQuantities]
+  );
+  const hasReturnableItems = returnableItems.some((item) => item.remainingQuantity > 0);
+  const canRequestReturn = order?.status === "delivered" && hasReturnableItems;
+
   if (!order && !feedback) {
     return <div className="page-state">Đang tải chi tiết đơn hàng...</div>;
   }
@@ -142,6 +174,49 @@ export function OrderDetailPage() {
         };
       })
     : [];
+
+  async function handleSubmitReturn() {
+    if (!token || !order) {
+      setReturnFeedback("Bạn cần đăng nhập để gửi yêu cầu trả hàng.");
+      return;
+    }
+
+    const normalizedReason = returnReason.trim();
+    const selectedItems = returnableItems
+      .map((item) => ({
+        order_item_id: item.id,
+        quantity: Math.max(0, Math.min(item.remainingQuantity, returnQuantities[item.id] ?? 0)),
+        reason: returnItemReasons[item.id]?.trim() || undefined,
+      }))
+      .filter((item) => item.quantity > 0);
+
+    if (!normalizedReason) {
+      setReturnFeedback("Hãy điền lý do chung cho yêu cầu trả hàng.");
+      return;
+    }
+    if (selectedItems.length === 0) {
+      setReturnFeedback("Hãy chọn ít nhất một mặt hàng và số lượng cần trả.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReturn(true);
+      const response = await api.createReturn(token, order.id, {
+        reason: normalizedReason,
+        items: selectedItems,
+      });
+
+      setOrderReturns((current) => [response.data, ...current]);
+      setReturnReason("");
+      setReturnQuantities({});
+      setReturnItemReasons({});
+      setReturnFeedback(`Đã tạo yêu cầu trả hàng ${response.data.id}.`);
+    } catch (reason) {
+      setReturnFeedback(getErrorMessage(reason));
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  }
 
   return (
     <div className="page-stack order-confirmation-page">
@@ -257,9 +332,237 @@ export function OrderDetailPage() {
               </div>
             </section>
 
+            <section className="order-return-portal">
+              <div className="order-return-head">
+                <div>
+                  <span className="order-return-kicker">Aftercare portal</span>
+                  <h2>Returns for this order</h2>
+                  <p>
+                    Yêu cầu trả hàng sẽ được đồng bộ vào khu vực account và timeline vận hành ngay
+                    sau khi bạn gửi form.
+                  </p>
+                </div>
+                <Link className="text-link" to="/returns">
+                  Open full returns center
+                </Link>
+              </div>
+
+              {returnFeedback ? <div className="feedback feedback-info">{returnFeedback}</div> : null}
+
+              {canRequestReturn ? (
+                <div className="order-return-form-card">
+                  <div className="order-return-form-head">
+                    <div>
+                      <strong>Request a return</strong>
+                      <p>
+                        Chọn các dòng hàng còn khả dụng để trả, thêm lý do tổng quát và ghi chú cho
+                        từng item nếu cần.
+                      </p>
+                    </div>
+                    <span className="status-pill status-pill-neutral">
+                      {returnableItems.filter((item) => item.remainingQuantity > 0).length} returnable
+                      lines
+                    </span>
+                  </div>
+
+                  <label className="order-return-field">
+                    <span>Overall reason</span>
+                    <textarea
+                      placeholder="Example: wrong size, damaged packaging, or product mismatch"
+                      value={returnReason}
+                      onChange={(event) => setReturnReason(event.target.value)}
+                    />
+                  </label>
+
+                  <div className="order-return-line-grid">
+                    {returnableItems.map((item) => (
+                      <article className="order-return-line-card" key={item.id}>
+                        <div className="order-return-line-copy">
+                          <strong>{item.name}</strong>
+                          <span>
+                            Purchased {item.quantity} • Remaining returnable {item.remainingQuantity}
+                          </span>
+                        </div>
+
+                        <div className="order-return-line-controls">
+                          <label className="order-return-field">
+                            <span>Quantity</span>
+                            <select
+                              value={String(returnQuantities[item.id] ?? 0)}
+                              onChange={(event) =>
+                                setReturnQuantities((current) => ({
+                                  ...current,
+                                  [item.id]: Math.max(
+                                    0,
+                                    Math.min(
+                                      item.remainingQuantity,
+                                      Number.parseInt(event.target.value, 10) || 0
+                                    )
+                                  ),
+                                }))
+                              }
+                            >
+                              {Array.from({ length: item.remainingQuantity + 1 }, (_, index) => (
+                                <option key={`${item.id}-${index}`} value={index}>
+                                  {index}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="order-return-field">
+                            <span>Line note</span>
+                            <input
+                              disabled={item.remainingQuantity === 0}
+                              placeholder="Optional note for this item"
+                              value={returnItemReasons[item.id] ?? ""}
+                              onChange={(event) =>
+                                setReturnItemReasons((current) => ({
+                                  ...current,
+                                  [item.id]: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="order-return-form-actions">
+                    <button
+                      className="primary-button"
+                      disabled={isSubmittingReturn}
+                      type="button"
+                      onClick={() => void handleSubmitReturn()}
+                    >
+                      {isSubmittingReturn ? "Submitting..." : "Request return"}
+                    </button>
+                    <span className="history-subtle">
+                      Only delivered lines with remaining quantity can be returned.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="order-return-empty-state">
+                  <strong>Return request unavailable</strong>
+                  <p>
+                    {order.status !== "delivered"
+                      ? "Returns open after the order reaches delivered status."
+                      : "All quantities from this order have already been accounted for in existing return requests."}
+                  </p>
+                </div>
+              )}
+
+              {isLoadingReturns ? (
+                <div className="page-state">Đang tải lịch sử trả hàng của đơn này...</div>
+              ) : sortedReturns.length > 0 ? (
+                <div className="order-return-history">
+                  {sortedReturns.map((returnRequest) => (
+                    <article className="history-card order-return-history-card" key={returnRequest.id}>
+                      <div className="history-card-head">
+                        <div>
+                          <p className="history-kicker">Return request</p>
+                          <h3>{returnRequest.id}</h3>
+                          <p className="history-subtle">
+                            Created {formatDateTime(returnRequest.created_at)}
+                          </p>
+                        </div>
+
+                        <span className={getReturnStatusClassName(returnRequest.status)}>
+                          {formatStatusLabel(returnRequest.status)}
+                        </span>
+                      </div>
+
+                      <div className="history-meta-grid">
+                        <div>
+                          <span>Main reason</span>
+                          <strong>{returnRequest.reason}</strong>
+                        </div>
+                        <div>
+                          <span>Refund</span>
+                          <strong>{buildReturnRefundCopy(returnRequest)}</strong>
+                        </div>
+                        <div>
+                          <span>Attempts</span>
+                          <strong>{returnRequest.refund_attempt_count ?? 0}</strong>
+                        </div>
+                        <div>
+                          <span>Last update</span>
+                          <strong>
+                            {returnRequest.events.length
+                              ? formatDateTime(returnRequest.events[returnRequest.events.length - 1].created_at)
+                              : formatDateTime(returnRequest.updated_at)}
+                          </strong>
+                        </div>
+                      </div>
+
+                      <div className="order-return-history-grid">
+                        <div className="order-return-history-subcard">
+                          <div className="history-line">
+                            <strong>Return items</strong>
+                            <span className="history-subtle">{returnRequest.items.length} lines</span>
+                          </div>
+
+                          <div className="order-return-line-list">
+                            {returnRequest.items.map((item) => (
+                              <div className="history-item-preview" key={item.id}>
+                                <strong>{item.product_id}</strong>
+                                <span>
+                                  Order item {item.order_item_id} • Quantity {item.quantity}
+                                </span>
+                                <span>{item.reason || "No item-level note."}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="order-return-history-subcard">
+                          <div className="history-line">
+                            <strong>Timeline</strong>
+                            <span className="history-subtle">{returnRequest.events.length} milestones</span>
+                          </div>
+
+                          <div className="order-return-event-list">
+                            {returnRequest.events.map((event) => (
+                              <div className="order-return-event" key={event.id}>
+                                <strong>{formatStatusLabel(event.status)}</strong>
+                                <span>{event.message}</span>
+                                <span className="history-subtle">
+                                  {event.actor_role || "system"} • {formatDateTime(event.created_at)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {returnRequest.refund_last_error ? (
+                        <div className="feedback feedback-warning order-return-warning" role="note">
+                          <strong>Last refund attempt did not complete.</strong>
+                          <span>{returnRequest.refund_last_error}</span>
+                          {returnRequest.refund_next_retry_at ? (
+                            <span>Next retry at {formatDateTime(returnRequest.refund_next_retry_at)}.</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="order-return-empty-state">
+                  <strong>No return requests yet</strong>
+                  <p>Once you submit a request for this order, the full timeline will appear here.</p>
+                </div>
+              )}
+            </section>
+
             <div className="order-confirmation-actions">
-              <Link className="primary-button order-confirmation-primary" to="/profile">
+              <Link className="primary-button order-confirmation-primary" to="/myorders">
                 View Order History
+              </Link>
+              <Link className="order-confirmation-secondary-link" to="/returns">
+                Open Returns Center
               </Link>
               <Link className="order-confirmation-secondary-link" to="/products">
                 Back to Shop
@@ -293,6 +596,54 @@ function buildOrderItemSubtitle(product?: Product) {
 
   const subtitle = [product.category, product.brand].filter(Boolean).join(" / ");
   return subtitle || "Editorial selection";
+}
+
+function buildReturnedQuantityMap(returnRequests: ReturnRequest[]) {
+  return returnRequests.reduce<Record<string, number>>((result, returnRequest) => {
+    if (isIgnoredReturnStatus(returnRequest.status)) {
+      return result;
+    }
+
+    returnRequest.items.forEach((item) => {
+      result[item.order_item_id] = (result[item.order_item_id] ?? 0) + item.quantity;
+    });
+    return result;
+  }, {});
+}
+
+function isIgnoredReturnStatus(status: string) {
+  return status === "rejected" || status === "cancelled";
+}
+
+function buildReturnRefundCopy(returnRequest: ReturnRequest) {
+  if (typeof returnRequest.refund_amount !== "number") {
+    return "Pending review";
+  }
+
+  if (returnRequest.status === "refunded") {
+    return formatCurrency(returnRequest.refund_amount);
+  }
+  if (returnRequest.status === "refund_pending") {
+    return `${formatCurrency(returnRequest.refund_amount)} queued`;
+  }
+
+  return `${formatCurrency(returnRequest.refund_amount)} est.`;
+}
+
+function getReturnStatusClassName(status: string) {
+  switch (status) {
+    case "approved":
+    case "received":
+    case "refunded":
+      return "status-pill status-pill-success";
+    case "refund_pending":
+      return "status-pill status-pill-warning";
+    case "rejected":
+    case "cancelled":
+      return "status-pill status-pill-danger";
+    default:
+      return "status-pill status-pill-neutral";
+  }
 }
 
 function formatArrivalWindow(createdAt: string) {

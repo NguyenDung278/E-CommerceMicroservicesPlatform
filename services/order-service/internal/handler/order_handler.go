@@ -44,6 +44,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	returns := e.Group("/api/v1/returns")
 	returns.Use(middleware.JWTAuth(jwtSecret))
+	returns.GET("", h.ListUserReturns)
 	returns.GET("/:id", h.GetReturn)
 
 	legacyAdmin := orders.Group("/admin")
@@ -63,7 +64,10 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminReturns := e.Group("/api/v1/admin/returns")
 	adminReturns.Use(middleware.JWTAuth(jwtSecret))
 	adminReturns.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	adminReturns.GET("", h.ListAdminReturns)
+	adminReturns.GET("/health", h.GetReturnQueueHealth)
 	adminReturns.PUT("/:id/status", h.UpdateReturnStatus)
+	adminReturns.POST("/:id/refund", h.RequestReturnRefund)
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
 	adminCoupons.Use(middleware.JWTAuth(jwtSecret))
@@ -167,6 +171,35 @@ func (h *OrderHandler) GetReturn(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "return retrieved", returnRequest)
+}
+
+// ListUserReturns handles GET /api/v1/returns
+//
+// Mục đích: Trả về danh sách yêu cầu trả hàng thuộc chính người dùng hiện tại
+// với filter và metadata phân trang cho khu vực account/storefront.
+func (h *OrderHandler) ListUserReturns(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	page, limit := parsePageAndLimit(c)
+	filters := model.ReturnFilters{
+		Query:  strings.TrimSpace(c.QueryParam("query")),
+		Status: model.ReturnStatus(strings.TrimSpace(c.QueryParam("status"))),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	returns, total, err := h.orderService.ListUserReturns(c.Request().Context(), claims.UserID, filters)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to list user returns")
+	}
+	if returns == nil {
+		returns = []*model.ReturnRequest{}
+	}
+
+	return response.SuccessWithMeta(c, http.StatusOK, "returns retrieved", returns, &response.Meta{
+		Page:  page,
+		Limit: limit,
+		Total: total,
+	})
 }
 
 func (h *OrderHandler) GetUserOrders(c echo.Context) error {
@@ -365,6 +398,76 @@ func (h *OrderHandler) UpdateReturnStatus(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "return status updated", returnRequest)
 }
 
+func (h *OrderHandler) RequestReturnRefund(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	var req dto.RequestReturnRefundRequest
+	if err := c.Bind(&req); err != nil && !errors.Is(err, io.EOF) && err != echo.ErrUnsupportedMediaType {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	if err := h.orderService.RequestReturnRefund(
+		c.Request().Context(),
+		c.Param("id"),
+		claims.UserID,
+		claims.Role,
+		req.Message,
+	); err != nil {
+		return writeReturnError(c, err, "failed to queue return refund")
+	}
+
+	returnRequest, err := h.orderService.GetReturn(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load queued return refund")
+	}
+
+	return response.Success(c, http.StatusAccepted, "return refund queued", returnRequest)
+}
+
+func (h *OrderHandler) ListAdminReturns(c echo.Context) error {
+	page, limit := parsePageAndLimit(c)
+	filters := model.ReturnFilters{
+		Query:  strings.TrimSpace(c.QueryParam("query")),
+		Status: model.ReturnStatus(strings.TrimSpace(c.QueryParam("status"))),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	returns, total, err := h.orderService.ListAdminReturns(c.Request().Context(), filters)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to list returns")
+	}
+	if returns == nil {
+		returns = []*model.ReturnRequest{}
+	}
+
+	return response.SuccessWithMeta(c, http.StatusOK, "returns retrieved", returns, &response.Meta{
+		Page:  page,
+		Limit: limit,
+		Total: total,
+	})
+}
+
+// GetReturnQueueHealth handles GET /api/v1/admin/returns/health
+//
+// Mục đích: Cung cấp snapshot vận hành của hàng đợi refund_pending cho dashboard
+// admin theo dõi số job chờ, retry, in-flight và lỗi gần nhất.
+func (h *OrderHandler) GetReturnQueueHealth(c echo.Context) error {
+	health, err := h.orderService.GetReturnQueueHealth(c.Request().Context())
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load return queue health")
+	}
+	if health == nil {
+		health = &model.ReturnQueueHealth{
+			RecentFailures: []model.ReturnQueueFailure{},
+		}
+	}
+
+	return response.Success(c, http.StatusOK, "return queue health retrieved", health)
+}
+
 func (h *OrderHandler) CreateCoupon(c echo.Context) error {
 	var req dto.CreateCouponRequest
 	if err := c.Bind(&req); err != nil {
@@ -505,6 +608,9 @@ func writeReturnError(c echo.Context, err error, fallbackMessage string) error {
 	}
 	if errors.Is(err, service.ErrReturnStatusTransition) {
 		return response.Error(c, http.StatusConflict, "transition not allowed", err.Error())
+	}
+	if errors.Is(err, service.ErrReturnRefundPending) {
+		return response.Error(c, http.StatusConflict, "refund pending", err.Error())
 	}
 	if errors.Is(err, service.ErrReturnRefundUnavailable) {
 		return response.Error(c, http.StatusConflict, "refund unavailable", err.Error())

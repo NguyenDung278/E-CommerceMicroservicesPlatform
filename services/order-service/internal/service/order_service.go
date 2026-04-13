@@ -40,6 +40,7 @@ var (
 	ErrReturnStatusTransition  = errors.New("return status transition is not allowed")
 	ErrReturnRefundUnavailable = errors.New("return refund could not be matched to a refundable payment")
 	ErrReturnRefundAmount      = errors.New("return refund amount is invalid")
+	ErrReturnRefundPending     = errors.New("return refund is already queued for processing")
 )
 
 // OrderEvent is published to RabbitMQ when an order is created or cancelled so
@@ -88,7 +89,7 @@ type productCatalog interface {
 type paymentHistorySource interface {
 	ListPaymentHistory(ctx context.Context, authHeader string) ([]model.PaymentSummary, error)
 	ListPaymentsByOrder(ctx context.Context, orderID string) ([]model.PaymentSummary, error)
-	RefundPayment(ctx context.Context, paymentID string, amount float64, message string) (*model.PaymentSummary, error)
+	RefundPayment(ctx context.Context, paymentID string, amount float64, message, idempotencyKey string) (*model.PaymentSummary, error)
 }
 
 type pricedOrderItem struct {

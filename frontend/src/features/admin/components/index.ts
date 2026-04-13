@@ -5,4 +5,5 @@ export * from "./admin-coupons-section";
 export * from "./admin-orders-section";
 export * from "./admin-overview-section";
 export * from "./admin-report-section";
+export * from "./admin-returns-section";
 export * from "./admin-users-section";

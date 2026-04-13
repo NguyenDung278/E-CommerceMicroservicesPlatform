@@ -314,6 +314,86 @@ func TestProcessPaymentRejectsIdempotencyKeyReuseForDifferentPayload(t *testing.
 	}
 }
 
+func TestRefundPaymentReplaysCompletedRequestByIdempotencyKey(t *testing.T) {
+	repo := &fakePaymentRepo{
+		payments: []*model.Payment{
+			{
+				ID:              "payment-1",
+				OrderID:         "order-1",
+				UserID:          "user-1",
+				OrderTotal:      120,
+				Amount:          120,
+				Status:          model.PaymentStatusCompleted,
+				TransactionType: model.PaymentTransactionTypeCharge,
+				PaymentMethod:   "manual",
+				GatewayProvider: "manual",
+				CreatedAt:       time.Now().Add(-2 * time.Hour),
+				UpdatedAt:       time.Now().Add(-2 * time.Hour),
+			},
+		},
+	}
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+
+	firstRefund, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
+		Amount:  40,
+		Message: "Damage refund",
+	})
+	if err != nil {
+		t.Fatalf("first RefundPayment returned error: %v", err)
+	}
+
+	replayedRefund, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
+		Amount:  40,
+		Message: "Damage refund",
+	})
+	if err != nil {
+		t.Fatalf("replayed RefundPayment returned error: %v", err)
+	}
+
+	if len(repo.payments) != 2 {
+		t.Fatalf("expected one persisted refund plus original charge, got %d payments", len(repo.payments))
+	}
+	if replayedRefund.ID != firstRefund.ID {
+		t.Fatalf("expected replayed refund id %q, got %q", firstRefund.ID, replayedRefund.ID)
+	}
+}
+
+func TestRefundPaymentRejectsIdempotencyKeyReuseForDifferentPayload(t *testing.T) {
+	repo := &fakePaymentRepo{
+		payments: []*model.Payment{
+			{
+				ID:              "payment-1",
+				OrderID:         "order-1",
+				UserID:          "user-1",
+				OrderTotal:      120,
+				Amount:          120,
+				Status:          model.PaymentStatusCompleted,
+				TransactionType: model.PaymentTransactionTypeCharge,
+				PaymentMethod:   "manual",
+				GatewayProvider: "manual",
+				CreatedAt:       time.Now().Add(-2 * time.Hour),
+				UpdatedAt:       time.Now().Add(-2 * time.Hour),
+			},
+		},
+	}
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+
+	if _, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
+		Amount:  40,
+		Message: "Damage refund",
+	}); err != nil {
+		t.Fatalf("initial RefundPayment returned error: %v", err)
+	}
+
+	_, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
+		Amount:  50,
+		Message: "Different refund amount",
+	})
+	if !errors.Is(err, ErrIdempotencyKeyConflict) {
+		t.Fatalf("expected ErrIdempotencyKeyConflict, got %v", err)
+	}
+}
+
 func TestHandleMomoWebhookCompletesPendingPayment(t *testing.T) {
 	repo := &fakePaymentRepo{
 		payments: []*model.Payment{

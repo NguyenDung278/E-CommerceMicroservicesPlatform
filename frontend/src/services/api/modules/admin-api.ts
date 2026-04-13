@@ -1,5 +1,13 @@
 import { request } from "../http-client";
-import type { AdminOrderReport, ApiEnvelope, Coupon, Order, Payment } from "@/types/api";
+import type {
+  AdminOrderReport,
+  ApiEnvelope,
+  Coupon,
+  Order,
+  Payment,
+  ReturnQueueHealth,
+  ReturnRequest,
+} from "@/types/api";
 import {
   normalizeAdminOrderReport,
   normalizeCoupon,
@@ -8,6 +16,9 @@ import {
   normalizeOrderList,
   normalizePayment,
   normalizePaymentList,
+  normalizeReturnQueueHealth,
+  normalizeReturnRequest,
+  normalizeReturnRequestList,
 } from "../normalizers";
 
 export interface AdminListOrdersOptions {
@@ -21,6 +32,13 @@ export interface AdminListOrdersOptions {
 
 export interface AdminCancelOrderData {
   message?: string;
+}
+
+export interface AdminListReturnsOptions {
+  query?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateCouponData {
@@ -39,7 +57,49 @@ export interface RefundPaymentData {
   message?: string;
 }
 
+export interface UpdateReturnStatusData {
+  status: "approved" | "rejected" | "received" | "cancelled";
+  message?: string;
+}
+
+export interface RequestReturnRefundData {
+  message?: string;
+}
+
 export const adminApi = {
+  /**
+   * Load the paginated admin returns queue with optional filters.
+   */
+  listReturns(
+    token: string,
+    options: AdminListReturnsOptions = {}
+  ): Promise<ApiEnvelope<ReturnRequest[]>> {
+    const params = new URLSearchParams();
+    params.set("page", String(options.page ?? 1));
+    params.set("limit", String(options.limit ?? 20));
+
+    if (options.query) {
+      params.set("query", options.query);
+    }
+    if (options.status) {
+      params.set("status", options.status);
+    }
+
+    return request<unknown>(`/api/v1/admin/returns?${params.toString()}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequestList(response.data),
+    }));
+  },
+
+  getReturnQueueHealth(token: string): Promise<ApiEnvelope<ReturnQueueHealth>> {
+    return request<unknown>("/api/v1/admin/returns/health", { token }).then((response) => ({
+      ...response,
+      data: normalizeReturnQueueHealth(response.data),
+    }));
+  },
+
   getOrderReport(token: string, windowDays = 30): Promise<ApiEnvelope<AdminOrderReport>> {
     return request<unknown>(
       `/api/v1/admin/orders/report?days=${encodeURIComponent(String(windowDays))}`,
@@ -130,6 +190,42 @@ export const adminApi = {
     }).then((response) => ({
       ...response,
       data: normalizePayment(response.data),
+    }));
+  },
+
+  /**
+   * Update a return lifecycle status from the admin surface.
+   */
+  updateReturnStatus(
+    token: string,
+    returnId: string,
+    body: UpdateReturnStatusData
+  ): Promise<ApiEnvelope<ReturnRequest>> {
+    return request<unknown>(`/api/v1/admin/returns/${encodeURIComponent(returnId)}/status`, {
+      method: "PUT",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequest(response.data),
+    }));
+  },
+
+  /**
+   * Queue or retry an asynchronous refund for a return.
+   */
+  requestReturnRefund(
+    token: string,
+    returnId: string,
+    body: RequestReturnRefundData = {}
+  ): Promise<ApiEnvelope<ReturnRequest>> {
+    return request<unknown>(`/api/v1/admin/returns/${encodeURIComponent(returnId)}/refund`, {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequest(response.data),
     }));
   },
 };

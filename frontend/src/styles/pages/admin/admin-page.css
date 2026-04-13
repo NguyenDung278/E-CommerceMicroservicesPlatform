@@ -496,3 +496,203 @@
   background: rgba(255, 246, 238, 0.95);
   color: #7e3d14;
 }
+
+.admin-returns-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-return-health-shell {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(217, 160, 91, 0.16), transparent 28%),
+    rgba(19, 61, 51, 0.04);
+}
+
+.admin-return-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-return-health-card,
+.admin-return-failure-panel {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(22, 33, 29, 0.06);
+}
+
+.admin-return-health-card strong {
+  font-size: clamp(1.7rem, 2.2vw, 2.2rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.admin-return-health-card p,
+.admin-return-failure-item p {
+  margin: 0;
+  color: rgba(22, 33, 29, 0.68);
+  line-height: 1.55;
+}
+
+.admin-return-health-label {
+  color: rgba(22, 33, 29, 0.58);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-return-failure-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-return-failure-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(6, 27, 14, 0.04);
+}
+
+.admin-return-failure-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.admin-return-filter-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(220px, 0.9fr) auto;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(19, 61, 51, 0.04);
+}
+
+.admin-return-filter-field {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-return-filter-field span {
+  color: rgba(22, 33, 29, 0.62);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.admin-return-filter-actions,
+.admin-return-pagination,
+.admin-return-actions,
+.admin-return-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-return-filter-actions {
+  align-self: end;
+}
+
+.admin-return-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-return-pagination span {
+  color: rgba(22, 33, 29, 0.62);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.admin-return-card {
+  gap: 20px;
+}
+
+.admin-return-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-return-subcard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(22, 33, 29, 0.06);
+}
+
+.admin-return-item-list,
+.admin-return-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-return-timeline-item {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(6, 27, 14, 0.04);
+}
+
+.admin-return-timeline-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-return-warning {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.admin-return-footer {
+  justify-content: space-between;
+}
+
+.admin-return-refund-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+@media (max-width: 1040px) {
+  .admin-return-health-grid,
+  .admin-return-filter-form,
+  .admin-return-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-return-failure-item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-return-toolbar,
+  .admin-return-footer {
+    align-items: flex-start;
+  }
+
+  .admin-return-pagination {
+    width: 100%;
+  }
+
+  .admin-return-pagination .ghost-button {
+    flex: 1 1 0;
+  }
+}

@@ -101,6 +101,44 @@ func (s *OrderService) ListReturnsByOrder(ctx context.Context, orderID, actorID,
 	return s.repo.ListReturnsByOrderID(ctx, orderID)
 }
 
+// ListUserReturns returns the paginated returns list scoped to one user.
+func (s *OrderService) ListUserReturns(ctx context.Context, userID string, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error) {
+	if filters.Page <= 0 {
+		filters.Page = 1
+	}
+	if filters.Limit <= 0 {
+		filters.Limit = 10
+	}
+	if filters.Limit > 30 {
+		filters.Limit = 30
+	}
+	filters.UserID = strings.TrimSpace(userID)
+
+	return s.repo.ListReturns(ctx, filters)
+}
+
+// ListAdminReturns returns the paginated returns list without user scoping for
+// operator dashboards.
+func (s *OrderService) ListAdminReturns(ctx context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error) {
+	if filters.Page <= 0 {
+		filters.Page = 1
+	}
+	if filters.Limit <= 0 {
+		filters.Limit = 10
+	}
+	if filters.Limit > 50 {
+		filters.Limit = 50
+	}
+
+	return s.repo.ListReturns(ctx, filters)
+}
+
+// GetReturnQueueHealth loads the current refund_pending queue health snapshot
+// for admin monitoring surfaces.
+func (s *OrderService) GetReturnQueueHealth(ctx context.Context) (*model.ReturnQueueHealth, error) {
+	return s.repo.GetReturnQueueHealth(ctx)
+}
+
 func (s *OrderService) UpdateReturnStatus(ctx context.Context, returnID string, status model.ReturnStatus, actorID, actorRole, message string) error {
 	if !isValidReturnStatus(status) {
 		return ErrInvalidReturnStatus
@@ -121,31 +159,58 @@ func (s *OrderService) UpdateReturnStatus(ctx context.Context, returnID string, 
 		message = "return status updated"
 	}
 
-	var refundAmount float64
-	if status == model.ReturnStatusRefunded {
-		order, err := s.loadOrderByID(ctx, returnRequest.OrderID)
-		if err != nil {
-			return err
-		}
-
-		refundAmount, err = calculateReturnRefundAmount(returnRequest, order)
-		if err != nil {
-			return err
-		}
-		if err := s.processReturnRefund(ctx, returnRequest, refundAmount); err != nil {
-			return err
-		}
-	}
-
 	updatedReturn := *returnRequest
 	updatedReturn.Status = status
 	updatedReturn.UpdatedAt = time.Now()
-	outbox, err := buildReturnOutboxMessage(ctx, &updatedReturn, status, refundAmount)
+	outbox, err := buildReturnOutboxMessage(ctx, &updatedReturn, status, updatedReturn.RefundAmount)
 	if err != nil {
 		return err
 	}
 
 	return s.repo.UpdateReturnStatus(ctx, returnID, status, actorID, actorRole, message, outbox)
+}
+
+// RequestReturnRefund schedules an asynchronous refund for an approved or
+// received return. The external refund call is deferred to the background
+// worker so this API only needs one local transaction to persist the new state.
+func (s *OrderService) RequestReturnRefund(ctx context.Context, returnID, actorID, actorRole, message string) error {
+	returnRequest, err := s.loadReturnByID(ctx, returnID)
+	if err != nil {
+		return err
+	}
+	if returnRequest.Status == model.ReturnStatusRefunded {
+		return nil
+	}
+	if returnRequest.Status == model.ReturnStatusRefundPending && returnRequest.RefundProcessingStarted != nil {
+		return ErrReturnRefundPending
+	}
+	if !canQueueReturnRefund(returnRequest.Status) {
+		return ErrReturnStatusTransition
+	}
+
+	scheduledReturn, err := s.prepareReturnRefund(ctx, returnRequest)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(message) == "" {
+		if returnRequest.Status == model.ReturnStatusRefundPending {
+			message = "refund retry queued"
+		} else {
+			message = "refund queued for asynchronous processing"
+		}
+	}
+
+	outbox, err := buildReturnOutboxMessage(
+		ctx,
+		scheduledReturn,
+		model.ReturnStatusRefundPending,
+		scheduledReturn.RefundAmount,
+	)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.ScheduleReturnRefund(ctx, scheduledReturn, actorID, actorRole, message, outbox)
 }
 
 func buildReturnItems(
@@ -223,6 +288,7 @@ func isValidReturnStatus(status model.ReturnStatus) bool {
 		model.ReturnStatusApproved,
 		model.ReturnStatusRejected,
 		model.ReturnStatusReceived,
+		model.ReturnStatusRefundPending,
 		model.ReturnStatusRefunded,
 		model.ReturnStatusCancelled:
 		return true
@@ -236,12 +302,18 @@ func canTransitionReturnStatus(current, next model.ReturnStatus) bool {
 	case model.ReturnStatusRequested:
 		return next == model.ReturnStatusApproved || next == model.ReturnStatusRejected || next == model.ReturnStatusCancelled
 	case model.ReturnStatusApproved:
-		return next == model.ReturnStatusReceived || next == model.ReturnStatusCancelled || next == model.ReturnStatusRefunded
+		return next == model.ReturnStatusReceived || next == model.ReturnStatusCancelled
 	case model.ReturnStatusReceived:
-		return next == model.ReturnStatusRefunded
+		return false
 	default:
 		return false
 	}
+}
+
+func canQueueReturnRefund(status model.ReturnStatus) bool {
+	return status == model.ReturnStatusApproved ||
+		status == model.ReturnStatusReceived ||
+		status == model.ReturnStatusRefundPending
 }
 
 func aggregateReturnedQuantities(existingReturns []*model.ReturnRequest) map[string]int {
@@ -298,28 +370,56 @@ func calculateReturnRefundAmount(returnRequest *model.ReturnRequest, order *mode
 	return refundAmount, nil
 }
 
-func (s *OrderService) processReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest, amount float64) error {
+func (s *OrderService) prepareReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest) (*model.ReturnRequest, error) {
 	if s.paymentClient == nil {
-		return fmt.Errorf("payment client is not configured")
+		return nil, fmt.Errorf("payment client is not configured")
 	}
 
-	payments, err := s.paymentClient.ListPaymentsByOrder(ctx, returnRequest.OrderID)
-	if err != nil {
-		return err
+	updatedReturn := *returnRequest
+	now := time.Now()
+	if updatedReturn.RefundRequestedAt == nil {
+		updatedReturn.RefundRequestedAt = &now
+	}
+	if updatedReturn.RefundIdempotencyKey == "" {
+		updatedReturn.RefundIdempotencyKey = buildReturnRefundIdempotencyKey(updatedReturn.ID)
+	}
+	if updatedReturn.RefundAmount <= 0 || updatedReturn.RefundChargePaymentID == "" {
+		order, err := s.loadOrderByID(ctx, updatedReturn.OrderID)
+		if err != nil {
+			return nil, err
+		}
+
+		refundAmount, err := calculateReturnRefundAmount(&updatedReturn, order)
+		if err != nil {
+			return nil, err
+		}
+
+		payments, err := s.paymentClient.ListPaymentsByOrder(ctx, updatedReturn.OrderID)
+		if err != nil {
+			return nil, err
+		}
+
+		refundablePaymentID, err := findRefundableChargePayment(payments, refundAmount)
+		if err != nil {
+			return nil, err
+		}
+		updatedReturn.RefundAmount = refundAmount
+		updatedReturn.RefundChargePaymentID = refundablePaymentID
 	}
 
-	refundablePaymentID, err := findRefundableChargePayment(payments, amount)
-	if err != nil {
-		return err
-	}
+	retryAt := now
+	updatedReturn.Status = model.ReturnStatusRefundPending
+	updatedReturn.RefundLastError = ""
+	updatedReturn.RefundPaymentID = ""
+	updatedReturn.RefundCompletedAt = nil
+	updatedReturn.RefundNextRetryAt = &retryAt
+	updatedReturn.RefundProcessingStarted = nil
+	updatedReturn.UpdatedAt = now
+	return &updatedReturn, nil
+}
 
-	_, err = s.paymentClient.RefundPayment(
-		ctx,
-		refundablePaymentID,
-		amount,
-		fmt.Sprintf("Return %s refunded", returnRequest.ID),
-	)
-	return err
+func buildReturnRefundIdempotencyKey(returnID string) string {
+	return "return-refund:" + strings.TrimSpace(returnID)
 }
 
 func findRefundableChargePayment(payments []model.PaymentSummary, amount float64) (string, error) {

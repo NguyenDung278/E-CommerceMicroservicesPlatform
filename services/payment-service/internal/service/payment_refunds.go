@@ -38,7 +38,22 @@ import (
 //
 // Performance:
 //   - dominated by two repository reads, one insert, and O(n) sibling-payment scans.
-func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, actorRole, userEmail string, req dto.RefundPaymentRequest) (*model.Payment, error) {
+func (s *PaymentService) RefundPayment(
+	ctx context.Context,
+	paymentID, actorID, actorRole, userEmail, idempotencyKey string,
+	req dto.RefundPaymentRequest,
+) (*model.Payment, error) {
+	normalizedKey, err := normalizeIdempotencyKey(idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+
+	requestHash := hashRefundPaymentRequest(paymentID, req)
+	replayedPayment, err := s.findIdempotentPayment(ctx, actorID, normalizedKey, requestHash)
+	if err != nil || replayedPayment != nil {
+		return replayedPayment, err
+	}
+
 	startedAt := time.Now()
 	outcome := appobs.OutcomeSuccess
 	requestLog := appobs.LoggerWithContext(s.log, ctx,
@@ -124,7 +139,37 @@ func (s *PaymentService) RefundPayment(ctx context.Context, paymentID, actorID, 
 		return nil, err
 	}
 
-	if err := s.repo.Create(ctx, refund, outbox); err != nil {
+	if normalizedKey != "" {
+		err = s.repo.CreateWithIdempotency(ctx, refund, outbox, &model.PaymentIdempotencyRecord{
+			UserID:         actorID,
+			IdempotencyKey: normalizedKey,
+			RequestHash:    requestHash,
+			PaymentID:      refund.ID,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		})
+	} else {
+		err = s.repo.Create(ctx, refund, outbox)
+	}
+	if err != nil {
+		if normalizedKey != "" && isUniqueViolation(err) {
+			replayedPayment, replayErr := s.findIdempotentPayment(ctx, actorID, normalizedKey, requestHash)
+			if replayErr == nil && replayedPayment != nil {
+				requestLog.Info("refund request replayed from idempotency key",
+					zap.String("idempotency_key", normalizedKey),
+					zap.String("refund_id", replayedPayment.ID),
+				)
+				return replayedPayment, nil
+			}
+			if replayErr != nil {
+				outcome = appobs.OutcomeSystemError
+				requestLog.Error("refund idempotency replay failed after unique violation",
+					zap.String("idempotency_key", normalizedKey),
+					zap.Error(replayErr),
+				)
+				return nil, replayErr
+			}
+		}
 		if isUniqueViolation(err) {
 			outcome = appobs.OutcomeBusinessError
 			requestLog.Warn("refund rejected due to duplicate payment record", zap.Error(err))

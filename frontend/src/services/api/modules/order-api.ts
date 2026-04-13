@@ -5,12 +5,21 @@
  */
 
 import { request } from "../http-client";
-import type { ApiEnvelope, Order, OrderEvent, OrderPreview, ShippingAddress } from "@/types/api";
+import type {
+  ApiEnvelope,
+  Order,
+  OrderEvent,
+  OrderPreview,
+  ReturnRequest,
+  ShippingAddress,
+} from "@/types/api";
 import {
   normalizeOrder,
   normalizeOrderList,
   normalizeOrderEventList,
   normalizeOrderPreview,
+  normalizeReturnRequest,
+  normalizeReturnRequestList,
 } from "../normalizers";
 
 /**
@@ -39,6 +48,24 @@ export interface PreviewOrderData {
   coupon_code?: string;
   shipping_method?: string;
   shipping_address?: ShippingAddress;
+}
+
+export interface ReturnItemData {
+  order_item_id: string;
+  quantity: number;
+  reason?: string;
+}
+
+export interface CreateReturnData {
+  reason: string;
+  items: ReturnItemData[];
+}
+
+export interface ListReturnsOptions {
+  query?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
 }
 
 /**
@@ -104,6 +131,72 @@ export const orderApi = {
     }).then((response) => ({
       ...response,
       data: normalizeOrderEventList(response.data),
+    }));
+  },
+
+  /**
+   * Get paginated returns for the signed-in customer.
+   */
+  listReturns(
+    token: string,
+    options: ListReturnsOptions = {}
+  ): Promise<ApiEnvelope<ReturnRequest[]>> {
+    const params = new URLSearchParams();
+    params.set("page", String(options.page ?? 1));
+    params.set("limit", String(options.limit ?? 10));
+
+    if (options.query) {
+      params.set("query", options.query);
+    }
+    if (options.status) {
+      params.set("status", options.status);
+    }
+
+    return request<unknown>(`/api/v1/returns?${params.toString()}`, { token }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequestList(response.data),
+    }));
+  },
+
+  /**
+   * Get all returns attached to one order.
+   */
+  listReturnsByOrder(token: string, orderId: string): Promise<ApiEnvelope<ReturnRequest[]>> {
+    return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequestList(response.data),
+    }));
+  },
+
+  /**
+   * Get one return request by ID.
+   */
+  getReturnById(token: string, returnId: string): Promise<ApiEnvelope<ReturnRequest>> {
+    return request<unknown>(`/api/v1/returns/${encodeURIComponent(returnId)}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequest(response.data),
+    }));
+  },
+
+  /**
+   * Create a new return request for one order.
+   */
+  createReturn(
+    token: string,
+    orderId: string,
+    body: CreateReturnData
+  ): Promise<ApiEnvelope<ReturnRequest>> {
+    return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequest(response.data),
     }));
   },
 

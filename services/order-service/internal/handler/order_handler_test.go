@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,9 +25,11 @@ import (
 )
 
 type fakeOrderHandlerRepo struct {
-	coupons     map[string]*model.Coupon
-	ordersByID  map[string]*model.Order
-	returnsByID map[string]*model.ReturnRequest
+	coupons             map[string]*model.Coupon
+	ordersByID          map[string]*model.Order
+	returnsByID         map[string]*model.ReturnRequest
+	queueHealth         *model.ReturnQueueHealth
+	forceNilQueueHealth bool
 }
 
 func (r *fakeOrderHandlerRepo) Create(_ context.Context, _ *model.Order, _ *model.OutboxMessage) error {
@@ -70,6 +73,41 @@ func (r *fakeOrderHandlerRepo) ListReturnsByOrderID(_ context.Context, orderID s
 	return returns, nil
 }
 
+func (r *fakeOrderHandlerRepo) ListReturns(_ context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error) {
+	var returns []*model.ReturnRequest
+	for _, returnRequest := range r.returnsByID {
+		if filters.UserID != "" && returnRequest.UserID != filters.UserID {
+			continue
+		}
+		if filters.Status != "" && returnRequest.Status != filters.Status {
+			continue
+		}
+		if filters.Query != "" &&
+			!strings.Contains(returnRequest.ID, filters.Query) &&
+			!strings.Contains(returnRequest.OrderID, filters.Query) &&
+			!strings.Contains(returnRequest.UserID, filters.Query) &&
+			!strings.Contains(returnRequest.UserEmail, filters.Query) &&
+			!strings.Contains(returnRequest.Reason, filters.Query) {
+			continue
+		}
+		returns = append(returns, cloneHandlerReturnRequest(returnRequest))
+	}
+	return returns, int64(len(returns)), nil
+}
+
+func (r *fakeOrderHandlerRepo) GetReturnQueueHealth(_ context.Context) (*model.ReturnQueueHealth, error) {
+	if r.forceNilQueueHealth {
+		return nil, nil
+	}
+	if r.queueHealth == nil {
+		return &model.ReturnQueueHealth{RecentFailures: []model.ReturnQueueFailure{}}, nil
+	}
+
+	healthCopy := *r.queueHealth
+	healthCopy.RecentFailures = append([]model.ReturnQueueFailure(nil), r.queueHealth.RecentFailures...)
+	return &healthCopy, nil
+}
+
 func (r *fakeOrderHandlerRepo) UpdateReturnStatus(_ context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, _ *model.OutboxMessage) error {
 	returnRequest, ok := r.returnsByID[id]
 	if !ok {
@@ -86,6 +124,56 @@ func (r *fakeOrderHandlerRepo) UpdateReturnStatus(_ context.Context, id string, 
 		Message:   message,
 		CreatedAt: time.Now(),
 	})
+	return nil
+}
+
+func (r *fakeOrderHandlerRepo) ScheduleReturnRefund(_ context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, _ *model.OutboxMessage) error {
+	current, ok := r.returnsByID[returnRequest.ID]
+	if !ok {
+		return nil
+	}
+	current.Status = model.ReturnStatusRefundPending
+	current.RefundAmount = returnRequest.RefundAmount
+	current.RefundChargePaymentID = returnRequest.RefundChargePaymentID
+	current.RefundRequestedAt = returnRequest.RefundRequestedAt
+	current.RefundNextRetryAt = returnRequest.RefundNextRetryAt
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-schedule-" + returnRequest.ID,
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefundPending,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
+}
+
+func (r *fakeOrderHandlerRepo) ClaimPendingReturnRefunds(_ context.Context, _ int, _ time.Duration) ([]*model.ReturnRequest, error) {
+	return nil, nil
+}
+
+func (r *fakeOrderHandlerRepo) CompleteReturnRefund(_ context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, _ *model.OutboxMessage) error {
+	current, ok := r.returnsByID[returnRequest.ID]
+	if !ok {
+		return nil
+	}
+	current.Status = model.ReturnStatusRefunded
+	current.RefundPaymentID = returnRequest.RefundPaymentID
+	current.RefundCompletedAt = returnRequest.RefundCompletedAt
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-complete-" + returnRequest.ID,
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefunded,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
+}
+
+func (r *fakeOrderHandlerRepo) MarkReturnRefundAttemptFailed(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }
 
@@ -186,6 +274,30 @@ func (c *fakeOrderHandlerCatalog) DecreaseStock(_ context.Context, _ string, _ i
 
 func (c *fakeOrderHandlerCatalog) RestoreStock(_ context.Context, _ string, _ int) error {
 	return nil
+}
+
+type fakeOrderHandlerPaymentClient struct {
+	paymentsByOrder map[string][]model.PaymentSummary
+}
+
+func (c *fakeOrderHandlerPaymentClient) ListPaymentHistory(_ context.Context, _ string) ([]model.PaymentSummary, error) {
+	return nil, nil
+}
+
+func (c *fakeOrderHandlerPaymentClient) ListPaymentsByOrder(_ context.Context, orderID string) ([]model.PaymentSummary, error) {
+	return c.paymentsByOrder[orderID], nil
+}
+
+func (c *fakeOrderHandlerPaymentClient) RefundPayment(_ context.Context, paymentID string, amount float64, message, _ string) (*model.PaymentSummary, error) {
+	return &model.PaymentSummary{
+		ID:                 "refund-" + paymentID,
+		OrderID:            "order-1",
+		Amount:             amount,
+		Status:             "refunded",
+		TransactionType:    "refund",
+		ReferencePaymentID: paymentID,
+		FailureReason:      message,
+	}, nil
 }
 
 func TestPreviewOrderReturnsShippingMethodsContract(t *testing.T) {
@@ -423,6 +535,299 @@ func TestAdminUpdateReturnStatusRouteUpdatesReturn(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"approved"`)) {
 		t.Fatalf("expected approved return status, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminRequestReturnRefundRouteQueuesRefundPending(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:             "order-1",
+				UserID:         "user-1",
+				Status:         model.OrderStatusDelivered,
+				SubtotalPrice:  120,
+				DiscountAmount: 20,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Archive Coat",
+						Price:     120,
+						Quantity:  1,
+					},
+				},
+			},
+		},
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusApproved,
+				Reason:  "Package arrived damaged",
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    1,
+					},
+				},
+			},
+		},
+	}
+	paymentClient := &fakeOrderHandlerPaymentClient{
+		paymentsByOrder: map[string][]model.PaymentSummary{
+			"order-1": {
+				{
+					ID:              "payment-1",
+					OrderID:         "order-1",
+					Amount:          100,
+					Status:          "completed",
+					TransactionType: "charge",
+				},
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	body, _ := json.Marshal(map[string]any{
+		"message": "Queue refund in background",
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/returns/return-1/refund", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"refund_pending"`)) {
+		t.Fatalf("expected refund_pending return status, got %s", rec.Body.String())
+	}
+}
+
+func TestAdminRequestReturnRefundRouteReturnsConflictWhenRefundIsInFlight(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	startedAt := time.Now()
+	repo := &fakeOrderHandlerRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:                      "return-1",
+				OrderID:                 "order-1",
+				UserID:                  "user-1",
+				Status:                  model.ReturnStatusRefundPending,
+				Reason:                  "Package arrived damaged",
+				RefundAmount:            100,
+				RefundChargePaymentID:   "payment-1",
+				RefundProcessingStarted: &startedAt,
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/returns/return-1/refund", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("already queued")) {
+		t.Fatalf("expected refund pending message, got %s", rec.Body.String())
+	}
+}
+
+func TestListAdminReturnsRouteReturnsMeta(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Package arrived damaged",
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/returns?page=1&limit=6&status=requested", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"total":1`)) {
+		t.Fatalf("expected response meta with total=1, got %s", rec.Body.String())
+	}
+}
+
+func TestListUserReturnsRouteReturnsMeta(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:        "return-1",
+				OrderID:   "order-1",
+				UserID:    "user-1",
+				UserEmail: "user@example.com",
+				Status:    model.ReturnStatusRequested,
+				Reason:    "Package arrived damaged",
+			},
+			"return-2": {
+				ID:      "return-2",
+				OrderID: "order-2",
+				UserID:  "user-2",
+				Status:  model.ReturnStatusApproved,
+				Reason:  "Wrong size",
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/returns?page=1&limit=6&status=requested", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"total":1`)) {
+		t.Fatalf("expected response meta with total=1, got %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte(`"return-2"`)) {
+		t.Fatalf("expected other user returns to be excluded, got %s", rec.Body.String())
+	}
+}
+
+func TestListUserReturnsRouteReturnsEmptyArrayWhenRepoIsEmpty(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/returns?page=1&limit=6", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"data":[]`)) {
+		t.Fatalf("expected empty array payload, got %s", rec.Body.String())
+	}
+}
+
+func TestGetReturnQueueHealthRouteReturnsSnapshot(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	nextRetryAt := time.Now().Add(5 * time.Minute).UTC()
+	repo := &fakeOrderHandlerRepo{
+		queueHealth: &model.ReturnQueueHealth{
+			PendingCount:        4,
+			ReadyNowCount:       2,
+			InFlightCount:       1,
+			RetryScheduledCount: 1,
+			FailedAttemptCount:  1,
+			MaxAttemptCount:     3,
+			NextRetryAt:         &nextRetryAt,
+			RecentFailures: []model.ReturnQueueFailure{
+				{
+					ReturnID:     "return-1",
+					OrderID:      "order-1",
+					UserID:       "user-1",
+					LastError:    "gateway timeout",
+					AttemptCount: 2,
+					UpdatedAt:    time.Now().UTC(),
+				},
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/returns/health", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"pending_count":4`)) {
+		t.Fatalf("expected pending_count=4, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("gateway timeout")) {
+		t.Fatalf("expected recent failure payload, got %s", rec.Body.String())
+	}
+}
+
+func TestGetReturnQueueHealthRouteReturnsEmptySnapshotWhenServiceReturnsNil(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{forceNilQueueHealth: true}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/returns/health", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"pending_count":0`)) {
+		t.Fatalf("expected normalized empty health snapshot, got %s", rec.Body.String())
 	}
 }
 

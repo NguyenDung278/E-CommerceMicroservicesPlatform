@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,6 +16,13 @@ import (
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 	"go.uber.org/zap"
+)
+
+var (
+	ErrPaymentRefundNotFound            = errors.New("payment refund target was not found")
+	ErrPaymentRefundNotAllowed          = errors.New("payment refund is not allowed")
+	ErrPaymentRefundAmountExceeded      = errors.New("payment refund amount exceeds refundable balance")
+	ErrPaymentRefundIdempotencyConflict = errors.New("payment refund idempotency conflict")
 )
 
 type paymentHistoryEnvelope struct {
@@ -160,7 +168,13 @@ func (c *PaymentClient) ListPaymentsByOrder(ctx context.Context, orderID string)
 	return envelope.Data, nil
 }
 
-func (c *PaymentClient) RefundPayment(ctx context.Context, paymentID string, amount float64, message string) (*model.PaymentSummary, error) {
+func (c *PaymentClient) RefundPayment(
+	ctx context.Context,
+	paymentID string,
+	amount float64,
+	message string,
+	idempotencyKey string,
+) (*model.PaymentSummary, error) {
 	if c == nil || c.baseURL == "" {
 		return nil, fmt.Errorf("payment client is not configured")
 	}
@@ -179,6 +193,9 @@ func (c *PaymentClient) RefundPayment(ctx context.Context, paymentID string, amo
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(idempotencyKey) != "" {
+		req.Header.Set("Idempotency-Key", strings.TrimSpace(idempotencyKey))
+	}
 	if err := c.attachServiceAuthorization(req); err != nil {
 		return nil, err
 	}
@@ -194,6 +211,21 @@ func (c *PaymentClient) RefundPayment(ctx context.Context, paymentID string, amo
 		return nil, fmt.Errorf("failed to decode refund response: %w", err)
 	}
 	if resp.StatusCode != http.StatusCreated || !envelope.Success {
+		errMessage := envelope.Error
+		if strings.TrimSpace(errMessage) == "" {
+			errMessage = fmt.Sprintf("status %d", resp.StatusCode)
+		}
+		switch resp.StatusCode {
+		case http.StatusNotFound:
+			return nil, fmt.Errorf("%w: %s", ErrPaymentRefundNotFound, errMessage)
+		case http.StatusConflict:
+			return nil, fmt.Errorf("%w: %s", ErrPaymentRefundIdempotencyConflict, errMessage)
+		case http.StatusBadRequest:
+			if strings.EqualFold(strings.TrimSpace(envelope.Message), "refund exceeded") {
+				return nil, fmt.Errorf("%w: %s", ErrPaymentRefundAmountExceeded, errMessage)
+			}
+			return nil, fmt.Errorf("%w: %s", ErrPaymentRefundNotAllowed, errMessage)
+		}
 		if envelope.Error != "" {
 			return nil, fmt.Errorf("failed to refund payment: %s", envelope.Error)
 		}

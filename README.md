@@ -402,6 +402,7 @@ Ba điểm bắt đầu thực dụng nhất:
 
 ## Tài liệu liên quan
 
+- [PROJECTS.md](./PROJECTS.md): bảng theo dõi triển khai theo function/layer, danh sách test, UI đã có và UI còn thiếu
 - [feature_tracker.md](./feature_tracker.md): feature inventory và roadmap gợi ý bám theo source hiện tại
 - [DOCKER_GUIDE.md](./DOCKER_GUIDE.md): hướng dẫn Docker/Compose thực chiến cho chính repo này
 - [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể

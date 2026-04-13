@@ -357,6 +357,13 @@ func returnEmailContent(event ReturnEvent) (string, string) {
 			event.OrderID,
 			event.Reason,
 		)
+	case "refund_pending":
+		return "Yeu cau hoan tien dang duoc xu ly", fmt.Sprintf(
+			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s da duoc dua vao hang doi hoan tien.\nSo tien hoan du kien: %.2f\n\nChung toi se gui tiep thong bao ngay khi khoan hoan tien hoan tat.",
+			event.ReturnID,
+			event.OrderID,
+			event.RefundAmount,
+		)
 	case "rejected":
 		return "Yeu cau tra hang bi tu choi", fmt.Sprintf(
 			"Chao ban,\n\nYeu cau tra hang %s cho don hang %s khong duoc chap nhan.\nLy do: %s\n\nNeu ban can ho tro them, vui long lien he chung toi.",

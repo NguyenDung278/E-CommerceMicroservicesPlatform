@@ -29,7 +29,13 @@ type OrderRepository interface {
 	CreateReturn(ctx context.Context, returnRequest *model.ReturnRequest, outbox *model.OutboxMessage) error
 	GetReturnByID(ctx context.Context, id string) (*model.ReturnRequest, error)
 	ListReturnsByOrderID(ctx context.Context, orderID string) ([]*model.ReturnRequest, error)
+	ListReturns(ctx context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error)
+	GetReturnQueueHealth(ctx context.Context) (*model.ReturnQueueHealth, error)
 	UpdateReturnStatus(ctx context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
+	ScheduleReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, outbox *model.OutboxMessage) error
+	ClaimPendingReturnRefunds(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.ReturnRequest, error)
+	CompleteReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, outbox *model.OutboxMessage) error
+	MarkReturnRefundAttemptFailed(ctx context.Context, returnID, lastError string, nextRetryAt time.Time) error
 	ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error)
 	GetEventsByOrderID(ctx context.Context, orderID string) ([]*model.OrderEvent, error)
 	UpdateStatus(ctx context.Context, id string, status model.OrderStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
@@ -265,7 +271,10 @@ func (r *postgresOrderRepository) CreateReturn(ctx context.Context, returnReques
 
 func (r *postgresOrderRepository) GetReturnByID(ctx context.Context, id string) (*model.ReturnRequest, error) {
 	returnRequest, err := scanReturn(r.db.QueryRowContext(ctx, `
-		SELECT id, order_id, user_id, user_email, status, reason, created_at, updated_at
+		SELECT id, order_id, user_id, user_email, status, reason,
+		       refund_amount, refund_charge_payment_id, refund_payment_id, refund_idempotency_key,
+		       refund_last_error, refund_attempt_count, refund_requested_at, refund_completed_at,
+		       refund_next_retry_at, refund_processing_started_at, created_at, updated_at
 		FROM returns
 		WHERE id = $1
 	`, id))
@@ -284,7 +293,10 @@ func (r *postgresOrderRepository) GetReturnByID(ctx context.Context, id string) 
 
 func (r *postgresOrderRepository) ListReturnsByOrderID(ctx context.Context, orderID string) ([]*model.ReturnRequest, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, order_id, user_id, user_email, status, reason, created_at, updated_at
+		SELECT id, order_id, user_id, user_email, status, reason,
+		       refund_amount, refund_charge_payment_id, refund_payment_id, refund_idempotency_key,
+		       refund_last_error, refund_attempt_count, refund_requested_at, refund_completed_at,
+		       refund_next_retry_at, refund_processing_started_at, created_at, updated_at
 		FROM returns
 		WHERE order_id = $1
 		ORDER BY created_at DESC, id DESC
@@ -313,6 +325,184 @@ func (r *postgresOrderRepository) ListReturnsByOrderID(ctx context.Context, orde
 	}
 
 	return returns, nil
+}
+
+func (r *postgresOrderRepository) ListReturns(ctx context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error) {
+	baseQuery := `FROM returns WHERE 1=1`
+	args := make([]interface{}, 0, 5)
+	argIdx := 1
+
+	if filters.UserID != "" {
+		baseQuery += fmt.Sprintf(` AND user_id = $%d`, argIdx)
+		args = append(args, filters.UserID)
+		argIdx++
+	}
+	if filters.Status != "" {
+		baseQuery += fmt.Sprintf(` AND status = $%d`, argIdx)
+		args = append(args, filters.Status)
+		argIdx++
+	}
+	if query := strings.TrimSpace(filters.Query); query != "" {
+		baseQuery += fmt.Sprintf(` AND (
+			id ILIKE $%d OR
+			order_id ILIKE $%d OR
+			user_id ILIKE $%d OR
+			user_email ILIKE $%d OR
+			reason ILIKE $%d
+		)`, argIdx, argIdx, argIdx, argIdx, argIdx)
+		args = append(args, "%"+query+"%")
+		argIdx++
+	}
+
+	var total int64
+	countQuery := `SELECT COUNT(*) ` + baseQuery
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count returns: %w", err)
+	}
+
+	selectQuery := fmt.Sprintf(`
+		SELECT id, order_id, user_id, user_email, status, reason,
+		       refund_amount, refund_charge_payment_id, refund_payment_id, refund_idempotency_key,
+		       refund_last_error, refund_attempt_count, refund_requested_at, refund_completed_at,
+		       refund_next_retry_at, refund_processing_started_at, created_at, updated_at
+		%s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d OFFSET $%d
+	`, baseQuery, argIdx, argIdx+1)
+	args = append(args, filters.Limit, (filters.Page-1)*filters.Limit)
+
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list returns: %w", err)
+	}
+	defer rows.Close()
+
+	var returns []*model.ReturnRequest
+	for rows.Next() {
+		returnRequest, err := scanReturn(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan return: %w", err)
+		}
+		returns = append(returns, returnRequest)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate returns: %w", err)
+	}
+
+	for _, returnRequest := range returns {
+		if err := r.loadReturnDetails(ctx, returnRequest); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	return returns, total, nil
+}
+
+func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*model.ReturnQueueHealth, error) {
+	health := &model.ReturnQueueHealth{
+		RecentFailures: []model.ReturnQueueFailure{},
+	}
+
+	var oldestPendingAt sql.NullTime
+	var nextRetryAt sql.NullTime
+
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'refund_pending') AS pending_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_payment_id = ''
+				  AND (refund_next_retry_at IS NULL OR refund_next_retry_at <= NOW())
+				  AND refund_processing_started_at IS NULL
+			) AS ready_now_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_processing_started_at IS NOT NULL
+			) AS in_flight_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_next_retry_at IS NOT NULL
+				  AND refund_next_retry_at > NOW()
+			) AS retry_scheduled_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
+				  AND COALESCE(refund_last_error, '') <> ''
+			) AS failed_attempt_count,
+			COALESCE(MAX(refund_attempt_count) FILTER (WHERE status = 'refund_pending'), 0) AS max_attempt_count,
+			MIN(COALESCE(refund_requested_at, created_at)) FILTER (WHERE status = 'refund_pending') AS oldest_pending_at,
+			MIN(refund_next_retry_at) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_next_retry_at IS NOT NULL
+				  AND refund_next_retry_at > NOW()
+			) AS next_retry_at
+		FROM returns
+	`).Scan(
+		&health.PendingCount,
+		&health.ReadyNowCount,
+		&health.InFlightCount,
+		&health.RetryScheduledCount,
+		&health.FailedAttemptCount,
+		&health.MaxAttemptCount,
+		&oldestPendingAt,
+		&nextRetryAt,
+	); err != nil {
+		return nil, fmt.Errorf("failed to query return queue health: %w", err)
+	}
+
+	if oldestPendingAt.Valid {
+		value := oldestPendingAt.Time
+		health.OldestPendingAt = &value
+	}
+	if nextRetryAt.Valid {
+		value := nextRetryAt.Time
+		health.NextRetryAt = &value
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			id,
+			order_id,
+			user_id,
+			refund_last_error,
+			refund_attempt_count,
+			refund_next_retry_at,
+			updated_at
+		FROM returns
+		WHERE status = 'refund_pending'
+		  AND COALESCE(refund_last_error, '') <> ''
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 5
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent return refund failures: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		failure := model.ReturnQueueFailure{}
+		var retryAt sql.NullTime
+		if err := rows.Scan(
+			&failure.ReturnID,
+			&failure.OrderID,
+			&failure.UserID,
+			&failure.LastError,
+			&failure.AttemptCount,
+			&retryAt,
+			&failure.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan return queue failure: %w", err)
+		}
+		if retryAt.Valid {
+			value := retryAt.Time
+			failure.NextRetryAt = &value
+		}
+		health.RecentFailures = append(health.RecentFailures, failure)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate recent return refund failures: %w", err)
+	}
+
+	return health, nil
 }
 
 func (r *postgresOrderRepository) ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error) {
@@ -512,6 +702,232 @@ func (r *postgresOrderRepository) UpdateReturnStatus(ctx context.Context, id str
 	}
 
 	return tx.Commit()
+}
+
+func (r *postgresOrderRepository) ScheduleReturnRefund(
+	ctx context.Context,
+	returnRequest *model.ReturnRequest,
+	actorID, actorRole, message string,
+	outbox *model.OutboxMessage,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin return refund scheduling transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE returns
+		SET status = $1,
+		    refund_amount = $2,
+		    refund_charge_payment_id = $3,
+		    refund_payment_id = '',
+		    refund_idempotency_key = $4,
+		    refund_last_error = '',
+		    refund_requested_at = $5,
+		    refund_completed_at = NULL,
+		    refund_next_retry_at = $6,
+		    refund_processing_started_at = NULL,
+		    updated_at = $7
+		WHERE id = $8
+	`,
+		returnRequest.Status,
+		returnRequest.RefundAmount,
+		nullIfEmpty(returnRequest.RefundChargePaymentID),
+		nullIfEmpty(returnRequest.RefundIdempotencyKey),
+		returnRequest.RefundRequestedAt,
+		returnRequest.RefundNextRetryAt,
+		returnRequest.UpdatedAt,
+		returnRequest.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to schedule return refund: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read return refund scheduling rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	if strings.TrimSpace(message) == "" {
+		message = "return refund queued"
+	}
+	if err := r.insertReturnEventTx(ctx, tx, &model.ReturnEvent{
+		ID:        uuid.New().String(),
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefundPending,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresOrderRepository) ClaimPendingReturnRefunds(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.ReturnRequest, error) {
+	if limit <= 0 {
+		limit = 1
+	}
+	leaseSeconds := int(leaseDuration / time.Second)
+	if leaseSeconds <= 0 {
+		leaseSeconds = 30
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		WITH candidates AS (
+			SELECT id
+			FROM returns
+			WHERE status = 'refund_pending'
+			  AND refund_payment_id = ''
+			  AND (refund_next_retry_at IS NULL OR refund_next_retry_at <= NOW())
+			  AND (
+				refund_processing_started_at IS NULL OR
+				refund_processing_started_at <= NOW() - ($2 * INTERVAL '1 second')
+			  )
+			ORDER BY COALESCE(refund_next_retry_at, created_at) ASC, created_at ASC
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE returns AS r
+		SET refund_attempt_count = r.refund_attempt_count + 1,
+		    refund_processing_started_at = NOW(),
+		    updated_at = NOW()
+		FROM candidates
+		WHERE r.id = candidates.id
+		RETURNING
+			r.id,
+			r.order_id,
+			r.user_id,
+			r.user_email,
+			r.status,
+			r.reason,
+			r.refund_amount,
+			r.refund_charge_payment_id,
+			r.refund_payment_id,
+			r.refund_idempotency_key,
+			r.refund_last_error,
+			r.refund_attempt_count,
+			r.refund_requested_at,
+			r.refund_completed_at,
+			r.refund_next_retry_at,
+			r.refund_processing_started_at,
+			r.created_at,
+			r.updated_at
+	`, limit, leaseSeconds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to claim pending return refunds: %w", err)
+	}
+	defer rows.Close()
+
+	var returns []*model.ReturnRequest
+	for rows.Next() {
+		returnRequest, err := scanReturn(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan claimed return refund: %w", err)
+		}
+		returns = append(returns, returnRequest)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate claimed return refunds: %w", err)
+	}
+
+	for _, returnRequest := range returns {
+		if err := r.loadReturnDetails(ctx, returnRequest); err != nil {
+			return nil, err
+		}
+	}
+
+	return returns, nil
+}
+
+func (r *postgresOrderRepository) CompleteReturnRefund(
+	ctx context.Context,
+	returnRequest *model.ReturnRequest,
+	actorID, actorRole, message string,
+	outbox *model.OutboxMessage,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin return refund completion transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE returns
+		SET status = $1,
+		    refund_payment_id = $2,
+		    refund_last_error = '',
+		    refund_completed_at = $3,
+		    refund_next_retry_at = NULL,
+		    refund_processing_started_at = NULL,
+		    updated_at = $4
+		WHERE id = $5
+	`,
+		returnRequest.Status,
+		nullIfEmpty(returnRequest.RefundPaymentID),
+		returnRequest.RefundCompletedAt,
+		returnRequest.UpdatedAt,
+		returnRequest.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to complete return refund: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read return refund completion rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	if strings.TrimSpace(message) == "" {
+		message = "return refund completed"
+	}
+	if err := r.insertReturnEventTx(ctx, tx, &model.ReturnEvent{
+		ID:        uuid.New().String(),
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefunded,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresOrderRepository) MarkReturnRefundAttemptFailed(
+	ctx context.Context,
+	returnID, lastError string,
+	nextRetryAt time.Time,
+) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE returns
+		SET refund_last_error = $2,
+		    refund_next_retry_at = $3,
+		    refund_processing_started_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, returnID, lastError, nextRetryAt)
+	if err != nil {
+		return fmt.Errorf("failed to mark return refund attempt failed: %w", err)
+	}
+	return nil
 }
 
 func (r *postgresOrderRepository) CreateCoupon(ctx context.Context, coupon *model.Coupon) error {
@@ -815,6 +1231,14 @@ func scanCoupon(scanner rowScanner) (*model.Coupon, error) {
 
 func scanReturn(scanner rowScanner) (*model.ReturnRequest, error) {
 	returnRequest := &model.ReturnRequest{}
+	var refundChargePaymentID sql.NullString
+	var refundPaymentID sql.NullString
+	var refundIdempotencyKey sql.NullString
+	var refundLastError sql.NullString
+	var refundRequestedAt sql.NullTime
+	var refundCompletedAt sql.NullTime
+	var refundNextRetryAt sql.NullTime
+	var refundProcessingStarted sql.NullTime
 	if err := scanner.Scan(
 		&returnRequest.ID,
 		&returnRequest.OrderID,
@@ -822,10 +1246,48 @@ func scanReturn(scanner rowScanner) (*model.ReturnRequest, error) {
 		&returnRequest.UserEmail,
 		&returnRequest.Status,
 		&returnRequest.Reason,
+		&returnRequest.RefundAmount,
+		&refundChargePaymentID,
+		&refundPaymentID,
+		&refundIdempotencyKey,
+		&refundLastError,
+		&returnRequest.RefundAttemptCount,
+		&refundRequestedAt,
+		&refundCompletedAt,
+		&refundNextRetryAt,
+		&refundProcessingStarted,
 		&returnRequest.CreatedAt,
 		&returnRequest.UpdatedAt,
 	); err != nil {
 		return nil, err
+	}
+	if refundChargePaymentID.Valid {
+		returnRequest.RefundChargePaymentID = refundChargePaymentID.String
+	}
+	if refundPaymentID.Valid {
+		returnRequest.RefundPaymentID = refundPaymentID.String
+	}
+	if refundIdempotencyKey.Valid {
+		returnRequest.RefundIdempotencyKey = refundIdempotencyKey.String
+	}
+	if refundLastError.Valid {
+		returnRequest.RefundLastError = refundLastError.String
+	}
+	if refundRequestedAt.Valid {
+		value := refundRequestedAt.Time
+		returnRequest.RefundRequestedAt = &value
+	}
+	if refundCompletedAt.Valid {
+		value := refundCompletedAt.Time
+		returnRequest.RefundCompletedAt = &value
+	}
+	if refundNextRetryAt.Valid {
+		value := refundNextRetryAt.Time
+		returnRequest.RefundNextRetryAt = &value
+	}
+	if refundProcessingStarted.Valid {
+		value := refundProcessingStarted.Time
+		returnRequest.RefundProcessingStarted = &value
 	}
 
 	return returnRequest, nil

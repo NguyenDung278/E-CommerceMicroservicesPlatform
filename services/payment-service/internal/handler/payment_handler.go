@@ -152,7 +152,15 @@ func (h *PaymentHandler) RefundPayment(c echo.Context) error {
 
 	// Admin/staff-triggered refunds should not reuse the actor email as the
 	// customer notification recipient.
-	refund, err := h.paymentService.RefundPayment(c.Request().Context(), c.Param("id"), claims.UserID, claims.Role, "", req)
+	refund, err := h.paymentService.RefundPayment(
+		c.Request().Context(),
+		c.Param("id"),
+		claims.UserID,
+		claims.Role,
+		"",
+		c.Request().Header.Get("Idempotency-Key"),
+		req,
+	)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")
@@ -162,6 +170,12 @@ func (h *PaymentHandler) RefundPayment(c echo.Context) error {
 		}
 		if errors.Is(err, service.ErrRefundAmountExceeded) {
 			return response.Error(c, http.StatusBadRequest, "refund exceeded", "refund amount exceeds refundable balance")
+		}
+		if errors.Is(err, service.ErrInvalidIdempotencyKey) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "idempotency key is invalid")
+		}
+		if errors.Is(err, service.ErrIdempotencyKeyConflict) {
+			return response.Error(c, http.StatusConflict, "idempotency conflict", "idempotency key is already used for a different refund request")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "refund failed")
 	}

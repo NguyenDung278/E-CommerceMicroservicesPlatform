@@ -333,6 +333,70 @@ export type OrderEvent = {
   created_at: string;
 };
 
+export type ReturnItem = {
+  id: string;
+  return_id: string;
+  order_item_id: string;
+  product_id: string;
+  quantity: number;
+  reason?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReturnEvent = {
+  id: string;
+  return_id: string;
+  status: string;
+  actor_id?: string;
+  actor_role?: string;
+  message: string;
+  created_at: string;
+};
+
+export type ReturnRequest = {
+  id: string;
+  order_id: string;
+  user_id: string;
+  user_email?: string;
+  status: string;
+  reason: string;
+  items: ReturnItem[];
+  events: ReturnEvent[];
+  refund_amount?: number;
+  refund_charge_payment_id?: string;
+  refund_payment_id?: string;
+  refund_last_error?: string;
+  refund_attempt_count?: number;
+  refund_requested_at?: string;
+  refund_completed_at?: string;
+  refund_next_retry_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReturnQueueFailure = {
+  return_id: string;
+  order_id: string;
+  user_id: string;
+  last_error: string;
+  attempt_count: number;
+  next_retry_at?: string;
+  updated_at: string;
+};
+
+export type ReturnQueueHealth = {
+  pending_count: number;
+  ready_now_count: number;
+  in_flight_count: number;
+  retry_scheduled_count: number;
+  failed_attempt_count: number;
+  max_attempt_count: number;
+  oldest_pending_at?: string;
+  next_retry_at?: string;
+  recent_failures: ReturnQueueFailure[];
+};
+
 export type Coupon = {
   id: string;
   code: string;

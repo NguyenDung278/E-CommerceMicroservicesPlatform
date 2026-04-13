@@ -139,6 +139,18 @@ function workbookSyncPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), workbookSyncPlugin()],
+  test: {
+    environment: "jsdom",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "cobertura"],
+      reportsDirectory: "./coverage",
+      include: [
+        "src/features/admin/components/admin-returns-section.tsx",
+        "src/services/api/modules/admin-api.ts",
+      ],
+    },
+  },
   build: {
     rollupOptions: {
       output: {
@@ -181,4 +193,4 @@ export default defineConfig({
     port: 4173,
     strictPort: true,
   },
-});
+} as any);

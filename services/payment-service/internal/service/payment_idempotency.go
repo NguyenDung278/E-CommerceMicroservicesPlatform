@@ -40,6 +40,16 @@ func hashProcessPaymentRequest(req dto.ProcessPaymentRequest) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func hashRefundPaymentRequest(paymentID string, req dto.RefundPaymentRequest) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(paymentID),
+		formatMoney(req.Amount),
+		strings.TrimSpace(req.Message),
+	}, "|")))
+
+	return hex.EncodeToString(sum[:])
+}
+
 func (s *PaymentService) findIdempotentPayment(
 	ctx context.Context,
 	userID string,
@@ -69,5 +79,5 @@ func (s *PaymentService) findIdempotentPayment(
 		return nil, fmt.Errorf("payment idempotency record references missing payment %s", record.PaymentID)
 	}
 
-	return s.loadEnrichedUserPayment(ctx, payment, userID)
+	return s.loadEnrichedPayment(ctx, payment)
 }

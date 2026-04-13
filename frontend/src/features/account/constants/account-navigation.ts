@@ -3,6 +3,7 @@ import type { AccountSidebarItem } from "../components/account-sidebar";
 export const accountNavigationItems: AccountSidebarItem[] = [
   { id: "personal-info", label: "Personal Info", to: "/profile", icon: "person", end: true },
   { id: "orders", label: "My Orders", to: "/myorders", icon: "orders" },
+  { id: "returns", label: "Returns", to: "/returns", icon: "returns" },
   { id: "addresses", label: "Addresses", to: "/addresses", icon: "pin" },
   { id: "payments", label: "Payments", to: "/payments", icon: "payments" },
   { id: "security", label: "Security", to: "/security", icon: "security" },

@@ -106,6 +106,7 @@ func main() {
 	if amqpCh != nil {
 		go orderService.StartOutboxRelay(relayCtx)
 	}
+	go orderService.StartReturnRefundWorker(relayCtx)
 	if amqpConsumerCh != nil {
 		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {
 			log.Warn("failed to start payment event consumer", zap.Error(err))

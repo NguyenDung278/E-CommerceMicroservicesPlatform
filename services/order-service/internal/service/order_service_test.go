@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,8 @@ type fakeOrderRepo struct {
 	createdOutbox       *model.OutboxMessage
 	createdReturnOutbox *model.OutboxMessage
 	updatedReturnOutbox *model.OutboxMessage
+	lastReturnFilters   model.ReturnFilters
+	returnQueueHealth   *model.ReturnQueueHealth
 	coupons             map[string]*model.Coupon
 	userOrders          []*model.Order
 	createErr           error
@@ -75,6 +78,39 @@ func (r *fakeOrderRepo) ListReturnsByOrderID(_ context.Context, orderID string) 
 	return returns, nil
 }
 
+func (r *fakeOrderRepo) ListReturns(_ context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error) {
+	r.lastReturnFilters = filters
+	var returns []*model.ReturnRequest
+	for _, returnRequest := range r.returnsByID {
+		if filters.UserID != "" && returnRequest.UserID != filters.UserID {
+			continue
+		}
+		if filters.Status != "" && returnRequest.Status != filters.Status {
+			continue
+		}
+		if filters.Query != "" &&
+			!strings.Contains(returnRequest.ID, filters.Query) &&
+			!strings.Contains(returnRequest.OrderID, filters.Query) &&
+			!strings.Contains(returnRequest.UserID, filters.Query) &&
+			!strings.Contains(returnRequest.UserEmail, filters.Query) &&
+			!strings.Contains(returnRequest.Reason, filters.Query) {
+			continue
+		}
+		returns = append(returns, cloneReturnRequest(returnRequest))
+	}
+	return returns, int64(len(returns)), nil
+}
+
+func (r *fakeOrderRepo) GetReturnQueueHealth(_ context.Context) (*model.ReturnQueueHealth, error) {
+	if r.returnQueueHealth == nil {
+		return &model.ReturnQueueHealth{RecentFailures: []model.ReturnQueueFailure{}}, nil
+	}
+
+	healthCopy := *r.returnQueueHealth
+	healthCopy.RecentFailures = append([]model.ReturnQueueFailure(nil), r.returnQueueHealth.RecentFailures...)
+	return &healthCopy, nil
+}
+
 func (r *fakeOrderRepo) UpdateReturnStatus(_ context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error {
 	returnRequest, ok := r.returnsByID[id]
 	if !ok {
@@ -92,6 +128,98 @@ func (r *fakeOrderRepo) UpdateReturnStatus(_ context.Context, id string, status 
 		Message:   message,
 		CreatedAt: time.Now(),
 	})
+	return nil
+}
+
+func (r *fakeOrderRepo) ScheduleReturnRefund(_ context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, outbox *model.OutboxMessage) error {
+	current, ok := r.returnsByID[returnRequest.ID]
+	if !ok {
+		return nil
+	}
+	current.Status = model.ReturnStatusRefundPending
+	current.RefundAmount = returnRequest.RefundAmount
+	current.RefundChargePaymentID = returnRequest.RefundChargePaymentID
+	current.RefundPaymentID = ""
+	current.RefundIdempotencyKey = returnRequest.RefundIdempotencyKey
+	current.RefundLastError = ""
+	current.RefundRequestedAt = returnRequest.RefundRequestedAt
+	current.RefundNextRetryAt = returnRequest.RefundNextRetryAt
+	current.RefundProcessingStarted = nil
+	current.UpdatedAt = time.Now()
+	r.updatedReturnOutbox = outbox
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-schedule-" + returnRequest.ID,
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefundPending,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
+}
+
+func (r *fakeOrderRepo) ClaimPendingReturnRefunds(_ context.Context, limit int, _ time.Duration) ([]*model.ReturnRequest, error) {
+	var returns []*model.ReturnRequest
+	now := time.Now()
+	for _, returnRequest := range r.returnsByID {
+		if returnRequest.Status != model.ReturnStatusRefundPending {
+			continue
+		}
+		if returnRequest.RefundPaymentID != "" {
+			continue
+		}
+		if returnRequest.RefundProcessingStarted != nil {
+			continue
+		}
+		if returnRequest.RefundNextRetryAt != nil && returnRequest.RefundNextRetryAt.After(now) {
+			continue
+		}
+		returnRequest.RefundAttemptCount++
+		startedAt := now
+		returnRequest.RefundProcessingStarted = &startedAt
+		claimed := cloneReturnRequest(returnRequest)
+		returns = append(returns, claimed)
+		if limit > 0 && len(returns) >= limit {
+			break
+		}
+	}
+	return returns, nil
+}
+
+func (r *fakeOrderRepo) CompleteReturnRefund(_ context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, outbox *model.OutboxMessage) error {
+	current, ok := r.returnsByID[returnRequest.ID]
+	if !ok {
+		return nil
+	}
+	current.Status = model.ReturnStatusRefunded
+	current.RefundPaymentID = returnRequest.RefundPaymentID
+	current.RefundCompletedAt = returnRequest.RefundCompletedAt
+	current.RefundLastError = ""
+	current.RefundNextRetryAt = nil
+	current.RefundProcessingStarted = nil
+	current.UpdatedAt = time.Now()
+	r.updatedReturnOutbox = outbox
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-complete-" + returnRequest.ID,
+		ReturnID:  returnRequest.ID,
+		Status:    model.ReturnStatusRefunded,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
+}
+
+func (r *fakeOrderRepo) MarkReturnRefundAttemptFailed(_ context.Context, returnID, lastError string, nextRetryAt time.Time) error {
+	current, ok := r.returnsByID[returnID]
+	if !ok {
+		return nil
+	}
+	current.RefundLastError = lastError
+	current.RefundProcessingStarted = nil
+	current.RefundNextRetryAt = &nextRetryAt
 	return nil
 }
 
@@ -239,9 +367,10 @@ type fakePaymentHistoryClient struct {
 	payments        []model.PaymentSummary
 	paymentsByOrder map[string][]model.PaymentSummary
 	refunded        []struct {
-		paymentID string
-		amount    float64
-		message   string
+		paymentID      string
+		amount         float64
+		message        string
+		idempotencyKey string
 	}
 	err error
 }
@@ -260,15 +389,16 @@ func (c *fakePaymentHistoryClient) ListPaymentsByOrder(_ context.Context, orderI
 	return c.paymentsByOrder[orderID], nil
 }
 
-func (c *fakePaymentHistoryClient) RefundPayment(_ context.Context, paymentID string, amount float64, message string) (*model.PaymentSummary, error) {
+func (c *fakePaymentHistoryClient) RefundPayment(_ context.Context, paymentID string, amount float64, message, idempotencyKey string) (*model.PaymentSummary, error) {
 	if c.err != nil {
 		return nil, c.err
 	}
 	c.refunded = append(c.refunded, struct {
-		paymentID string
-		amount    float64
-		message   string
-	}{paymentID: paymentID, amount: amount, message: message})
+		paymentID      string
+		amount         float64
+		message        string
+		idempotencyKey string
+	}{paymentID: paymentID, amount: amount, message: message, idempotencyKey: idempotencyKey})
 	return &model.PaymentSummary{
 		ID:                 "refund-" + paymentID,
 		OrderID:            "order-1",
@@ -520,7 +650,7 @@ func TestCreateReturnRejectsAlreadyReturnedQuantity(t *testing.T) {
 	}
 }
 
-func TestUpdateReturnStatusRefundedTriggersPaymentRefundAndOutbox(t *testing.T) {
+func TestRequestReturnRefundQueuesRefundPending(t *testing.T) {
 	repo := &fakeOrderRepo{
 		ordersByID: map[string]*model.Order{
 			"order-1": {
@@ -576,8 +706,377 @@ func TestUpdateReturnStatusRefundedTriggersPaymentRefundAndOutbox(t *testing.T) 
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient)
 
-	if err := svc.UpdateReturnStatus(context.Background(), "return-1", model.ReturnStatusRefunded, "admin-1", "admin", "Refund approved"); err != nil {
+	if err := svc.RequestReturnRefund(context.Background(), "return-1", "admin-1", "admin", "Queue refund"); err != nil {
+		t.Fatalf("RequestReturnRefund returned error: %v", err)
+	}
+
+	if len(paymentClient.refunded) != 0 {
+		t.Fatalf("expected refund to be deferred to worker, got %d direct refund calls", len(paymentClient.refunded))
+	}
+	if repo.returnsByID["return-1"].Status != model.ReturnStatusRefundPending {
+		t.Fatalf("expected return status refund_pending, got %s", repo.returnsByID["return-1"].Status)
+	}
+	if repo.returnsByID["return-1"].RefundChargePaymentID != "payment-1" {
+		t.Fatalf("expected refund charge payment id payment-1, got %q", repo.returnsByID["return-1"].RefundChargePaymentID)
+	}
+	if repo.returnsByID["return-1"].RefundAmount != 90 {
+		t.Fatalf("expected refund amount 90, got %.2f", repo.returnsByID["return-1"].RefundAmount)
+	}
+	if repo.updatedReturnOutbox == nil || repo.updatedReturnOutbox.RoutingKey != "return.refund_pending" {
+		t.Fatalf("expected refund_pending outbox message, got %#v", repo.updatedReturnOutbox)
+	}
+}
+
+func TestRequestReturnRefundRejectsWhileWorkerOwnsLease(t *testing.T) {
+	startedAt := time.Now()
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:                      "return-1",
+				OrderID:                 "order-1",
+				UserID:                  "user-1",
+				Status:                  model.ReturnStatusRefundPending,
+				Reason:                  "Damaged item",
+				RefundAmount:            90,
+				RefundChargePaymentID:   "payment-1",
+				RefundIdempotencyKey:    "return-refund:return-1",
+				RefundProcessingStarted: &startedAt,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, &fakePaymentHistoryClient{})
+
+	err := svc.RequestReturnRefund(context.Background(), "return-1", "admin-1", "admin", "Retry refund")
+	if !errors.Is(err, ErrReturnRefundPending) {
+		t.Fatalf("expected ErrReturnRefundPending, got %v", err)
+	}
+}
+
+func TestUpdateReturnStatusTransitionsApprovedAndWritesOutbox(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	if err := svc.UpdateReturnStatus(
+		context.Background(),
+		"return-1",
+		model.ReturnStatusApproved,
+		"staff-1",
+		"staff",
+		"Approved after review",
+	); err != nil {
 		t.Fatalf("UpdateReturnStatus returned error: %v", err)
+	}
+
+	if repo.returnsByID["return-1"].Status != model.ReturnStatusApproved {
+		t.Fatalf("expected approved status, got %s", repo.returnsByID["return-1"].Status)
+	}
+	if repo.updatedReturnOutbox == nil || repo.updatedReturnOutbox.RoutingKey != "return.approved" {
+		t.Fatalf("expected approved outbox message, got %#v", repo.updatedReturnOutbox)
+	}
+}
+
+func TestUpdateReturnStatusRejectsInvalidTransition(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusReceived,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	err := svc.UpdateReturnStatus(
+		context.Background(),
+		"return-1",
+		model.ReturnStatusApproved,
+		"staff-1",
+		"staff",
+		"Invalid transition",
+	)
+	if !errors.Is(err, ErrReturnStatusTransition) {
+		t.Fatalf("expected ErrReturnStatusTransition, got %v", err)
+	}
+}
+
+func TestUpdateReturnStatusRejectsInvalidStatus(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), nil, nil)
+
+	err := svc.UpdateReturnStatus(
+		context.Background(),
+		"return-1",
+		model.ReturnStatus("processing"),
+		"staff-1",
+		"staff",
+		"Invalid status",
+	)
+	if !errors.Is(err, ErrInvalidReturnStatus) {
+		t.Fatalf("expected ErrInvalidReturnStatus, got %v", err)
+	}
+}
+
+func TestUpdateReturnStatusReturnsNilWhenStatusIsUnchanged(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusApproved,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	if err := svc.UpdateReturnStatus(
+		context.Background(),
+		"return-1",
+		model.ReturnStatusApproved,
+		"staff-1",
+		"staff",
+		"No changes",
+	); err != nil {
+		t.Fatalf("expected nil error for unchanged status, got %v", err)
+	}
+}
+
+func TestListAdminReturnsNormalizesPaginationBounds(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	returns, total, err := svc.ListAdminReturns(context.Background(), model.ReturnFilters{
+		Page:  0,
+		Limit: 999,
+	})
+	if err != nil {
+		t.Fatalf("ListAdminReturns returned error: %v", err)
+	}
+
+	if len(returns) != 1 || total != 1 {
+		t.Fatalf("expected one return and total=1, got len=%d total=%d", len(returns), total)
+	}
+	if repo.lastReturnFilters.Page != 1 {
+		t.Fatalf("expected normalized page=1, got %d", repo.lastReturnFilters.Page)
+	}
+	if repo.lastReturnFilters.Limit != 50 {
+		t.Fatalf("expected normalized limit=50, got %d", repo.lastReturnFilters.Limit)
+	}
+}
+
+func TestListUserReturnsNormalizesPaginationAndScopesUser(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Damaged item",
+			},
+			"return-2": {
+				ID:      "return-2",
+				OrderID: "order-2",
+				UserID:  "user-2",
+				Status:  model.ReturnStatusApproved,
+				Reason:  "Wrong size",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	returns, total, err := svc.ListUserReturns(context.Background(), "user-1", model.ReturnFilters{
+		Page:  0,
+		Limit: 999,
+		Query: "return",
+	})
+	if err != nil {
+		t.Fatalf("ListUserReturns returned error: %v", err)
+	}
+
+	if len(returns) != 1 || total != 1 {
+		t.Fatalf("expected one scoped return and total=1, got len=%d total=%d", len(returns), total)
+	}
+	if returns[0].UserID != "user-1" {
+		t.Fatalf("expected return owned by user-1, got %q", returns[0].UserID)
+	}
+	if repo.lastReturnFilters.Page != 1 {
+		t.Fatalf("expected normalized page=1, got %d", repo.lastReturnFilters.Page)
+	}
+	if repo.lastReturnFilters.Limit != 30 {
+		t.Fatalf("expected normalized limit=30, got %d", repo.lastReturnFilters.Limit)
+	}
+	if repo.lastReturnFilters.UserID != "user-1" {
+		t.Fatalf("expected user scope user-1, got %q", repo.lastReturnFilters.UserID)
+	}
+}
+
+func TestGetReturnQueueHealthReturnsRepositorySnapshot(t *testing.T) {
+	nextRetryAt := time.Now().Add(5 * time.Minute).UTC()
+	repo := &fakeOrderRepo{
+		returnQueueHealth: &model.ReturnQueueHealth{
+			PendingCount:        4,
+			ReadyNowCount:       2,
+			InFlightCount:       1,
+			RetryScheduledCount: 1,
+			FailedAttemptCount:  1,
+			MaxAttemptCount:     3,
+			NextRetryAt:         &nextRetryAt,
+			RecentFailures: []model.ReturnQueueFailure{
+				{
+					ReturnID:     "return-1",
+					OrderID:      "order-1",
+					UserID:       "user-1",
+					LastError:    "gateway timeout",
+					AttemptCount: 2,
+					UpdatedAt:    time.Now().UTC(),
+				},
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	health, err := svc.GetReturnQueueHealth(context.Background())
+	if err != nil {
+		t.Fatalf("GetReturnQueueHealth returned error: %v", err)
+	}
+
+	if health.PendingCount != 4 || health.ReadyNowCount != 2 {
+		t.Fatalf("unexpected queue health snapshot: %#v", health)
+	}
+	if len(health.RecentFailures) != 1 || health.RecentFailures[0].ReturnID != "return-1" {
+		t.Fatalf("expected one recent failure, got %#v", health.RecentFailures)
+	}
+	if health.NextRetryAt == nil || !health.NextRetryAt.Equal(nextRetryAt) {
+		t.Fatalf("expected next retry %v, got %#v", nextRetryAt, health.NextRetryAt)
+	}
+}
+
+func TestRequestReturnRefundReturnsNilWhenAlreadyRefunded(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRefunded,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, &fakePaymentHistoryClient{})
+
+	if err := svc.RequestReturnRefund(context.Background(), "return-1", "admin-1", "admin", "Retry refund"); err != nil {
+		t.Fatalf("expected nil error for already refunded return, got %v", err)
+	}
+}
+
+func TestRequestReturnRefundRejectsRequestedStatus(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Damaged item",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, &fakePaymentHistoryClient{})
+
+	err := svc.RequestReturnRefund(context.Background(), "return-1", "admin-1", "admin", "Queue refund")
+	if !errors.Is(err, ErrReturnStatusTransition) {
+		t.Fatalf("expected ErrReturnStatusTransition, got %v", err)
+	}
+}
+
+func TestRequestReturnRefundRetriesExistingPendingRefundWithoutRepricing(t *testing.T) {
+	retryAt := time.Now().Add(-time.Second)
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:                    "return-1",
+				OrderID:               "order-1",
+				UserID:                "user-1",
+				Status:                model.ReturnStatusRefundPending,
+				Reason:                "Damaged item",
+				RefundAmount:          90,
+				RefundChargePaymentID: "payment-1",
+				RefundIdempotencyKey:  "return-refund:return-1",
+				RefundNextRetryAt:     &retryAt,
+			},
+		},
+	}
+	paymentClient := &fakePaymentHistoryClient{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient)
+
+	if err := svc.RequestReturnRefund(context.Background(), "return-1", "admin-1", "admin", ""); err != nil {
+		t.Fatalf("RequestReturnRefund returned error: %v", err)
+	}
+
+	if len(paymentClient.refunded) != 0 {
+		t.Fatalf("expected refund to stay queued for worker, got %d direct refund calls", len(paymentClient.refunded))
+	}
+	lastEvent := repo.returnsByID["return-1"].Events[len(repo.returnsByID["return-1"].Events)-1]
+	if lastEvent.Message != "refund retry queued" {
+		t.Fatalf("expected retry message, got %q", lastEvent.Message)
+	}
+}
+
+func TestReturnRefundWorkerCompletesQueuedRefund(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:                    "return-1",
+				OrderID:               "order-1",
+				UserID:                "user-1",
+				UserEmail:             "user@example.com",
+				Status:                model.ReturnStatusRefundPending,
+				Reason:                "Damaged item",
+				RefundAmount:          90,
+				RefundChargePaymentID: "payment-1",
+				RefundIdempotencyKey:  "return-refund:return-1",
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    1,
+					},
+				},
+			},
+		},
+	}
+	paymentClient := &fakePaymentHistoryClient{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient)
+
+	if err := svc.processPendingReturnRefund(context.Background(), repo.returnsByID["return-1"]); err != nil {
+		t.Fatalf("processPendingReturnRefund returned error: %v", err)
 	}
 
 	if len(paymentClient.refunded) != 1 {
@@ -589,11 +1088,54 @@ func TestUpdateReturnStatusRefundedTriggersPaymentRefundAndOutbox(t *testing.T) 
 	if paymentClient.refunded[0].amount != 90 {
 		t.Fatalf("expected refund amount 90, got %.2f", paymentClient.refunded[0].amount)
 	}
+	if paymentClient.refunded[0].idempotencyKey != "return-refund:return-1" {
+		t.Fatalf("expected idempotency key return-refund:return-1, got %q", paymentClient.refunded[0].idempotencyKey)
+	}
 	if repo.returnsByID["return-1"].Status != model.ReturnStatusRefunded {
 		t.Fatalf("expected return status refunded, got %s", repo.returnsByID["return-1"].Status)
 	}
+	if repo.returnsByID["return-1"].RefundPaymentID != "refund-payment-1" {
+		t.Fatalf("expected refund payment id to be persisted, got %q", repo.returnsByID["return-1"].RefundPaymentID)
+	}
 	if repo.updatedReturnOutbox == nil || repo.updatedReturnOutbox.RoutingKey != "return.refunded" {
-		t.Fatalf("expected refunded return outbox message, got %#v", repo.updatedReturnOutbox)
+		t.Fatalf("expected refunded outbox message, got %#v", repo.updatedReturnOutbox)
+	}
+}
+
+func TestReturnRefundWorkerMarksFailureForRetry(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:                    "return-1",
+				OrderID:               "order-1",
+				UserID:                "user-1",
+				Status:                model.ReturnStatusRefundPending,
+				Reason:                "Damaged item",
+				RefundAmount:          90,
+				RefundChargePaymentID: "payment-1",
+				RefundIdempotencyKey:  "return-refund:return-1",
+				RefundNextRetryAt:     ptrTime(time.Now().Add(-time.Second)),
+			},
+		},
+	}
+	paymentClient := &fakePaymentHistoryClient{err: errors.New("gateway timeout")}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, paymentClient)
+
+	if err := svc.flushPendingReturnRefunds(context.Background()); err != nil {
+		t.Fatalf("flushPendingReturnRefunds returned error: %v", err)
+	}
+
+	if repo.returnsByID["return-1"].Status != model.ReturnStatusRefundPending {
+		t.Fatalf("expected return to stay refund_pending, got %s", repo.returnsByID["return-1"].Status)
+	}
+	if repo.returnsByID["return-1"].RefundLastError != "gateway timeout" {
+		t.Fatalf("expected refund last error to be recorded, got %q", repo.returnsByID["return-1"].RefundLastError)
+	}
+	if repo.returnsByID["return-1"].RefundNextRetryAt == nil {
+		t.Fatal("expected refund retry time to be scheduled")
+	}
+	if repo.updatedReturnOutbox != nil && repo.updatedReturnOutbox.RoutingKey == "return.refunded" {
+		t.Fatalf("did not expect refunded outbox after failure, got %#v", repo.updatedReturnOutbox)
 	}
 }
 

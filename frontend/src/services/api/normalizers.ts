@@ -18,6 +18,11 @@ import type {
   OrderItem,
   OrderPreview,
   Payment,
+  ReturnEvent,
+  ReturnItem,
+  ReturnQueueFailure,
+  ReturnQueueHealth,
+  ReturnRequest,
   PhoneVerificationChallenge,
   Product,
   JsonObject,
@@ -531,6 +536,107 @@ export function normalizeOrderEventList(value: unknown): OrderEvent[] {
   return Array.isArray(value) ? value.map((item) => normalizeOrderEvent(item)) : [];
 }
 
+export function normalizeReturnItem(value: unknown): ReturnItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(item.id),
+    return_id: normalizeString(item.return_id),
+    order_item_id: normalizeString(item.order_item_id),
+    product_id: normalizeString(item.product_id),
+    quantity: normalizeNumber(item.quantity),
+    reason: normalizeString(item.reason) || undefined,
+    created_at: normalizeString(item.created_at),
+    updated_at: normalizeString(item.updated_at),
+  };
+}
+
+export function normalizeReturnEvent(value: unknown): ReturnEvent {
+  const event = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(event.id),
+    return_id: normalizeString(event.return_id),
+    status: normalizeString(event.status),
+    actor_id: normalizeString(event.actor_id) || undefined,
+    actor_role: normalizeString(event.actor_role) || undefined,
+    message: normalizeString(event.message),
+    created_at: normalizeString(event.created_at),
+  };
+}
+
+export function normalizeReturnRequest(value: unknown): ReturnRequest {
+  const request = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(request.id),
+    order_id: normalizeString(request.order_id),
+    user_id: normalizeString(request.user_id),
+    user_email: normalizeString(request.user_email) || undefined,
+    status: normalizeString(request.status),
+    reason: normalizeString(request.reason),
+    items: Array.isArray(request.items)
+      ? request.items.map((item) => normalizeReturnItem(item))
+      : [],
+    events: Array.isArray(request.events)
+      ? request.events.map((event) => normalizeReturnEvent(event))
+      : [],
+    refund_amount:
+      typeof request.refund_amount === "number" && Number.isFinite(request.refund_amount)
+        ? request.refund_amount
+        : undefined,
+    refund_charge_payment_id: normalizeString(request.refund_charge_payment_id) || undefined,
+    refund_payment_id: normalizeString(request.refund_payment_id) || undefined,
+    refund_last_error: normalizeString(request.refund_last_error) || undefined,
+    refund_attempt_count:
+      typeof request.refund_attempt_count === "number" &&
+      Number.isFinite(request.refund_attempt_count)
+        ? request.refund_attempt_count
+        : undefined,
+    refund_requested_at: normalizeString(request.refund_requested_at) || undefined,
+    refund_completed_at: normalizeString(request.refund_completed_at) || undefined,
+    refund_next_retry_at: normalizeString(request.refund_next_retry_at) || undefined,
+    created_at: normalizeString(request.created_at),
+    updated_at: normalizeString(request.updated_at),
+  };
+}
+
+export function normalizeReturnRequestList(value: unknown): ReturnRequest[] {
+  return Array.isArray(value) ? value.map((item) => normalizeReturnRequest(item)) : [];
+}
+
+export function normalizeReturnQueueFailure(value: unknown): ReturnQueueFailure {
+  const failure = isRecord(value) ? value : {};
+
+  return {
+    return_id: normalizeString(failure.return_id),
+    order_id: normalizeString(failure.order_id),
+    user_id: normalizeString(failure.user_id),
+    last_error: normalizeString(failure.last_error),
+    attempt_count: normalizeNumber(failure.attempt_count),
+    next_retry_at: normalizeString(failure.next_retry_at) || undefined,
+    updated_at: normalizeString(failure.updated_at),
+  };
+}
+
+export function normalizeReturnQueueHealth(value: unknown): ReturnQueueHealth {
+  const health = isRecord(value) ? value : {};
+
+  return {
+    pending_count: normalizeNumber(health.pending_count),
+    ready_now_count: normalizeNumber(health.ready_now_count),
+    in_flight_count: normalizeNumber(health.in_flight_count),
+    retry_scheduled_count: normalizeNumber(health.retry_scheduled_count),
+    failed_attempt_count: normalizeNumber(health.failed_attempt_count),
+    max_attempt_count: normalizeNumber(health.max_attempt_count),
+    oldest_pending_at: normalizeString(health.oldest_pending_at) || undefined,
+    next_retry_at: normalizeString(health.next_retry_at) || undefined,
+    recent_failures: Array.isArray(health.recent_failures)
+      ? health.recent_failures.map((entry) => normalizeReturnQueueFailure(entry))
+      : [],
+  };
+}
+
 /**
  * Normalize order preview
  */
@@ -800,6 +906,12 @@ export default {
   normalizeOrderList,
   normalizeOrderEvent,
   normalizeOrderEventList,
+  normalizeReturnItem,
+  normalizeReturnEvent,
+  normalizeReturnRequest,
+  normalizeReturnRequestList,
+  normalizeReturnQueueFailure,
+  normalizeReturnQueueHealth,
   normalizeOrderPreview,
   normalizePayment,
   normalizePaymentList,

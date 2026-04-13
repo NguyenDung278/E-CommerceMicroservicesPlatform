@@ -85,6 +85,11 @@
   color: #16211d;
 }
 
+.status-pill-warning {
+  background: rgba(217, 160, 91, 0.18);
+  color: #7b4b15;
+}
+
 .history-empty {
   margin: 0;
 }

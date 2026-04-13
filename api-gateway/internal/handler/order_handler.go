@@ -35,6 +35,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	returns := e.Group("/api/v1/returns")
 	returns.Use(appmw.JWTAuth(jwtSecret))
+	returns.GET("", h.forward)
 	returns.GET("/:id", h.forward)
 
 	legacyAdmin := orders.Group("/admin")
@@ -54,7 +55,10 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminReturns := e.Group("/api/v1/admin/returns")
 	adminReturns.Use(appmw.JWTAuth(jwtSecret))
 	adminReturns.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
+	adminReturns.GET("", h.forward)
+	adminReturns.GET("/health", h.forward)
 	adminReturns.PUT("/:id/status", h.forward)
+	adminReturns.POST("/:id/refund", h.forward)
 
 	adminCoupons := e.Group("/api/v1/admin/coupons")
 	adminCoupons.Use(appmw.JWTAuth(jwtSecret))

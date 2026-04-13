@@ -186,3 +186,12 @@ func (s *PaymentService) loadEnrichedUserPayment(ctx context.Context, payment *m
 
 	return enrichPayment(payment, payments), nil
 }
+
+func (s *PaymentService) loadEnrichedPayment(ctx context.Context, payment *model.Payment) (*model.Payment, error) {
+	payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return enrichPayment(payment, payments), nil
+}

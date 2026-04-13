@@ -6,6 +6,7 @@ import "./account-sidebar.css";
 export type AccountSidebarIconName =
   | "person"
   | "orders"
+  | "returns"
   | "pin"
   | "payments"
   | "security"
@@ -96,6 +97,14 @@ function AccountSidebarIcon({ name }: { name: AccountSidebarIconName }) {
           <path d="M9.7 7.8V6.6c0-1.28 1.02-2.3 2.3-2.3s2.3 1.02 2.3 2.3v1.2" />
           <path d="M10.2 11.6h3.6" />
           <path d="M10.2 14.6h3.6" />
+        </svg>
+      );
+    case "returns":
+      return (
+        <svg fill="none" viewBox="0 0 24 24">
+          <path d="M6.2 8.25h8.5a4.1 4.1 0 0 1 0 8.2H9.4" />
+          <path d="M9.25 13.85 6 16.95l3.25 3.1" />
+          <path d="M6.45 4.8h6.8" />
         </svg>
       );
     case "pin":

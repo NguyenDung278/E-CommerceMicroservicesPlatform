@@ -7,6 +7,7 @@ import {
   AdminOrdersSection,
   AdminOverviewSection,
   AdminReportSection,
+  AdminReturnsSection,
   AdminUsersSection,
 } from "@/features/admin/components";
 import {
@@ -33,18 +34,32 @@ import {
   syncWorkbookProductMutations,
 } from "@/features/home/workbook-sync-client";
 import { api, getErrorMessage } from "@/services/api";
-import type { AdminOrderReport, Coupon, Order, Payment, Product, UserProfile } from "@/types/api";
+import type {
+  AdminOrderReport,
+  ApiMeta,
+  Coupon,
+  Order,
+  Payment,
+  ReturnQueueHealth,
+  Product,
+  ReturnRequest,
+  UserProfile,
+} from "@/types/api";
 import { formatRoleLabel, isDevelopmentAccount } from "@/utils/dev-accounts";
 import { formatCurrency } from "@/utils/format";
 import { sanitizeMultiline, sanitizeText, sanitizeUrl, toPositiveFloat } from "@/utils/sanitize";
 import { validateProduct } from "@/utils/validation";
 import "@/styles/pages/admin/admin-page.css";
 
+const adminReturnPageSize = 6;
+
 export function AdminPage() {
   const { token, isAdmin, user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [returns, setReturns] = useState<ReturnRequest[]>([]);
+  const [returnQueueHealth, setReturnQueueHealth] = useState<ReturnQueueHealth | null>(null);
   const [paymentsByOrder, setPaymentsByOrder] = useState<Record<string, Payment[]>>({});
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [report, setReport] = useState<AdminOrderReport | null>(null);
@@ -52,6 +67,8 @@ export function AdminPage() {
   const [busyProductId, setBusyProductId] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
   const [busyRefundId, setBusyRefundId] = useState("");
+  const [busyReturnId, setBusyReturnId] = useState("");
+  const [busyReturnAction, setBusyReturnAction] = useState<"" | "refund" | "status">("");
   const [busyUserId, setBusyUserId] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
@@ -59,10 +76,21 @@ export function AdminPage() {
   const [isSyncingWorkbook, setIsSyncingWorkbook] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isLoadingReturns, setIsLoadingReturns] = useState(false);
+  const [isLoadingReturnQueueHealth, setIsLoadingReturnQueueHealth] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [editingProductId, setEditingProductId] = useState("");
   const [syncingWorkbookProductId, setSyncingWorkbookProductId] = useState("");
   const [reportDays, setReportDays] = useState(30);
+  const [adminReturnPage, setAdminReturnPage] = useState(1);
+  const [adminReturnStatusFilter, setAdminReturnStatusFilter] = useState("all");
+  const [adminReturnQuery, setAdminReturnQuery] = useState("");
+  const [adminReturnQueryDraft, setAdminReturnQueryDraft] = useState("");
+  const [adminReturnMeta, setAdminReturnMeta] = useState<ApiMeta>({
+    page: 1,
+    limit: adminReturnPageSize,
+    total: 0,
+  });
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [form, setForm] = useState<ProductFormState>(createDefaultProductForm);
@@ -206,6 +234,62 @@ export function AdminPage() {
     }
   }, [token]);
 
+  const loadAdminReturns = useCallback(
+    async (
+      nextPage = adminReturnPage,
+      nextQuery = adminReturnQuery,
+      nextStatus = adminReturnStatusFilter
+    ) => {
+      if (!token) {
+        return;
+      }
+
+      try {
+        setIsLoadingReturns(true);
+        const response = await api.listAdminReturns(token, {
+          page: nextPage,
+          limit: adminReturnPageSize,
+          query: nextQuery || undefined,
+          status: nextStatus === "all" ? undefined : nextStatus,
+        });
+
+        const total = response.meta?.total ?? 0;
+        if (nextPage > 1 && response.data.length === 0 && total > 0) {
+          setAdminReturnPage(nextPage - 1);
+          return;
+        }
+
+        setReturns(response.data);
+        setAdminReturnMeta({
+          page: response.meta?.page ?? nextPage,
+          limit: response.meta?.limit ?? adminReturnPageSize,
+          total,
+        });
+      } catch (reason) {
+        setFeedback(getErrorMessage(reason));
+      } finally {
+        setIsLoadingReturns(false);
+      }
+    },
+    [adminReturnPage, adminReturnQuery, adminReturnStatusFilter, token]
+  );
+
+  const loadReturnQueueHealth = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setIsLoadingReturnQueueHealth(true);
+      const response = await api.getAdminReturnQueueHealth(token);
+      setReturnQueueHealth(response.data);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsLoadingReturnQueueHealth(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadProducts();
   }, [loadProducts]);
@@ -222,6 +306,15 @@ export function AdminPage() {
       void loadUsers();
     }
   }, [isAdmin, loadAdminOrders, loadCoupons, loadReport, loadUsers, reportDays, token]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    void loadAdminReturns();
+    void loadReturnQueueHealth();
+  }, [loadAdminReturns, loadReturnQueueHealth, token]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -497,6 +590,104 @@ export function AdminPage() {
     }
   }
 
+  async function handleReturnStatusUpdate(
+    returnRequest: ReturnRequest,
+    status: "approved" | "rejected" | "received" | "cancelled"
+  ) {
+    if (!token) {
+      setFeedback("Bạn cần tài khoản staff/admin để cập nhật yêu cầu trả hàng.");
+      return;
+    }
+
+    const statusMessages: Record<"approved" | "rejected" | "received" | "cancelled", string> = {
+      approved: "Return approved from admin dashboard.",
+      rejected: "Return rejected from admin dashboard.",
+      received: "Returned items received by operations team.",
+      cancelled: "Return request cancelled from admin dashboard.",
+    };
+
+    try {
+      setBusyReturnId(returnRequest.id);
+      setBusyReturnAction("status");
+      await api.updateAdminReturnStatus(token, returnRequest.id, {
+        status,
+        message: statusMessages[status],
+      });
+      await loadAdminReturns();
+      await loadReturnQueueHealth();
+      setFeedback(`Đã cập nhật yêu cầu ${returnRequest.id} sang ${status}.`);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyReturnId("");
+      setBusyReturnAction("");
+    }
+  }
+
+  async function handleQueueReturnRefund(returnRequest: ReturnRequest) {
+    if (!token) {
+      setFeedback("Bạn cần tài khoản staff/admin để xếp hàng hoàn tiền.");
+      return;
+    }
+
+    try {
+      setBusyReturnId(returnRequest.id);
+      setBusyReturnAction("refund");
+      await api.requestAdminReturnRefund(token, returnRequest.id, {
+        message:
+          returnRequest.status === "refund_pending"
+            ? "Manual refund retry requested from admin dashboard."
+            : "Refund queued from admin dashboard.",
+      });
+      await loadAdminReturns();
+      await loadReturnQueueHealth();
+      setFeedback(
+        returnRequest.status === "refund_pending"
+          ? `Đã yêu cầu thử lại hoàn tiền cho ${returnRequest.id}.`
+          : `Đã xếp hàng hoàn tiền cho ${returnRequest.id}.`
+      );
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyReturnId("");
+      setBusyReturnAction("");
+    }
+  }
+
+  function handleAdminReturnFilterSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextQuery = adminReturnQueryDraft.trim();
+    if (nextQuery === adminReturnQuery && adminReturnPage === 1) {
+      void loadAdminReturns(1, nextQuery, adminReturnStatusFilter);
+      return;
+    }
+
+    setAdminReturnPage(1);
+    setAdminReturnQuery(nextQuery);
+  }
+
+  function handleResetAdminReturnFilters() {
+    const hasChanges = adminReturnQueryDraft || adminReturnQuery || adminReturnStatusFilter !== "all";
+    setAdminReturnQueryDraft("");
+    setAdminReturnQuery("");
+    setAdminReturnStatusFilter("all");
+    if (adminReturnPage !== 1) {
+      setAdminReturnPage(1);
+      return;
+    }
+    if (hasChanges) {
+      void loadAdminReturns(1, "", "all");
+    }
+  }
+
+  function handleAdminReturnStatusFilterChange(nextStatus: string) {
+    setAdminReturnStatusFilter(nextStatus);
+    if (adminReturnPage !== 1) {
+      setAdminReturnPage(1);
+    }
+  }
+
   function resetForm() {
     setForm(createDefaultProductForm());
     setEditingProductId("");
@@ -606,6 +797,8 @@ export function AdminPage() {
   function refreshDashboardData() {
     void loadReport(reportDays);
     void loadAdminOrders();
+    void loadAdminReturns();
+    void loadReturnQueueHealth();
     if (isAdmin) {
       void loadUsers();
     }
@@ -620,6 +813,9 @@ export function AdminPage() {
 
   const operationalOrderCount = orders.filter(
     (order) => order.status === "pending" || order.status === "paid"
+  ).length;
+  const activeReturnCount = returns.filter((item) =>
+    ["requested", "approved", "received", "refund_pending"].includes(item.status)
   ).length;
   const managedCustomerCount = isAdmin
     ? users.length
@@ -636,8 +832,8 @@ export function AdminPage() {
       label: "Active Orders",
       value: String(operationalOrderCount),
       caption:
-        operationalOrderCount > 0
-          ? "Đơn cần staff/admin theo dõi ngay"
+        operationalOrderCount > 0 || activeReturnCount > 0
+          ? `${operationalOrderCount} đơn và ${activeReturnCount} return đang cần theo dõi`
           : "Không có đơn cần can thiệp thủ công",
     },
     {
@@ -665,6 +861,12 @@ export function AdminPage() {
       group: "Core Analytics",
       label: "Orders",
       helper: "Theo dõi đơn hàng và giao dịch gần đây",
+    },
+    {
+      id: "admin-return-timeline",
+      group: "Core Analytics",
+      label: "Returns",
+      helper: "Trả hàng, refund queue, và lịch sử xử lý",
     },
     {
       id: "admin-user-governance",
@@ -725,6 +927,29 @@ export function AdminPage() {
             paymentsByOrder={paymentsByOrder}
             onCancelOrder={(order) => void handleManualCancel(order)}
             onRefund={(payment) => void handleRefund(payment)}
+          />
+
+          <AdminReturnsSection
+            busyReturnAction={busyReturnAction}
+            busyReturnId={busyReturnId}
+            isLoadingQueueHealth={isLoadingReturnQueueHealth}
+            isLoadingReturns={isLoadingReturns}
+            limit={adminReturnMeta.limit ?? adminReturnPageSize}
+            page={adminReturnMeta.page ?? adminReturnPage}
+            queryDraft={adminReturnQueryDraft}
+            queueHealth={returnQueueHealth}
+            returns={returns}
+            selectedStatus={adminReturnStatusFilter}
+            total={adminReturnMeta.total ?? 0}
+            onPageChange={setAdminReturnPage}
+            onQueryDraftChange={setAdminReturnQueryDraft}
+            onQueueRefund={(returnRequest) => void handleQueueReturnRefund(returnRequest)}
+            onResetFilters={handleResetAdminReturnFilters}
+            onSelectStatus={handleAdminReturnStatusFilterChange}
+            onSubmitFilters={handleAdminReturnFilterSubmit}
+            onUpdateStatus={(returnRequest, status) =>
+              void handleReturnStatusUpdate(returnRequest, status)
+            }
           />
 
           {isAdmin ? (
