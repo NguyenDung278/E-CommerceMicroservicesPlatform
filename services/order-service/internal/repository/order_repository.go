@@ -30,6 +30,7 @@ type OrderRepository interface {
 	GetReturnByID(ctx context.Context, id string) (*model.ReturnRequest, error)
 	ListReturnsByOrderID(ctx context.Context, orderID string) ([]*model.ReturnRequest, error)
 	ListReturns(ctx context.Context, filters model.ReturnFilters) ([]*model.ReturnRequest, int64, error)
+	AddReturnEvidence(ctx context.Context, returnID string, status model.ReturnStatus, evidence []model.ReturnEvidence, actorID, actorRole, message string) error
 	GetReturnQueueHealth(ctx context.Context) (*model.ReturnQueueHealth, error)
 	UpdateReturnStatus(ctx context.Context, id string, status model.ReturnStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
 	ScheduleReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest, actorID, actorRole, message string, outbox *model.OutboxMessage) error
@@ -503,6 +504,70 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 	}
 
 	return health, nil
+}
+
+func (r *postgresOrderRepository) AddReturnEvidence(
+	ctx context.Context,
+	returnID string,
+	status model.ReturnStatus,
+	evidence []model.ReturnEvidence,
+	actorID, actorRole, message string,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin return evidence transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, evidenceFile := range evidence {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO return_evidence (
+				id, return_id, file_name, content_type, size_bytes,
+				storage_key, url, uploaded_by, uploaded_by_role, created_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`,
+			evidenceFile.ID,
+			returnID,
+			evidenceFile.FileName,
+			evidenceFile.ContentType,
+			evidenceFile.SizeBytes,
+			evidenceFile.StorageKey,
+			evidenceFile.URL,
+			nullIfEmpty(evidenceFile.UploadedBy),
+			nullIfEmpty(evidenceFile.UploadedByRole),
+			evidenceFile.CreatedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert return evidence: %w", err)
+		}
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE returns
+		SET updated_at = NOW()
+		WHERE id = $1
+	`, returnID)
+	if err != nil {
+		return fmt.Errorf("failed to touch return after evidence upload: %w", err)
+	}
+
+	if strings.TrimSpace(message) == "" {
+		message = "return evidence uploaded"
+	}
+	if err := r.insertReturnEventTx(ctx, tx, &model.ReturnEvent{
+		ID:        uuid.New().String(),
+		ReturnID:  returnID,
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	}); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (r *postgresOrderRepository) ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error) {
@@ -1308,6 +1373,35 @@ func scanReturnItem(scanner rowScanner) (model.ReturnItem, error) {
 	return item, err
 }
 
+func scanReturnEvidence(scanner rowScanner) (model.ReturnEvidence, error) {
+	evidence := model.ReturnEvidence{}
+	var uploadedBy sql.NullString
+	var uploadedByRole sql.NullString
+	err := scanner.Scan(
+		&evidence.ID,
+		&evidence.ReturnID,
+		&evidence.FileName,
+		&evidence.ContentType,
+		&evidence.SizeBytes,
+		&evidence.StorageKey,
+		&evidence.URL,
+		&uploadedBy,
+		&uploadedByRole,
+		&evidence.CreatedAt,
+	)
+	if err != nil {
+		return model.ReturnEvidence{}, err
+	}
+	if uploadedBy.Valid {
+		evidence.UploadedBy = uploadedBy.String
+	}
+	if uploadedByRole.Valid {
+		evidence.UploadedByRole = uploadedByRole.String
+	}
+
+	return evidence, nil
+}
+
 func scanReturnEvent(scanner rowScanner) (model.ReturnEvent, error) {
 	event := model.ReturnEvent{}
 	var actorID sql.NullString
@@ -1422,9 +1516,14 @@ func (r *postgresOrderRepository) loadReturnDetails(ctx context.Context, returnR
 	if err != nil {
 		return err
 	}
+	evidence, err := r.listReturnEvidence(ctx, returnRequest.ID)
+	if err != nil {
+		return err
+	}
 
 	returnRequest.Items = items
 	returnRequest.Events = events
+	returnRequest.Evidence = evidence
 	return nil
 }
 
@@ -1480,6 +1579,34 @@ func (r *postgresOrderRepository) listReturnEvents(ctx context.Context, returnID
 	}
 
 	return events, nil
+}
+
+func (r *postgresOrderRepository) listReturnEvidence(ctx context.Context, returnID string) ([]model.ReturnEvidence, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, return_id, file_name, content_type, size_bytes, storage_key, url,
+		       uploaded_by, uploaded_by_role, created_at
+		FROM return_evidence
+		WHERE return_id = $1
+		ORDER BY created_at ASC, id ASC
+	`, returnID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list return evidence: %w", err)
+	}
+	defer rows.Close()
+
+	var evidence []model.ReturnEvidence
+	for rows.Next() {
+		evidenceFile, err := scanReturnEvidence(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan return evidence: %w", err)
+		}
+		evidence = append(evidence, evidenceFile)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate return evidence: %w", err)
+	}
+
+	return evidence, nil
 }
 
 func (r *postgresOrderRepository) ClaimPendingOutbox(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.OutboxMessage, error) {

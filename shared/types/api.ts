@@ -354,6 +354,18 @@ export type ReturnEvent = {
   created_at: string;
 };
 
+export type ReturnEvidence = {
+  id: string;
+  return_id: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  url: string;
+  uploaded_by?: string;
+  uploaded_by_role?: string;
+  created_at: string;
+};
+
 export type ReturnRequest = {
   id: string;
   order_id: string;
@@ -363,6 +375,7 @@ export type ReturnRequest = {
   reason: string;
   items: ReturnItem[];
   events: ReturnEvent[];
+  evidence: ReturnEvidence[];
   refund_amount?: number;
   refund_charge_payment_id?: string;
   refund_payment_id?: string;

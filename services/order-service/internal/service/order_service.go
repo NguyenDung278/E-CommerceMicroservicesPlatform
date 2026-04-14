@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
@@ -13,34 +14,37 @@ import (
 )
 
 var (
-	ErrOrderNotFound           = errors.New("order not found")
-	ErrEmptyOrder              = errors.New("order must contain at least one item")
-	ErrProductNotFound         = errors.New("product not found")
-	ErrProductUnavailable      = errors.New("product is unavailable")
-	ErrInsufficientStock       = errors.New("insufficient stock")
-	ErrOrderNotCancellable     = errors.New("only pending orders can be cancelled")
-	ErrAdminCancelNotAllowed   = errors.New("only pending or paid orders can be cancelled manually")
-	ErrInvalidOrderStatus      = errors.New("invalid order status")
-	ErrCouponAlreadyExists     = errors.New("coupon code already exists")
-	ErrCouponNotFound          = repository.ErrCouponNotFound
-	ErrCouponInactive          = repository.ErrCouponInactive
-	ErrCouponExpired           = repository.ErrCouponExpired
-	ErrCouponMinimumNotMet     = repository.ErrCouponMinimumNotMet
-	ErrCouponUsageLimit        = repository.ErrCouponUsageLimitReached
-	ErrInvalidShippingMethod   = errors.New("invalid shipping method")
-	ErrShippingAddressRequired = errors.New("shipping address is required")
-	ErrReturnNotFound          = errors.New("return not found")
-	ErrReturnReasonRequired    = errors.New("return reason is required")
-	ErrReturnItemsRequired     = errors.New("return items are required")
-	ErrReturnNotAllowed        = errors.New("only delivered orders can start a return")
-	ErrReturnOrderItemNotFound = errors.New("return item does not belong to the order")
-	ErrReturnQuantityExceeded  = errors.New("return quantity exceeds purchased quantity")
-	ErrDuplicateReturnItem     = errors.New("return request contains duplicate order item")
-	ErrInvalidReturnStatus     = errors.New("invalid return status")
-	ErrReturnStatusTransition  = errors.New("return status transition is not allowed")
-	ErrReturnRefundUnavailable = errors.New("return refund could not be matched to a refundable payment")
-	ErrReturnRefundAmount      = errors.New("return refund amount is invalid")
-	ErrReturnRefundPending     = errors.New("return refund is already queued for processing")
+	ErrOrderNotFound                    = errors.New("order not found")
+	ErrEmptyOrder                       = errors.New("order must contain at least one item")
+	ErrProductNotFound                  = errors.New("product not found")
+	ErrProductUnavailable               = errors.New("product is unavailable")
+	ErrInsufficientStock                = errors.New("insufficient stock")
+	ErrOrderNotCancellable              = errors.New("only pending orders can be cancelled")
+	ErrAdminCancelNotAllowed            = errors.New("only pending or paid orders can be cancelled manually")
+	ErrInvalidOrderStatus               = errors.New("invalid order status")
+	ErrCouponAlreadyExists              = errors.New("coupon code already exists")
+	ErrCouponNotFound                   = repository.ErrCouponNotFound
+	ErrCouponInactive                   = repository.ErrCouponInactive
+	ErrCouponExpired                    = repository.ErrCouponExpired
+	ErrCouponMinimumNotMet              = repository.ErrCouponMinimumNotMet
+	ErrCouponUsageLimit                 = repository.ErrCouponUsageLimitReached
+	ErrInvalidShippingMethod            = errors.New("invalid shipping method")
+	ErrShippingAddressRequired          = errors.New("shipping address is required")
+	ErrReturnNotFound                   = errors.New("return not found")
+	ErrReturnReasonRequired             = errors.New("return reason is required")
+	ErrReturnItemsRequired              = errors.New("return items are required")
+	ErrReturnNotAllowed                 = errors.New("only delivered orders can start a return")
+	ErrReturnOrderItemNotFound          = errors.New("return item does not belong to the order")
+	ErrReturnQuantityExceeded           = errors.New("return quantity exceeds purchased quantity")
+	ErrDuplicateReturnItem              = errors.New("return request contains duplicate order item")
+	ErrInvalidReturnStatus              = errors.New("invalid return status")
+	ErrReturnStatusTransition           = errors.New("return status transition is not allowed")
+	ErrReturnRefundUnavailable          = errors.New("return refund could not be matched to a refundable payment")
+	ErrReturnRefundAmount               = errors.New("return refund amount is invalid")
+	ErrReturnRefundPending              = errors.New("return refund is already queued for processing")
+	ErrReturnEvidenceRequired           = errors.New("at least one evidence file is required")
+	ErrReturnEvidenceClosed             = errors.New("cannot upload evidence to a closed return")
+	ErrReturnEvidenceStorageUnavailable = errors.New("return evidence storage is not configured")
 )
 
 // OrderEvent is published to RabbitMQ when an order is created or cancelled so
@@ -69,11 +73,12 @@ type ReturnLifecycleEvent struct {
 
 // OrderService coordinates order pricing, persistence, and event publication.
 type OrderService struct {
-	repo          repository.OrderRepository
-	amqpCh        *amqp.Channel
-	log           *zap.Logger
-	productClient productCatalog
-	paymentClient paymentHistorySource
+	repo             repository.OrderRepository
+	amqpCh           *amqp.Channel
+	log              *zap.Logger
+	productClient    productCatalog
+	paymentClient    paymentHistorySource
+	returnMediaStore returnEvidenceStore
 }
 
 // productCatalog describes the downstream product capabilities the order
@@ -90,6 +95,11 @@ type paymentHistorySource interface {
 	ListPaymentHistory(ctx context.Context, authHeader string) ([]model.PaymentSummary, error)
 	ListPaymentsByOrder(ctx context.Context, orderID string) ([]model.PaymentSummary, error)
 	RefundPayment(ctx context.Context, paymentID string, amount float64, message, idempotencyKey string) (*model.PaymentSummary, error)
+}
+
+type returnEvidenceStore interface {
+	EnsureBucket(ctx context.Context) error
+	Upload(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) (string, error)
 }
 
 type pricedOrderItem struct {
@@ -181,4 +191,8 @@ func NewOrderService(
 		productClient: productClient,
 		paymentClient: paymentClient,
 	}
+}
+
+func (s *OrderService) SetReturnMediaStore(store returnEvidenceStore) {
+	s.returnMediaStore = store
 }

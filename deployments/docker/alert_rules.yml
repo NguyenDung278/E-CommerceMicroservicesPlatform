@@ -72,3 +72,30 @@ groups:
         annotations:
           summary: "Notification duplicate inbox rate is elevated"
           description: "notification-service is skipping more than 0.1 duplicate messages per second over 10 minutes."
+
+      - alert: OrderReturnRefundQueueBacklogHigh
+        expr: ecommerce_order_return_refund_queue_jobs{state="pending"} > 15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Return refund backlog is growing"
+          description: "order-service has more than 15 refund_pending jobs for at least 10 minutes."
+
+      - alert: OrderReturnRefundQueueOldestPendingHigh
+        expr: max(ecommerce_order_return_refund_queue_oldest_age_seconds) > 900
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Return refund queue is too old"
+          description: "At least one refund_pending return has been waiting more than 15 minutes for 10 minutes."
+
+      - alert: OrderReturnRefundFailureRateHigh
+        expr: sum(rate(ecommerce_order_return_refund_attempt_total{outcome="failure"}[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Return refund failures are elevated"
+          description: "order-service is observing more than 0.05 failed asynchronous refund attempts per second over 10 minutes."

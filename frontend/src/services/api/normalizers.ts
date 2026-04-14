@@ -19,6 +19,7 @@ import type {
   OrderPreview,
   Payment,
   ReturnEvent,
+  ReturnEvidence,
   ReturnItem,
   ReturnQueueFailure,
   ReturnQueueHealth,
@@ -565,6 +566,22 @@ export function normalizeReturnEvent(value: unknown): ReturnEvent {
   };
 }
 
+export function normalizeReturnEvidence(value: unknown): ReturnEvidence {
+  const evidence = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(evidence.id),
+    return_id: normalizeString(evidence.return_id),
+    file_name: normalizeString(evidence.file_name),
+    content_type: normalizeString(evidence.content_type),
+    size_bytes: normalizeNumber(evidence.size_bytes),
+    url: normalizeString(evidence.url),
+    uploaded_by: normalizeString(evidence.uploaded_by) || undefined,
+    uploaded_by_role: normalizeString(evidence.uploaded_by_role) || undefined,
+    created_at: normalizeString(evidence.created_at),
+  };
+}
+
 export function normalizeReturnRequest(value: unknown): ReturnRequest {
   const request = isRecord(value) ? value : {};
 
@@ -580,6 +597,9 @@ export function normalizeReturnRequest(value: unknown): ReturnRequest {
       : [],
     events: Array.isArray(request.events)
       ? request.events.map((event) => normalizeReturnEvent(event))
+      : [],
+    evidence: Array.isArray(request.evidence)
+      ? request.evidence.map((entry) => normalizeReturnEvidence(entry))
       : [],
     refund_amount:
       typeof request.refund_amount === "number" && Number.isFinite(request.refund_amount)
@@ -908,6 +928,7 @@ export default {
   normalizeOrderEventList,
   normalizeReturnItem,
   normalizeReturnEvent,
+  normalizeReturnEvidence,
   normalizeReturnRequest,
   normalizeReturnRequestList,
   normalizeReturnQueueFailure,

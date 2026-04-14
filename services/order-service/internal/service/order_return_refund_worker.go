@@ -86,13 +86,22 @@ func (s *OrderService) flushPendingReturnRefunds(ctx context.Context) error {
 }
 
 func (s *OrderService) processPendingReturnRefund(ctx context.Context, returnRequest *model.ReturnRequest) error {
+	startedAt := time.Now()
+	outcome := "success"
+	defer func() {
+		observeReturnRefundAttempt(outcome, time.Since(startedAt))
+	}()
+
 	if strings.TrimSpace(returnRequest.RefundChargePaymentID) == "" {
+		outcome = "failure"
 		return fmt.Errorf("return refund metadata is missing charge payment id")
 	}
 	if returnRequest.RefundAmount <= 0 {
+		outcome = "failure"
 		return fmt.Errorf("return refund metadata is missing refund amount")
 	}
 	if strings.TrimSpace(returnRequest.RefundIdempotencyKey) == "" {
+		outcome = "failure"
 		return fmt.Errorf("return refund metadata is missing idempotency key")
 	}
 
@@ -104,6 +113,7 @@ func (s *OrderService) processPendingReturnRefund(ctx context.Context, returnReq
 		returnRequest.RefundIdempotencyKey,
 	)
 	if err != nil {
+		outcome = "failure"
 		return err
 	}
 
@@ -124,17 +134,23 @@ func (s *OrderService) processPendingReturnRefund(ctx context.Context, returnReq
 		updatedReturn.RefundAmount,
 	)
 	if err != nil {
+		outcome = "failure"
 		return err
 	}
 
-	return s.repo.CompleteReturnRefund(
+	if err := s.repo.CompleteReturnRefund(
 		ctx,
 		&updatedReturn,
 		returnRefundWorkerActorID,
 		returnRefundWorkerActorRole,
 		"refund processed asynchronously",
 		outbox,
-	)
+	); err != nil {
+		outcome = "failure"
+		return err
+	}
+
+	return nil
 }
 
 func nextReturnRefundRetryAt(attemptCount int) time.Time {

@@ -52,6 +52,7 @@ import { validateProduct } from "@/utils/validation";
 import "@/styles/pages/admin/admin-page.css";
 
 const adminReturnPageSize = 6;
+const returnQueueRefreshIntervalMs = 20_000;
 
 export function AdminPage() {
   const { token, isAdmin, user } = useAuth();
@@ -60,6 +61,7 @@ export function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
   const [returnQueueHealth, setReturnQueueHealth] = useState<ReturnQueueHealth | null>(null);
+  const [returnQueueLastUpdatedAt, setReturnQueueLastUpdatedAt] = useState("");
   const [paymentsByOrder, setPaymentsByOrder] = useState<Record<string, Payment[]>>({});
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [report, setReport] = useState<AdminOrderReport | null>(null);
@@ -274,21 +276,29 @@ export function AdminPage() {
     [adminReturnPage, adminReturnQuery, adminReturnStatusFilter, token]
   );
 
-  const loadReturnQueueHealth = useCallback(async () => {
-    if (!token) {
-      return;
-    }
+  const loadReturnQueueHealth = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      if (!token) {
+        return;
+      }
 
-    try {
-      setIsLoadingReturnQueueHealth(true);
-      const response = await api.getAdminReturnQueueHealth(token);
-      setReturnQueueHealth(response.data);
-    } catch (reason) {
-      setFeedback(getErrorMessage(reason));
-    } finally {
-      setIsLoadingReturnQueueHealth(false);
-    }
-  }, [token]);
+      try {
+        if (!options.silent) {
+          setIsLoadingReturnQueueHealth(true);
+        }
+        const response = await api.getAdminReturnQueueHealth(token);
+        setReturnQueueHealth(response.data);
+        setReturnQueueLastUpdatedAt(new Date().toISOString());
+      } catch (reason) {
+        setFeedback(getErrorMessage(reason));
+      } finally {
+        if (!options.silent) {
+          setIsLoadingReturnQueueHealth(false);
+        }
+      }
+    },
+    [token]
+  );
 
   useEffect(() => {
     void loadProducts();
@@ -315,6 +325,20 @@ export function AdminPage() {
     void loadAdminReturns();
     void loadReturnQueueHealth();
   }, [loadAdminReturns, loadReturnQueueHealth, token]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadReturnQueueHealth({ silent: true });
+    }, returnQueueRefreshIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadReturnQueueHealth, token]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -668,7 +692,8 @@ export function AdminPage() {
   }
 
   function handleResetAdminReturnFilters() {
-    const hasChanges = adminReturnQueryDraft || adminReturnQuery || adminReturnStatusFilter !== "all";
+    const hasChanges =
+      adminReturnQueryDraft || adminReturnQuery || adminReturnStatusFilter !== "all";
     setAdminReturnQueryDraft("");
     setAdminReturnQuery("");
     setAdminReturnStatusFilter("all");
@@ -938,6 +963,7 @@ export function AdminPage() {
             page={adminReturnMeta.page ?? adminReturnPage}
             queryDraft={adminReturnQueryDraft}
             queueHealth={returnQueueHealth}
+            queueLastUpdatedAt={returnQueueLastUpdatedAt}
             returns={returns}
             selectedStatus={adminReturnStatusFilter}
             total={adminReturnMeta.total ?? 0}

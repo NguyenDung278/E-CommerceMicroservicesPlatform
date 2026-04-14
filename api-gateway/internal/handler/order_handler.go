@@ -37,6 +37,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	returns.Use(appmw.JWTAuth(jwtSecret))
 	returns.GET("", h.forward)
 	returns.GET("/:id", h.forward)
+	returns.POST("/:id/evidence", h.forward)
 
 	legacyAdmin := orders.Group("/admin")
 	legacyAdmin.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))

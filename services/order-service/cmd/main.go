@@ -26,6 +26,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/storage"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/migrations"
 )
 
@@ -100,6 +101,11 @@ func main() {
 
 	orderRepo := repository.NewOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo, amqpCh, log, productClient, paymentClient)
+	if mediaStore, err := storage.NewObjectStorage(cfg.ObjectStorage); err != nil {
+		log.Warn("return evidence storage is not configured", zap.Error(err))
+	} else {
+		orderService.SetReturnMediaStore(mediaStore)
+	}
 	orderHandler := handler.NewOrderHandler(orderService)
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	defer relayCancel()
@@ -107,6 +113,7 @@ func main() {
 		go orderService.StartOutboxRelay(relayCtx)
 	}
 	go orderService.StartReturnRefundWorker(relayCtx)
+	go orderService.StartReturnRefundQueueMonitor(relayCtx)
 	if amqpConsumerCh != nil {
 		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {
 			log.Warn("failed to start payment event consumer", zap.Error(err))

@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +96,31 @@ func (r *fakeOrderHandlerRepo) ListReturns(_ context.Context, filters model.Retu
 		returns = append(returns, cloneHandlerReturnRequest(returnRequest))
 	}
 	return returns, int64(len(returns)), nil
+}
+
+func (r *fakeOrderHandlerRepo) AddReturnEvidence(
+	_ context.Context,
+	returnID string,
+	status model.ReturnStatus,
+	evidence []model.ReturnEvidence,
+	actorID, actorRole, message string,
+) error {
+	current, ok := r.returnsByID[returnID]
+	if !ok {
+		return nil
+	}
+	current.Evidence = append(current.Evidence, evidence...)
+	current.UpdatedAt = time.Now()
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-evidence-" + returnID,
+		ReturnID:  returnID,
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (r *fakeOrderHandlerRepo) GetReturnQueueHealth(_ context.Context) (*model.ReturnQueueHealth, error) {
@@ -251,6 +279,7 @@ func cloneHandlerReturnRequest(returnRequest *model.ReturnRequest) *model.Return
 	copyValue := *returnRequest
 	copyValue.Items = append([]model.ReturnItem(nil), returnRequest.Items...)
 	copyValue.Events = append([]model.ReturnEvent(nil), returnRequest.Events...)
+	copyValue.Evidence = append([]model.ReturnEvidence(nil), returnRequest.Evidence...)
 	return &copyValue
 }
 
@@ -298,6 +327,16 @@ func (c *fakeOrderHandlerPaymentClient) RefundPayment(_ context.Context, payment
 		ReferencePaymentID: paymentID,
 		FailureReason:      message,
 	}, nil
+}
+
+type fakeOrderHandlerMediaStore struct{}
+
+func (s *fakeOrderHandlerMediaStore) EnsureBucket(_ context.Context) error {
+	return nil
+}
+
+func (s *fakeOrderHandlerMediaStore) Upload(_ context.Context, objectKey string, _ io.Reader, _ int64, _ string) (string, error) {
+	return "https://cdn.example.com/" + objectKey, nil
 }
 
 func TestPreviewOrderReturnsShippingMethodsContract(t *testing.T) {
@@ -486,6 +525,73 @@ func TestCreateReturnRouteCreatesRequestedReturn(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"requested"`)) {
 		t.Fatalf("expected requested return status, got %s", rec.Body.String())
+	}
+}
+
+func TestUploadReturnEvidenceRouteReturnsUpdatedReturn(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	repo := &fakeOrderHandlerRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Package arrived damaged",
+				Events: []model.ReturnEvent{
+					{
+						ID:        "event-1",
+						ReturnID:  "return-1",
+						Status:    model.ReturnStatusRequested,
+						ActorID:   "user-1",
+						ActorRole: "user",
+						Message:   "return requested",
+						CreatedAt: time.Now(),
+					},
+				},
+			},
+		},
+	}
+
+	svc := service.NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+	svc.SetReturnMediaStore(&fakeOrderHandlerMediaStore{})
+	handler := NewOrderHandler(svc)
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	partHeader := textproto.MIMEHeader{}
+	partHeader.Set("Content-Disposition", `form-data; name="evidence"; filename="damage-front.png"`)
+	partHeader.Set("Content-Type", "image/png")
+	part, err := writer.CreatePart(partHeader)
+	if err != nil {
+		t.Fatalf("failed to create multipart file: %v", err)
+	}
+	if _, err := part.Write([]byte("fake-image-bytes")); err != nil {
+		t.Fatalf("failed to write multipart file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("failed to close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/returns/return-1/evidence", body)
+	req.Header.Set(echo.HeaderContentType, writer.FormDataContentType())
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"file_name":"damage-front.png"`)) {
+		t.Fatalf("expected uploaded evidence in payload, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"url":"https://cdn.example.com/`)) {
+		t.Fatalf("expected uploaded evidence URL, got %s", rec.Body.String())
 	}
 }
 

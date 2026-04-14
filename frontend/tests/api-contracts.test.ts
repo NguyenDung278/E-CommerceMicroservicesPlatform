@@ -142,9 +142,7 @@ describe("frontend api contracts", () => {
     });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(
-      "/api/v1/admin/returns?page=2&limit=6&query=order%2F1&status=refund_pending"
-    );
+    expect(url).toBe("/api/v1/admin/returns?page=2&limit=6&query=order%2F1&status=refund_pending");
     expect(init?.method).toBe("GET");
   });
 
@@ -219,6 +217,37 @@ describe("frontend api contracts", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/v1/orders/order%2F1/returns");
     expect(init?.method).toBe("POST");
+  });
+
+  it("keeps return evidence upload on POST /api/v1/returns/:id/evidence with multipart body", async () => {
+    fetchMock.mockResolvedValue(
+      createResponse({
+        data: {
+          id: "return-1",
+          order_id: "order-1",
+          user_id: "user-1",
+          status: "requested",
+          reason: "Wrong size",
+          items: [],
+          events: [],
+          evidence: [],
+          created_at: "2026-04-13T10:00:00Z",
+          updated_at: "2026-04-13T10:00:00Z",
+        },
+      })
+    );
+
+    await orderApi.uploadReturnEvidence("jwt-token", "return/1", [
+      new File(["proof"], "proof.png", { type: "image/png" }),
+    ]);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    const headers = init?.headers as Headers;
+    const formData = init?.body as FormData;
+    expect(url).toBe("/api/v1/returns/return%2F1/evidence");
+    expect(init?.method).toBe("POST");
+    expect(headers.get("Authorization")).toBe("Bearer jwt-token");
+    expect(formData.getAll("evidence")).toHaveLength(1);
   });
 
   it("keeps admin return queue health on GET /api/v1/admin/returns/health", async () => {

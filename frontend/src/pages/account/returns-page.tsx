@@ -244,9 +244,14 @@ export function ReturnsPage() {
                   <div className="history-card-head">
                     <div>
                       <p className="history-kicker">Return request</p>
-                      <h3>{returnRequest.id}</h3>
+                      <h3>
+                        <Link to={`/returns/${returnRequest.id}`}>{returnRequest.id}</Link>
+                      </h3>
                       <p className="history-subtle">
-                        Linked to order <Link to={`/orders/${returnRequest.order_id}`}>{returnRequest.order_id}</Link>
+                        Linked to order{" "}
+                        <Link to={`/orders/${returnRequest.order_id}`}>
+                          {returnRequest.order_id}
+                        </Link>
                       </p>
                     </div>
 
@@ -270,7 +275,9 @@ export function ReturnsPage() {
                     </div>
                     <div>
                       <span>Latest update</span>
-                      <strong>{latestEvent ? formatStatusLabel(latestEvent.status) : "Requested"}</strong>
+                      <strong>
+                        {latestEvent ? formatStatusLabel(latestEvent.status) : "Requested"}
+                      </strong>
                     </div>
                   </div>
 
@@ -278,7 +285,9 @@ export function ReturnsPage() {
                     <div className="returns-route-subcard">
                       <div className="history-line">
                         <strong>Reason</strong>
-                        <span className="history-subtle">{returnRequest.items.length} return lines</span>
+                        <span className="history-subtle">
+                          {returnRequest.items.length} return lines
+                        </span>
                       </div>
                       <p>{returnRequest.reason}</p>
 
@@ -298,7 +307,9 @@ export function ReturnsPage() {
                     <div className="returns-route-subcard">
                       <div className="history-line">
                         <strong>Timeline</strong>
-                        <span className="history-subtle">{returnRequest.events.length} milestones</span>
+                        <span className="history-subtle">
+                          {returnRequest.events.length} milestones
+                        </span>
                       </div>
 
                       <div className="returns-route-event-list">
@@ -320,10 +331,18 @@ export function ReturnsPage() {
                       <strong>Last refund attempt needs attention.</strong>
                       <span>{returnRequest.refund_last_error}</span>
                       {returnRequest.refund_next_retry_at ? (
-                        <span>Next retry at {formatDateTime(returnRequest.refund_next_retry_at)}.</span>
+                        <span>
+                          Next retry at {formatDateTime(returnRequest.refund_next_retry_at)}.
+                        </span>
                       ) : null}
                     </div>
                   ) : null}
+
+                  <div className="returns-route-actions">
+                    <Link className="ghost-button" to={`/returns/${returnRequest.id}`}>
+                      View details
+                    </Link>
+                  </div>
                 </article>
               );
             })}

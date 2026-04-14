@@ -29,3 +29,11 @@ jwt:
 
 services:
   product_service_grpc: "product-service:50052"
+
+object_storage:
+  endpoint: "minio:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "return-evidence"
+  use_ssl: false
+  public_base_url: "http://localhost:9000/return-evidence"

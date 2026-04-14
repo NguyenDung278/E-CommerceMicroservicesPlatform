@@ -46,6 +46,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	returns.Use(middleware.JWTAuth(jwtSecret))
 	returns.GET("", h.ListUserReturns)
 	returns.GET("/:id", h.GetReturn)
+	returns.POST("/:id/evidence", h.UploadReturnEvidence)
 
 	legacyAdmin := orders.Group("/admin")
 	legacyAdmin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
@@ -615,6 +616,12 @@ func writeReturnError(c echo.Context, err error, fallbackMessage string) error {
 	if errors.Is(err, service.ErrReturnRefundUnavailable) {
 		return response.Error(c, http.StatusConflict, "refund unavailable", err.Error())
 	}
+	if errors.Is(err, service.ErrReturnEvidenceClosed) {
+		return response.Error(c, http.StatusConflict, "return closed", err.Error())
+	}
+	if errors.Is(err, service.ErrReturnEvidenceStorageUnavailable) {
+		return response.Error(c, http.StatusServiceUnavailable, "upload failed", "object storage is not configured")
+	}
 	if errors.Is(err, service.ErrReturnReasonRequired) ||
 		errors.Is(err, service.ErrReturnItemsRequired) ||
 		errors.Is(err, service.ErrReturnNotAllowed) ||
@@ -622,7 +629,8 @@ func writeReturnError(c echo.Context, err error, fallbackMessage string) error {
 		errors.Is(err, service.ErrReturnQuantityExceeded) ||
 		errors.Is(err, service.ErrDuplicateReturnItem) ||
 		errors.Is(err, service.ErrReturnRefundAmount) ||
-		errors.Is(err, service.ErrInvalidReturnStatus) {
+		errors.Is(err, service.ErrInvalidReturnStatus) ||
+		errors.Is(err, service.ErrReturnEvidenceRequired) {
 		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
 	}
 

@@ -183,6 +183,29 @@ export const orderApi = {
   },
 
   /**
+   * Upload image evidence for one return request.
+   */
+  uploadReturnEvidence(
+    token: string,
+    returnId: string,
+    files: File[]
+  ): Promise<ApiEnvelope<ReturnRequest>> {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("evidence", file);
+    });
+
+    return request<unknown>(`/api/v1/returns/${encodeURIComponent(returnId)}/evidence`, {
+      method: "POST",
+      token,
+      body: formData,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnRequest(response.data),
+    }));
+  },
+
+  /**
    * Create a new return request for one order.
    */
   createReturn(

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,31 @@ func (r *fakeOrderRepo) ListReturns(_ context.Context, filters model.ReturnFilte
 		returns = append(returns, cloneReturnRequest(returnRequest))
 	}
 	return returns, int64(len(returns)), nil
+}
+
+func (r *fakeOrderRepo) AddReturnEvidence(
+	_ context.Context,
+	returnID string,
+	status model.ReturnStatus,
+	evidence []model.ReturnEvidence,
+	actorID, actorRole, message string,
+) error {
+	current, ok := r.returnsByID[returnID]
+	if !ok {
+		return nil
+	}
+	current.Evidence = append(current.Evidence, evidence...)
+	current.UpdatedAt = time.Now()
+	current.Events = append(current.Events, model.ReturnEvent{
+		ID:        "event-evidence-" + returnID,
+		ReturnID:  returnID,
+		Status:    status,
+		ActorID:   actorID,
+		ActorRole: actorRole,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+	return nil
 }
 
 func (r *fakeOrderRepo) GetReturnQueueHealth(_ context.Context) (*model.ReturnQueueHealth, error) {
@@ -301,6 +327,7 @@ func cloneReturnRequest(returnRequest *model.ReturnRequest) *model.ReturnRequest
 	copyValue := *returnRequest
 	copyValue.Items = append([]model.ReturnItem(nil), returnRequest.Items...)
 	copyValue.Events = append([]model.ReturnEvent(nil), returnRequest.Events...)
+	copyValue.Evidence = append([]model.ReturnEvidence(nil), returnRequest.Evidence...)
 	return &copyValue
 }
 
@@ -407,6 +434,35 @@ func (c *fakePaymentHistoryClient) RefundPayment(_ context.Context, paymentID st
 		TransactionType:    "refund",
 		ReferencePaymentID: paymentID,
 	}, nil
+}
+
+type fakeReturnMediaStore struct {
+	uploads []struct {
+		objectKey   string
+		contentType string
+		size        int64
+	}
+	err error
+}
+
+func (s *fakeReturnMediaStore) EnsureBucket(_ context.Context) error {
+	return s.err
+}
+
+func (s *fakeReturnMediaStore) Upload(_ context.Context, objectKey string, _ io.Reader, size int64, contentType string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	s.uploads = append(s.uploads, struct {
+		objectKey   string
+		contentType string
+		size        int64
+	}{
+		objectKey:   objectKey,
+		contentType: contentType,
+		size:        size,
+	})
+	return "https://cdn.example.com/" + objectKey, nil
 }
 
 func TestPreviewOrderAppliesCouponPricing(t *testing.T) {
@@ -647,6 +703,94 @@ func TestCreateReturnRejectsAlreadyReturnedQuantity(t *testing.T) {
 	})
 	if !errors.Is(err, ErrReturnQuantityExceeded) {
 		t.Fatalf("expected ErrReturnQuantityExceeded for already returned items, got %v", err)
+	}
+}
+
+func TestUploadReturnEvidenceStoresFilesAndAppendsTimeline(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Reason:  "Wrong size",
+				Events: []model.ReturnEvent{
+					{
+						ID:        "event-1",
+						ReturnID:  "return-1",
+						Status:    model.ReturnStatusRequested,
+						ActorID:   "user-1",
+						ActorRole: "user",
+						Message:   "return requested",
+						CreatedAt: time.Now(),
+					},
+				},
+			},
+		},
+	}
+	mediaStore := &fakeReturnMediaStore{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+	svc.SetReturnMediaStore(mediaStore)
+
+	returnRequest, err := svc.UploadReturnEvidence(context.Background(), "return-1", "user-1", "user", []model.ReturnEvidenceUpload{
+		{
+			FileName:    "damage-front.png",
+			ContentType: "image/png",
+			Size:        12,
+			Reader:      strings.NewReader("front-proof"),
+		},
+		{
+			FileName:    "damage-back.jpg",
+			ContentType: "image/jpeg",
+			Size:        11,
+			Reader:      strings.NewReader("back-proof"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected upload to succeed, got %v", err)
+	}
+
+	if len(mediaStore.uploads) != 2 {
+		t.Fatalf("expected 2 uploaded evidence files, got %d", len(mediaStore.uploads))
+	}
+	if len(returnRequest.Evidence) != 2 {
+		t.Fatalf("expected 2 evidence records on return, got %d", len(returnRequest.Evidence))
+	}
+	if !strings.Contains(returnRequest.Evidence[0].URL, "https://cdn.example.com/returns/") {
+		t.Fatalf("expected evidence URL to come from media store, got %q", returnRequest.Evidence[0].URL)
+	}
+	lastEvent := returnRequest.Events[len(returnRequest.Events)-1]
+	if !strings.Contains(lastEvent.Message, "uploaded 2 return evidence file(s)") {
+		t.Fatalf("expected upload timeline message, got %q", lastEvent.Message)
+	}
+}
+
+func TestUploadReturnEvidenceRejectsClosedReturn(t *testing.T) {
+	repo := &fakeOrderRepo{
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRefunded,
+				Reason:  "Wrong size",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+	svc.SetReturnMediaStore(&fakeReturnMediaStore{})
+
+	_, err := svc.UploadReturnEvidence(context.Background(), "return-1", "user-1", "user", []model.ReturnEvidenceUpload{
+		{
+			FileName:    "damage-front.png",
+			ContentType: "image/png",
+			Size:        12,
+			Reader:      strings.NewReader("front-proof"),
+		},
+	})
+	if !errors.Is(err, ErrReturnEvidenceClosed) {
+		t.Fatalf("expected ErrReturnEvidenceClosed, got %v", err)
 	}
 }
 

@@ -139,7 +139,10 @@ export function OrderDetailPage() {
     () => [...orderReturns].sort((left, right) => right.created_at.localeCompare(left.created_at)),
     [orderReturns]
   );
-  const returnedQuantities = useMemo(() => buildReturnedQuantityMap(sortedReturns), [sortedReturns]);
+  const returnedQuantities = useMemo(
+    () => buildReturnedQuantityMap(sortedReturns),
+    [sortedReturns]
+  );
   const returnableItems = useMemo(
     () =>
       (order?.items ?? []).map((item) => ({
@@ -319,9 +322,7 @@ export function OrderDetailPage() {
                 </div>
                 {order.discount_amount > 0 ? (
                   <div className="order-confirmation-total-line">
-                    <span>
-                      Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}
-                    </span>
+                    <span>Discount{order.coupon_code ? ` (${order.coupon_code})` : ""}</span>
                     <span>-{formatCurrency(order.discount_amount)}</span>
                   </div>
                 ) : null}
@@ -347,7 +348,9 @@ export function OrderDetailPage() {
                 </Link>
               </div>
 
-              {returnFeedback ? <div className="feedback feedback-info">{returnFeedback}</div> : null}
+              {returnFeedback ? (
+                <div className="feedback feedback-info">{returnFeedback}</div>
+              ) : null}
 
               {canRequestReturn ? (
                 <div className="order-return-form-card">
@@ -360,8 +363,8 @@ export function OrderDetailPage() {
                       </p>
                     </div>
                     <span className="status-pill status-pill-neutral">
-                      {returnableItems.filter((item) => item.remainingQuantity > 0).length} returnable
-                      lines
+                      {returnableItems.filter((item) => item.remainingQuantity > 0).length}{" "}
+                      returnable lines
                     </span>
                   </div>
 
@@ -380,7 +383,8 @@ export function OrderDetailPage() {
                         <div className="order-return-line-copy">
                           <strong>{item.name}</strong>
                           <span>
-                            Purchased {item.quantity} • Remaining returnable {item.remainingQuantity}
+                            Purchased {item.quantity} • Remaining returnable{" "}
+                            {item.remainingQuantity}
                           </span>
                         </div>
 
@@ -459,7 +463,10 @@ export function OrderDetailPage() {
               ) : sortedReturns.length > 0 ? (
                 <div className="order-return-history">
                   {sortedReturns.map((returnRequest) => (
-                    <article className="history-card order-return-history-card" key={returnRequest.id}>
+                    <article
+                      className="history-card order-return-history-card"
+                      key={returnRequest.id}
+                    >
                       <div className="history-card-head">
                         <div>
                           <p className="history-kicker">Return request</p>
@@ -491,7 +498,9 @@ export function OrderDetailPage() {
                           <span>Last update</span>
                           <strong>
                             {returnRequest.events.length
-                              ? formatDateTime(returnRequest.events[returnRequest.events.length - 1].created_at)
+                              ? formatDateTime(
+                                  returnRequest.events[returnRequest.events.length - 1].created_at
+                                )
                               : formatDateTime(returnRequest.updated_at)}
                           </strong>
                         </div>
@@ -501,7 +510,9 @@ export function OrderDetailPage() {
                         <div className="order-return-history-subcard">
                           <div className="history-line">
                             <strong>Return items</strong>
-                            <span className="history-subtle">{returnRequest.items.length} lines</span>
+                            <span className="history-subtle">
+                              {returnRequest.items.length} lines
+                            </span>
                           </div>
 
                           <div className="order-return-line-list">
@@ -520,7 +531,9 @@ export function OrderDetailPage() {
                         <div className="order-return-history-subcard">
                           <div className="history-line">
                             <strong>Timeline</strong>
-                            <span className="history-subtle">{returnRequest.events.length} milestones</span>
+                            <span className="history-subtle">
+                              {returnRequest.events.length} milestones
+                            </span>
                           </div>
 
                           <div className="order-return-event-list">
@@ -529,7 +542,8 @@ export function OrderDetailPage() {
                                 <strong>{formatStatusLabel(event.status)}</strong>
                                 <span>{event.message}</span>
                                 <span className="history-subtle">
-                                  {event.actor_role || "system"} • {formatDateTime(event.created_at)}
+                                  {event.actor_role || "system"} •{" "}
+                                  {formatDateTime(event.created_at)}
                                 </span>
                               </div>
                             ))}
@@ -542,17 +556,25 @@ export function OrderDetailPage() {
                           <strong>Last refund attempt did not complete.</strong>
                           <span>{returnRequest.refund_last_error}</span>
                           {returnRequest.refund_next_retry_at ? (
-                            <span>Next retry at {formatDateTime(returnRequest.refund_next_retry_at)}.</span>
+                            <span>
+                              Next retry at {formatDateTime(returnRequest.refund_next_retry_at)}.
+                            </span>
                           ) : null}
                         </div>
                       ) : null}
+
+                      <Link className="text-link" to={`/returns/${returnRequest.id}`}>
+                        View return detail
+                      </Link>
                     </article>
                   ))}
                 </div>
               ) : (
                 <div className="order-return-empty-state">
                   <strong>No return requests yet</strong>
-                  <p>Once you submit a request for this order, the full timeline will appear here.</p>
+                  <p>
+                    Once you submit a request for this order, the full timeline will appear here.
+                  </p>
                 </div>
               )}
             </section>

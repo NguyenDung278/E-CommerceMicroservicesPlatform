@@ -158,6 +158,11 @@
   margin: 0;
 }
 
+.returns-route-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .returns-route-empty {
   gap: 14px;
 }

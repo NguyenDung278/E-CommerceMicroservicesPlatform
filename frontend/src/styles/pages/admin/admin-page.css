@@ -518,6 +518,35 @@
   gap: 14px;
 }
 
+.admin-return-alert-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-return-alert {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+}
+
+.admin-return-alert p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.admin-return-alert-warning {
+  background: rgba(255, 244, 229, 0.94);
+  border: 1px solid rgba(214, 147, 72, 0.18);
+  color: #7e4d14;
+}
+
+.admin-return-alert-danger {
+  background: rgba(255, 236, 236, 0.94);
+  border: 1px solid rgba(203, 87, 87, 0.18);
+  color: #7e1f24;
+}
+
 .admin-return-health-card,
 .admin-return-failure-panel {
   display: grid;

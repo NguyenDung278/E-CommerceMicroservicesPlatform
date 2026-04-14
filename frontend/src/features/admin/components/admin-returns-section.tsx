@@ -6,6 +6,7 @@ import { formatCurrency, formatDateTime, formatStatusLabel } from "@/utils/forma
 type AdminReturnsSectionProps = {
   busyReturnAction: "" | "refund" | "status";
   busyReturnId: string;
+  queueLastUpdatedAt: string;
   isLoadingQueueHealth: boolean;
   isLoadingReturns: boolean;
   limit: number;
@@ -93,6 +94,7 @@ function formatRefundSummary(returnRequest: ReturnRequest) {
 export function AdminReturnsSection({
   busyReturnAction,
   busyReturnId,
+  queueLastUpdatedAt,
   isLoadingQueueHealth,
   isLoadingReturns,
   limit,
@@ -112,7 +114,9 @@ export function AdminReturnsSection({
 }: AdminReturnsSectionProps) {
   const totalPages = Math.max(1, Math.ceil(total / Math.max(limit, 1)));
   const showingFrom = total === 0 || returns.length === 0 ? 0 : (page - 1) * limit + 1;
-  const showingTo = total === 0 || returns.length === 0 ? 0 : Math.min(total, showingFrom + returns.length - 1);
+  const showingTo =
+    total === 0 || returns.length === 0 ? 0 : Math.min(total, showingFrom + returns.length - 1);
+  const queueAlerts = buildReturnQueueAlerts(queueHealth, queueLastUpdatedAt);
 
   return (
     <section className="admin-console-panel admin-returns-panel" id="admin-return-timeline">
@@ -120,8 +124,8 @@ export function AdminReturnsSection({
         <div>
           <h2>Returns timeline</h2>
           <p className="history-subtle">
-            Theo dõi toàn bộ yêu cầu trả hàng, trạng thái hoàn tiền, và lịch sử thao tác của đội
-            vận hành trong cùng một bề mặt.
+            Theo dõi toàn bộ yêu cầu trả hàng, trạng thái hoàn tiền, và lịch sử thao tác của đội vận
+            hành trong cùng một bề mặt.
           </p>
         </div>
       </div>
@@ -129,7 +133,11 @@ export function AdminReturnsSection({
       <div className="admin-return-health-shell">
         <div className="history-line">
           <strong>Refund queue health</strong>
-          {queueHealth?.oldest_pending_at ? (
+          {queueLastUpdatedAt ? (
+            <span className="history-subtle">
+              Auto-refresh mỗi 20 giây • cập nhật {formatDateTime(queueLastUpdatedAt)}
+            </span>
+          ) : queueHealth?.oldest_pending_at ? (
             <span className="history-subtle">
               Job chờ lâu nhất từ {formatDateTime(queueHealth.oldest_pending_at)}
             </span>
@@ -137,6 +145,20 @@ export function AdminReturnsSection({
             <span className="history-subtle">Chưa có job refund_pending tồn đọng.</span>
           )}
         </div>
+
+        {queueAlerts.length > 0 ? (
+          <div className="admin-return-alert-list">
+            {queueAlerts.map((alert) => (
+              <article
+                className={`admin-return-alert admin-return-alert-${alert.severity}`}
+                key={alert.id}
+              >
+                <strong>{alert.title}</strong>
+                <p>{alert.description}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
 
         {isLoadingQueueHealth ? (
           <div className="page-state">Đang tải queue health...</div>
@@ -281,13 +303,17 @@ export function AdminReturnsSection({
           const isBusy = busyReturnId === returnRequest.id;
 
           return (
-            <article className="history-card admin-console-record admin-return-card" key={returnRequest.id}>
+            <article
+              className="history-card admin-console-record admin-return-card"
+              key={returnRequest.id}
+            >
               <div className="history-card-head">
                 <div>
                   <p className="history-kicker">Return</p>
                   <h3>{returnRequest.id}</h3>
                   <p className="history-subtle">
-                    Order {returnRequest.order_id} • {returnRequest.user_email || returnRequest.user_id}
+                    Order {returnRequest.order_id} •{" "}
+                    {returnRequest.user_email || returnRequest.user_id}
                   </p>
                 </div>
                 <span className={getReturnStatusClassName(returnRequest.status)}>
@@ -361,7 +387,9 @@ export function AdminReturnsSection({
                   <strong>Lần hoàn tiền gần nhất chưa thành công.</strong>
                   <span>{returnRequest.refund_last_error}</span>
                   {returnRequest.refund_next_retry_at ? (
-                    <span>Hệ thống sẽ thử lại sau {formatDateTime(returnRequest.refund_next_retry_at)}.</span>
+                    <span>
+                      Hệ thống sẽ thử lại sau {formatDateTime(returnRequest.refund_next_retry_at)}.
+                    </span>
                   ) : null}
                 </div>
               ) : null}
@@ -372,7 +400,9 @@ export function AdminReturnsSection({
                     Refund attempts: {returnRequest.refund_attempt_count ?? 0}
                   </span>
                   {returnRequest.refund_payment_id ? (
-                    <span className="history-subtle">Refund payment: {returnRequest.refund_payment_id}</span>
+                    <span className="history-subtle">
+                      Refund payment: {returnRequest.refund_payment_id}
+                    </span>
                   ) : null}
                 </div>
 
@@ -412,11 +442,76 @@ export function AdminReturnsSection({
         })}
 
         {!isLoadingReturns && returns.length === 0 ? (
-          <p className="history-empty">
-            Chưa có yêu cầu trả hàng nào khớp với bộ lọc hiện tại.
-          </p>
+          <p className="history-empty">Chưa có yêu cầu trả hàng nào khớp với bộ lọc hiện tại.</p>
         ) : null}
       </div>
     </section>
   );
+}
+
+function buildReturnQueueAlerts(queueHealth: ReturnQueueHealth | null, queueLastUpdatedAt: string) {
+  if (!queueHealth) {
+    return [];
+  }
+
+  const alerts: Array<{
+    id: string;
+    severity: "warning" | "danger";
+    title: string;
+    description: string;
+  }> = [];
+
+  if (queueHealth.pending_count >= 10) {
+    alerts.push({
+      id: "pending-backlog",
+      severity: "warning",
+      title: "Backlog refund_pending đang tăng",
+      description: `${queueHealth.pending_count} job đang chờ xử lý. Nên kiểm tra worker và payment-service trước khi hàng đợi phình thêm.`,
+    });
+  }
+
+  if (queueHealth.failed_attempt_count > 0) {
+    alerts.push({
+      id: "failed-attempts",
+      severity: "warning",
+      title: "Có job refund thất bại gần đây",
+      description: `${queueHealth.failed_attempt_count} job đang mang lỗi gần nhất và cần theo dõi retry hoặc can thiệp tay.`,
+    });
+  }
+
+  if (queueHealth.max_attempt_count >= 4) {
+    alerts.push({
+      id: "max-attempts",
+      severity: "danger",
+      title: "Một số job đã retry nhiều lần",
+      description: `Attempt cao nhất đang là ${queueHealth.max_attempt_count}. Hãy rà lại idempotency, lease và lỗi gateway trước khi backlog tích tụ lâu hơn.`,
+    });
+  }
+
+  if (queueHealth.oldest_pending_at) {
+    const oldestPendingAgeMs = Date.now() - Date.parse(queueHealth.oldest_pending_at);
+    if (oldestPendingAgeMs > 10 * 60 * 1000) {
+      alerts.push({
+        id: "oldest-pending",
+        severity: "danger",
+        title: "Job chờ quá lâu",
+        description: `Job refund_pending lâu nhất đã chờ từ ${formatDateTime(queueHealth.oldest_pending_at)}. Luồng hoàn tiền đang có dấu hiệu nghẽn.`,
+      });
+    }
+  }
+
+  if (queueLastUpdatedAt) {
+    const staleAgeMs = Date.now() - Date.parse(queueLastUpdatedAt);
+    if (staleAgeMs > 60 * 1000) {
+      alerts.push({
+        id: "stale-dashboard",
+        severity: "warning",
+        title: "Dashboard queue health đang cũ",
+        description:
+          "Dữ liệu queue health chưa làm mới hơn 60 giây. Hãy kiểm tra kết nối API hoặc worker monitor.",
+      });
+    }
+  }
+
+  return alerts;
 }

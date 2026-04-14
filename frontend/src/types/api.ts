@@ -26,6 +26,7 @@ export type {
   ProductReviewList,
   ProductReviewSummary,
   ReturnEvent,
+  ReturnEvidence,
   ReturnItem,
   ReturnQueueFailure,
   ReturnQueueHealth,

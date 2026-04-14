@@ -136,7 +136,12 @@ func (s *OrderService) ListAdminReturns(ctx context.Context, filters model.Retur
 // GetReturnQueueHealth loads the current refund_pending queue health snapshot
 // for admin monitoring surfaces.
 func (s *OrderService) GetReturnQueueHealth(ctx context.Context) (*model.ReturnQueueHealth, error) {
-	return s.repo.GetReturnQueueHealth(ctx)
+	health, err := s.repo.GetReturnQueueHealth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	recordReturnRefundQueueHealth(health, time.Now())
+	return health, nil
 }
 
 func (s *OrderService) UpdateReturnStatus(ctx context.Context, returnID string, status model.ReturnStatus, actorID, actorRole, message string) error {

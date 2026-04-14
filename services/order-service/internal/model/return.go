@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"io"
+	"time"
+)
 
 type ReturnStatus string
 
@@ -15,26 +18,27 @@ const (
 )
 
 type ReturnRequest struct {
-	ID                      string        `json:"id"`
-	OrderID                 string        `json:"order_id"`
-	UserID                  string        `json:"user_id"`
-	UserEmail               string        `json:"user_email,omitempty"`
-	Status                  ReturnStatus  `json:"status"`
-	Reason                  string        `json:"reason"`
-	Items                   []ReturnItem  `json:"items"`
-	Events                  []ReturnEvent `json:"events,omitempty"`
-	RefundAmount            float64       `json:"refund_amount,omitempty"`
-	RefundChargePaymentID   string        `json:"refund_charge_payment_id,omitempty"`
-	RefundPaymentID         string        `json:"refund_payment_id,omitempty"`
-	RefundLastError         string        `json:"refund_last_error,omitempty"`
-	RefundAttemptCount      int           `json:"refund_attempt_count,omitempty"`
-	RefundRequestedAt       *time.Time    `json:"refund_requested_at,omitempty"`
-	RefundCompletedAt       *time.Time    `json:"refund_completed_at,omitempty"`
-	RefundNextRetryAt       *time.Time    `json:"refund_next_retry_at,omitempty"`
-	RefundIdempotencyKey    string        `json:"-"`
-	RefundProcessingStarted *time.Time    `json:"-"`
-	CreatedAt               time.Time     `json:"created_at"`
-	UpdatedAt               time.Time     `json:"updated_at"`
+	ID                      string           `json:"id"`
+	OrderID                 string           `json:"order_id"`
+	UserID                  string           `json:"user_id"`
+	UserEmail               string           `json:"user_email,omitempty"`
+	Status                  ReturnStatus     `json:"status"`
+	Reason                  string           `json:"reason"`
+	Items                   []ReturnItem     `json:"items"`
+	Events                  []ReturnEvent    `json:"events,omitempty"`
+	Evidence                []ReturnEvidence `json:"evidence,omitempty"`
+	RefundAmount            float64          `json:"refund_amount,omitempty"`
+	RefundChargePaymentID   string           `json:"refund_charge_payment_id,omitempty"`
+	RefundPaymentID         string           `json:"refund_payment_id,omitempty"`
+	RefundLastError         string           `json:"refund_last_error,omitempty"`
+	RefundAttemptCount      int              `json:"refund_attempt_count,omitempty"`
+	RefundRequestedAt       *time.Time       `json:"refund_requested_at,omitempty"`
+	RefundCompletedAt       *time.Time       `json:"refund_completed_at,omitempty"`
+	RefundNextRetryAt       *time.Time       `json:"refund_next_retry_at,omitempty"`
+	RefundIdempotencyKey    string           `json:"-"`
+	RefundProcessingStarted *time.Time       `json:"-"`
+	CreatedAt               time.Time        `json:"created_at"`
+	UpdatedAt               time.Time        `json:"updated_at"`
 }
 
 type ReturnItem struct {
@@ -56,6 +60,26 @@ type ReturnEvent struct {
 	ActorRole string       `json:"actor_role,omitempty"`
 	Message   string       `json:"message"`
 	CreatedAt time.Time    `json:"created_at"`
+}
+
+type ReturnEvidence struct {
+	ID             string    `json:"id"`
+	ReturnID       string    `json:"return_id"`
+	FileName       string    `json:"file_name"`
+	ContentType    string    `json:"content_type"`
+	SizeBytes      int64     `json:"size_bytes"`
+	URL            string    `json:"url"`
+	UploadedBy     string    `json:"uploaded_by,omitempty"`
+	UploadedByRole string    `json:"uploaded_by_role,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	StorageKey     string    `json:"-"`
+}
+
+type ReturnEvidenceUpload struct {
+	FileName    string
+	ContentType string
+	Size        int64
+	Reader      io.Reader
 }
 
 type ReturnFilters struct {

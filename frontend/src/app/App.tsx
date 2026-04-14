@@ -71,6 +71,11 @@ const OrdersPage = lazy(() =>
 const ReturnsPage = lazy(() =>
   import("@/pages/account/returns-page").then((module) => ({ default: module.ReturnsPage }))
 );
+const ReturnDetailPage = lazy(() =>
+  import("@/pages/account/return-detail-page").then((module) => ({
+    default: module.ReturnDetailPage,
+  }))
+);
 const AddressesPage = lazy(() =>
   import("@/pages/account/addresses-page").then((module) => ({
     default: module.AddressesPage,
@@ -142,6 +147,10 @@ export default function App() {
             <Route
               element={<ProtectedRoute>{withSuspense(<ReturnsPage />)}</ProtectedRoute>}
               path="returns"
+            />
+            <Route
+              element={<ProtectedRoute>{withSuspense(<ReturnDetailPage />)}</ProtectedRoute>}
+              path="returns/:returnId"
             />
             <Route
               element={<ProtectedRoute>{withSuspense(<AddressesPage />)}</ProtectedRoute>}

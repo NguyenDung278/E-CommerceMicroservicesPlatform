@@ -40,6 +40,7 @@ function buildReturnRequest(overrides: Partial<ReturnRequest> = {}): ReturnReque
         created_at: "2026-04-13T10:00:00Z",
       },
     ],
+    evidence: [],
     created_at: "2026-04-13T10:00:00Z",
     updated_at: "2026-04-13T10:00:00Z",
     ...overrides,
@@ -56,6 +57,7 @@ function renderReturnsSection(
   const defaultProps: React.ComponentProps<typeof AdminReturnsSection> = {
     busyReturnAction: "",
     busyReturnId: "",
+    queueLastUpdatedAt: "2026-04-13T10:15:00Z",
     isLoadingQueueHealth: false,
     isLoadingReturns: false,
     limit: 6,
@@ -138,6 +140,7 @@ describe("AdminReturnsSection", () => {
 
     expect(container.textContent).toContain("Returns timeline");
     expect(container.textContent).toContain("Refund queue health");
+    expect(container.textContent).toContain("Auto-refresh mỗi 20 giây");
     expect(container.textContent).toContain("gateway timeout");
     expect(container.textContent).toContain("return-1");
     expect(container.textContent).toContain("alice@example.com");
@@ -155,7 +158,9 @@ describe("AdminReturnsSection", () => {
 
   it("wires filter and pagination callbacks", () => {
     const { container, props } = renderReturnsSection();
-    const queryInput = container.querySelector<HTMLInputElement>('input[name="admin-return-query"]');
+    const queryInput = container.querySelector<HTMLInputElement>(
+      'input[name="admin-return-query"]'
+    );
     const statusSelect = container.querySelector<HTMLSelectElement>(
       'select[name="admin-return-status-filter"]'
     );
@@ -244,6 +249,21 @@ describe("AdminReturnsSection", () => {
     });
 
     expect(container.textContent).toContain("Đang tải queue health...");
+  });
+
+  it("shows queue alerts when backlog and retries look risky", () => {
+    const { container } = renderReturnsSection({
+      queueHealth: buildQueueHealth({
+        pending_count: 18,
+        failed_attempt_count: 3,
+        max_attempt_count: 5,
+        oldest_pending_at: "2026-04-13T09:30:00Z",
+      }),
+    });
+
+    expect(container.textContent).toContain("Backlog refund_pending đang tăng");
+    expect(container.textContent).toContain("Một số job đã retry nhiều lần");
+    expect(container.textContent).toContain("Job chờ quá lâu");
   });
 
   it("calls onUpdateStatus with the selected lifecycle transition", () => {
