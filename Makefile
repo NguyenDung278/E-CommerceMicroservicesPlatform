@@ -12,6 +12,7 @@ COMPOSE_NETWORK ?= ecommerce-network
 POSTGRES_CONTAINER ?= ecommerce-postgres
 GO_DOCKER_IMAGE ?= golang:1.25-alpine
 POSTGRES_CLIENT_IMAGE ?= postgres:15-alpine
+MIGRATE_DOCKER_IMAGE ?= migrate/migrate:v4.18.3
 FRONTEND_ADMIN_URL ?= http://127.0.0.1:5174/admin
 STOREFRONT_API_BASE_URL ?= http://127.0.0.1:8080
 STOREFRONT_SYNC_PRODUCT_STATUS ?= active
@@ -101,24 +102,96 @@ k8s-delete:
 
 migrate-up:
 	@echo "==> Running migrations UP for all services"
-	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" up
-	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" up
-	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" up
-	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" up
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/user-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_user?sslmode=disable" up; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/product-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_product?sslmode=disable" up; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/order-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_order?sslmode=disable" up; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/payment-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_payment?sslmode=disable" up
 
 migrate-down:
 	@echo "==> Running migrations DOWN for all services"
-	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" down -all
-	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" down -all
-	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" down -all
-	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" down -all
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/payment-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_payment?sslmode=disable" down -all; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/order-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_order?sslmode=disable" down -all; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/product-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_product?sslmode=disable" down -all; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/user-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_user?sslmode=disable" down -all
 
 migrate-force:
 	@echo "==> Forcing migration versions to 1"
-	migrate -path services/user-service/migrations -database "$(USER_DB_URL)" force 1
-	migrate -path services/product-service/migrations -database "$(PRODUCT_DB_URL)" force 1
-	migrate -path services/order-service/migrations -database "$(ORDER_DB_URL)" force 1
-	migrate -path services/payment-service/migrations -database "$(PAYMENT_DB_URL)" force 1
+	@POSTGRES_USER="$$(grep -E '^POSTGRES_USER=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_PASSWORD="$$(grep -E '^POSTGRES_PASSWORD=' "$(COMPOSE_ENV_FILE)" | tail -1 | cut -d= -f2-)"; \
+	POSTGRES_USER="$${POSTGRES_USER:-admin}"; \
+	POSTGRES_PASSWORD="$${POSTGRES_PASSWORD:-change-me-db-password}"; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/user-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_user?sslmode=disable" force 1; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/product-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_product?sslmode=disable" force 1; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/order-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_order?sslmode=disable" force 1; \
+	docker run --rm --network "$(COMPOSE_NETWORK)" \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		"$(MIGRATE_DOCKER_IMAGE)" \
+		-path /workspace/services/payment-service/migrations \
+		-database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@postgres:5432/ecommerce_payment?sslmode=disable" force 1
 
 storefront-import-dry-run:
 	@echo "==> Dry-run importing storefront workbook into product-service"

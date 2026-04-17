@@ -1,139 +1,323 @@
 # Feature Tracker
 
-Tài liệu này theo dõi hai thứ:
+File này chỉ theo dõi **những gì chưa làm hoặc chưa khép kín**.
 
-- feature nào đang thật sự có trong source code hiện tại
-- hướng mở rộng nào đáng làm tiếp, bám sát trạng thái repo và định hướng refactor frontend theo hướng dễ đọc, dễ quản lý, dễ mở rộng
+Những feature đã chạy ổn trong source hiện tại sẽ không còn được liệt kê ở đây nữa, để tracker bớt nhiễu và dùng đúng như một backlog mở. Nếu cần xem hiện trạng toàn hệ thống, ưu tiên đọc:
 
-Các nhãn trạng thái dùng trong file này:
+- `README.md`
+- `docs/README.md`
+- `LOGIC_FLOW.md`
 
-- `Đang dùng`: đã có trong runtime mặc định hoặc đã được UI/backend dùng thật
-- `Optional`: có trong code nhưng phụ thuộc config hoặc hạ tầng phụ trợ
-- `Partial`: đã có một phần nhưng flow chưa khép kín hoặc UI/backend chưa khớp hoàn toàn
-- `Experimental`: đã có nhánh triển khai nhưng chưa phải đường chạy mặc định
+---
 
-## Hiện trạng feature theo domain
+## Cách đọc tracker này
 
-### 1. Tài khoản, danh tính và phân quyền
+Các nhãn ưu tiên:
 
-- `Đang dùng`: đăng ký, đăng nhập, refresh token, verify email, forgot password, reset password qua `user-service` và gateway.
-- `Đang dùng`: lấy/cập nhật profile người dùng.
-- `Đang dùng`: quản lý địa chỉ giao hàng ở backend, gồm create/list/update/delete/set-default.
-- `Đang dùng`: admin có thể xem danh sách user và đổi role qua `/api/v1/admin/users`.
-- `Optional`: Google OAuth đã có start/callback/exchange flow, nhưng chỉ hoạt động khi cấu hình `OAUTH_GOOGLE_*`.
-- `Đang dùng`: xác minh số điện thoại qua Telegram OTP đã có đầy đủ status/send/resend/verify, kèm theo OTP rate limiting.
-- `Đang dùng`: user profile management, chuẩn hoá đầu vào (input normalization) cho email, số điện thoại, và tên người dùng.
-- `Đang dùng`: local bootstrap account cho `admin` và `staff` chỉ dành cho development.
-- `Partial`: frontend account area đã có nhiều trang, nhưng phần đổi mật khẩu và preference/security chưa nối trọn vẹn với capability backend hiện có.
+- `P0`: ảnh hưởng correctness, doanh thu, hoặc rủi ro production
+- `P1`: rất nên làm để hoàn thiện sản phẩm và giảm nợ kỹ thuật
+- `P2`: có giá trị nhưng chưa phải nút thắt lớn nhất hiện tại
 
-### 2. Catalog, sản phẩm và media
+Các nhãn trạng thái:
 
-- `Đang dùng`: CRUD sản phẩm với các field như brand, sku, tags, variants, image_url, image_urls, status `draft|active|inactive`.
-- `Đang dùng`: product listing public có cursor pagination, `next_cursor`, `has_next`, filter theo category, brand, tag, status, search, min/max price, size, color, sort.
-- `Đang dùng`: review sản phẩm gồm list, summary, lấy review của tôi, create/update/delete review được tối ưu bằng Redis cache, transaction bảo đảm tính nhất quán, và có benchmark đánh giá hiệu năng.
-- `Đang dùng`: upload ảnh sản phẩm qua endpoint `/api/v1/products/uploads`.
-- `Optional`: MinIO object storage đã được bật trong compose và được `product-service` dùng nếu object storage enabled.
-- `Optional`: Elasticsearch search index đã được bật trong compose; `product-service` có sync search index khi startup nếu config bật.
-- `Đang dùng`: gRPC product lookup đang được `cart-service` và `order-service` dùng để đọc thông tin sản phẩm/stock có tính authoritative.
-- `Đang dùng`: low-stock monitor chạy nền trong `product-service`.
-- `Đang dùng`: ở frontend chính, có 4 trang thiết kế đặc biệt (editorial category page) với custom layout và filter logic: `Shop Men`, `Shop Women`, `Footwear`, `Accessories`.
+- `Open`: chưa bắt đầu hoặc chưa có implementation đáng kể
+- `Partial`: đã có một phần nhưng flow chưa khép kín hoặc FE/BE chưa đồng bộ
+- `Decision`: cần chốt hướng trước khi đầu tư thêm
 
-### 3. Cart, checkout và giao vận
+---
 
-- `Đang dùng`: `cart-service` lưu giỏ hàng của user trong Redis với TTL, hỗ trợ get/add/update/remove/clear cart.
-- `Đang dùng`: frontend React có guest cart trong `localStorage` và merge lại sau login bằng cách replay `addToCart`.
-- `Đang dùng`: checkout flow gọi `order-service` để preview order trước khi create.
-- `Đang dùng`: shipping method hiện có `standard`, `express`, `pickup`.
-- `Đang dùng`: coupon đã có backend create/list trong admin và được dùng trong order flow.
-- `Partial`: chưa có server-side guest cart hoặc endpoint merge cart riêng; merge hiện nằm ở logic frontend.
+## 1. Production Correctness Và Reliability
 
-### 4. Đơn hàng, timeline và vận hành admin
+### P0 · Open · Stock Reservation / Allocation
 
-- `Đang dùng`: user có thể preview, tạo đơn, xem danh sách đơn, xem chi tiết đơn, xem timeline/event, hủy đơn.
-- `Đang dùng`: admin/staff có thể xem report, list đơn, xem chi tiết, xem event, cập nhật trạng thái, hủy đơn.
-- `Đang dùng`: order-service có `audit_entries` và `order_events` để lưu vết.
-- `Đang dùng`: order-service sử dụng HTTP client để lấy dữ liệu payment logic.
-- `Đang dùng`: order-service consume payment event từ RabbitMQ qua cơ chế Outbox/Inbox message pattern để bảo đảm tính bền vững (durable message processing).
-- `Đang dùng`: order-service restore stock khi cancel flow yêu cầu.
-- `Đang dùng`: endpoint `/api/v1/catalog/popularity` đang được frontend dùng cho một số khu vực catalog/home.
-- `Partial`: admin order listing vẫn theo page/limit/total metadata, chưa đi theo cursor như product catalog.
+Mục tiêu:
 
-### 5. Thanh toán
+- giữ tồn kho trong thời gian ngắn khi user bước vào checkout hoặc chuẩn bị thanh toán
+- tránh oversell khi nhiều người mua cùng lúc
 
-- `Đang dùng`: tạo payment, lấy payment history, lấy payment detail, lấy payment theo order, refund cho admin/staff.
-- `Đang dùng`: webhook MoMo đã có verify signature bằng secret cấu hình.
-- `Đang dùng`: payment-service publish `payment.completed`, `payment.failed`, `payment.refunded` sang RabbitMQ.
-- `Đang dùng`: model payment đã có các field lifecycle tương đối đầy đủ như gateway provider, gateway transaction ID, checkout URL, signature_verified, outstanding_amount.
-- `Partial`: backend chấp nhận nhiều payment method hơn (`manual`, `momo`, `credit_card`, `digital_wallet`, `demo`), nhưng frontend chính hiện chủ yếu expose `manual` và `momo`.
-- `Partial`: chưa thấy idempotency key rõ ràng cho initiation/payment retry path.
+Vì sao còn mở:
 
-### 6. Thông báo và async workflow
+- hiện flow chủ yếu mới kiểm tra tồn khi preview/create order và hoàn tồn khi hủy đơn
+- chưa có reserve transaction-safe theo kiểu allocation rõ ràng
 
-- `Đang dùng`: `notification-service` xử lý worker consume RabbitMQ bằng Redis store, tích hợp retry publisher và lưu trữ metrics cho queue state, delivery outcome.
-- `Đang dùng`: service này có HTTP server nội bộ tối thiểu cho health/metrics, không phải public business API.
-- `Đang dùng`: sử dụng kiến trúc Outbox và Inbox queue cho các luồng event bất đồng bộ quan trọng thay vì publish mất mát.
+Gợi ý triển khai:
 
-### 7. Frontend React + Vite (`frontend/`)
+- ưu tiên giải pháp đơn giản trong `product-service` hoặc `order-service`
+- dùng PostgreSQL transaction + row lock trước khi nghĩ tới distributed lock
+- làm rõ TTL release khi checkout/payment không hoàn tất
 
-- `Đang dùng`: đây là frontend local chính, có storefront, auth pages, cart, checkout, profile, orders, payments, admin area.
-- `Đang dùng`: API layer được quy hoạch tập trung lại cùng với kiến trúc dựa theo module tính năng (feature-based modular design), giúp code dễ quản lý hơn.
-- `Đang dùng`: `AuthProvider` và `CartProvider` đang là hai provider chính cho session/cart flow.
-- `Đang dùng`: `/admin` đã nối với API thật cho products, upload ảnh, coupon, order report/listing, payment history/refund, user role.
-- `Partial`: một số trang account vẫn thiên về UI hoặc derived data hơn là flow nghiệp vụ hoàn chỉnh, nhất là `SecurityPage`, `NotificationsPage`, một phần `AddressesPage`.
+### P0 · Partial · Idempotency Cho Create Order
 
-### 8. Frontend Next.js (`client/`)
+Mục tiêu:
 
-- `Experimental`: `client/` đã có nhiều route storefront/account, provider cho auth/cart/wishlist và Dockerfile riêng.
-- `Experimental`: hỗ trợ kịch bản standalone preparation cho production, cấu hình image host policy cho Next.js optimization, và chia sẻ các API types tiêu chuẩn.
-- `Experimental`: chưa có service `client` trong Docker Compose mặc định.
-- `Experimental`: CI hiện không build `client/`; workflow publish Docker cũng không push image cho `client/`.
-- `Experimental`: phù hợp để thử nghiệm hướng UI khác, nhưng chưa nên coi là source of truth cho onboarding.
+- ngăn tạo trùng order khi client retry hoặc user bấm nhiều lần
 
-### 9. DevOps, observability và local runtime
+Vì sao còn mở:
 
-- `Đang dùng`: Docker Compose hiện có đầy đủ `frontend`, `api-gateway`, 6 Go services, PostgreSQL, Redis, RabbitMQ, MinIO, Jaeger, Elasticsearch, Prometheus, Grafana, Nginx edge.
-- `Đang dùng`: gateway và các service có tracing/metrics/logging theo cấu trúc hiện có.
-- `Đang dùng`: CI chạy repo-safety, Go checks cho mọi module và build `frontend`.
-- `Đang dùng`: Docker publish workflow build/push `api-gateway`, tất cả Go services và `frontend`.
-- `Partial`: Prometheus/Grafana có trong compose nhưng hiện chưa publish port ra host.
+- `payment-service` đã có idempotency cho payment/refund
+- nhưng `create order` vẫn là flow nên được harden thêm
 
-## Các điểm lệch hoặc khoảng trống đang thấy từ source
+Gợi ý triển khai:
 
-- `frontend/src/lib/api/cart.ts` có helper `mergeCart`, nhưng backend/gateway hiện không có route `/api/v1/cart/merge`. Merge thật đang nằm ở logic provider phía frontend.
-- `frontend/src/lib/api/order.ts` đang gọi hủy đơn bằng `POST`, trong khi route backend/gateway user hiện là `PUT /api/v1/orders/:id/cancel`.
-- `frontend/src/lib/api/payment.ts` có helper `verifyPaymentSignature`, nhưng backend không có route `/api/v1/payments/:id/verify`.
-- `frontend` có UI cho security/preferences/notifications, nhưng chưa phải mọi hành vi đều có backend API chuyên biệt hoặc flow hoàn chỉnh.
-- `client/README.md` mô tả phạm vi hẹp hơn so với source hiện tại của `client/`.
-- local runtime mặc định không chạy `client/`, không expose Postgres/Redis/RabbitMQ ra host, và `http://localhost` không phải frontend chính.
+- nhận `Idempotency-Key` ở order create path
+- lưu mapping `user + key + request hash + order_id`
+- replay an toàn nếu request giống hệt
+- conflict nếu cùng key nhưng payload khác
 
-## Hướng mở rộng gợi ý bám theo codebase hiện tại (Best Solutions cho E-Commerce)
+### P0 · Partial · Guest Cart Merge Ở Backend
 
-Dưới đây là lộ trình các tính năng đáng đầu tư nhất, bám sát các luồng microservices hiện tại để giúp dự án trở thành một nền tảng thương mại điện tử cấp độ Production, đáp ứng yêu cầu khắt khe về UI/UX và tính chính xác dữ liệu gốc.
+Mục tiêu:
 
-### 1. Backend (Microservices, Hiệu năng, và An toàn Dữ liệu)
+- đưa logic merge guest cart xuống backend để thống nhất dữ liệu giỏ hàng
 
-| Ưu tiên | Đề xuất (Backend) | Giá trị mang lại | Phụ thuộc chính / Giải pháp kỹ thuật |
-| --- | --- | --- | --- |
-| **P0** | **Quản lý Tồn kho & Đặt cọc (Stock Reservation / Allocation).** Lock số lượng khi user bắt đầu quá trình thanh toán, release sau 15 phút nếu hỏng/cancel. | Chống lỗi bán vượt hàng (Overselling) trong các dịp Flash Sale hay cao điểm khi nhiều khách cùng mua 1 sản phẩm. | Dùng Row-level lock (`SELECT FOR UPDATE`) ở `product-service` hoặc Redis Distributed Locks. Tách transaction rõ ràng. |
-| **P0** | **Idempotency Key cho Order & Payment.** Ngăn chặn hành động bị lặp lại khi network rớt gói tin hoặc user bấm "Thanh toán" liên tục nhiều lần. | Chống trừ tiền 2 lần (double charge) hay tạo trùng đơn hàng cho cùng một session thanh toán. | Yêu cầu Frontend truyền `Idempotency-Key` header, Backend cache key này trên Redis trong 24h. |
-| **P0** | **Cung cấp API Merge Guest Cart.** Mang logic gộp giỏ hàng (Guest -> Authenticated) xuống Backend `cart-service` thay vì để ở React Provider. | Server quản lý giỏ hàng thống nhất, chống thất thoát dữ liệu ngay cả khi user đăng nhập trên thiết bị khác. | Khai báo API `/api/v1/cart/merge` xử lý gộp Item IDs qua cache Redis. |
-| **P1** | **Nâng cấp Search Engine chuyên sâu (Elasticsearch).** Triển khai Autocomplete, Fuzzy Search (tìm sai chính tả vẫn ra), và Faceted/Filter Search (lọc động). | Tính năng không thể thiếu để user tìm thấy đúng món hàng. Giảm tải truy vấn chéo nhiều bảng cho database PostgreSQL. | `product-service` chuyển queries Product List nặng từ DB sang Elasticsearch. Tập trung build Index Data. |
-| **P1** | **Server-Sent Events (SSE) / WebSockets cho Trạng thái Đơn hàng.** Push kết quả thanh toán từ Gateway trực tiếp xuống thiết bị User. | Trải nghiệm App Real-time mượt mà, user không cần F5 (Reload) để biết đơn đã thanh toán xong hay chưa. | Nối tín hiệu từ RabbitMQ Payment Worker về API-Gateway để phát stream xuống Client. |
-| **P2** | **Tối ưu Admin Dashboard với Materialized Views / Cache.** Cung cấp báo cáo doanh thu, sản phẩm bán chạy bằng tổng hợp background. | Giao diện Backoffice tính toán hàng triệu records không làm treo hệ thống User (`COUNT(*) + OFFSET`). | Thiết lập Cron jobs hoặc Postgres Materialized Views ở `order-service` để phân tích report. |
+Vì sao còn mở:
 
-### 2. Frontend (React/Vite & Next.js, SEO, UI/UX)
+- merge hiện vẫn chủ yếu nằm ở frontend provider
+- gateway handler hiện không expose `POST /api/v1/cart/merge`
 
-| Ưu tiên | Đề xuất (Frontend) | Giá trị mang lại | Phụ thuộc chính / Giải pháp kỹ thuật |
-| --- | --- | --- | --- |
-| **P0** | **Đẩy mạnh SEO với Next.js (SSR / SSG) làm Storefront chính.** Đưa thư mục `client/` trở thành kênh bán lẻ mặc định thay vì Vite SPA. React/Vite lùi về phục vụ luồng App Private / Admin Backoffice. | Nguồn sống E-Commerce đến từ Organic Traffic (Google Search). Storefront SPA hiện tại rất khó index tự nhiên. | Merge các Components từ `frontend/` sang `client/`, cấu hình CI/CD Docker image chuẩn cho nhánh Next.js. |
-| **P0** | **Tối ưu UI/UX State và Skeleton Loaders.** Xóa bỏ giao diện giật/nháy (layout shift) trong quá trình call API bằng cách áp dụng bộ khung Skeleton thay thế spinner ở mọi page. | Tăng điểm Core Web Vitals (LCP, CLS, FID) mang lại cảm giác premium, "bấm là load tức thì". | Áp dụng SWR / React Query trên frontend giúp cache tạm dữ liệu Catalog / Profile giữa các lần chuyển trang. |
-| **P1** | **Triển khai Lazy Loading, Image Optimization tự động.** Mọi hình ảnh product listing phải được tự thu nhỏ, lazy load (chỉ render khi scroll tới). | Giảm dung lượng tải trang xuống 80%, site render nhanh hơn cho mạng di động yếu. | Dùng `next/image` và CDN provider policy phù hợp để tự format WebP / auto-sizing. |
-| **P2** | **Phân quyền và Bảo mật Màn hình theo Role.** Tái cấu trúc bộ component chặn trang admin dựa theo logic Role-Based / JWT Expiration hợp lý. Xử lý timeout phiên tự động. | Mở rộng dễ dàng cho các role cụ thể trong Admin: Content Writer, Accountant, Super Admin thay vì chỉ 1 role. | Dùng Middleware Authentication tập trung của cả API & Frontend App. |
-| **P3** | **Cá nhân hóa (Personalization) / Behavior Tracking.** Block "Sản phẩm vừa xem" (Recently Viewed) hoặc "Có thể bạn cũng thích". Khuyến nghị Cross-sell, Up-sell lúc Checkout. | Đẩy mạnh AOV (Average Order Value) - giá trị đơn hàng trung bình. Bí quyết tăng lợi nhuận sau chốt sale. | Frontend bám theo Storage Metadata kết hợp thuật toán Gợi ý nhẹ từ Backend `product-service`. |
+Gợi ý triển khai:
 
-## Cách dùng file này
+- thêm route thật ở gateway + cart-service
+- merge theo product/variant/quantity ở server
+- giữ logic client càng mỏng càng tốt
 
-- Khi thêm feature mới, hãy cập nhật cả phần "Hiện trạng feature" và "Hướng mở rộng" nếu nó làm đổi roadmap.
-- Khi refactor frontend, ưu tiên làm rõ trạng thái `Partial` trước khi bổ sung abstraction mới.
-- Khi backend thay đổi contract, hãy rà lại ngay những dòng đang ghi "điểm lệch" để tránh tài liệu cũ tiếp tục tồn tại.
+### P1 · Partial · Hardening Payment Retry Story
 
+Mục tiêu:
+
+- làm payment flow rõ ràng hơn khi timeout, redirect thất bại, hoặc webhook đến muộn
+
+Vì sao còn mở:
+
+- create payment và refund đã có idempotency
+- nhưng end-to-end retry story giữa checkout UI, payment status polling, webhook replay, và order sync vẫn nên được document + verify sâu hơn
+
+Gợi ý triển khai:
+
+- bổ sung test replay/retry end-to-end
+- làm rõ state transition trong docs và admin UI
+- thêm metric cho replay/idempotent hit/conflict
+
+---
+
+## 2. Storefront Và Commerce UX
+
+### P1 · Partial · Payment Method Parity Trên Frontend
+
+Mục tiêu:
+
+- làm cho frontend expose các payment method hợp lý hơn với backend capability
+
+Vì sao còn mở:
+
+- backend hỗ trợ nhiều method hơn
+- frontend chính hiện mới thiên về `manual` và `momo`
+
+Gợi ý triển khai:
+
+- quyết định method nào thực sự muốn support trong runtime local
+- chỉ expose method có flow hoàn chỉnh
+- tránh để UI gợi ý những lựa chọn chưa dùng được
+
+### P1 · Partial · Shopper Return Experience
+
+Mục tiêu:
+
+- hoàn thiện luồng đổi trả phía người dùng cuối
+
+Vì sao còn mở:
+
+- backend/admin return flow đã có nhiều phần mạnh
+- nhưng shopper-facing return UX vẫn chưa là một hành trình commerce hoàn chỉnh
+
+Gợi ý triển khai:
+
+- return request form rõ lý do, ảnh chứng minh, timeline
+- status copy dễ hiểu cho người dùng
+- liên kết tốt hơn giữa order detail và return detail
+
+### P1 · Open · Wishlist-Driven Retention
+
+Mục tiêu:
+
+- biến wishlist thành công cụ retention thay vì chỉ là nơi lưu món
+
+Gợi ý:
+
+- back-in-stock alerts
+- price-drop alerts
+- saved sizes / preferred fit
+- handoff mượt hơn từ wishlist sang cart
+
+### P2 · Partial · Search Và Discovery Nâng Cao
+
+Mục tiêu:
+
+- giúp user tìm sản phẩm tốt hơn khi catalog lớn lên
+
+Vì sao còn mở:
+
+- search cơ bản và Elasticsearch integration đã có nền
+- nhưng autocomplete/fuzzy/faceted search sâu hơn vẫn chưa thành trải nghiệm mạnh
+
+Gợi ý:
+
+- autocomplete cho storefront search
+- typo tolerance nếu dùng Elasticsearch
+- facet rõ theo category/brand/size/color/price
+
+---
+
+## 3. Admin, Reporting, Và Vận Hành
+
+### P1 · Partial · Admin Order Listing Scale Story
+
+Mục tiêu:
+
+- làm cho admin list/report bền hơn khi dữ liệu tăng
+
+Vì sao còn mở:
+
+- product catalog public đã có cursor pagination
+- admin order listing vẫn thiên về `COUNT(*) + OFFSET/LIMIT`
+
+Gợi ý triển khai:
+
+- xác định endpoint nóng thật sự trước
+- cân nhắc cursor hoặc pre-aggregated reporting path
+- đo bằng query plan và latency trước khi tối ưu
+
+### P1 · Partial · Async Refund Queue Observability
+
+Mục tiêu:
+
+- nhìn rõ hơn sức khỏe của refund queue và failure mode
+
+Vì sao còn mở:
+
+- hiện đã có metrics và admin surface khá tốt
+- nhưng đây vẫn là vùng rất đáng đầu tư thêm vì chạm tiền và hậu mãi
+
+Gợi ý:
+
+- alerting rõ cho backlog tăng
+- dashboard rõ retry age / stuck jobs
+- playbook xử lý incident cho refund_pending
+
+### P2 · Open · Order / Payment Audit Narrative Cho Support
+
+Mục tiêu:
+
+- giúp support/admin đọc được câu chuyện của đơn hàng và payment nhanh hơn
+
+Gợi ý:
+
+- timeline copy rõ hơn
+- gom event kỹ thuật thành narrative dễ đọc
+- link sâu giữa order detail, payment detail, return detail
+
+---
+
+## 4. Frontend Runtime Direction
+
+### P1 · Decision · Chốt Vai Trò `frontend/` Và `client/`
+
+Mục tiêu:
+
+- tránh kéo dài trạng thái "2 UI cùng tồn tại nhưng không cùng mục tiêu"
+
+Hiện trạng:
+
+- `frontend/` vẫn là local UI chính và có admin surface rõ nhất
+- `client/` đã có Docker profile riêng để smoke test, nhưng chưa là đường chạy mặc định
+
+Điều cần chốt:
+
+- storefront dài hạn có tiếp tục ở `frontend/` hay chuyển dần sang `client/`
+- admin có ở lại `frontend/` hay tách app riêng
+- CI/CD/publish image sẽ bám theo hướng nào
+
+Nếu chưa chốt, đừng đầu tư refactor lớn theo cả hai hướng cùng lúc.
+
+---
+
+## 5. DevEx Và Docs
+
+### P1 · Open · Postman / API Contract Collection Chính Thức
+
+Mục tiêu:
+
+- có một collection hoặc contract suite chính thức bám route thật
+
+Vì sao nên làm:
+
+- hiện route và helper cũ có chỗ đã lệch nhau
+- tài liệu đã được cập nhật, nhưng collection sống sẽ giúp verify nhanh hơn
+
+Gợi ý:
+
+- build một Postman collection hoặc script-based smoke test từ gateway route thật
+- ưu tiên auth, cart, order, payment, returns
+
+### P1 · Open · End-To-End Verification Checklist Theo Flow
+
+Mục tiêu:
+
+- giảm tình trạng sửa UI xong nhưng không verify đủ backend, hoặc ngược lại
+
+Gợi ý:
+
+- tạo checklist riêng cho `catalog`, `checkout`, `payment`, `returns`
+- mỗi flow nên có happy path + negative path + async verification
+
+---
+
+## 6. 5 Gợi Ý Nên Làm Tiếp Ngay
+
+Nếu chỉ chọn 5 việc có giá trị cao nhất trong giai đoạn này, mình khuyên ưu tiên:
+
+1. `Stock Reservation / Allocation`
+2. `Idempotency Cho Create Order`
+3. `Guest Cart Merge Ở Backend`
+4. `Admin Order Listing Scale Story`
+5. `Chốt Vai Trò frontend/client`
+
+Đây là 5 việc cân bằng tốt giữa:
+
+- correctness
+- khả năng scale
+- trải nghiệm người dùng
+- giảm nợ kỹ thuật
+- rõ hướng phát triển dài hạn
+
+---
+
+## 7. 5 Gợi Ý Nếu Muốn Tăng Giá Trị Sản Phẩm
+
+Nếu mục tiêu là tăng chất lượng sản phẩm và conversion thay vì hardening thuần backend, hãy cân nhắc:
+
+1. `Wishlist back-in-stock / price-drop alerts`
+2. `Saved sizes / preferred fit`
+3. `Shopper return experience hoàn chỉnh`
+4. `Search autocomplete + facet rõ hơn`
+5. `Order/payment/return timeline dễ hiểu cho support và user`
+
+---
+
+## 8. Cách Dùng Tracker Này
+
+Khi một hạng mục đã hoàn thành thật sự:
+
+- xóa nó khỏi tracker này
+- cập nhật `README.md`, `LOGIC_FLOW.md`, hoặc docs domain liên quan nếu contract/runtime thay đổi
+
+Khi phát sinh ý tưởng mới:
+
+- chỉ thêm nếu nó là nhu cầu thật hoặc rủi ro thật
+- tránh biến file này thành wish-list quá dài nhưng không có thứ tự ưu tiên
+
+Mục tiêu của tracker là giúp team nhìn rõ:
+
+- cái gì chưa xong
+- cái gì đáng làm tiếp
+- cái gì nên ưu tiên trước để repo tiến gần hơn tới một sản phẩm commerce production-ready

@@ -23,6 +23,18 @@ Ba lớp tài liệu chính:
 4. [learning/03-source-reading-roadmap.md](./learning/03-source-reading-roadmap.md)
 5. [annotated/README.md](./annotated/README.md)
 
+### Lộ trình nếu mục tiêu của bạn là vừa hiểu project vừa phát triển sự nghiệp Golang Developer
+
+1. [learning/00-local-setup.md](./learning/00-local-setup.md)
+2. [learning/03-source-reading-roadmap.md](./learning/03-source-reading-roadmap.md)
+3. [learning/06-testing-and-verification.md](./learning/06-testing-and-verification.md)
+4. [learning/10-guide-to-debugging.md](./learning/10-guide-to-debugging.md)
+5. [learning/12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md)
+6. [learning/13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md)
+7. [learning/14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md)
+
+Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết", mà muốn dùng repo này để luyện tư duy backend Go thực chiến, hiểu production risk, và xây một nền tảng nghề nghiệp rõ ràng hơn.
+
 ### Lộ trình nếu bạn đang sửa frontend React + Vite
 
 1. [deep-dive/frontend-architecture.md](./deep-dive/frontend-architecture.md)
@@ -51,6 +63,8 @@ Ba lớp tài liệu chính:
 - [10-guide-to-debugging.md](./learning/10-guide-to-debugging.md): debug Docker, gateway, service, trace và DB
 - [11-senior-source-code-review-guide.md](./learning/11-senior-source-code-review-guide.md): review toàn repo theo góc nhìn senior
 - [12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md): lộ trình học để biến hiểu biết repo thành năng lực xây sản phẩm commerce thực chiến
+- [13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md): tài liệu chi tiết để hiểu project theo flow thật và chuyển kiến thức đó thành năng lực nghề nghiệp Golang Developer
+- [14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md): hướng dẫn thực dụng về Go foundation trước microservice, cách luyện SQL/transaction/idempotency, và các feature nên build để đi phỏng vấn backend mạnh hơn
 
 ### `deep-dive/`
 
@@ -95,3 +109,16 @@ Ba lớp tài liệu chính:
 5. [annotated/frontend-source-map.md](./annotated/frontend-source-map.md)
 6. [annotated/order-service.md](./annotated/order-service.md)
 7. [annotated/payment-service.md](./annotated/payment-service.md)
+
+## Nếu bạn muốn dùng repo này như một "trường học nghề"
+
+Hãy đọc theo cụm sau:
+
+1. [learning/03-source-reading-roadmap.md](./learning/03-source-reading-roadmap.md)
+2. [learning/06-testing-and-verification.md](./learning/06-testing-and-verification.md)
+3. [learning/10-guide-to-debugging.md](./learning/10-guide-to-debugging.md)
+4. [learning/12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md)
+5. [learning/13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md)
+6. [learning/14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md)
+
+Nhóm tài liệu này phù hợp khi mục tiêu của bạn không chỉ là sửa một task trước mắt, mà là hiểu vì sao hệ thống được tổ chức như hiện tại, biết mình cần học gì tiếp theo, và xây nền tảng để phát triển theo hướng Golang backend production.

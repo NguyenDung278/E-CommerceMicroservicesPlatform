@@ -1,6 +1,8 @@
 # Learning Path
 
-`learning/` là tầng tài liệu dành cho người mới vào repo hoặc người đang dùng dự án như một bộ case study để học backend/full-stack thực chiến.
+`learning/` là tầng tài liệu dành cho người mới vào repo hoặc người muốn dùng chính `ecommerce-platform` như một bộ case study để học backend/full-stack thực chiến và phát triển sự nghiệp Golang Developer.
+
+Nếu bạn đang phân vân "nên đọc gì trước để vừa hiểu project, vừa biết mình cần học gì tiếp theo", thì đây là tầng docs nên mở đầu tiên.
 
 ## Thứ tự học khuyến nghị
 
@@ -14,6 +16,7 @@
 8. [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md)
 9. [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md)
 10. [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md)
+11. [14-go-sql-idempotency-interview-playbook.md](./14-go-sql-idempotency-interview-playbook.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 
@@ -22,6 +25,25 @@
 - học cách đọc repo theo flow chứ không đọc rời từng file
 - biết verify thay đổi theo đúng runtime hiện tại
 - biết cách debug khi compose, env, gateway, DB hoặc frontend đang lệch nhau
+- nối việc "đọc hiểu project" với "phát triển năng lực nghề nghiệp" theo hướng backend Go production
+
+## Nếu mục tiêu của bạn là hiểu project nhanh mà vẫn chắc
+
+Hãy ưu tiên đúng 5 tài liệu này trước:
+
+1. [00-local-setup.md](./00-local-setup.md)
+2. [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
+3. [06-testing-and-verification.md](./06-testing-and-verification.md)
+4. [10-guide-to-debugging.md](./10-guide-to-debugging.md)
+5. [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md)
+
+Lý do:
+
+- `00` giúp bạn dựng runtime đúng
+- `03` giúp bạn biết mở file nào trước
+- `06` giúp bạn tránh verify hời hợt
+- `10` giúp bạn không bị bí khi local/dev lệch nhau
+- `13` biến việc đọc repo thành một lộ trình học nghề rõ ràng
 
 ## Khi nào chuyển sang `deep-dive/` và `annotated/`
 
@@ -35,3 +57,5 @@
 - [06-testing-and-verification.md](./06-testing-and-verification.md): biết verify gì trước khi tin rằng mình đã sửa xong
 - [11-senior-source-code-review-guide.md](./11-senior-source-code-review-guide.md): nhìn repo như một senior engineer thay vì chỉ như người học syntax
 - [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md): nối từ hiểu source code sang biết mình cần học gì để ship một sản phẩm e-commerce production-ready
+- [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md): bản đồ học nghề bám chính repo này, giải thích nên học gì theo từng giai đoạn từ hiểu flow tới tư duy production
+- [14-go-sql-idempotency-interview-playbook.md](./14-go-sql-idempotency-interview-playbook.md): playbook cực thực dụng về nền Go trước microservice, cách luyện SQL/transaction/idempotency, và 5 đề tài mạnh để build portfolio/phỏng vấn backend

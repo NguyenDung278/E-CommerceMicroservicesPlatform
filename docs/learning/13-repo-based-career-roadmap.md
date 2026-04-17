@@ -1,333 +1,603 @@
-# 8-Week Repo-Based Career Roadmap
+# Repo-Based Golang Career Roadmap
 
-Tài liệu này biến chính `ecommerce-platform` thành một lộ trình học 8 tuần có đầu ra rõ ràng. Mục tiêu không phải đọc cho biết, mà là đi từ mức "đọc code còn chậm" lên mức "tự tin sửa flow quan trọng, giải thích thiết kế, và có portfolio đủ mạnh để phỏng vấn backend/full-stack thực chiến".
+Tài liệu này dành cho hai mục tiêu cùng lúc:
 
-Nếu bạn cần rút xuống 6 tuần:
+- giúp bạn hiểu `ecommerce-platform` một cách có hệ thống, không bị ngợp bởi số lượng service và folder
+- giúp bạn dùng chính repo này như một "phòng tập nghề" để phát triển sự nghiệp Golang Developer theo hướng backend production
 
-- gộp tuần 1 + 2
-- gộp tuần 6 + 7
-- vẫn giữ tuần 4, 5, 8 vì đây là các vùng giá trị cao nhất
+Nếu đọc xong mà bạn chỉ nhớ một điều, hãy nhớ điều này:
 
-## Cách dùng roadmap này
+> Đừng học repo bằng cách đọc tất cả file. Hãy học bằng cách lần theo một flow thật, hiểu vì sao nó chạy được, rồi mới mở rộng dần sang kiến trúc, performance, reliability và vận hành.
 
-- Mỗi tuần chỉ chọn một flow chính để theo đuổi đến cùng.
-- Không học tản mạn nhiều service cùng lúc khi chưa hiểu luồng dữ liệu.
-- Mỗi tuần phải có đầu ra hữu hình: note, test, PR nhỏ, benchmark, diagram, hoặc feature hoàn chỉnh.
-- Khi đọc code, luôn lần theo đúng layering: `handler -> service -> repository`.
+---
 
-## Tuần 1: Dựng Runtime Và Đọc Luồng Tổng
+## 1. Tài liệu này giúp bạn giải quyết vấn đề gì
 
-Mục tiêu:
+Người mới vào repo thường gặp 4 khó khăn:
 
-- chạy được local stack
-- hiểu thành phần nào là source of truth
-- lần được 1 request từ UI tới DB
+1. Không biết nên mở file nào trước.
+2. Không biết service nào quan trọng hơn service nào.
+3. Không biết skill nào là "học syntax" và skill nào là "học nghề".
+4. Không biết học xong thì biến nó thành năng lực nghề nghiệp như thế nào.
 
-Việc cần làm:
+Tài liệu này sẽ trả lời lần lượt:
 
-1. Đọc `README.md`, `LOGIC_FLOW.md`, `AGENTS.md`.
-2. Chạy local bằng `make compose-up` hoặc workflow tương đương.
-3. Mở `deployments/docker/docker-compose.yml`, `api-gateway/cmd/main.go`, `frontend/src/app/app.tsx`.
-4. Theo dấu 1 route storefront đơn giản như catalog hoặc product detail.
-5. Vẽ lại sơ đồ dữ liệu riêng của bạn: Browser -> Gateway -> Service -> Repo -> DB.
+- project này đang được tổ chức ra sao
+- nên đọc repo theo thứ tự nào
+- một Golang Developer cần thành thạo những gì để làm tốt một hệ thống commerce như repo này
+- bạn nên luyện theo chặng nào để đi từ mức junior lên mid rồi senior
+- nên build feature, note, test, benchmark hay proposal nào để biến quá trình học thành portfolio có giá trị
 
-File nên mở:
+---
+
+## 2. Bạn đang đứng ở đâu trong hành trình học nghề
+
+Hãy tự xác định điểm bắt đầu của mình trước khi đọc tiếp.
+
+### Mức 1: Mới học Go hoặc mới chạm backend
+
+Bạn thường có dấu hiệu:
+
+- hiểu syntax Go nhưng đọc code service còn chậm
+- chưa quen với `context.Context`, interface, layering, transaction
+- thấy nhiều service là rối
+- chưa tự tin lần một request từ frontend tới database
+
+Nếu đang ở mức này, mục tiêu của bạn chưa phải "thiết kế kiến trúc". Mục tiêu đúng là:
+
+- chạy được local
+- đọc được một flow end-to-end
+- sửa được một bug nhỏ mà không phá hệ thống
+
+### Mức 2: Đã làm backend một thời gian nhưng muốn lên mid
+
+Bạn thường có dấu hiệu:
+
+- đọc được code nhưng chưa luôn nhìn ra business invariant
+- viết API được nhưng chưa chắc tay về transaction, idempotency, observability
+- biết debug lỗi đơn lẻ nhưng chưa quen tối ưu hệ thống bằng số liệu
+
+Nếu đang ở mức này, mục tiêu đúng là:
+
+- hiểu tại sao repo này chia tầng `handler -> service -> repository`
+- sửa được flow quan trọng như order/payment mà vẫn giữ contract rõ ràng
+- biết viết test và log đủ để người khác tin thay đổi của bạn
+
+### Mức 3: Muốn tiến gần Senior Golang Developer
+
+Bạn thường quan tâm:
+
+- consistency giữa nhiều service
+- trade-off sync vs async
+- retry, duplicate side effect, rollback, failure mode
+- query scaling, tracing, metrics, cost vận hành
+
+Nếu đang ở mức này, mục tiêu đúng là:
+
+- nhìn repo như một hệ thống sản phẩm thật
+- ưu tiên đúng bài toán production thay vì chạy theo abstraction cho đẹp
+- biến hiểu biết kỹ thuật thành quyết định kiến trúc có trách nhiệm
+
+---
+
+## 3. Hiểu project này theo cách ít đau đầu nhất
+
+Thay vì cố nhớ toàn bộ repo, hãy nhớ 5 ý chính.
+
+### 3.1. `frontend/` là điểm bắt đầu dễ hiểu nhất
+
+Nếu bạn muốn hiểu người dùng đang làm gì, hãy bắt đầu từ:
+
+- `frontend/src/pages/storefront/`
+- `frontend/src/features/`
+- `frontend/src/services/api/`
+
+Ở đây bạn sẽ thấy:
+
+- user đang xem catalog thế nào
+- product detail lấy dữ liệu ra sao
+- cart và checkout gọi API nào
+
+Đây là cách nhanh nhất để có "cảm giác sản phẩm" trước khi đi sâu vào backend.
+
+### 3.2. `api-gateway/` là cửa vào HTTP
+
+Gateway không nên chứa business logic. Vai trò chính là:
+
+- nhận request từ UI
+- định tuyến về service đúng domain
+- gắn middleware như tracing, logging, rate limit
+
+Khi bạn muốn biết một API storefront đi đâu, mở:
 
 - `api-gateway/cmd/main.go`
 - `api-gateway/internal/proxy/service_proxy.go`
-- `frontend/src/pages/storefront/catalog-page.tsx`
-- `frontend/src/services/api/modules/product-api.ts`
-- `services/product-service/cmd/main.go`
 
-Đầu ra tuần này:
+### 3.3. Mỗi `services/*-service/` là một domain tương đối độc lập
 
-- một note 1-2 trang về kiến trúc repo
-- một diagram tự vẽ cho flow catalog
+Bạn không cần hiểu tất cả cùng lúc. Hãy xem từng service như một câu chuyện riêng:
 
-Kỹ năng luyện:
+- `user-service`: auth, profile, thông tin người dùng
+- `product-service`: catalog, media, listing, review, search
+- `cart-service`: giỏ hàng Redis + product lookup
+- `order-service`: preview order, tạo đơn, coupon, lifecycle
+- `payment-service`: payment, refund, webhook
+- `notification-service`: consume event và gửi thông báo
 
-- Docker Compose
-- đọc code theo flow
-- phân biệt boundary HTTP, gRPC, event
+### 3.4. PostgreSQL là nguồn dữ liệu chính
 
-## Tuần 2: Nắm Chắc Frontend Data Flow
+Đây là điều cực kỳ quan trọng về mặt tư duy nghề nghiệp.
 
-Mục tiêu:
+Trong repo này:
 
-- hiểu cách frontend gọi API
-- hiểu state nào là local, state nào đến từ backend
-- tự sửa một bug UI nhỏ và verify được
+- PostgreSQL là source of truth cho các domain chính
+- Redis chủ yếu hỗ trợ cart, rate limit, cache hoặc các nhu cầu tạm thời
+- RabbitMQ dành cho event bất đồng bộ
+- MinIO và Elasticsearch là integration có thể degrade gracefully
 
-Việc cần làm:
+Nếu bạn học nghề backend production, đây là bài học lớn:
 
-1. Đọc `frontend/src/services/api/`, `frontend/src/features/`, `frontend/src/pages/`.
-2. Theo flow của `catalog-page`, `product-detail-page`, `checkout-page`.
-3. Hiểu `useHomeWorkbook`, `useCart`, `useAuth`.
-4. Sửa một bug nhỏ ở storefront và viết hoặc cập nhật test Vitest.
+> Đừng mặc định mọi vấn đề đều cần thêm công nghệ mới. Phần lớn tính đúng đắn vẫn xoay quanh model dữ liệu, query, transaction và boundary rõ ràng.
 
-File nên mở:
+### 3.5. Cách đọc chuẩn là đi theo flow, không đi theo folder
 
-- `frontend/src/services/api/http-client.ts`
-- `frontend/src/services/api/normalizers.ts`
-- `frontend/src/features/cart/providers/cart-provider.tsx`
-- `frontend/src/features/auth/providers/auth-provider.tsx`
-- `frontend/src/pages/storefront/checkout-page.tsx`
+Ví dụ với checkout:
 
-Đầu ra tuần này:
+1. Mở `frontend/src/pages/storefront/checkout-page.tsx`
+2. Xem frontend gọi API nào trong `frontend/src/services/api/`
+3. Mở route tương ứng ở gateway
+4. Mở handler của `order-service`
+5. Mở service xử lý pricing / lifecycle
+6. Mở repository và migration liên quan
 
-- một PR UI nhỏ có test
-- một note mô tả data flow của checkout
+Chỉ cần bạn giữ thói quen này, khả năng đọc repo sẽ tăng rất nhanh.
 
-Kỹ năng luyện:
+---
 
-- React + TypeScript
-- async state
-- API envelope và error mapping
-- test UI với Vitest
+## 4. Bạn nên đọc gì trước để hiểu project
 
-## Tuần 3: Product Service Và SQL Cơ Bản
+Thứ tự khuyến nghị:
 
-Mục tiêu:
+1. [00-local-setup.md](./00-local-setup.md)
+2. [03-source-reading-roadmap.md](./03-source-reading-roadmap.md)
+3. [06-testing-and-verification.md](./06-testing-and-verification.md)
+4. [10-guide-to-debugging.md](./10-guide-to-debugging.md)
+5. [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md)
 
-- hiểu flow CRUD và listing ở backend Go
-- đọc được query, pagination, validation
-- tự thêm một filter hoặc trường trả về
+Sau đó mới đọc sâu:
 
-Việc cần làm:
+- `docs/deep-dive/` để hiểu kiến trúc và runtime
+- `docs/annotated/` để đọc source theo module cụ thể
 
-1. Đọc `services/product-service/internal/handler`, `service`, `repository`.
-2. Theo flow list products và get product by id.
-3. Xem migration và index liên quan tới listing.
-4. Thêm một filter nhỏ hoặc cải thiện response field.
-5. Viết test cho service/repository tương ứng.
+Nếu mục tiêu của bạn là backend Go nhiều hơn frontend, hãy ưu tiên thêm:
 
-File nên mở:
+- `docs/annotated/shared-packages.md`
+- `docs/annotated/order-service.md`
+- `docs/annotated/payment-service.md`
+- `docs/deep-dive/system-overview.md`
 
-- `services/product-service/internal/service/product_service.go`
-- `services/product-service/internal/service/storefront_service.go`
-- `services/product-service/internal/repository/*`
-- `services/product-service/migrations/000003_add_products_listing_index.up.sql`
+---
 
-Đầu ra tuần này:
+## 5. Một Golang Developer cần học gì từ repo này
 
-- một PR backend nhỏ đi trọn `handler -> service -> repository -> test`
+Phần này là trọng tâm của tài liệu.
 
-Kỹ năng luyện:
+Repo này không chỉ dạy bạn "viết Go". Nó dạy bạn làm backend trong một hệ thống commerce có nhiều failure mode.
 
-- Go service layering
-- SQL query đọc
-- pagination
-- migration và index
+### 5.1. Go fundamentals phải thật chắc
 
-## Tuần 4: Order Pricing, Coupon Và Checkout
+Bạn cần nắm vững:
 
-Mục tiêu:
+- struct, method, interface
+- pointer vs value
+- error handling với `fmt.Errorf(... %w ...)`, `errors.Is`, `errors.As`
+- `context.Context`
+- package organization
+- table-driven test
 
-- hiểu luồng tạo đơn là flow nghiệp vụ lõi
-- nắm pricing preview, coupon, shipping method
-- tự tin sửa checkout mà không phá contract
+Trong repo này, bạn sẽ gặp các khái niệm đó ở hầu hết service layer và handler layer.
 
-Việc cần làm:
+Nếu phần này chưa chắc, mọi chủ đề phía sau sẽ rất mệt.
 
-1. Đọc toàn bộ flow preview order và create order.
-2. So sánh payload frontend gửi với DTO backend nhận.
-3. Trace đường đi của coupon từ UI đến DB.
-4. Viết test cho một nhánh lỗi hoặc nhánh edge case của checkout.
-5. Ghi ra các invariant đang có và invariant còn thiếu.
+### 5.2. Layering và trách nhiệm từng tầng
 
-File nên mở:
+Đây là kỹ năng nghề rất quan trọng.
 
-- `frontend/src/pages/storefront/checkout-page.tsx`
-- `services/order-service/internal/handler/order_handler.go`
-- `services/order-service/internal/service/order_pricing.go`
-- `services/order-service/internal/service/order_lifecycle.go`
+Repo đang đi theo hướng:
 
-Đầu ra tuần này:
+- `handler`: parse request, validate boundary, map response
+- `service`: business logic, orchestration
+- `repository`: SQL, transaction, persistence
 
-- tài liệu ngắn về checkout contract
-- test bổ sung cho checkout hoặc preview pricing
+Bạn cần học cách nhìn ra:
 
-Kỹ năng luyện:
+- logic nào nên ở handler
+- logic nào phải nằm ở service
+- query nào nên gom ở repository
+- chỗ nào đang lẫn vai trò và cần cleanup
 
-- business rule
-- DTO mapping
-- invariant thinking
-- debugging cross-layer
+Nếu bạn chưa làm được điều này, rất khó viết code sạch trong hệ thống lớn.
 
-## Tuần 5: Payment, Webhook Và Idempotency
+### 5.3. SQL, transaction và data modeling
 
-Mục tiêu:
+Một backend engineer mạnh không thể yếu SQL.
 
-- hiểu payment là nơi rủi ro production cao nhất
-- nắm retry-safety, webhook replay, duplicate side effect
-- có một đề tài portfolio mạnh
+Bạn nên học từ repo này:
 
-Việc cần làm:
+- cách đọc migration
+- cách lần từ query tới index
+- khi nào cần transaction
+- khi nào cần lock hoặc invariant chặt hơn
+- vì sao `COUNT(*) + OFFSET` có thể thành bottleneck
 
-1. Đọc create payment, refund, webhook MoMo.
-2. Ghi ra các chỗ có thể bị duplicate nếu retry.
-3. Thiết kế hoặc implement thêm idempotency key cho một nhánh quan trọng.
-4. Viết test mô phỏng duplicate webhook hoặc retry payment.
+Các nơi đáng học nhất:
 
-File nên mở:
+- `product-service` cho listing và pagination
+- `order-service` cho pricing, create order, report
+- `payment-service` cho payment state
 
-- `services/payment-service/internal/service/payment_processing.go`
-- `services/payment-service/internal/service/payment_refunds.go`
-- `services/payment-service/internal/handler/payment_handler.go`
-- `services/payment-service/internal/repository/payment_repository.go`
+### 5.4. API contract và boundary
 
-Đầu ra tuần này:
+Bạn cần học:
 
-- một PR hoặc proposal về idempotency/webhook hardening
+- request/response DTO
+- status code và error mapping
+- API ổn định nghĩa là gì
+- frontend và backend giữ contract nhất quán ra sao
 
-Kỹ năng luyện:
+Bài học lớn ở đây là:
 
-- webhook design
-- errors.Is / domain error
-- transaction safety
-- payment risk analysis
+> Backend tốt không chỉ "xử lý đúng", mà còn phải "dễ dùng, dễ đoán, khó gọi sai".
 
-## Tuần 6: Event-Driven Flow Và Notification
+### 5.5. Tư duy asynchronous flow
 
-Mục tiêu:
+Khi đi sâu hơn, bạn sẽ thấy hệ thống không chỉ có HTTP request-response.
 
-- hiểu rõ async side effect thay vì chỉ sync HTTP
-- nắm outbox/inbox pattern
-- đọc được message lifecycle từ publish tới consume
+Repo này giúp bạn học:
 
-Việc cần làm:
-
-1. Đọc outbox ở order/payment service.
-2. Đọc inbox và consumer của notification service.
-3. Theo một event từ lúc order/payment phát ra tới lúc email được gửi.
-4. Thêm metric, log context, hoặc test cho consumer.
-
-File nên mở:
-
-- `services/order-service/internal/model/messaging.go`
-- `services/payment-service/internal/model/messaging.go`
-- `services/notification-service/internal/handler/event_handler.go`
-- `services/notification-service/internal/inbox/redis_store.go`
-- `docs/deep-dive/order-payment-outbox-inbox.md`
-
-Đầu ra tuần này:
-
-- một sequence diagram cho async flow
-- một PR nhỏ về observability hoặc retry handling
-
-Kỹ năng luyện:
-
-- RabbitMQ
-- message dedupe
+- RabbitMQ event flow
+- outbox / inbox pattern
 - eventual consistency
-- observability cho worker
+- retry và duplicate message
 
-## Tuần 7: Performance, Query Và Observability
+Đây là vùng rất giá trị khi bạn muốn lên mid hoặc senior, vì nhiều ứng viên chỉ quen synchronous CRUD.
+
+### 5.6. Observability và debugging
+
+Bạn nên học cách trả lời các câu hỏi:
+
+- request này đã đi qua service nào
+- nó chậm ở đâu
+- lỗi xảy ra ở DB, gateway hay consumer
+- một event đã publish nhưng vì sao email chưa gửi
+
+Repo đã có:
+
+- structured logging
+- Prometheus metrics
+- OpenTelemetry tracing
+- Jaeger/Grafana trong local stack
+
+Nếu bạn biết tận dụng chúng, bạn đang học đúng kỹ năng production.
+
+### 5.7. Testing và verification
+
+Bạn cần hiểu rõ:
+
+- khi nào viết unit test
+- khi nào nên viết integration test
+- verify thay đổi ở local như thế nào để không tự tin ảo
+
+Một Golang Developer mạnh không chỉ code chạy được, mà còn biết chứng minh thay đổi của mình đáng tin.
+
+### 5.8. Security và production thinking
+
+Bạn không cần là security specialist để làm backend tốt, nhưng phải có phản xạ đúng:
+
+- input đã validate chưa
+- query đã parameterized chưa
+- route có cần auth/authz không
+- webhook có verify chưa
+- log có lộ dữ liệu nhạy cảm không
+
+Career sẽ tiến nhanh hơn rất nhiều nếu bạn có phản xạ này từ sớm.
+
+---
+
+## 6. Học nghề theo cấp độ: từ Junior lên Senior
+
+### 6.1. Giai đoạn Junior
+
+Mục tiêu chính:
+
+- hiểu flow
+- code đúng layering
+- bớt sợ repo lớn
+
+Bạn nên tập trung vào:
+
+- đọc một flow từ frontend tới DB
+- sửa bug nhỏ ở UI hoặc API
+- viết test cơ bản
+- làm quen migration và query đơn giản
+
+Dấu hiệu bạn đang tiến bộ:
+
+- không còn mở file theo kiểu đoán mò
+- biết handler gọi service nào
+- biết repository nào chịu trách nhiệm query nào
+- có thể giải thích một flow bằng lời của mình
+
+### 6.2. Giai đoạn Mid-level
+
+Mục tiêu chính:
+
+- giữ được business rule khi sửa code
+- nghĩ đến edge case và failure mode
+- biết verify một thay đổi nghiêm túc hơn
+
+Bạn nên tập trung vào:
+
+- checkout, order, coupon, payment
+- transaction và idempotency
+- tracing, metrics, structured logs
+- test cho edge case
+
+Dấu hiệu bạn đang tiến bộ:
+
+- đọc code không chỉ thấy "nó làm gì" mà còn thấy "nó có thể hỏng ở đâu"
+- có thể đề xuất refactor nhỏ nhưng đúng trọng tâm
+- biết khi nào nên giữ giải pháp đơn giản thay vì thêm abstraction
+
+### 6.3. Giai đoạn Senior
+
+Mục tiêu chính:
+
+- quyết định kiến trúc có trách nhiệm
+- cân bằng correctness, complexity và cost vận hành
+- nâng chất lượng toàn team, không chỉ code của riêng mình
+
+Bạn nên tập trung vào:
+
+- write flow nhiều bước
+- async consistency
+- performance tuning bằng số liệu
+- observability đầy đủ
+- review code theo business invariant
+
+Dấu hiệu bạn đang tiến bộ:
+
+- bạn nghĩ được cả happy path lẫn rollback path
+- bạn nhìn ra nợ kỹ thuật đáng trả trước khi nó thành sự cố production
+- bạn không thêm thành phần mới chỉ để cảm thấy "xịn hơn"
+
+---
+
+## 7. Lộ trình học thực chiến 30 / 60 / 90 ngày
+
+Phần này hữu ích nếu bạn muốn học có lịch trình rõ.
+
+### 30 ngày đầu: Hiểu hệ thống và sửa được bug nhỏ
 
 Mục tiêu:
 
-- ngừng tối ưu theo cảm giác
-- biết dùng số liệu để quyết định
-- luyện cách nhìn hệ thống như senior
+- chạy local ổn định
+- hiểu catalog, product detail, cart, checkout ở mức cơ bản
+- hoàn thành ít nhất 1 thay đổi nhỏ end-to-end
 
-Việc cần làm:
+Bạn nên làm:
 
-1. Chọn một hot path như product listing, order report, review summary.
-2. Xem metric/tracing hiện có.
-3. Chạy benchmark hoặc profile.
-4. Nếu là SQL hot path, dùng `EXPLAIN ANALYZE`.
-5. Viết note trước/sau tối ưu.
+1. Đọc setup và source-reading docs.
+2. Theo flow catalog và checkout.
+3. Sửa một bug nhỏ ở frontend hoặc API.
+4. Viết note riêng về kiến trúc repo.
 
-Vùng nên ưu tiên:
+Kết quả mong đợi:
 
-- list endpoint admin/order
-- listing product nhiều filter
-- checkout preview
-- review aggregation
+- không còn mù đường trong repo
+- đã biết gateway, service, repository liên kết ra sao
 
-Đầu ra tuần này:
-
-- benchmark note hoặc report tối ưu
-- một PR giảm query count, latency, hoặc allocation
-
-Kỹ năng luyện:
-
-- Prometheus / tracing
-- benchmark / pprof
-- query tuning
-- performance communication
-
-## Tuần 8: Portfolio Feature Hoàn Chỉnh
+### 60 ngày: Bắt đầu làm việc như một backend engineer thực thụ
 
 Mục tiêu:
 
-- hoàn thành một feature đủ sâu để đưa vào CV/portfolio
-- chứng minh bạn không chỉ sửa bug nhỏ mà còn ship được flow production-minded
+- sửa được flow nghiệp vụ quan trọng
+- hiểu transaction, coupon, payment, event
+- tự tin viết test và verify
 
-Feature nên chọn một:
+Bạn nên làm:
 
-1. Idempotent payment + webhook replay protection.
-2. Inventory reservation transaction-safe cho checkout.
-3. Order/admin listing chuyển khỏi `COUNT(*) + OFFSET`.
-4. Returns/refund portal cơ bản với timeline rõ ràng.
-5. Promotion engine cơ bản hơn: giới hạn usage, min order, expiry, admin validation.
+1. Đọc sâu `order-service` và `payment-service`.
+2. Viết test cho checkout/pricing/payment edge case.
+3. Theo một event từ publish tới notification.
+4. Làm một PR cải thiện reliability hoặc clarity.
 
-Checklist đầu ra:
+Kết quả mong đợi:
 
-- có docs ngắn
-- có test
-- có observability
-- có rollback/failure mode note
-- có demo script local
+- bắt đầu nhìn thấy production risk
+- có khả năng review code tốt hơn
 
-Kỹ năng luyện:
+### 90 ngày: Tạo ra dấu ấn portfolio có chất lượng
 
-- đóng feature end-to-end
-- trade-off reasoning
-- viết PR như engineer production
+Mục tiêu:
 
-## Các vùng giá trị cao nhất để luyện tập và làm portfolio
+- có 1 đến 2 thay đổi đáng kể
+- có tài liệu, benchmark hoặc proposal chất lượng
+- có câu chuyện nghề nghiệp rõ ràng khi đi phỏng vấn
 
-- `order-service`: giá trị cao nhất vì chạm transaction, pricing, coupon, state machine.
-- `payment-service`: rất tốt để nói về idempotency, webhook, retry, reliability.
-- `notification-service`: tốt để thể hiện hiểu biết async architecture.
-- `product-service`: phù hợp để luyện SQL, pagination, search, media integration.
-- `frontend/checkout + product detail`: tốt để thể hiện full-stack thinking và UX + contract alignment.
+Bạn nên làm:
 
-## Kỹ năng cần có để thành thạo repo này
+1. Chọn một đề tài có chiều sâu.
+2. Làm trọn từ phân tích, code, test, verify đến doc.
+3. Viết lại bài học rút ra: trade-off, failure mode, cách verify.
 
-- Go, `context`, interface hợp lý, error wrapping
-- SQL, migration, index, transaction
-- Redis, RabbitMQ, gRPC, HTTP
-- React + TypeScript + test frontend
-- Docker Compose, env config, local ops
-- structured logging, Prometheus, tracing
-- security basics: auth/authz, webhook verify, input validation
+Ví dụ đề tài mạnh:
 
-## Gợi ý chức năng nên làm tiếp để tăng giá trị dự án
+- harden payment webhook bằng idempotency
+- tối ưu list endpoint nóng bằng query/index
+- mở rộng outbox/inbox observability
+- cải thiện checkout UX nhưng vẫn giữ contract backend rõ ràng
 
-Nhóm nên ưu tiên trước:
+---
 
-1. Idempotency đầy đủ cho payment/webhook path.
-2. Inventory reservation hoặc stock deduction transaction-safe.
-3. Returns/RMA flow cơ bản thay vì chỉ refund.
-4. Order timeline chi tiết hơn cho customer.
-5. Admin audit trail rõ hơn cho các thay đổi nhạy cảm.
+## 8. Bạn nên luyện những bài tập nào trong chính repo này
 
-Nhóm mạnh về portfolio:
+Đây là phần biến việc học thành năng lực thật.
 
-1. Recommendation rail dựa trên category + purchase history.
-2. Search ranking và faceted filtering tốt hơn.
-3. Loyalty points / membership tier.
-4. Saved payment methods và payment retry UX tốt hơn.
-5. Shipping carrier integration + tracking events.
+### Bài tập dễ để bắt đầu
 
-## Cách tự đánh giá sau 8 tuần
+- thêm một field response nhỏ ở product listing
+- sửa một bug validation hoặc UX ở checkout
+- viết test cho một service function đơn giản
+- cập nhật doc khi phát hiện source và tài liệu lệch nhau
 
-Bạn đang tiến bộ đúng hướng nếu bạn có thể:
+### Bài tập mức trung bình
 
-- giải thích luồng checkout từ UI tới DB mà không nhìn note
-- chỉ ra transaction nào đang giữ invariant và invariant nào còn hở
-- tự viết test cho một bug mới trước khi sửa
-- đọc log/trace để tìm lỗi thay vì đoán
-- đề xuất feature mới mà không phá layering hiện có
+- thêm filter hoặc sort cho catalog
+- cải thiện error mapping ở order/payment
+- thêm logging có ngữ cảnh cho một flow đang mờ
+- viết integration test cho query quan trọng
+
+### Bài tập mức khá mạnh cho portfolio
+
+- bổ sung idempotency cho một payment path
+- giảm `COUNT(*) + OFFSET` ở endpoint phù hợp
+- thêm metric/tracing rõ hơn cho queue consumer
+- refactor một flow nhiều điều kiện thành business logic dễ đọc hơn
+
+### Bài tập dành cho tư duy senior
+
+- viết proposal ngắn cho một vấn đề production thực tế
+- chỉ ra failure mode hiện tại và cách giảm rủi ro bằng giải pháp đơn giản nhất
+- benchmark trước/sau cho một hot path
+- thiết kế rollback plan cho một thay đổi data model
+
+---
+
+## 9. Những kỹ năng quyết định sự nghiệp Golang Developer
+
+Nếu mục tiêu của bạn là phát triển nghề nghiệp lâu dài, hãy ưu tiên theo thứ tự này.
+
+### 9.1. Kỹ năng nền tảng
+
+- Go cơ bản thật chắc
+- SQL đủ mạnh để tự đọc và tối ưu query phổ biến
+- HTTP API design
+- Git workflow sạch
+
+### 9.2. Kỹ năng giúp bạn lên Mid nhanh
+
+- transaction và data consistency
+- testing strategy
+- debug qua logs/traces
+- hiểu queue, event, retry
+- biết đọc code cũ và sửa mà không phá hành vi
+
+### 9.3. Kỹ năng giúp bạn tiến gần Senior
+
+- architectural judgement
+- performance tuning bằng dữ liệu
+- reliability và incident thinking
+- security review cơ bản
+- viết tài liệu giúp cả team làm việc tốt hơn
+
+Điều quan trọng:
+
+> Senior không phải là người dùng nhiều pattern nhất. Senior là người chọn giải pháp đủ tốt, đủ rõ, đủ an toàn và đủ rẻ để vận hành.
+
+---
+
+## 10. Cách biến repo này thành portfolio nghề nghiệp
+
+Nhiều người học rất nhiều nhưng không biết kể câu chuyện nghề nghiệp của mình. Hãy dùng repo này để tạo bằng chứng rõ ràng.
+
+### Bạn nên lưu lại các đầu ra sau
+
+- diagram flow bạn tự vẽ
+- note phân tích kiến trúc
+- test bạn đã viết
+- benchmark hoặc profiling note
+- doc bạn đã cập nhật để làm rõ hệ thống
+- PR hoặc patch giải quyết một vấn đề thật
+
+### Khi đi phỏng vấn, bạn có thể kể theo mẫu này
+
+1. Vấn đề là gì.
+2. Vì sao nó quan trọng với người dùng hoặc vận hành.
+3. Bạn đã đọc flow ra sao.
+4. Bạn chọn giải pháp nào và vì sao không chọn giải pháp phức tạp hơn.
+5. Bạn verify bằng cách nào.
+6. Bạn học được gì về production thinking.
+
+Nếu bạn kể được theo cấu trúc này, hồ sơ của bạn sẽ thuyết phục hơn rất nhiều so với kiểu "em có làm project e-commerce".
+
+---
+
+## 11. Checklist tự đánh giá sau khi học
+
+Bạn có thể tự chấm mình bằng cách xem đã làm được bao nhiêu điều sau.
+
+### Hiểu project
+
+- giải thích được vai trò của từng service chính
+- lần được một flow storefront từ UI đến DB
+- biết PostgreSQL, Redis, RabbitMQ đang được dùng cho mục đích gì
+- biết nơi nào là source of truth
+
+### Kỹ năng coding
+
+- viết code bám đúng layering
+- xử lý error rõ ràng, không nuốt lỗi
+- viết test cho business rule quan trọng
+- đọc và sửa query mà không sợ
+
+### Tư duy production
+
+- nghĩ tới timeout, retry, idempotency
+- biết log gì để debug sau này
+- nhận ra nơi nào có thể thành bottleneck
+- không vội thêm công nghệ khi PostgreSQL và refactor tốt đã đủ
+
+### Tư duy nghề nghiệp
+
+- hiểu mình đang thiếu gì
+- có kế hoạch học tiếp rõ ràng
+- có ít nhất một thay đổi trong repo mà bạn tự tin giải thích trước senior engineer
+
+---
+
+## 12. Nếu chỉ có thời gian ngắn, hãy ưu tiên gì
+
+Nếu bạn chỉ có vài ngày, đừng cố đọc hết.
+
+Hãy ưu tiên:
+
+1. setup local
+2. đọc flow catalog hoặc checkout
+3. hiểu `handler -> service -> repository`
+4. làm một thay đổi nhỏ nhưng verify đàng hoàng
+5. đọc thêm production-readiness roadmap
+
+Làm tốt 5 bước này có giá trị hơn rất nhiều so với việc đọc rải rác 30 file mà không nắm được flow nào hoàn chỉnh.
+
+---
+
+## 13. Kết luận
+
+`ecommerce-platform` là một repo rất tốt để học nghề nếu bạn dùng nó đúng cách.
+
+Giá trị lớn nhất của repo này không nằm ở chỗ nó có nhiều service, mà ở chỗ nó cho bạn luyện:
+
+- đọc flow thật
+- giữ business rule rõ ràng
+- làm việc với SQL, transaction, event, observability
+- suy nghĩ như một backend engineer có trách nhiệm với production
+
+Nếu mục tiêu của bạn là phát triển sự nghiệp Golang Developer, hãy học theo hướng:
+
+- hiểu hệ thống trước
+- sửa thay đổi nhỏ trước
+- tăng dần độ khó bằng checkout, payment, event
+- luôn để lại bằng chứng học tập dưới dạng test, note, doc, benchmark hoặc PR
+
+Đi theo hướng này, bạn không chỉ "biết Go", mà sẽ dần trở thành người có thể xây, sửa và vận hành một sản phẩm backend thực tế.
