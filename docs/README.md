@@ -65,6 +65,7 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 - [12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md): lộ trình học để biến hiểu biết repo thành năng lực xây sản phẩm commerce thực chiến
 - [13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md): tài liệu chi tiết để hiểu project theo flow thật và chuyển kiến thức đó thành năng lực nghề nghiệp Golang Developer
 - [14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md): hướng dẫn thực dụng về Go foundation trước microservice, cách luyện SQL/transaction/idempotency, và các feature nên build để đi phỏng vấn backend mạnh hơn
+- [15-end-to-end-verification-checklists.md](./learning/15-end-to-end-verification-checklists.md): checklist verify theo flow thật cho catalog, checkout, payment, returns, và admin
 
 ### `deep-dive/`
 

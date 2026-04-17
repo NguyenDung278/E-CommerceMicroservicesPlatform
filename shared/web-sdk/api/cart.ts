@@ -6,6 +6,10 @@ export interface SharedAddToCartItem {
   quantity: number;
 }
 
+export interface SharedMergeCartRequest {
+  items: SharedAddToCartItem[];
+}
+
 type RequestLike = <T>(
   path: string,
   options?: RequestOptions
@@ -35,6 +39,20 @@ export function createCartApi(config: CreateCartApiConfig) {
         method: "POST",
         token,
         body: item,
+      }).then((response) => ({
+        ...response,
+        data: normalizeCart(response.data),
+      }));
+    },
+
+    mergeCart(
+      token: string,
+      payload: SharedMergeCartRequest
+    ): Promise<ApiEnvelope<Cart>> {
+      return request<unknown>("/api/v1/cart/merge", {
+        method: "POST",
+        token,
+        body: payload,
       }).then((response) => ({
         ...response,
         data: normalizeCart(response.data),

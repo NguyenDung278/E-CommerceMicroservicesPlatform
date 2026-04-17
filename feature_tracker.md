@@ -26,80 +26,6 @@ Các nhãn trạng thái:
 
 ---
 
-## 1. Production Correctness Và Reliability
-
-### P0 · Open · Stock Reservation / Allocation
-
-Mục tiêu:
-
-- giữ tồn kho trong thời gian ngắn khi user bước vào checkout hoặc chuẩn bị thanh toán
-- tránh oversell khi nhiều người mua cùng lúc
-
-Vì sao còn mở:
-
-- hiện flow chủ yếu mới kiểm tra tồn khi preview/create order và hoàn tồn khi hủy đơn
-- chưa có reserve transaction-safe theo kiểu allocation rõ ràng
-
-Gợi ý triển khai:
-
-- ưu tiên giải pháp đơn giản trong `product-service` hoặc `order-service`
-- dùng PostgreSQL transaction + row lock trước khi nghĩ tới distributed lock
-- làm rõ TTL release khi checkout/payment không hoàn tất
-
-### P0 · Partial · Idempotency Cho Create Order
-
-Mục tiêu:
-
-- ngăn tạo trùng order khi client retry hoặc user bấm nhiều lần
-
-Vì sao còn mở:
-
-- `payment-service` đã có idempotency cho payment/refund
-- nhưng `create order` vẫn là flow nên được harden thêm
-
-Gợi ý triển khai:
-
-- nhận `Idempotency-Key` ở order create path
-- lưu mapping `user + key + request hash + order_id`
-- replay an toàn nếu request giống hệt
-- conflict nếu cùng key nhưng payload khác
-
-### P0 · Partial · Guest Cart Merge Ở Backend
-
-Mục tiêu:
-
-- đưa logic merge guest cart xuống backend để thống nhất dữ liệu giỏ hàng
-
-Vì sao còn mở:
-
-- merge hiện vẫn chủ yếu nằm ở frontend provider
-- gateway handler hiện không expose `POST /api/v1/cart/merge`
-
-Gợi ý triển khai:
-
-- thêm route thật ở gateway + cart-service
-- merge theo product/variant/quantity ở server
-- giữ logic client càng mỏng càng tốt
-
-### P1 · Partial · Hardening Payment Retry Story
-
-Mục tiêu:
-
-- làm payment flow rõ ràng hơn khi timeout, redirect thất bại, hoặc webhook đến muộn
-
-Vì sao còn mở:
-
-- create payment và refund đã có idempotency
-- nhưng end-to-end retry story giữa checkout UI, payment status polling, webhook replay, và order sync vẫn nên được document + verify sâu hơn
-
-Gợi ý triển khai:
-
-- bổ sung test replay/retry end-to-end
-- làm rõ state transition trong docs và admin UI
-- thêm metric cho replay/idempotent hit/conflict
-
----
-
 ## 2. Storefront Và Commerce UX
 
 ### P1 · Partial · Payment Method Parity Trên Frontend
@@ -170,23 +96,6 @@ Gợi ý:
 
 ## 3. Admin, Reporting, Và Vận Hành
 
-### P1 · Partial · Admin Order Listing Scale Story
-
-Mục tiêu:
-
-- làm cho admin list/report bền hơn khi dữ liệu tăng
-
-Vì sao còn mở:
-
-- product catalog public đã có cursor pagination
-- admin order listing vẫn thiên về `COUNT(*) + OFFSET/LIMIT`
-
-Gợi ý triển khai:
-
-- xác định endpoint nóng thật sự trước
-- cân nhắc cursor hoặc pre-aggregated reporting path
-- đo bằng query plan và latency trước khi tối ưu
-
 ### P1 · Partial · Async Refund Queue Observability
 
 Mục tiêu:
@@ -243,44 +152,17 @@ Nếu chưa chốt, đừng đầu tư refactor lớn theo cả hai hướng cù
 
 ## 5. DevEx Và Docs
 
-### P1 · Open · Postman / API Contract Collection Chính Thức
-
-Mục tiêu:
-
-- có một collection hoặc contract suite chính thức bám route thật
-
-Vì sao nên làm:
-
-- hiện route và helper cũ có chỗ đã lệch nhau
-- tài liệu đã được cập nhật, nhưng collection sống sẽ giúp verify nhanh hơn
-
-Gợi ý:
-
-- build một Postman collection hoặc script-based smoke test từ gateway route thật
-- ưu tiên auth, cart, order, payment, returns
-
-### P1 · Open · End-To-End Verification Checklist Theo Flow
-
-Mục tiêu:
-
-- giảm tình trạng sửa UI xong nhưng không verify đủ backend, hoặc ngược lại
-
-Gợi ý:
-
-- tạo checklist riêng cho `catalog`, `checkout`, `payment`, `returns`
-- mỗi flow nên có happy path + negative path + async verification
-
 ---
 
 ## 6. 5 Gợi Ý Nên Làm Tiếp Ngay
 
 Nếu chỉ chọn 5 việc có giá trị cao nhất trong giai đoạn này, mình khuyên ưu tiên:
 
-1. `Stock Reservation / Allocation`
-2. `Idempotency Cho Create Order`
-3. `Guest Cart Merge Ở Backend`
-4. `Admin Order Listing Scale Story`
-5. `Chốt Vai Trò frontend/client`
+1. `Chốt Vai Trò frontend/client`
+2. `Async Refund Queue Observability`
+3. `Shopper Return Experience hoàn chỉnh`
+4. `Wishlist back-in-stock / price-drop alerts`
+5. `Order/payment/return timeline dễ hiểu cho support và user`
 
 Đây là 5 việc cân bằng tốt giữa:
 

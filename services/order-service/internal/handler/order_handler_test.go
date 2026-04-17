@@ -39,6 +39,10 @@ func (r *fakeOrderHandlerRepo) Create(_ context.Context, _ *model.Order, _ *mode
 	return nil
 }
 
+func (r *fakeOrderHandlerRepo) CreateWithIdempotency(_ context.Context, _ *model.Order, _ *model.OutboxMessage, _ *model.OrderIdempotencyRecord) error {
+	return nil
+}
+
 func (r *fakeOrderHandlerRepo) GetByID(_ context.Context, id string) (*model.Order, error) {
 	order, ok := r.ordersByID[id]
 	if !ok {
@@ -51,6 +55,10 @@ func (r *fakeOrderHandlerRepo) GetByID(_ context.Context, id string) (*model.Ord
 }
 
 func (r *fakeOrderHandlerRepo) GetByUserID(_ context.Context, _ string) ([]*model.Order, error) {
+	return nil, nil
+}
+
+func (r *fakeOrderHandlerRepo) GetIdempotencyKey(_ context.Context, _, _ string) (*model.OrderIdempotencyRecord, error) {
 	return nil, nil
 }
 
@@ -96,6 +104,21 @@ func (r *fakeOrderHandlerRepo) ListReturns(_ context.Context, filters model.Retu
 		returns = append(returns, cloneHandlerReturnRequest(returnRequest))
 	}
 	return returns, int64(len(returns)), nil
+}
+
+func (r *fakeOrderHandlerRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*model.Order, int64, error) {
+	orders := make([]*model.Order, 0, len(r.ordersByID))
+	for _, order := range r.ordersByID {
+		copyValue := *order
+		copyValue.Items = append([]model.OrderItem(nil), order.Items...)
+		orders = append(orders, &copyValue)
+	}
+	return orders, int64(len(orders)), nil
+}
+
+func (r *fakeOrderHandlerRepo) ListAllByCursor(_ context.Context, filters model.OrderFilters) ([]*model.Order, string, bool, error) {
+	orders, _, err := r.ListAll(context.Background(), filters)
+	return orders, "", false, err
 }
 
 func (r *fakeOrderHandlerRepo) AddReturnEvidence(
@@ -205,10 +228,6 @@ func (r *fakeOrderHandlerRepo) MarkReturnRefundAttemptFailed(_ context.Context, 
 	return nil
 }
 
-func (r *fakeOrderHandlerRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*model.Order, int64, error) {
-	return nil, 0, nil
-}
-
 func (r *fakeOrderHandlerRepo) GetEventsByOrderID(_ context.Context, _ string) ([]*model.OrderEvent, error) {
 	return nil, nil
 }
@@ -258,6 +277,22 @@ func (r *fakeOrderHandlerRepo) MarkOutboxPublished(_ context.Context, _ string, 
 
 func (r *fakeOrderHandlerRepo) MarkOutboxFailed(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
+}
+
+func (r *fakeOrderHandlerRepo) ExpirePendingReservation(
+	_ context.Context,
+	orderID string,
+	_, _, _ string,
+	_ *model.OutboxMessage,
+) (bool, error) {
+	order, ok := r.ordersByID[orderID]
+	if !ok || order.Status != model.OrderStatusPending {
+		return false, nil
+	}
+	order.Status = model.OrderStatusCancelled
+	order.ReservationExpiresAt = nil
+	order.ReservationAllocatedAt = nil
+	return true, nil
 }
 
 func (r *fakeOrderHandlerRepo) ApplyInboxStatusTransition(

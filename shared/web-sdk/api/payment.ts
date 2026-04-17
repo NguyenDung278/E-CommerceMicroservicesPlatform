@@ -7,6 +7,10 @@ export interface SharedProcessPaymentData<TPaymentMethod extends string = string
   amount?: number;
 }
 
+export interface SharedProcessPaymentOptions {
+  idempotencyKey?: string;
+}
+
 type RequestLike = <T>(
   path: string,
   options?: RequestOptions
@@ -26,12 +30,18 @@ export function createPaymentApi<TPaymentMethod extends string = string>(
   return {
     processPayment(
       token: string,
-      body: SharedProcessPaymentData<TPaymentMethod>
+      body: SharedProcessPaymentData<TPaymentMethod>,
+      options: SharedProcessPaymentOptions = {}
     ): Promise<ApiEnvelope<Payment>> {
       return request<unknown>("/api/v1/payments", {
         method: "POST",
         token,
         body,
+        headers: options.idempotencyKey
+          ? {
+              "Idempotency-Key": options.idempotencyKey,
+            }
+          : undefined,
       }).then((response) => ({
         ...response,
         data: normalizePayment(response.data),

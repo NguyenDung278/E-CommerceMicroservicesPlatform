@@ -25,6 +25,7 @@ func (h *CartHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 
 	cart.GET("", h.forward)
 	cart.DELETE("", h.forward)
+	cart.POST("/merge", h.forward)
 	cart.POST("/items", h.forward)
 	cart.PUT("/items/:productId", h.forward)
 	cart.DELETE("/items/:productId", h.forward)

@@ -201,3 +201,69 @@ func TestAddItemMapsProductNotFound(t *testing.T) {
 		t.Fatalf("expected ErrProductNotFound, got %v", err)
 	}
 }
+
+func TestMergeCartMergesGuestItemsInSingleSave(t *testing.T) {
+	repo := newFakeCartRepo()
+	repo.carts["user-1"] = &model.Cart{
+		UserID: "user-1",
+		Items: []model.CartItem{
+			{ProductID: "product-1", Name: "Keyboard", Price: 40, Quantity: 1},
+		},
+		Total: 40,
+	}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {Id: "product-1", Name: "Mechanical Keyboard", Price: 55, StockQuantity: 5},
+			"product-2": {Id: "product-2", Name: "Mouse", Price: 25, StockQuantity: 4},
+		},
+	}
+	svc := NewCartService(repo, catalog)
+
+	cart, err := svc.MergeCart(context.Background(), "user-1", dto.MergeCartRequest{
+		Items: []dto.AddToCartRequest{
+			{ProductID: "product-1", Quantity: 2},
+			{ProductID: "product-2", Quantity: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MergeCart returned error: %v", err)
+	}
+
+	if len(cart.Items) != 2 {
+		t.Fatalf("expected 2 items after merge, got %d", len(cart.Items))
+	}
+	if cart.Items[0].Quantity != 3 {
+		t.Fatalf("expected merged quantity 3 for product-1, got %d", cart.Items[0].Quantity)
+	}
+	if cart.Items[0].Price != 55 {
+		t.Fatalf("expected refreshed price 55 for product-1, got %.2f", cart.Items[0].Price)
+	}
+	if cart.Total != 190 {
+		t.Fatalf("expected total 190, got %.2f", cart.Total)
+	}
+	if repo.saveCount != 1 {
+		t.Fatalf("expected a single save, got %d", repo.saveCount)
+	}
+}
+
+func TestMergeCartReturnsInsufficientStockWithoutSaving(t *testing.T) {
+	repo := newFakeCartRepo()
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {Id: "product-1", Name: "Mouse", Price: 25, StockQuantity: 1},
+		},
+	}
+	svc := NewCartService(repo, catalog)
+
+	_, err := svc.MergeCart(context.Background(), "user-1", dto.MergeCartRequest{
+		Items: []dto.AddToCartRequest{
+			{ProductID: "product-1", Quantity: 2},
+		},
+	})
+	if !errors.Is(err, ErrInsufficientStock) {
+		t.Fatalf("expected ErrInsufficientStock, got %v", err)
+	}
+	if repo.saveCount != 0 {
+		t.Fatalf("expected no save on failed merge, got %d", repo.saveCount)
+	}
+}

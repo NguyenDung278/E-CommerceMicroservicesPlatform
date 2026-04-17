@@ -52,6 +52,7 @@ import { validateProduct } from "@/utils/validation";
 import "@/styles/pages/admin/admin-page.css";
 
 const adminReturnPageSize = 6;
+const adminOrderPageSize = 8;
 const returnQueueRefreshIntervalMs = 20_000;
 
 export function AdminPage() {
@@ -93,6 +94,12 @@ export function AdminPage() {
     limit: adminReturnPageSize,
     total: 0,
   });
+  const [adminOrderMeta, setAdminOrderMeta] = useState<ApiMeta>({
+    limit: adminOrderPageSize,
+    next_cursor: "",
+    has_next: false,
+  });
+  const [isLoadingMoreOrders, setIsLoadingMoreOrders] = useState(false);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [form, setForm] = useState<ProductFormState>(createDefaultProductForm);
@@ -207,15 +214,27 @@ export function AdminPage() {
     }
   }, [isAdmin, token]);
 
-  const loadAdminOrders = useCallback(async () => {
+  const loadAdminOrders = useCallback(async (options: { append?: boolean; cursor?: string } = {}) => {
     if (!token) {
       return;
     }
 
     try {
-      setIsLoadingOrders(true);
-      const response = await api.listAdminOrders(token, { limit: 8 });
-      setOrders(response.data);
+      if (options.append) {
+        setIsLoadingMoreOrders(true);
+      } else {
+        setIsLoadingOrders(true);
+      }
+      const response = await api.listAdminOrders(token, {
+        limit: adminOrderPageSize,
+        cursor: options.cursor,
+      });
+      setOrders((current) => (options.append ? [...current, ...response.data] : response.data));
+      setAdminOrderMeta({
+        limit: response.meta?.limit ?? adminOrderPageSize,
+        next_cursor: response.meta?.next_cursor ?? "",
+        has_next: response.meta?.has_next ?? false,
+      });
 
       const paymentEntries = await Promise.all(
         response.data.map(async (order) => {
@@ -228,11 +247,22 @@ export function AdminPage() {
         })
       );
 
-      setPaymentsByOrder(Object.fromEntries(paymentEntries));
+      setPaymentsByOrder((current) =>
+        options.append
+          ? {
+              ...current,
+              ...Object.fromEntries(paymentEntries),
+            }
+          : Object.fromEntries(paymentEntries)
+      );
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
     } finally {
-      setIsLoadingOrders(false);
+      if (options.append) {
+        setIsLoadingMoreOrders(false);
+      } else {
+        setIsLoadingOrders(false);
+      }
     }
   }, [token]);
 
@@ -947,8 +977,16 @@ export function AdminPage() {
           <AdminOrdersSection
             busyOrderId={busyOrderId}
             busyRefundId={busyRefundId}
+            hasMoreOrders={Boolean(adminOrderMeta.has_next)}
             isLoadingOrders={isLoadingOrders}
+            isLoadingMoreOrders={isLoadingMoreOrders}
             orders={orders}
+            onLoadMoreOrders={() =>
+              void loadAdminOrders({
+                append: true,
+                cursor: adminOrderMeta.next_cursor,
+              })
+            }
             paymentsByOrder={paymentsByOrder}
             onCancelOrder={(order) => void handleManualCancel(order)}
             onRefund={(payment) => void handleRefund(payment)}

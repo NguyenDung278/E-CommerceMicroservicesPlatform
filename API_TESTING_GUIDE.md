@@ -9,6 +9,15 @@ Tài liệu này hướng dẫn test HTTP API của repo theo trạng thái sour
 
 Guide này không cố thay Postman collection chi tiết đến từng request nhỏ. Nó đóng vai trò như một playbook để bạn tự dựng collection, hoặc dùng làm checklist smoke test mỗi khi sửa backend/frontend.
 
+Collection và environment starter hiện có sẵn tại:
+
+- `postman/ecommerce-platform-local.postman_collection.json`
+- `postman/ecommerce-platform-local.postman_environment.json`
+
+Checklist verify theo flow hiện có tại:
+
+- `docs/learning/15-end-to-end-verification-checklists.md`
+
 ---
 
 ## 1. Source Of Truth Khi Test API
@@ -123,7 +132,8 @@ Tạo environment tên `ecommerce-local` với các biến sau:
 | `address_id` | địa chỉ đã tạo |
 | `return_id` | return request đã tạo |
 | `coupon_code` | coupon admin đã tạo |
-| `idempotency_key` | dùng cho payment/refund testing |
+| `order_idempotency_key` | dùng cho create-order replay testing |
+| `payment_idempotency_key` | dùng cho payment/refund replay testing |
 | `oauth_ticket` | dùng khi test OAuth exchange |
 
 Header hay dùng:
@@ -203,9 +213,11 @@ Nếu bạn đang dựng collection mới, hãy test theo đúng thứ tự này
 5. list products
 6. add to cart
 7. preview order
-8. create order
-9. create payment
-10. get payment history
+8. create order với `Idempotency-Key`
+9. retry create order với cùng `Idempotency-Key` để verify replay
+10. create payment với `Idempotency-Key`
+11. retry payment với cùng `Idempotency-Key` để verify replay
+12. get payment history
 
 ### 7.3. Admin Journey
 
@@ -303,14 +315,15 @@ Nếu bạn đang dựng collection mới, hãy test theo đúng thứ tự này
 | --- | --- |
 | `GET` | `/api/v1/cart` |
 | `DELETE` | `/api/v1/cart` |
+| `POST` | `/api/v1/cart/merge` |
 | `POST` | `/api/v1/cart/items` |
 | `PUT` | `/api/v1/cart/items/:productId` |
 | `DELETE` | `/api/v1/cart/items/:productId` |
 
 Lưu ý quan trọng:
 
-- route `POST /api/v1/cart/merge` hiện xuất hiện trong test expectation cũ, nhưng gateway handler hiện không expose route này
-- merge guest cart hiện vẫn chủ yếu nằm ở logic frontend
+- `POST /api/v1/cart/merge` hiện là route thật để merge guest cart vào server-side cart sau login
+- frontend vẫn giữ guest cart ở local storage khi chưa đăng nhập, nhưng việc merge sau khi có token giờ đã được chuyển xuống backend
 
 ### 8.6. Orders, Returns, Coupons
 

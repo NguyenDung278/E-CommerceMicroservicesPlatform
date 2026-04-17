@@ -39,13 +39,35 @@ import (
 // Performance:
 //   - O(n) over order items plus downstream product lookups and one repository
 //     transaction.
-func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string, req dto.CreateOrderRequest) (*model.Order, error) {
+func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail, idempotencyKey string, req dto.CreateOrderRequest) (*model.Order, error) {
 	startedAt := time.Now()
 	outcome := appobs.OutcomeSuccess
 	requestLog := appobs.LoggerWithContext(s.log, ctx, zap.String("user_id", userID))
 	defer func() {
 		appobs.ObserveOperation("order-service", "create_order", outcome, time.Since(startedAt))
 	}()
+
+	normalizedKey, err := normalizeOrderIdempotencyKey(idempotencyKey)
+	if err != nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("create order failed due to invalid idempotency key", zap.Error(err))
+		return nil, err
+	}
+
+	requestHash := hashCreateOrderRequest(req)
+	replayedOrder, err := s.findIdempotentOrder(ctx, userID, normalizedKey, requestHash)
+	if err != nil || replayedOrder != nil {
+		if err != nil {
+			outcome = appobs.OutcomeFromError(err, ErrIdempotencyKeyConflict)
+			requestLog.Warn("create order failed during idempotency lookup", zap.Error(err))
+			return nil, err
+		}
+		requestLog.Info("order create request replayed from idempotency key",
+			zap.String("idempotency_key", normalizedKey),
+			zap.String("order_id", replayedOrder.ID),
+		)
+		return replayedOrder, nil
+	}
 
 	quote, err := s.quoteOrder(ctx, req)
 	if err != nil {
@@ -67,12 +89,26 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		return nil, err
 	}
 
-	order := newOrderFromQuote(userID, quote, time.Now())
+	now := time.Now()
+	order := newOrderFromQuote(userID, quote, now)
 	createdOutbox, err := buildCreatedOrderOutbox(ctx, order, userEmail)
 	if err != nil {
 		outcome = appobs.OutcomeSystemError
 		requestLog.Error("create order failed while building outbox payload", zap.Error(err))
 		return nil, err
+	}
+
+	var idempotencyRecord *model.OrderIdempotencyRecord
+	if normalizedKey != "" && order.ReservationExpiresAt != nil {
+		idempotencyRecord = &model.OrderIdempotencyRecord{
+			UserID:               userID,
+			IdempotencyKey:       normalizedKey,
+			RequestHash:          requestHash,
+			OrderID:              order.ID,
+			ReservationExpiresAt: *order.ReservationExpiresAt,
+			CreatedAt:            now,
+			UpdatedAt:            now,
+		}
 	}
 
 	if err := s.reserveCreatedOrderStock(ctx, requestLog, order); err != nil {
@@ -81,10 +117,28 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail string
 		return nil, err
 	}
 
-	if err := s.persistCreatedOrder(ctx, requestLog, order, createdOutbox); err != nil {
+	if err := s.persistCreatedOrder(ctx, requestLog, order, createdOutbox, idempotencyRecord); err != nil {
 		s.restoreOrderItemsStock(ctx, order.ID, order.Items, "create order persistence rollback")
+		if normalizedKey != "" && isOrderUniqueViolation(err) {
+			replayedOrder, replayErr := s.findIdempotentOrder(ctx, userID, normalizedKey, requestHash)
+			if replayErr == nil && replayedOrder != nil {
+				requestLog.Info("order request replayed after idempotency unique violation",
+					zap.String("idempotency_key", normalizedKey),
+					zap.String("order_id", replayedOrder.ID),
+				)
+				return replayedOrder, nil
+			}
+			if replayErr != nil {
+				requestLog.Error("order idempotency replay failed after unique violation",
+					zap.String("idempotency_key", normalizedKey),
+					zap.Error(replayErr),
+				)
+				return nil, replayErr
+			}
+		}
 		outcome = appobs.OutcomeFromError(
 			err,
+			ErrIdempotencyKeyConflict,
 			ErrCouponNotFound,
 			ErrCouponInactive,
 			ErrCouponExpired,
@@ -333,19 +387,20 @@ func newOrderFromQuote(userID string, quote *pricedOrderQuote, now time.Time) *m
 	orderID := uuid.New().String()
 
 	return &model.Order{
-		ID:              orderID,
-		UserID:          userID,
-		Status:          model.OrderStatusPending,
-		Items:           buildOrderItems(orderID, quote.Items),
-		CouponCode:      quote.CouponCode,
-		SubtotalPrice:   quote.SubtotalPrice,
-		DiscountAmount:  quote.DiscountAmount,
-		ShippingMethod:  quote.ShippingMethod,
-		ShippingFee:     quote.ShippingFee,
-		ShippingAddress: quote.ShippingAddress,
-		TotalPrice:      quote.TotalPrice,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                   orderID,
+		UserID:               userID,
+		Status:               model.OrderStatusPending,
+		Items:                buildOrderItems(orderID, quote.Items),
+		CouponCode:           quote.CouponCode,
+		SubtotalPrice:        quote.SubtotalPrice,
+		DiscountAmount:       quote.DiscountAmount,
+		ShippingMethod:       quote.ShippingMethod,
+		ShippingFee:          quote.ShippingFee,
+		ShippingAddress:      quote.ShippingAddress,
+		ReservationExpiresAt: buildOrderReservationExpiry(now),
+		TotalPrice:           quote.TotalPrice,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 }
 
@@ -402,8 +457,20 @@ func buildOrderItems(orderID string, items []pricedOrderItem) []model.OrderItem 
 //
 // Performance:
 //   - dominated by one repository transaction.
-func (s *OrderService) persistCreatedOrder(ctx context.Context, requestLog *zap.Logger, order *model.Order, outbox *model.OutboxMessage) error {
-	if err := s.repo.Create(ctx, order, outbox); err != nil {
+func (s *OrderService) persistCreatedOrder(
+	ctx context.Context,
+	requestLog *zap.Logger,
+	order *model.Order,
+	outbox *model.OutboxMessage,
+	record *model.OrderIdempotencyRecord,
+) error {
+	var err error
+	if record != nil {
+		err = s.repo.CreateWithIdempotency(ctx, order, outbox, record)
+	} else {
+		err = s.repo.Create(ctx, order, outbox)
+	}
+	if err != nil {
 		logCreateOrderPersistenceError(requestLog, order, err)
 		return err
 	}

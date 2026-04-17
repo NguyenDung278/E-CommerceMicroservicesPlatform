@@ -100,6 +100,34 @@ export function CheckoutPage() {
     .filter(Boolean)
     .sort()
     .join("|");
+  const checkoutRequestFingerprint = useMemo(
+    () =>
+      buildCheckoutRequestFingerprint(
+        draftItems,
+        appliedCouponCode,
+        selectedShippingMethod,
+        form.fullName,
+        form.phone
+      ),
+    [appliedCouponCode, draftItems, form.fullName, form.phone, selectedShippingMethod]
+  );
+  const [orderRequestKey, setOrderRequestKey] = useState(() =>
+    generateCheckoutIdempotencyKey("order")
+  );
+  const [paymentRequestKey, setPaymentRequestKey] = useState(() =>
+    generateCheckoutIdempotencyKey("payment")
+  );
+  const [createdOrderId, setCreatedOrderId] = useState("");
+
+  useEffect(() => {
+    setOrderRequestKey(generateCheckoutIdempotencyKey("order"));
+    setPaymentRequestKey(generateCheckoutIdempotencyKey("payment"));
+    setCreatedOrderId("");
+  }, [checkoutRequestFingerprint]);
+
+  useEffect(() => {
+    setPaymentRequestKey(generateCheckoutIdempotencyKey("payment"));
+  }, [paymentMethod]);
 
   useEffect(() => {
     let active = true;
@@ -376,23 +404,40 @@ export function CheckoutPage() {
       return;
     }
 
+    let orderId = createdOrderId;
     try {
       setIsSubmitting(true);
 
-      const orderResponse = await api.createOrder(token, {
-        items: draftItems.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-        })),
-        coupon_code: appliedCouponCode || undefined,
-        shipping_method: selectedShippingMethod,
-        shipping_address: buildCheckoutSubmissionAddress(form, selectedShippingMethod),
-      });
+      if (!orderId) {
+        const orderResponse = await api.createOrder(
+          token,
+          {
+            items: draftItems.map((item) => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+            })),
+            coupon_code: appliedCouponCode || undefined,
+            shipping_method: selectedShippingMethod,
+            shipping_address: buildCheckoutSubmissionAddress(form, selectedShippingMethod),
+          },
+          {
+            idempotencyKey: orderRequestKey,
+          }
+        );
+        orderId = orderResponse.data.id;
+        setCreatedOrderId(orderId);
+      }
 
-      const paymentResponse = await api.processPayment(token, {
-        order_id: orderResponse.data.id,
-        payment_method: paymentMethod,
-      });
+      const paymentResponse = await api.processPayment(
+        token,
+        {
+          order_id: orderId,
+          payment_method: paymentMethod,
+        },
+        {
+          idempotencyKey: paymentRequestKey,
+        }
+      );
 
       await syncPurchasedProductsToWorkbook(draftItems);
 
@@ -400,7 +445,7 @@ export function CheckoutPage() {
         await clearCart();
       }
 
-      navigate(`/orders/${orderResponse.data.id}`, {
+      navigate(`/orders/${orderId}`, {
         replace: true,
         state: {
           confirmation: true,
@@ -408,7 +453,19 @@ export function CheckoutPage() {
         },
       });
     } catch (reason) {
-      setFeedback(getErrorMessage(reason));
+      const message = getErrorMessage(reason);
+      if (createdOrderId) {
+        setFeedback(
+          `Order đã được tạo nhưng thanh toán chưa hoàn tất. Bạn có thể retry payment an toàn hoặc mở trang order để tiếp tục. ${message}`
+        );
+      } else if (orderId) {
+        setCreatedOrderId(orderId);
+        setFeedback(
+          `Order đã được tạo nhưng thanh toán chưa hoàn tất. Bạn có thể retry payment an toàn hoặc mở trang order để tiếp tục. ${message}`
+        );
+      } else {
+        setFeedback(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -423,6 +480,13 @@ export function CheckoutPage() {
         </div>
 
         {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
+        {createdOrderId ? (
+          <div className="hero-actions">
+            <Link className="secondary-link" to={`/orders/${createdOrderId}`}>
+              Open Current Order
+            </Link>
+          </div>
+        ) : null}
 
         {draftItems.length === 0 ? (
           <div className="empty-card checkout-empty-state">
@@ -692,7 +756,11 @@ export function CheckoutPage() {
                   disabled={isSubmitting}
                   type="submit"
                 >
-                  {isSubmitting ? "Placing Order..." : "Place Order"}
+                  {isSubmitting
+                    ? "Processing Checkout..."
+                    : createdOrderId
+                    ? "Retry Payment"
+                    : "Place Order"}
                 </button>
 
                 <p className="checkout-summary-caption">
@@ -869,4 +937,33 @@ function buildFallbackShippingOptions(subtotal: number): ShippingOption[] {
 
 function roundCurrencyAmount(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function buildCheckoutRequestFingerprint(
+  items: Array<{ product_id: string; quantity: number }>,
+  couponCode: string,
+  shippingMethod: ShippingMethodChoice,
+  fullName: string,
+  phone: string
+) {
+  const normalizedItems = items
+    .map((item) => `${item.product_id.trim()}:${item.quantity}`)
+    .sort()
+    .join("|");
+
+  return JSON.stringify({
+    items: normalizedItems,
+    couponCode: normalizeCheckoutCouponCode(couponCode),
+    shippingMethod,
+    fullName: sanitizeText(fullName),
+    phone: sanitizeText(phone),
+  });
+}
+
+function generateCheckoutIdempotencyKey(scope: "order" | "payment") {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `checkout:${scope}:${crypto.randomUUID()}`;
+  }
+
+  return `checkout:${scope}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
 }

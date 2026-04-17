@@ -84,7 +84,24 @@ func (s *OrderService) GetOrderForAdmin(ctx context.Context, orderID string) (*m
 // Performance:
 //   - dominated by one repository query.
 func (s *OrderService) GetUserOrders(ctx context.Context, userID string) ([]*model.Order, error) {
-	return s.repo.GetByUserID(ctx, userID)
+	orders, err := s.repo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	for index, order := range orders {
+		if !isPendingReservationExpired(order, time.Now()) {
+			continue
+		}
+
+		refreshedOrder, err := s.loadOrderByID(ctx, order.ID)
+		if err != nil {
+			return nil, err
+		}
+		orders[index] = refreshedOrder
+	}
+
+	return orders, nil
 }
 
 // GetUserOrderSummary returns the user's orders together with grouped payment
@@ -117,7 +134,7 @@ func (s *OrderService) GetUserOrderSummary(ctx context.Context, userID, authHead
 		appobs.ObserveOperation("order-service", "get_user_order_summary", outcome, time.Since(startedAt))
 	}()
 
-	orders, err := s.repo.GetByUserID(ctx, userID)
+	orders, err := s.GetUserOrders(ctx, userID)
 	if err != nil {
 		outcome = appobs.OutcomeSystemError
 		requestLog.Error("failed to load user orders for summary", zap.Error(err))
@@ -169,6 +186,10 @@ func (s *OrderService) GetUserOrderSummary(ctx context.Context, userID, authHead
 //   - dominated by repository count and list queries.
 func (s *OrderService) ListAdminOrders(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error) {
 	return s.repo.ListAll(ctx, filters)
+}
+
+func (s *OrderService) ListAdminOrdersByCursor(ctx context.Context, filters model.OrderFilters) ([]*model.Order, string, bool, error) {
+	return s.repo.ListAllByCursor(ctx, filters)
 }
 
 // GetOrderTimeline returns the recorded audit trail for an order when the actor
@@ -281,7 +302,7 @@ func (s *OrderService) loadOrderByID(ctx context.Context, orderID string) (*mode
 	if order == nil {
 		return nil, ErrOrderNotFound
 	}
-	return order, nil
+	return s.finalizeOrderReservationState(ctx, order)
 }
 
 // buildOrderIDSet constructs the membership set used to filter payment history

@@ -292,6 +292,8 @@ export type Order = {
   shipping_method: string;
   shipping_fee: number;
   shipping_address?: ShippingAddress;
+  reservation_expires_at?: string;
+  reservation_allocated_at?: string;
   total_price: number;
   items: OrderItem[];
   created_at: string;

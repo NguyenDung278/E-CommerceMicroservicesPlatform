@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
@@ -22,6 +23,9 @@ var (
 	ErrOrderNotCancellable              = errors.New("only pending orders can be cancelled")
 	ErrAdminCancelNotAllowed            = errors.New("only pending or paid orders can be cancelled manually")
 	ErrInvalidOrderStatus               = errors.New("invalid order status")
+	ErrInvalidIdempotencyKey            = errors.New("idempotency key is invalid")
+	ErrIdempotencyKeyConflict           = errors.New("idempotency key is already used for a different order request")
+	ErrInvalidOrderCursor               = repository.ErrInvalidOrderCursor
 	ErrCouponAlreadyExists              = errors.New("coupon code already exists")
 	ErrCouponNotFound                   = repository.ErrCouponNotFound
 	ErrCouponInactive                   = repository.ErrCouponInactive
@@ -80,6 +84,8 @@ type OrderService struct {
 	paymentClient    paymentHistorySource
 	returnMediaStore returnEvidenceStore
 }
+
+const orderReservationHoldDuration = 15 * time.Minute
 
 // productCatalog describes the downstream product capabilities the order
 // service needs for pricing and stock restoration.

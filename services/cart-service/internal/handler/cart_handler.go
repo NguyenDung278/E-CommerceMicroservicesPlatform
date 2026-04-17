@@ -26,6 +26,7 @@ func (h *CartHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	cart := e.Group("/api/v1/cart")
 	cart.Use(middleware.JWTAuth(jwtSecret))
 	cart.GET("", h.GetCart)
+	cart.POST("/merge", h.MergeCart)
 	cart.POST("/items", h.AddItem)
 	cart.PUT("/items/:productId", h.UpdateItem)
 	cart.DELETE("/items/:productId", h.RemoveItem)
@@ -39,6 +40,37 @@ func (h *CartHandler) GetCart(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", err.Error())
 	}
 	return response.Success(c, http.StatusOK, "cart retrieved", cart)
+}
+
+// MergeCart handles POST /api/v1/cart/merge
+//
+// Muc dich: hop nhat guest cart vao server-side cart cua user da dang nhap
+// trong mot lan goi API duy nhat.
+func (h *CartHandler) MergeCart(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	var req dto.MergeCartRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	cart, err := h.cartService.MergeCart(c.Request().Context(), claims.UserID, req)
+	if err != nil {
+		if errors.Is(err, service.ErrProductNotFound) {
+			return response.Error(c, http.StatusNotFound, "product not found", err.Error())
+		}
+		if errors.Is(err, service.ErrProductUnavailable) {
+			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
+		}
+		if errors.Is(err, service.ErrInsufficientStock) {
+			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", err.Error())
+	}
+
+	return response.Success(c, http.StatusOK, "guest cart merged", cart)
 }
 
 // AddItem handles POST /api/v1/cart/items

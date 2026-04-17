@@ -17,6 +17,7 @@ Nếu bạn đang phân vân "nên đọc gì trước để vừa hiểu projec
 9. [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md)
 10. [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md)
 11. [14-go-sql-idempotency-interview-playbook.md](./14-go-sql-idempotency-interview-playbook.md)
+12. [15-end-to-end-verification-checklists.md](./15-end-to-end-verification-checklists.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 
@@ -59,3 +60,4 @@ Lý do:
 - [12-production-readiness-roadmap.md](./12-production-readiness-roadmap.md): nối từ hiểu source code sang biết mình cần học gì để ship một sản phẩm e-commerce production-ready
 - [13-repo-based-career-roadmap.md](./13-repo-based-career-roadmap.md): bản đồ học nghề bám chính repo này, giải thích nên học gì theo từng giai đoạn từ hiểu flow tới tư duy production
 - [14-go-sql-idempotency-interview-playbook.md](./14-go-sql-idempotency-interview-playbook.md): playbook cực thực dụng về nền Go trước microservice, cách luyện SQL/transaction/idempotency, và 5 đề tài mạnh để build portfolio/phỏng vấn backend
+- [15-end-to-end-verification-checklists.md](./15-end-to-end-verification-checklists.md): checklist ngắn gọn nhưng sát production để verify end-to-end theo flow thay vì test rời từng API

@@ -54,13 +54,13 @@ func TestCartHandlerRegisterRoutesParity(t *testing.T) {
 	assertRoutesPresent(t, e,
 		routeExpectation{method: http.MethodGet, path: "/api/v1/cart"},
 		routeExpectation{method: http.MethodDelete, path: "/api/v1/cart"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/cart/merge"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/cart/items"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/cart/items/:productId"},
 		routeExpectation{method: http.MethodDelete, path: "/api/v1/cart/items/:productId"},
 	)
 
 	assertRoutesAbsent(t, e,
-		routeExpectation{method: http.MethodPost, path: "/api/v1/cart/merge"},
 		routeExpectation{method: http.MethodPatch, path: "/api/v1/cart/items/:productId"},
 	)
 }

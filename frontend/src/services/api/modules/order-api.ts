@@ -40,6 +40,10 @@ export interface CreateOrderData {
   shipping_address?: ShippingAddress;
 }
 
+export interface CreateOrderOptions {
+  idempotencyKey?: string;
+}
+
 /**
  * Preview order data
  */
@@ -75,11 +79,20 @@ export const orderApi = {
   /**
    * Create a new order
    */
-  createOrder(token: string, body: CreateOrderData): Promise<ApiEnvelope<Order>> {
+  createOrder(
+    token: string,
+    body: CreateOrderData,
+    options: CreateOrderOptions = {}
+  ): Promise<ApiEnvelope<Order>> {
     return request<unknown>("/api/v1/orders", {
       method: "POST",
       token,
       body,
+      headers: options.idempotencyKey
+        ? {
+            "Idempotency-Key": options.idempotencyKey,
+          }
+        : undefined,
     }).then((response) => ({
       ...response,
       data: normalizeOrder(response.data),

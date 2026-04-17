@@ -4,8 +4,11 @@ import type { Order, Payment } from "@/types/api";
 type AdminOrdersSectionProps = {
   busyOrderId: string;
   busyRefundId: string;
+  hasMoreOrders: boolean;
   isLoadingOrders: boolean;
+  isLoadingMoreOrders: boolean;
   orders: Order[];
+  onLoadMoreOrders: () => void;
   paymentsByOrder: Record<string, Payment[]>;
   onCancelOrder: (order: Order) => void;
   onRefund: (payment: Payment) => void;
@@ -14,8 +17,11 @@ type AdminOrdersSectionProps = {
 export function AdminOrdersSection({
   busyOrderId,
   busyRefundId,
+  hasMoreOrders,
   isLoadingOrders,
+  isLoadingMoreOrders,
   orders,
+  onLoadMoreOrders,
   paymentsByOrder,
   onCancelOrder,
   onRefund,
@@ -116,6 +122,19 @@ export function AdminOrdersSection({
           <p className="history-empty">Chưa có đơn hàng nào để xử lý.</p>
         ) : null}
       </div>
+
+      {hasMoreOrders ? (
+        <div className="history-actions">
+          <button
+            className="ghost-button"
+            disabled={isLoadingMoreOrders}
+            type="button"
+            onClick={onLoadMoreOrders}
+          >
+            {isLoadingMoreOrders ? "Đang tải thêm..." : "Tải thêm đơn hàng"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

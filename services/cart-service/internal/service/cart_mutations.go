@@ -8,6 +8,42 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/model"
 )
 
+// MergeCart merges guest cart items into the authenticated user's cart in a
+// single server-side mutation.
+func (s *CartService) MergeCart(ctx context.Context, userID string, req dto.MergeCartRequest) (*model.Cart, error) {
+	cart, err := s.loadCart(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, item := range req.Items {
+		product, err := s.getProductForCart(ctx, item.ProductID)
+		if err != nil {
+			return nil, err
+		}
+
+		itemIndex := findCartItemIndex(cart.Items, item.ProductID)
+		if itemIndex >= 0 {
+			updatedItem, delta, err := mergeCartItem(cart.Items[itemIndex], product, item.Quantity)
+			if err != nil {
+				return nil, err
+			}
+			cart.Items[itemIndex] = updatedItem
+			cart.Total += delta
+			continue
+		}
+
+		nextItem, err := newCartItem(product, item)
+		if err != nil {
+			return nil, err
+		}
+		cart.Items = append(cart.Items, nextItem)
+		cart.Total += itemSubtotal(nextItem)
+	}
+
+	return cart, s.saveCart(ctx, cart)
+}
+
 // AddItem adds a product to the cart or increases the quantity if the product is
 // already present.
 //

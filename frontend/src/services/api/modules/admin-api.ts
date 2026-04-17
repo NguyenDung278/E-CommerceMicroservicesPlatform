@@ -26,6 +26,7 @@ export interface AdminListOrdersOptions {
   status?: string;
   from?: string;
   to?: string;
+  cursor?: string;
   page?: number;
   limit?: number;
 }
@@ -112,8 +113,13 @@ export const adminApi = {
 
   listOrders(token: string, options: AdminListOrdersOptions = {}): Promise<ApiEnvelope<Order[]>> {
     const params = new URLSearchParams();
-    params.set("page", String(options.page ?? 1));
     params.set("limit", String(options.limit ?? 20));
+
+    if (options.cursor) {
+      params.set("cursor", options.cursor);
+    } else {
+      params.set("page", String(options.page ?? 1));
+    }
 
     if (options.userId) {
       params.set("user_id", options.userId);

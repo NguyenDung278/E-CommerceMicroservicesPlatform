@@ -95,9 +95,9 @@ Compose hiện có profile `client`, nhưng repo vẫn đang dùng `frontend/` l
 Một số flow đã khá chắc, một số flow vẫn là vùng nên đầu tư tiếp:
 
 - payment create/refund đã có idempotency
-- create order vẫn là vùng nên harden thêm
-- stock reservation chưa là flow transaction-safe hoàn chỉnh
-- guest cart merge vẫn chủ yếu nằm ở frontend logic
+- create order đã nhận `Idempotency-Key` và replay theo `user + key + request hash`
+- stock reservation hiện được giữ ở lúc create order, có TTL release khi đơn pending quá hạn, và được allocate khi payment hoàn tất
+- guest cart merge đã có API backend; các vùng nên đầu tư tiếp nhiều hơn hiện là observability, admin scale path, và shopper UX
 
 ---
 
@@ -216,6 +216,7 @@ Các lớp trách nhiệm:
 ### Điều đáng chú ý
 
 - product listing public dùng cursor pagination
+- admin order ledger cũng đã có cursor pagination cho dashboard path nóng
 - review flow đã có caching và transaction logic tương đối tốt
 - storefront category pages đang là một lớp UI được tùy biến khá sâu so với catalog list đơn thuần
 
@@ -243,7 +244,7 @@ Các lớp trách nhiệm:
 ### Điều đáng chú ý
 
 - giỏ hàng guest vẫn có logic local ở frontend
-- merge guest cart sau login chưa được dời hoàn toàn xuống backend
+- merge guest cart sau login giờ đi qua `POST /api/v1/cart/merge`, giúp auth transition bớt phụ thuộc vào replay nhiều lần từ client
 
 ---
 

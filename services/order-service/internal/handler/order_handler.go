@@ -95,8 +95,20 @@ func (h *OrderHandler) CreateOrder(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	order, err := h.orderService.CreateOrder(c.Request().Context(), claims.UserID, claims.Email, req)
+	order, err := h.orderService.CreateOrder(
+		c.Request().Context(),
+		claims.UserID,
+		claims.Email,
+		c.Request().Header.Get("Idempotency-Key"),
+		req,
+	)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidIdempotencyKey) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "idempotency key is invalid")
+		}
+		if errors.Is(err, service.ErrIdempotencyKeyConflict) {
+			return response.Error(c, http.StatusConflict, "idempotency conflict", "idempotency key is already used for a different order request")
+		}
 		return writePricingError(c, err, "failed to create order")
 	}
 	return response.Success(c, http.StatusCreated, "order created", order)
@@ -278,6 +290,7 @@ func (h *OrderHandler) ListAdminOrders(c echo.Context) error {
 	filters := model.OrderFilters{
 		UserID: strings.TrimSpace(c.QueryParam("user_id")),
 		Status: model.OrderStatus(strings.TrimSpace(c.QueryParam("status"))),
+		Cursor: strings.TrimSpace(c.QueryParam("cursor")),
 		Page:   page,
 		Limit:  limit,
 	}
@@ -292,6 +305,25 @@ func (h *OrderHandler) ListAdminOrders(c echo.Context) error {
 	}
 	filters.From = from
 	filters.To = to
+
+	if filters.Cursor != "" {
+		orders, nextCursor, hasNext, err := h.orderService.ListAdminOrdersByCursor(c.Request().Context(), filters)
+		if err != nil {
+			if errors.Is(err, service.ErrInvalidOrderCursor) {
+				return response.Error(c, http.StatusBadRequest, "validation failed", "invalid cursor")
+			}
+			return response.Error(c, http.StatusInternalServerError, "error", "failed to list orders")
+		}
+		if orders == nil {
+			orders = []*model.Order{}
+		}
+
+		return response.SuccessWithMeta(c, http.StatusOK, "orders retrieved", orders, &response.Meta{
+			Limit:      limit,
+			NextCursor: nextCursor,
+			HasNext:    &hasNext,
+		})
+	}
 
 	orders, total, err := h.orderService.ListAdminOrders(c.Request().Context(), filters)
 	if err != nil {

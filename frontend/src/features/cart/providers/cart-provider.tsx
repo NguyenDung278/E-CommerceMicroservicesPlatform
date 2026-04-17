@@ -14,8 +14,8 @@ import { useAuth } from "../../auth/hooks/use-auth";
 import {
   createEmptyGuestCart,
   readGuestCart,
-  saveGuestCart,
   clearGuestCart,
+  saveGuestCart,
 } from "../storage/guest-cart-storage";
 
 const emptyCart: Cart = createEmptyGuestCart();
@@ -74,30 +74,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
         fallbackCart = nextCart;
         const guestCart = readGuestCart();
 
-        // Merge guest cart items
+        // Merge guest cart items on the server so auth transitions stay atomic.
         if (guestCart.items.length > 0) {
-          let remainingGuestItems = [...guestCart.items];
-
-          for (const item of guestCart.items) {
-            const response = await cartApi.addToCart(token, {
+          const response = await cartApi.mergeCart(token, {
+            items: guestCart.items.map((item: CartItem) => ({
               product_id: item.product_id,
               quantity: item.quantity,
-            });
-            nextCart = response.data;
-            fallbackCart = nextCart;
-            remainingGuestItems = remainingGuestItems.filter(
-              (guestItem: CartItem) => guestItem.product_id !== item.product_id
-            );
-            saveGuestCart({
-              user_id: "",
-              items: remainingGuestItems,
-              total: remainingGuestItems.reduce(
-                (sum: number, guestItem: CartItem) => sum + guestItem.price * guestItem.quantity,
-                0
-              ),
-            });
-          }
-
+            })),
+          });
+          nextCart = response.data;
+          fallbackCart = nextCart;
           clearGuestCart();
         }
 

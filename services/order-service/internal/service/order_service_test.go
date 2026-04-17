@@ -21,6 +21,7 @@ import (
 type fakeOrderRepo struct {
 	createdOrder        *model.Order
 	createdOutbox       *model.OutboxMessage
+	createdIdempotency  *model.OrderIdempotencyRecord
 	createdReturnOutbox *model.OutboxMessage
 	updatedReturnOutbox *model.OutboxMessage
 	lastReturnFilters   model.ReturnFilters
@@ -29,6 +30,7 @@ type fakeOrderRepo struct {
 	userOrders          []*model.Order
 	createErr           error
 	ordersByID          map[string]*model.Order
+	idempotencyRecords  map[string]*model.OrderIdempotencyRecord
 	returnsByID         map[string]*model.ReturnRequest
 }
 
@@ -38,6 +40,21 @@ func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *mo
 	}
 	r.createdOrder = order
 	r.createdOutbox = outbox
+	return nil
+}
+
+func (r *fakeOrderRepo) CreateWithIdempotency(_ context.Context, order *model.Order, outbox *model.OutboxMessage, record *model.OrderIdempotencyRecord) error {
+	if err := r.Create(context.Background(), order, outbox); err != nil {
+		return err
+	}
+	r.createdIdempotency = record
+	if record != nil {
+		if r.idempotencyRecords == nil {
+			r.idempotencyRecords = map[string]*model.OrderIdempotencyRecord{}
+		}
+		recordCopy := *record
+		r.idempotencyRecords[record.UserID+"::"+record.IdempotencyKey] = &recordCopy
+	}
 	return nil
 }
 
@@ -54,6 +71,15 @@ func (r *fakeOrderRepo) GetByID(_ context.Context, id string) (*model.Order, err
 
 func (r *fakeOrderRepo) GetByUserID(_ context.Context, _ string) ([]*model.Order, error) {
 	return r.userOrders, nil
+}
+
+func (r *fakeOrderRepo) GetIdempotencyKey(_ context.Context, userID, idempotencyKey string) (*model.OrderIdempotencyRecord, error) {
+	record := r.idempotencyRecords[userID+"::"+idempotencyKey]
+	if record == nil {
+		return nil, nil
+	}
+	recordCopy := *record
+	return &recordCopy, nil
 }
 
 func (r *fakeOrderRepo) CreateReturn(_ context.Context, returnRequest *model.ReturnRequest, outbox *model.OutboxMessage) error {
@@ -253,6 +279,10 @@ func (r *fakeOrderRepo) ListAll(_ context.Context, _ model.OrderFilters) ([]*mod
 	return nil, 0, nil
 }
 
+func (r *fakeOrderRepo) ListAllByCursor(_ context.Context, _ model.OrderFilters) ([]*model.Order, string, bool, error) {
+	return nil, "", false, nil
+}
+
 func (r *fakeOrderRepo) GetEventsByOrderID(_ context.Context, _ string) ([]*model.OrderEvent, error) {
 	return nil, nil
 }
@@ -306,6 +336,22 @@ func (r *fakeOrderRepo) MarkOutboxPublished(_ context.Context, _ string, _ time.
 
 func (r *fakeOrderRepo) MarkOutboxFailed(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
+}
+
+func (r *fakeOrderRepo) ExpirePendingReservation(
+	_ context.Context,
+	orderID string,
+	_, _, _ string,
+	_ *model.OutboxMessage,
+) (bool, error) {
+	order, ok := r.ordersByID[orderID]
+	if !ok || order.Status != model.OrderStatusPending {
+		return false, nil
+	}
+	order.Status = model.OrderStatusCancelled
+	order.ReservationExpiresAt = nil
+	order.ReservationAllocatedAt = nil
+	return true, nil
 }
 
 func (r *fakeOrderRepo) ApplyInboxStatusTransition(
@@ -1307,7 +1353,7 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
-	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 2},
 		},
@@ -1413,7 +1459,7 @@ func TestCreateOrderRestoresReservedStockWhenPersistenceFails(t *testing.T) {
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
-	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 2},
 		},
@@ -1427,6 +1473,163 @@ func TestCreateOrderRestoresReservedStockWhenPersistenceFails(t *testing.T) {
 	}
 	if catalog.restoreCalls["product-1"] != 1 {
 		t.Fatalf("expected one stock restore call, got %d", catalog.restoreCalls["product-1"])
+	}
+}
+
+func TestCreateOrderPersistsIdempotencyRecordAndReservationExpiry(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Archive Boot",
+				Price:         80,
+				StockQuantity: 5,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "checkout-order-key", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "pickup",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	if repo.createdIdempotency == nil {
+		t.Fatal("expected create order to persist an idempotency record")
+	}
+	if repo.createdIdempotency.OrderID != order.ID {
+		t.Fatalf("expected idempotency record to reference order %q, got %q", order.ID, repo.createdIdempotency.OrderID)
+	}
+	if order.ReservationExpiresAt == nil {
+		t.Fatal("expected created order to carry a reservation expiry")
+	}
+}
+
+func TestCreateOrderReplaysIdempotentRequest(t *testing.T) {
+	expiresAt := time.Now().Add(10 * time.Minute)
+	repo := &fakeOrderRepo{
+		idempotencyRecords: map[string]*model.OrderIdempotencyRecord{
+			"user-1::checkout-order-key": {
+				UserID:               "user-1",
+				IdempotencyKey:       "checkout-order-key",
+				RequestHash:          hashCreateOrderRequest(dto.CreateOrderRequest{Items: []dto.OrderItemRequest{{ProductID: "product-1", Quantity: 1}}, ShippingMethod: "pickup"}),
+				OrderID:              "order-1",
+				ReservationExpiresAt: expiresAt,
+			},
+		},
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:                   "order-1",
+				UserID:               "user-1",
+				Status:               model.OrderStatusPending,
+				ReservationExpiresAt: &expiresAt,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Quantity:  1,
+					},
+				},
+			},
+		},
+	}
+	catalog := &fakeProductCatalog{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "checkout-order-key", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "pickup",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	if order.ID != "order-1" {
+		t.Fatalf("expected replayed order order-1, got %q", order.ID)
+	}
+	if repo.createdOrder != nil {
+		t.Fatal("expected idempotent replay to skip repository create")
+	}
+	if len(catalog.decreaseCalls) != 0 {
+		t.Fatalf("expected no stock reservation on replay, got %#v", catalog.decreaseCalls)
+	}
+}
+
+func TestCreateOrderRejectsIdempotencyConflict(t *testing.T) {
+	repo := &fakeOrderRepo{
+		idempotencyRecords: map[string]*model.OrderIdempotencyRecord{
+			"user-1::checkout-order-key": {
+				UserID:         "user-1",
+				IdempotencyKey: "checkout-order-key",
+				RequestHash:    "different-hash",
+				OrderID:        "order-1",
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), &fakeProductCatalog{}, nil)
+
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "checkout-order-key", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "pickup",
+	})
+	if !errors.Is(err, ErrIdempotencyKeyConflict) {
+		t.Fatalf("expected ErrIdempotencyKeyConflict, got %v", err)
+	}
+}
+
+func TestGetOrderExpiresPendingReservationAndRestoresStock(t *testing.T) {
+	expiredAt := time.Now().Add(-time.Minute)
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:                   "order-1",
+				UserID:               "user-1",
+				Status:               model.OrderStatusPending,
+				ReservationExpiresAt: &expiredAt,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Quantity:  2,
+					},
+				},
+			},
+		},
+	}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Archive Boot",
+				Price:         80,
+				StockQuantity: 1,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	order, err := svc.GetOrder(context.Background(), "order-1", "user-1")
+	if err != nil {
+		t.Fatalf("GetOrder returned error: %v", err)
+	}
+
+	if order.Status != model.OrderStatusCancelled {
+		t.Fatalf("expected expired reservation order to become cancelled, got %s", order.Status)
+	}
+	if catalog.products["product-1"].StockQuantity != 3 {
+		t.Fatalf("expected stock restore to bring quantity to 3, got %d", catalog.products["product-1"].StockQuantity)
 	}
 }
 
@@ -1444,7 +1647,7 @@ func TestCreateOrderReturnsInsufficientStockWhenReservationFails(t *testing.T) {
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
-	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 2},
 		},
@@ -1594,7 +1797,7 @@ func TestCreateOrderRequiresShippingAddressForDelivery(t *testing.T) {
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
-	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", dto.CreateOrderRequest{
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "", dto.CreateOrderRequest{
 		Items: []dto.OrderItemRequest{
 			{ProductID: "product-1", Quantity: 1},
 		},
