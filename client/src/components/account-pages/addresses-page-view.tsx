@@ -21,10 +21,7 @@ import { invalidateSavedAddressesResource } from "@/lib/resources/account-resour
 const emptyAddressForm = {
   recipient_name: "",
   phone: "",
-  street: "",
-  ward: "",
-  district: "",
-  city: "",
+  location: "",
   is_default: false,
 };
 
@@ -135,23 +132,8 @@ export function AddressesPageView() {
             />
             <TextInput
               placeholder="Địa chỉ"
-              value={form.street}
-              onChange={(event) => setForm((current) => ({ ...current, street: event.target.value }))}
-            />
-            <TextInput
-              placeholder="Phường / xã"
-              value={form.ward}
-              onChange={(event) => setForm((current) => ({ ...current, ward: event.target.value }))}
-            />
-            <TextInput
-              placeholder="Quận / huyện"
-              value={form.district}
-              onChange={(event) => setForm((current) => ({ ...current, district: event.target.value }))}
-            />
-            <TextInput
-              placeholder="Tỉnh / thành phố"
-              value={form.city}
-              onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
+              value={form.location}
+              onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
             />
             <label className="flex items-center gap-3 text-sm text-on-surface-variant">
               <input
@@ -199,11 +181,7 @@ export function AddressesPageView() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-primary">{address.recipient_name}</p>
-                      <p className="mt-2 text-sm leading-7 text-on-surface-variant">
-                        {address.street}
-                        <br />
-                        {[address.ward, address.district, address.city].filter(Boolean).join(", ")}
-                      </p>
+                      <p className="mt-2 text-sm leading-7 text-on-surface-variant">{address.location}</p>
                       <p className="mt-2 text-sm text-on-surface-variant">{address.phone}</p>
                     </div>
                     {address.is_default ? <StatusPill status="default" /> : null}
@@ -214,7 +192,12 @@ export function AddressesPageView() {
                       className={buttonStyles({ variant: "secondary" })}
                       onClick={() => {
                         setEditingId(address.id);
-                        setForm({ ...address, ward: address.ward || "" });
+                        setForm({
+                          recipient_name: address.recipient_name,
+                          phone: address.phone,
+                          location: address.location,
+                          is_default: address.is_default,
+                        });
                       }}
                     >
                       Sửa

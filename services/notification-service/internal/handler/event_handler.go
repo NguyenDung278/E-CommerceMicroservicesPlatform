@@ -23,11 +23,16 @@ import (
 type EventHandler struct {
 	log            *zap.Logger
 	sender         email.Sender
+	preferences    notificationPreferenceReader
 	inboxStore     inbox.Store
 	retryPublisher retryPublisher
 	maxRetries     int
 	inboxTTL       time.Duration
 	processingTTL  time.Duration
+}
+
+type notificationPreferenceReader interface {
+	PreferenceMap(ctx context.Context, userID string) (map[string]bool, error)
 }
 
 type retryPublisher interface {
@@ -37,6 +42,7 @@ type retryPublisher interface {
 func NewEventHandler(
 	log *zap.Logger,
 	sender email.Sender,
+	preferences notificationPreferenceReader,
 	inboxStore inbox.Store,
 	retryPublisher retryPublisher,
 	maxRetries int,
@@ -56,6 +62,7 @@ func NewEventHandler(
 	return &EventHandler{
 		log:            log,
 		sender:         sender,
+		preferences:    preferences,
 		inboxStore:     inboxStore,
 		retryPublisher: retryPublisher,
 		maxRetries:     maxRetries,
@@ -150,7 +157,7 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 		}
 	}
 
-	if err := h.processMessage(msg); err != nil {
+	if err := h.processMessage(ctx, msg); err != nil {
 		if h.inboxStore != nil {
 			if releaseErr := h.inboxStore.Release(ctx, meta.MessageID); releaseErr != nil {
 				requestLog.Warn("failed to release notification inbox claim", zap.Error(releaseErr))
@@ -204,42 +211,42 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 	_ = msg.Ack(false)
 }
 
-func (h *EventHandler) processMessage(msg amqp.Delivery) error {
+func (h *EventHandler) processMessage(ctx context.Context, msg amqp.Delivery) error {
 	switch msg.RoutingKey {
 	case "order.created":
 		var event OrderEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode order created event: %w", err))
 		}
-		return h.handleOrderCreated(event)
+		return h.handleOrderCreated(ctx, event)
 
 	case "payment.completed":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment completed event: %w", err))
 		}
-		return h.handlePaymentCompleted(event)
+		return h.handlePaymentCompleted(ctx, event)
 
 	case "payment.failed":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment failed event: %w", err))
 		}
-		return h.handlePaymentFailed(event)
+		return h.handlePaymentFailed(ctx, event)
 
 	case "payment.refunded":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment refunded event: %w", err))
 		}
-		return h.handlePaymentRefunded(event)
+		return h.handlePaymentRefunded(ctx, event)
 
 	case "order.cancelled":
 		var event OrderEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode order cancelled event: %w", err))
 		}
-		return h.handleOrderCancelled(event)
+		return h.handleOrderCancelled(ctx, event)
 	}
 
 	if strings.HasPrefix(msg.RoutingKey, "return.") {
@@ -247,13 +254,21 @@ func (h *EventHandler) processMessage(msg amqp.Delivery) error {
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
 			return newPermanentDeliveryError(fmt.Errorf("failed to decode return event: %w", err))
 		}
-		return h.handleReturnEvent(event)
+		return h.handleReturnEvent(ctx, event)
 	}
 
 	return newPermanentDeliveryError(fmt.Errorf("unsupported routing key %s", msg.RoutingKey))
 }
 
-func (h *EventHandler) handleOrderCreated(event OrderEvent) error {
+func (h *EventHandler) handleOrderCreated(ctx context.Context, event OrderEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicOrderUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Info("notification: order confirmation",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -267,7 +282,15 @@ func (h *EventHandler) handleOrderCreated(event OrderEvent) error {
 	))
 }
 
-func (h *EventHandler) handlePaymentCompleted(event PaymentEvent) error {
+func (h *EventHandler) handlePaymentCompleted(ctx context.Context, event PaymentEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Info("notification: payment completed",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -281,7 +304,15 @@ func (h *EventHandler) handlePaymentCompleted(event PaymentEvent) error {
 	))
 }
 
-func (h *EventHandler) handlePaymentFailed(event PaymentEvent) error {
+func (h *EventHandler) handlePaymentFailed(ctx context.Context, event PaymentEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Warn("notification: payment failed",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -295,7 +326,15 @@ func (h *EventHandler) handlePaymentFailed(event PaymentEvent) error {
 	))
 }
 
-func (h *EventHandler) handlePaymentRefunded(event PaymentEvent) error {
+func (h *EventHandler) handlePaymentRefunded(ctx context.Context, event PaymentEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Info("notification: payment refunded",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -309,7 +348,15 @@ func (h *EventHandler) handlePaymentRefunded(event PaymentEvent) error {
 	))
 }
 
-func (h *EventHandler) handleOrderCancelled(event OrderEvent) error {
+func (h *EventHandler) handleOrderCancelled(ctx context.Context, event OrderEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicOrderUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Info("notification: order cancelled",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -322,7 +369,15 @@ func (h *EventHandler) handleOrderCancelled(event OrderEvent) error {
 	))
 }
 
-func (h *EventHandler) handleReturnEvent(event ReturnEvent) error {
+func (h *EventHandler) handleReturnEvent(ctx context.Context, event ReturnEvent) error {
+	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicReturnUpdates)
+	if err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+
 	h.log.Info("notification: return updated",
 		zap.String("user_id", event.UserID),
 		zap.String("order_id", event.OrderID),
@@ -333,6 +388,42 @@ func (h *EventHandler) handleReturnEvent(event ReturnEvent) error {
 	subject, body := returnEmailContent(event)
 	return h.sendEmail(event.UserEmail, subject, body)
 }
+
+func (h *EventHandler) shouldDeliverTopic(
+	ctx context.Context,
+	userID, topic string,
+) (bool, error) {
+	if h.preferences == nil {
+		return true, nil
+	}
+	userID = strings.TrimSpace(userID)
+	topic = strings.TrimSpace(topic)
+	if userID == "" || topic == "" {
+		return true, nil
+	}
+
+	preferences, err := h.preferences.PreferenceMap(ctx, userID)
+	if err != nil {
+		return false, newTransientDeliveryError(fmt.Errorf("failed to load notification preferences: %w", err))
+	}
+	enabled, ok := preferences[topic]
+	if !ok {
+		return true, nil
+	}
+	if !enabled {
+		h.log.Info("notification skipped by user preference",
+			zap.String("user_id", userID),
+			zap.String("topic", topic),
+		)
+	}
+	return enabled, nil
+}
+
+const (
+	notificationTopicOrderUpdates   = "order_updates"
+	notificationTopicPaymentUpdates = "payment_updates"
+	notificationTopicReturnUpdates  = "return_updates"
+)
 
 func returnEmailContent(event ReturnEvent) (string, string) {
 	switch strings.ToLower(strings.TrimSpace(event.Status)) {

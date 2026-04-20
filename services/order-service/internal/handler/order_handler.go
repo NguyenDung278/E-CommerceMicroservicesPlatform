@@ -37,6 +37,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.GET("/summary", h.GetUserOrderSummary)
 	orders.GET("", h.GetUserOrders)
 	orders.GET("/:id/events", h.GetOrderTimeline)
+	orders.GET("/:id/return-eligibility", h.GetReturnEligibility)
 	orders.POST("/:id/returns", h.CreateReturn)
 	orders.GET("/:id/returns", h.ListOrderReturns)
 	orders.GET("/:id", h.GetOrder)
@@ -143,6 +144,31 @@ func (h *OrderHandler) GetOrder(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
 	}
 	return response.Success(c, http.StatusOK, "order retrieved", order)
+}
+
+func (h *OrderHandler) GetReturnEligibility(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	snapshot, err := h.orderService.GetReturnEligibility(
+		c.Request().Context(),
+		c.Param("id"),
+		claims.UserID,
+		claims.Role,
+	)
+	if err != nil {
+		if errors.Is(err, service.ErrOrderNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "order not found")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to load return eligibility")
+	}
+	if snapshot == nil {
+		snapshot = &model.ReturnEligibilitySnapshot{
+			OrderID:          c.Param("id"),
+			ReturnWindowDays: model.DefaultReturnWindowDays,
+			Items:            []model.ReturnEligibilityItem{},
+		}
+	}
+
+	return response.Success(c, http.StatusOK, "return eligibility retrieved", snapshot)
 }
 
 func (h *OrderHandler) CreateReturn(c echo.Context) error {

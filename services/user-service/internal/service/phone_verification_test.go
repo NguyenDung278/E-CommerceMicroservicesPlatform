@@ -397,6 +397,7 @@ func TestUpdateProfileConsumesVerifiedChallengeAndUpsertsDefaultAddress(t *testi
 		DefaultAddress: &dto.UpdateProfileAddressInput{
 			RecipientName: stringPtr("After Update"),
 			Phone:         stringPtr("0901122334"),
+			Location:      stringPtr("123 Nguyen Trai, Ward 5, District 1, Ho Chi Minh City"),
 		},
 	})
 	if err != nil {
@@ -424,7 +425,10 @@ func TestUpdateProfileConsumesVerifiedChallengeAndUpsertsDefaultAddress(t *testi
 	if len(addresses) != 1 {
 		t.Fatalf("expected one default address, got %d", len(addresses))
 	}
-	if !addresses[0].IsDefault || addresses[0].RecipientName != "After Update" || addresses[0].Phone != "0901122334" {
+	if !addresses[0].IsDefault ||
+		addresses[0].RecipientName != "After Update" ||
+		addresses[0].Phone != "0901122334" ||
+		addresses[0].Location != "123 Nguyen Trai, Ward 5, District 1, Ho Chi Minh City" {
 		t.Fatalf("expected upserted default address, got %#v", addresses[0])
 	}
 }
@@ -477,7 +481,7 @@ func TestUpdateProfileAllowsPhoneOnlyChange(t *testing.T) {
 	}
 }
 
-func TestUpdateProfileCreatesDefaultAddressFromRecipientOnlyUsingVerifiedPhone(t *testing.T) {
+func TestUpdateProfileCreatesDefaultAddressFromLocationUsingVerifiedPhone(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	phoneRepo := newFakePhoneVerificationRepo()
 	addressRepo := newFakeAddressRepo()
@@ -512,6 +516,7 @@ func TestUpdateProfileCreatesDefaultAddressFromRecipientOnlyUsingVerifiedPhone(t
 		PhoneVerificationID: startResult.VerificationID,
 		DefaultAddress: &dto.UpdateProfileAddressInput{
 			RecipientName: stringPtr("Recipient Only"),
+			Location:      stringPtr("45 Le Loi, District 3, Ho Chi Minh City"),
 		},
 	})
 	if err != nil {
@@ -537,9 +542,12 @@ func TestUpdateProfileCreatesDefaultAddressFromRecipientOnlyUsingVerifiedPhone(t
 	if addresses[0].Phone != "0987654336" {
 		t.Fatalf("expected verified phone to be reused for address, got %#v", addresses[0])
 	}
+	if addresses[0].Location != "45 Le Loi, District 3, Ho Chi Minh City" {
+		t.Fatalf("expected location to persist, got %#v", addresses[0])
+	}
 }
 
-func TestUpdateProfileCreatesDefaultAddressFromRecipientOnlyWithoutPhone(t *testing.T) {
+func TestUpdateProfileRejectsDefaultAddressWithoutPhone(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	phoneRepo := newFakePhoneVerificationRepo()
 	addressRepo := newFakeAddressRepo()
@@ -554,33 +562,14 @@ func TestUpdateProfileCreatesDefaultAddressFromRecipientOnlyWithoutPhone(t *test
 	}
 	seedUser(userRepo, user)
 
-	updatedUser, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
+	_, err := svc.UpdateProfile(context.Background(), user.ID, dto.UpdateProfileRequest{
 		DefaultAddress: &dto.UpdateProfileAddressInput{
 			RecipientName: stringPtr("Location Only"),
+			Location:      stringPtr("100 Tran Hung Dao, District 5, Ho Chi Minh City"),
 		},
 	})
-	if err != nil {
-		t.Fatalf("UpdateProfile returned error: %v", err)
-	}
-	if updatedUser.FirstName != "Location" || updatedUser.LastName != "Only" {
-		t.Fatalf("expected profile identity to remain unchanged, got %#v", updatedUser)
-	}
-
-	addresses, err := addressRepo.GetByUserID(context.Background(), user.ID)
-	if err != nil {
-		t.Fatalf("GetByUserID returned error: %v", err)
-	}
-	if len(addresses) != 1 {
-		t.Fatalf("expected one default address after recipient-only update, got %d", len(addresses))
-	}
-	if !addresses[0].IsDefault {
-		t.Fatalf("expected created address to be default, got %#v", addresses[0])
-	}
-	if addresses[0].RecipientName != "Location Only" {
-		t.Fatalf("expected recipient-only contact to persist, got %#v", addresses[0])
-	}
-	if addresses[0].Phone != "" {
-		t.Fatalf("expected phone to stay empty when profile phone is missing, got %#v", addresses[0])
+	if !errors.Is(err, ErrInvalidProfileAddress) {
+		t.Fatalf("expected ErrInvalidProfileAddress, got %v", err)
 	}
 }
 
@@ -606,6 +595,7 @@ func TestUpdateProfileAllowsAddressOnlyChangeWithoutMutatingPhone(t *testing.T) 
 		UserID:        user.ID,
 		RecipientName: "Old Recipient",
 		Phone:         "0901122334",
+		Location:      "12 Ly Tu Trong, Ward 7, District 3, Ho Chi Minh City",
 		IsDefault:     true,
 		CreatedAt:     time.Now().Add(-time.Hour),
 		UpdatedAt:     time.Now().Add(-time.Hour),
@@ -615,6 +605,7 @@ func TestUpdateProfileAllowsAddressOnlyChangeWithoutMutatingPhone(t *testing.T) 
 		DefaultAddress: &dto.UpdateProfileAddressInput{
 			RecipientName: stringPtr("New Recipient"),
 			Phone:         stringPtr("0909988776"),
+			Location:      stringPtr("99 Pasteur, District 1, Ho Chi Minh City"),
 		},
 	})
 	if err != nil {
@@ -634,7 +625,9 @@ func TestUpdateProfileAllowsAddressOnlyChangeWithoutMutatingPhone(t *testing.T) 
 	if !addresses[0].IsDefault {
 		t.Fatalf("expected default flag to stay true, got %#v", addresses[0])
 	}
-	if addresses[0].RecipientName != "New Recipient" || addresses[0].Phone != "0909988776" {
+	if addresses[0].RecipientName != "New Recipient" ||
+		addresses[0].Phone != "0909988776" ||
+		addresses[0].Location != "99 Pasteur, District 1, Ho Chi Minh City" {
 		t.Fatalf("expected requested contact fields to be updated, got %#v", addresses[0])
 	}
 }

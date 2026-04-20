@@ -5,6 +5,7 @@ import type {
   Coupon,
   Order,
   Payment,
+  ProductSearchAnalyticsSummary,
   ReturnQueueHealth,
   ReturnRequest,
 } from "@/types/api";
@@ -16,6 +17,7 @@ import {
   normalizeOrderList,
   normalizePayment,
   normalizePaymentList,
+  normalizeProductSearchAnalyticsSummary,
   normalizeReturnQueueHealth,
   normalizeReturnRequest,
   normalizeReturnRequestList,
@@ -67,6 +69,11 @@ export interface RequestReturnRefundData {
   message?: string;
 }
 
+export interface SearchAnalyticsOptions {
+  days?: number;
+  limit?: number;
+}
+
 export const adminApi = {
   /**
    * Load the paginated admin returns queue with optional filters.
@@ -108,6 +115,22 @@ export const adminApi = {
     ).then((response) => ({
       ...response,
       data: normalizeAdminOrderReport(response.data),
+    }));
+  },
+
+  getSearchAnalytics(
+    token: string,
+    options: SearchAnalyticsOptions = {}
+  ): Promise<ApiEnvelope<ProductSearchAnalyticsSummary>> {
+    const params = new URLSearchParams();
+    params.set("days", String(options.days ?? 30));
+    params.set("limit", String(options.limit ?? 10));
+
+    return request<unknown>(`/api/v1/products/analytics/search?${params.toString()}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProductSearchAnalyticsSummary(response.data),
     }));
   },
 
@@ -184,6 +207,34 @@ export const adminApi = {
     }));
   },
 
+  listPaymentsByOrders(
+    token: string,
+    orderIds: string[]
+  ): Promise<ApiEnvelope<Record<string, Payment[]>>> {
+    const params = new URLSearchParams();
+    orderIds.forEach((orderId) => {
+      const normalizedOrderId = orderId.trim();
+      if (normalizedOrderId) {
+        params.append("order_ids", normalizedOrderId);
+      }
+    });
+
+    if (!params.toString()) {
+      return Promise.resolve({
+        success: true,
+        message: "payments retrieved",
+        data: {},
+      });
+    }
+
+    return request<unknown>(`/api/v1/admin/payments/history?${params.toString()}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizePaymentsByOrderRecord(response.data),
+    }));
+  },
+
   refundPayment(
     token: string,
     paymentId: string,
@@ -237,3 +288,18 @@ export const adminApi = {
 };
 
 export default adminApi;
+
+function normalizePaymentsByOrderRecord(value: unknown): Record<string, Payment[]> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, Payment[]>>((result, [orderId, payments]) => {
+    result[orderId] = normalizePaymentList(payments);
+    return result;
+  }, {});
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

@@ -326,15 +326,23 @@ func normalizeShippingAddress(address *dto.ShippingAddressRequest) *model.Shippi
 	}
 
 	normalized := &model.ShippingAddress{
-		RecipientName: strings.TrimSpace(address.RecipientName),
+		RecipientName: normalizeShippingText(address.RecipientName),
 		Phone:         strings.TrimSpace(address.Phone),
+		Location:      normalizeShippingText(address.Location),
 	}
 
-	if normalized.RecipientName == "" || normalized.Phone == "" {
+	if normalized.RecipientName == "" ||
+		normalized.Phone == "" ||
+		normalized.Location == "" {
 		return nil
 	}
 
 	return normalized
+}
+
+func normalizeShippingText(value string) string {
+	parts := strings.Fields(strings.TrimSpace(value))
+	return strings.Join(parts, " ")
 }
 
 // calculateShippingFee computes the delivery charge from the normalized method

@@ -28,6 +28,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.GET("/summary", h.forward)
 	orders.GET("", h.forward)
 	orders.GET("/:id/events", h.forward)
+	orders.GET("/:id/return-eligibility", h.forward)
 	orders.POST("/:id/returns", h.forward)
 	orders.GET("/:id/returns", h.forward)
 	orders.GET("/:id", h.forward)

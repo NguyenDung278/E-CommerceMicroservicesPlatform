@@ -28,6 +28,8 @@
 }
 
 :root {
+  --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --background: #fbf9f4;
   --surface: #fbf9f4;
   --surface-container-low: #f5f3ee;

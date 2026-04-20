@@ -26,6 +26,7 @@ import (
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
+	userclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/grpc"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
@@ -118,9 +119,17 @@ func main() {
 	avatarRepo := repository.NewUserAvatarRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
 	wishlistRepo := repository.NewWishlistRepository(db)
+	notificationPreferenceRepo := repository.NewNotificationPreferenceRepository(db)
 	profileTxManager := repository.NewProfileTxManager(db)
+	productClient := userclient.NewProductClient(cfg.Services.ProductService, log)
 	addressService := service.NewAddressService(addressRepo)
-	wishlistService := service.NewWishlistService(wishlistRepo)
+	notificationPreferenceService := service.NewNotificationPreferenceService(notificationPreferenceRepo)
+	wishlistService := service.NewWishlistService(
+		wishlistRepo,
+		service.WithWishlistProductCatalog(productClient),
+		service.WithWishlistNotificationPreferences(notificationPreferenceService),
+		service.WithWishlistUserReader(userRepo),
+	)
 	oauthClient := service.NewOAuthProviderClient(cfg.OAuth)
 	userService := service.NewUserService(
 		userRepo,
@@ -144,6 +153,7 @@ func main() {
 	userHandler := handler.NewUserHandler(userService)
 	addressHandler := handler.NewAddressHandler(addressService)
 	wishlistHandler := handler.NewWishlistHandler(wishlistService)
+	notificationPreferenceHandler := handler.NewNotificationPreferenceHandler(notificationPreferenceService)
 
 	// 7. Set up Echo and register routes.
 	e := echo.New()
@@ -170,6 +180,7 @@ func main() {
 	userHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	addressHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	wishlistHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	notificationPreferenceHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 8. Set up gRPC server.
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(appobs.GRPCUnaryServerInterceptor("user-service")))

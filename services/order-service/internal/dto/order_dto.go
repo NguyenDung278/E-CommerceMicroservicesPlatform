@@ -21,6 +21,7 @@ type OrderItemRequest struct {
 type ShippingAddressRequest struct {
 	RecipientName string `json:"recipient_name" validate:"omitempty,min=2,max=100"`
 	Phone         string `json:"phone" validate:"omitempty,min=10,max=20"`
+	Location      string `json:"location" validate:"omitempty,min=5,max=255"`
 }
 
 type UpdateOrderStatusRequest struct {

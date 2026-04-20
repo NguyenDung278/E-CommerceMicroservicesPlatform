@@ -118,12 +118,12 @@ func (r *postgresOrderRepository) createOrderTx(
 	orderQuery := `
 		INSERT INTO orders (
 			id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
-			shipping_recipient_name, shipping_phone, reservation_expires_at, reservation_allocated_at,
-			total_price, created_at, updated_at
+			shipping_recipient_name, shipping_phone, shipping_location,
+			reservation_expires_at, reservation_allocated_at, total_price, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
-	shippingRecipientName, shippingPhone := shippingAddressColumns(order.ShippingAddress)
+	shippingRecipientName, shippingPhone, shippingLocation := shippingAddressColumns(order.ShippingAddress)
 	_, err = tx.ExecContext(ctx, orderQuery,
 		order.ID,
 		order.UserID,
@@ -135,6 +135,7 @@ func (r *postgresOrderRepository) createOrderTx(
 		order.ShippingFee,
 		shippingRecipientName,
 		shippingPhone,
+		shippingLocation,
 		order.ReservationExpiresAt,
 		order.ReservationAllocatedAt,
 		order.TotalPrice,
@@ -184,8 +185,8 @@ func (r *postgresOrderRepository) createOrderTx(
 func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*model.Order, error) {
 	orderQuery := `
 		SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
-		       shipping_recipient_name, shipping_phone, reservation_expires_at, reservation_allocated_at,
-		       total_price, created_at, updated_at
+		       shipping_recipient_name, shipping_phone, shipping_location,
+		       reservation_expires_at, reservation_allocated_at, total_price, created_at, updated_at
 		FROM orders
 		WHERE id = $1
 	`
@@ -222,8 +223,8 @@ func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*mode
 func (r *postgresOrderRepository) GetByUserID(ctx context.Context, userID string) ([]*model.Order, error) {
 	query := `
 		SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
-		       shipping_recipient_name, shipping_phone, reservation_expires_at, reservation_allocated_at,
-		       total_price, created_at, updated_at
+		       shipping_recipient_name, shipping_phone, shipping_location,
+		       reservation_expires_at, reservation_allocated_at, total_price, created_at, updated_at
 		FROM orders
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -458,6 +459,7 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 	}
 
 	var oldestPendingAt sql.NullTime
+	var longestInFlightStartedAt sql.NullTime
 	var nextRetryAt sql.NullTime
 
 	if err := r.db.QueryRowContext(ctx, `
@@ -471,8 +473,20 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 			) AS ready_now_count,
 			COUNT(*) FILTER (
 				WHERE status = 'refund_pending'
+				  AND refund_payment_id = ''
+				  AND (refund_next_retry_at IS NULL OR refund_next_retry_at <= NOW())
+				  AND refund_processing_started_at IS NULL
+				  AND COALESCE(refund_last_error, '') <> ''
+			) AS ready_with_failures_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
 				  AND refund_processing_started_at IS NOT NULL
 			) AS in_flight_count,
+			COUNT(*) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_processing_started_at IS NOT NULL
+				  AND refund_processing_started_at <= NOW() - INTERVAL '1 minute'
+			) AS stale_in_flight_count,
 			COUNT(*) FILTER (
 				WHERE status = 'refund_pending'
 				  AND refund_next_retry_at IS NOT NULL
@@ -484,6 +498,10 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 			) AS failed_attempt_count,
 			COALESCE(MAX(refund_attempt_count) FILTER (WHERE status = 'refund_pending'), 0) AS max_attempt_count,
 			MIN(COALESCE(refund_requested_at, created_at)) FILTER (WHERE status = 'refund_pending') AS oldest_pending_at,
+			MIN(refund_processing_started_at) FILTER (
+				WHERE status = 'refund_pending'
+				  AND refund_processing_started_at IS NOT NULL
+			) AS longest_in_flight_started_at,
 			MIN(refund_next_retry_at) FILTER (
 				WHERE status = 'refund_pending'
 				  AND refund_next_retry_at IS NOT NULL
@@ -493,11 +511,14 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 	`).Scan(
 		&health.PendingCount,
 		&health.ReadyNowCount,
+		&health.ReadyWithFailuresCount,
 		&health.InFlightCount,
+		&health.StaleInFlightCount,
 		&health.RetryScheduledCount,
 		&health.FailedAttemptCount,
 		&health.MaxAttemptCount,
 		&oldestPendingAt,
+		&longestInFlightStartedAt,
 		&nextRetryAt,
 	); err != nil {
 		return nil, fmt.Errorf("failed to query return queue health: %w", err)
@@ -506,6 +527,10 @@ func (r *postgresOrderRepository) GetReturnQueueHealth(ctx context.Context) (*mo
 	if oldestPendingAt.Valid {
 		value := oldestPendingAt.Time
 		health.OldestPendingAt = &value
+	}
+	if longestInFlightStartedAt.Valid {
+		value := longestInFlightStartedAt.Time
+		health.LongestInFlightStartedAt = &value
 	}
 	if nextRetryAt.Valid {
 		value := nextRetryAt.Time
@@ -657,8 +682,8 @@ func (r *postgresOrderRepository) ListAll(ctx context.Context, filters model.Ord
 
 	selectQuery := fmt.Sprintf(
 		`SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
-		        shipping_recipient_name, shipping_phone, reservation_expires_at, reservation_allocated_at,
-		        total_price, created_at, updated_at %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		        shipping_recipient_name, shipping_phone, shipping_location,
+		        reservation_expires_at, reservation_allocated_at, total_price, created_at, updated_at %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		baseQuery, argIdx, argIdx+1,
 	)
 	args = append(args, filters.Limit, (filters.Page-1)*filters.Limit)
@@ -722,8 +747,8 @@ func (r *postgresOrderRepository) ListAllByCursor(ctx context.Context, filters m
 
 	selectQuery := fmt.Sprintf(
 		`SELECT id, user_id, status, subtotal_price, discount_amount, coupon_code, shipping_method, shipping_fee,
-		        shipping_recipient_name, shipping_phone, reservation_expires_at, reservation_allocated_at,
-		        total_price, created_at, updated_at %s ORDER BY created_at DESC, id DESC LIMIT $%d`,
+		        shipping_recipient_name, shipping_phone, shipping_location,
+		        reservation_expires_at, reservation_allocated_at, total_price, created_at, updated_at %s ORDER BY created_at DESC, id DESC LIMIT $%d`,
 		baseQuery, argIdx,
 	)
 	args = append(args, filters.Limit+1)
@@ -1436,6 +1461,7 @@ func scanOrder(scanner rowScanner) (*model.Order, error) {
 	var couponCode sql.NullString
 	var shippingRecipientName sql.NullString
 	var shippingPhone sql.NullString
+	var shippingLocation sql.NullString
 	var reservationExpiresAt sql.NullTime
 	var reservationAllocatedAt sql.NullTime
 	err := scanner.Scan(
@@ -1449,6 +1475,7 @@ func scanOrder(scanner rowScanner) (*model.Order, error) {
 		&order.ShippingFee,
 		&shippingRecipientName,
 		&shippingPhone,
+		&shippingLocation,
 		&reservationExpiresAt,
 		&reservationAllocatedAt,
 		&order.TotalPrice,
@@ -1461,10 +1488,11 @@ func scanOrder(scanner rowScanner) (*model.Order, error) {
 	if couponCode.Valid {
 		order.CouponCode = couponCode.String
 	}
-	if shippingRecipientName.Valid || shippingPhone.Valid {
+	if shippingRecipientName.Valid || shippingPhone.Valid || shippingLocation.Valid {
 		order.ShippingAddress = &model.ShippingAddress{
 			RecipientName: shippingRecipientName.String,
 			Phone:         shippingPhone.String,
+			Location:      shippingLocation.String,
 		}
 	}
 	if reservationExpiresAt.Valid {
@@ -1493,13 +1521,14 @@ func scanOrderIdempotencyRecord(scanner rowScanner) (*model.OrderIdempotencyReco
 	return record, nil
 }
 
-func shippingAddressColumns(address *model.ShippingAddress) (any, any) {
+func shippingAddressColumns(address *model.ShippingAddress) (any, any, any) {
 	if address == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	return nullIfEmpty(address.RecipientName),
-		nullIfEmpty(address.Phone)
+		nullIfEmpty(address.Phone),
+		nullIfEmpty(address.Location)
 }
 
 func (r *postgresOrderRepository) insertOrderIdempotencyRecordTx(
@@ -2042,14 +2071,14 @@ func (r *postgresOrderRepository) ApplyInboxStatusTransition(
 
 	updateResult, err := tx.ExecContext(ctx, `
 		UPDATE orders
-		SET status = $1,
+		SET status = CAST($1 AS VARCHAR(20)),
 		    reservation_expires_at = CASE
-		        WHEN $1 IN ('paid', 'cancelled', 'refunded') THEN NULL
+		        WHEN CAST($1 AS VARCHAR(20)) IN ('paid', 'cancelled', 'refunded') THEN NULL
 		        ELSE reservation_expires_at
 		    END,
 		    reservation_allocated_at = CASE
-		        WHEN $1 = 'paid' THEN COALESCE(reservation_allocated_at, NOW())
-		        WHEN $1 = 'cancelled' THEN NULL
+		        WHEN CAST($1 AS VARCHAR(20)) = 'paid' THEN COALESCE(reservation_allocated_at, NOW())
+		        WHEN CAST($1 AS VARCHAR(20)) = 'cancelled' THEN NULL
 		        ELSE reservation_allocated_at
 		    END,
 		    updated_at = NOW()

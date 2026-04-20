@@ -11,6 +11,7 @@ import type {
   OrderEvent,
   OrderPreview,
   ReturnRequest,
+  ReturnEligibilitySnapshot,
   ShippingAddress,
 } from "@/types/api";
 import {
@@ -18,6 +19,7 @@ import {
   normalizeOrderList,
   normalizeOrderEventList,
   normalizeOrderPreview,
+  normalizeReturnEligibilitySnapshot,
   normalizeReturnRequest,
   normalizeReturnRequestList,
 } from "../normalizers";
@@ -144,6 +146,18 @@ export const orderApi = {
     }).then((response) => ({
       ...response,
       data: normalizeOrderEventList(response.data),
+    }));
+  },
+
+  getReturnEligibility(
+    token: string,
+    orderId: string
+  ): Promise<ApiEnvelope<ReturnEligibilitySnapshot>> {
+    return request<unknown>(`/api/v1/orders/${encodeURIComponent(orderId)}/return-eligibility`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeReturnEligibilitySnapshot(response.data),
     }));
   },
 

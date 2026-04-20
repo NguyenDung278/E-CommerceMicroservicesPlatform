@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
+
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 )
 
@@ -20,6 +22,7 @@ type PaymentRepository interface {
 	GetByIDForUser(ctx context.Context, id, userID string) (*model.Payment, error)
 	GetByOrderIDForUser(ctx context.Context, orderID, userID string) (*model.Payment, error)
 	ListByOrderID(ctx context.Context, orderID string) ([]*model.Payment, error)
+	ListByOrderIDs(ctx context.Context, orderIDs []string) ([]*model.Payment, error)
 	ListByOrderIDForUser(ctx context.Context, orderID, userID string) ([]*model.Payment, error)
 	ListByUserID(ctx context.Context, userID string) ([]*model.Payment, error)
 	Update(ctx context.Context, payment *model.Payment, outbox *model.OutboxMessage) error
@@ -204,6 +207,27 @@ func (r *postgresPaymentRepository) ListByOrderID(ctx context.Context, orderID s
 	`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list payments by order: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPayments(rows)
+}
+
+func (r *postgresPaymentRepository) ListByOrderIDs(ctx context.Context, orderIDs []string) ([]*model.Payment, error) {
+	if len(orderIDs) == 0 {
+		return []*model.Payment{}, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, order_id, user_id, order_total, amount, status, transaction_type, reference_payment_id,
+		       payment_method, gateway_provider, gateway_transaction_id, gateway_order_id, checkout_url,
+		       signature_verified, failure_reason, created_at, updated_at
+		FROM payments
+		WHERE order_id = ANY($1::varchar[])
+		ORDER BY order_id ASC, created_at DESC, id DESC
+	`, pq.Array(orderIDs))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list payments by order ids: %w", err)
 	}
 	defer rows.Close()
 

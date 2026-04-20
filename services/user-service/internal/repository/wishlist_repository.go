@@ -12,8 +12,9 @@ import (
 
 type WishlistRepository interface {
 	ListByUserID(ctx context.Context, userID string) ([]*model.WishlistItem, error)
+	ListUserIDs(ctx context.Context, limit int) ([]string, error)
 	Upsert(ctx context.Context, item *model.WishlistItem) error
-	UpsertMany(ctx context.Context, userID string, productIDs []string) error
+	UpsertMany(ctx context.Context, items []*model.WishlistItem) error
 	Delete(ctx context.Context, userID, productID string) error
 }
 
@@ -27,7 +28,7 @@ func NewWishlistRepository(db *sql.DB) WishlistRepository {
 
 func (r *postgresWishlistRepository) ListByUserID(ctx context.Context, userID string) ([]*model.WishlistItem, error) {
 	rows, err := r.executor.QueryContext(ctx, `
-		SELECT user_id, product_id, created_at, updated_at
+		SELECT user_id, product_id, baseline_price, baseline_stock, created_at, updated_at
 		FROM wishlist_items
 		WHERE user_id = $1
 		ORDER BY updated_at DESC, product_id ASC
@@ -40,7 +41,14 @@ func (r *postgresWishlistRepository) ListByUserID(ctx context.Context, userID st
 	items := make([]*model.WishlistItem, 0)
 	for rows.Next() {
 		item := &model.WishlistItem{}
-		if err := rows.Scan(&item.UserID, &item.ProductID, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(
+			&item.UserID,
+			&item.ProductID,
+			&item.BaselinePrice,
+			&item.BaselineStock,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan wishlist item: %w", err)
 		}
 		items = append(items, item)
@@ -52,13 +60,45 @@ func (r *postgresWishlistRepository) ListByUserID(ctx context.Context, userID st
 	return items, nil
 }
 
+func (r *postgresWishlistRepository) ListUserIDs(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	rows, err := r.executor.QueryContext(ctx, `
+		SELECT user_id
+		FROM wishlist_items
+		GROUP BY user_id
+		ORDER BY MAX(updated_at) DESC, user_id ASC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list wishlist user ids: %w", err)
+	}
+	defer rows.Close()
+
+	userIDs := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("failed to scan wishlist user id: %w", err)
+		}
+		userIDs = append(userIDs, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate wishlist user ids: %w", err)
+	}
+
+	return userIDs, nil
+}
+
 func (r *postgresWishlistRepository) Upsert(ctx context.Context, item *model.WishlistItem) error {
 	_, err := r.executor.ExecContext(ctx, `
-		INSERT INTO wishlist_items (user_id, product_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO wishlist_items (user_id, product_id, baseline_price, baseline_stock, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (user_id, product_id)
 		DO UPDATE SET updated_at = EXCLUDED.updated_at
-	`, item.UserID, item.ProductID, item.CreatedAt, item.UpdatedAt)
+	`, item.UserID, item.ProductID, item.BaselinePrice, item.BaselineStock, item.CreatedAt, item.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to upsert wishlist item: %w", err)
 	}
@@ -66,18 +106,35 @@ func (r *postgresWishlistRepository) Upsert(ctx context.Context, item *model.Wis
 	return nil
 }
 
-func (r *postgresWishlistRepository) UpsertMany(ctx context.Context, userID string, productIDs []string) error {
-	if len(productIDs) == 0 {
+func (r *postgresWishlistRepository) UpsertMany(ctx context.Context, items []*model.WishlistItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	userIDs := make([]string, 0, len(items))
+	productIDs := make([]string, 0, len(items))
+	baselinePrices := make([]float64, 0, len(items))
+	baselineStocks := make([]int, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		userIDs = append(userIDs, item.UserID)
+		productIDs = append(productIDs, item.ProductID)
+		baselinePrices = append(baselinePrices, item.BaselinePrice)
+		baselineStocks = append(baselineStocks, item.BaselineStock)
+	}
+	if len(userIDs) == 0 {
 		return nil
 	}
 
 	_, err := r.executor.ExecContext(ctx, `
-		INSERT INTO wishlist_items (user_id, product_id, created_at, updated_at)
-		SELECT $1, product_id, NOW(), NOW()
-		FROM unnest($2::text[]) AS product_id
+		INSERT INTO wishlist_items (user_id, product_id, baseline_price, baseline_stock, created_at, updated_at)
+		SELECT user_id, product_id, baseline_price, baseline_stock, NOW(), NOW()
+		FROM unnest($1::text[], $2::text[], $3::double precision[], $4::integer[]) AS payload(user_id, product_id, baseline_price, baseline_stock)
 		ON CONFLICT (user_id, product_id)
 		DO UPDATE SET updated_at = NOW()
-	`, userID, pq.Array(productIDs))
+	`, pq.Array(userIDs), pq.Array(productIDs), pq.Array(baselinePrices), pq.Array(baselineStocks))
 	if err != nil {
 		return fmt.Errorf("failed to upsert wishlist items: %w", err)
 	}

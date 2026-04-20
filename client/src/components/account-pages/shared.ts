@@ -18,9 +18,7 @@ export type ProfileFieldErrors = Partial<
     | "lastName"
     | "phone"
     | "recipientName"
-    | "street"
-    | "district"
-    | "city"
+    | "location"
     | "otpCode",
     string
   >

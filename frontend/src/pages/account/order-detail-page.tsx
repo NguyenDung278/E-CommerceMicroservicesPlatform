@@ -3,7 +3,13 @@ import { Link, useLocation, useParams } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { api, getErrorMessage } from "@/services/api";
-import type { Order, Payment, Product, ReturnRequest } from "@/types/api";
+import type {
+  Order,
+  Payment,
+  Product,
+  ReturnEligibilitySnapshot,
+  ReturnRequest,
+} from "@/types/api";
 import { formatCurrency, formatDateTime, formatStatusLabel } from "@/utils/format";
 import "@/styles/pages/account/order-detail-page.css";
 
@@ -31,6 +37,7 @@ export function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [orderReturns, setOrderReturns] = useState<ReturnRequest[]>([]);
+  const [returnEligibility, setReturnEligibility] = useState<ReturnEligibilitySnapshot | null>(null);
   const [feedback, setFeedback] = useState("");
   const [returnFeedback, setReturnFeedback] = useState("");
   const [productLookup, setProductLookup] = useState<Record<string, Product>>({});
@@ -60,9 +67,10 @@ export function OrderDetailPage() {
 
         setOrder(orderResponse.data);
 
-        const [paymentResult, returnResult] = await Promise.allSettled([
+        const [paymentResult, returnResult, eligibilityResult] = await Promise.allSettled([
           api.listPaymentsByOrder(token, orderId),
           api.listOrderReturns(token, orderId),
+          api.getReturnEligibility(token, orderId),
         ]);
 
         if (!active) {
@@ -71,6 +79,9 @@ export function OrderDetailPage() {
 
         setPayments(paymentResult.status === "fulfilled" ? paymentResult.value.data : []);
         setOrderReturns(returnResult.status === "fulfilled" ? returnResult.value.data : []);
+        setReturnEligibility(
+          eligibilityResult.status === "fulfilled" ? eligibilityResult.value.data : null
+        );
       } catch (reason) {
         if (active) {
           setFeedback(getErrorMessage(reason));
@@ -139,20 +150,14 @@ export function OrderDetailPage() {
     () => [...orderReturns].sort((left, right) => right.created_at.localeCompare(left.created_at)),
     [orderReturns]
   );
-  const returnedQuantities = useMemo(
-    () => buildReturnedQuantityMap(sortedReturns),
-    [sortedReturns]
-  );
   const returnableItems = useMemo(
-    () =>
-      (order?.items ?? []).map((item) => ({
-        ...item,
-        remainingQuantity: Math.max(item.quantity - (returnedQuantities[item.id] ?? 0), 0),
-      })),
-    [order, returnedQuantities]
+    () => returnEligibility?.items ?? [],
+    [returnEligibility]
   );
-  const hasReturnableItems = returnableItems.some((item) => item.remainingQuantity > 0);
-  const canRequestReturn = order?.status === "delivered" && hasReturnableItems;
+  const hasReturnableItems = returnableItems.some(
+    (item) => item.eligible && item.remaining_quantity > 0
+  );
+  const canRequestReturn = Boolean(returnEligibility?.eligible && hasReturnableItems);
 
   if (!order && !feedback) {
     return <div className="page-state">Đang tải chi tiết đơn hàng...</div>;
@@ -187,9 +192,12 @@ export function OrderDetailPage() {
     const normalizedReason = returnReason.trim();
     const selectedItems = returnableItems
       .map((item) => ({
-        order_item_id: item.id,
-        quantity: Math.max(0, Math.min(item.remainingQuantity, returnQuantities[item.id] ?? 0)),
-        reason: returnItemReasons[item.id]?.trim() || undefined,
+        order_item_id: item.order_item_id,
+        quantity: Math.max(
+          0,
+          Math.min(item.remaining_quantity, returnQuantities[item.order_item_id] ?? 0)
+        ),
+        reason: returnItemReasons[item.order_item_id]?.trim() || undefined,
       }))
       .filter((item) => item.quantity > 0);
 
@@ -208,8 +216,14 @@ export function OrderDetailPage() {
         reason: normalizedReason,
         items: selectedItems,
       });
+      const eligibilityResponse = await api
+        .getReturnEligibility(token, order.id)
+        .catch(() => null);
 
       setOrderReturns((current) => [response.data, ...current]);
+      if (eligibilityResponse) {
+        setReturnEligibility(eligibilityResponse.data);
+      }
       setReturnReason("");
       setReturnQuantities({});
       setReturnItemReasons({});
@@ -358,15 +372,22 @@ export function OrderDetailPage() {
                     <div>
                       <strong>Request a return</strong>
                       <p>
-                        Chọn các dòng hàng còn khả dụng để trả, thêm lý do tổng quát và ghi chú cho
-                        từng item nếu cần.
+                        Snapshot eligibility từ back-end quyết định item nào còn có thể trả và số
+                        lượng còn lại cho từng line.
                       </p>
                     </div>
                     <span className="status-pill status-pill-neutral">
-                      {returnableItems.filter((item) => item.remainingQuantity > 0).length}{" "}
+                      {returnableItems.filter((item) => item.eligible && item.remaining_quantity > 0).length}{" "}
                       returnable lines
                     </span>
                   </div>
+
+                  {returnEligibility?.return_window_expires_at ? (
+                    <p className="history-subtle">
+                      Return window closes on{" "}
+                      {formatDateTime(returnEligibility.return_window_expires_at)}.
+                    </p>
+                  ) : null}
 
                   <label className="order-return-field">
                     <span>Overall reason</span>
@@ -379,35 +400,37 @@ export function OrderDetailPage() {
 
                   <div className="order-return-line-grid">
                     {returnableItems.map((item) => (
-                      <article className="order-return-line-card" key={item.id}>
+                      <article className="order-return-line-card" key={item.order_item_id}>
                         <div className="order-return-line-copy">
-                          <strong>{item.name}</strong>
+                          <strong>{item.product_name}</strong>
                           <span>
-                            Purchased {item.quantity} • Remaining returnable{" "}
-                            {item.remainingQuantity}
+                            Purchased {item.ordered_quantity} • Remaining returnable{" "}
+                            {item.remaining_quantity}
                           </span>
+                          {item.reason ? <span>{item.reason}</span> : null}
                         </div>
 
                         <div className="order-return-line-controls">
                           <label className="order-return-field">
                             <span>Quantity</span>
                             <select
-                              value={String(returnQuantities[item.id] ?? 0)}
+                              disabled={!item.eligible || item.remaining_quantity === 0}
+                              value={String(returnQuantities[item.order_item_id] ?? 0)}
                               onChange={(event) =>
                                 setReturnQuantities((current) => ({
                                   ...current,
-                                  [item.id]: Math.max(
+                                  [item.order_item_id]: Math.max(
                                     0,
                                     Math.min(
-                                      item.remainingQuantity,
+                                      item.remaining_quantity,
                                       Number.parseInt(event.target.value, 10) || 0
                                     )
                                   ),
                                 }))
                               }
                             >
-                              {Array.from({ length: item.remainingQuantity + 1 }, (_, index) => (
-                                <option key={`${item.id}-${index}`} value={index}>
+                              {Array.from({ length: item.remaining_quantity + 1 }, (_, index) => (
+                                <option key={`${item.order_item_id}-${index}`} value={index}>
                                   {index}
                                 </option>
                               ))}
@@ -417,13 +440,13 @@ export function OrderDetailPage() {
                           <label className="order-return-field">
                             <span>Line note</span>
                             <input
-                              disabled={item.remainingQuantity === 0}
+                              disabled={!item.eligible || item.remaining_quantity === 0}
                               placeholder="Optional note for this item"
-                              value={returnItemReasons[item.id] ?? ""}
+                              value={returnItemReasons[item.order_item_id] ?? ""}
                               onChange={(event) =>
                                 setReturnItemReasons((current) => ({
                                   ...current,
-                                  [item.id]: event.target.value,
+                                  [item.order_item_id]: event.target.value,
                                 }))
                               }
                             />
@@ -451,9 +474,11 @@ export function OrderDetailPage() {
                 <div className="order-return-empty-state">
                   <strong>Return request unavailable</strong>
                   <p>
-                    {order.status !== "delivered"
-                      ? "Returns open after the order reaches delivered status."
-                      : "All quantities from this order have already been accounted for in existing return requests."}
+                    {returnEligibility?.reason
+                      ? returnEligibility.reason
+                      : order.status !== "delivered"
+                        ? "Returns open after the order reaches delivered status."
+                        : "Eligibility snapshot is temporarily unavailable or all quantities have already been accounted for."}
                   </p>
                 </div>
               )}
@@ -618,23 +643,6 @@ function buildOrderItemSubtitle(product?: Product) {
 
   const subtitle = [product.category, product.brand].filter(Boolean).join(" / ");
   return subtitle || "Editorial selection";
-}
-
-function buildReturnedQuantityMap(returnRequests: ReturnRequest[]) {
-  return returnRequests.reduce<Record<string, number>>((result, returnRequest) => {
-    if (isIgnoredReturnStatus(returnRequest.status)) {
-      return result;
-    }
-
-    returnRequest.items.forEach((item) => {
-      result[item.order_item_id] = (result[item.order_item_id] ?? 0) + item.quantity;
-    });
-    return result;
-  }, {});
-}
-
-function isIgnoredReturnStatus(status: string) {
-  return status === "rejected" || status === "cancelled";
 }
 
 function buildReturnRefundCopy(returnRequest: ReturnRequest) {

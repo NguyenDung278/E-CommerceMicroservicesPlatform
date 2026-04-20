@@ -37,10 +37,7 @@ CREATE TABLE IF NOT EXISTS addresses (
     user_id        VARCHAR(36)  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_name VARCHAR(100) NOT NULL,
     phone          VARCHAR(20)  NOT NULL,
-    street         VARCHAR(255) NOT NULL,
-    ward           VARCHAR(100) NOT NULL DEFAULT '',
-    district       VARCHAR(100) NOT NULL,
-    city           VARCHAR(100) NOT NULL,
+    location       VARCHAR(255) NOT NULL,
     is_default     BOOLEAN      NOT NULL DEFAULT false,
     created_at     TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMP    NOT NULL DEFAULT NOW()

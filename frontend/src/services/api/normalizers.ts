@@ -13,32 +13,37 @@ import type {
   CartItem,
   Coupon,
   EmailVerificationChallenge,
+  JsonObject,
+  JsonValue,
+  NotificationPreference,
   Order,
   OrderEvent,
   OrderItem,
   OrderPreview,
   Payment,
-  ReturnEvent,
-  ReturnEvidence,
-  ReturnItem,
-  ReturnQueueFailure,
-  ReturnQueueHealth,
-  ReturnRequest,
   PhoneVerificationChallenge,
   Product,
-  JsonObject,
-  JsonValue,
-  ProductRatingBreakdown,
   ProductPopularity,
+  ProductRatingBreakdown,
   ProductReview,
   ProductReviewList,
   ProductReviewSummary,
+  ProductSearchAnalyticsEntry,
+  ProductSearchAnalyticsSummary,
   ProductSearchAssist,
   ProductSearchFacet,
   ProductSearchFacetValue,
   ProductSearchSortOption,
   ProductSearchSuggestion,
   ProductVariant,
+  ReturnEvent,
+  ReturnEvidence,
+  ReturnEligibilityItem,
+  ReturnEligibilitySnapshot,
+  ReturnItem,
+  ReturnQueueFailure,
+  ReturnQueueHealth,
+  ReturnRequest,
   ShippingAddress,
   ShippingOption,
   StorefrontCategory,
@@ -48,6 +53,7 @@ import type {
   StorefrontHomeData,
   StorefrontProduct,
   UserProfile,
+  WishlistAlert,
   WishlistItem,
 } from "@/types/api";
 
@@ -395,6 +401,7 @@ export function normalizeAddress(value: unknown): Address {
     user_id: normalizeString(address.user_id),
     recipient_name: normalizeString(address.recipient_name),
     phone: normalizeString(address.phone),
+    location: normalizeString(address.location),
     is_default: normalizeBoolean(address.is_default),
     created_at: normalizeString(address.created_at),
     updated_at: normalizeString(address.updated_at),
@@ -423,6 +430,54 @@ export function normalizeWishlistItemList(value: unknown): WishlistItem[] {
   return Array.isArray(value) ? value.map((item) => normalizeWishlistItem(item)) : [];
 }
 
+export function normalizeWishlistAlert(value: unknown): WishlistAlert {
+  const alert = isRecord(value) ? value : {};
+
+  return {
+    product_id: normalizeString(alert.product_id),
+    product_name: normalizeString(alert.product_name) || undefined,
+    kind: normalizeString(alert.kind),
+    baseline_price:
+      typeof alert.baseline_price === "number" && Number.isFinite(alert.baseline_price)
+        ? alert.baseline_price
+        : undefined,
+    current_price:
+      typeof alert.current_price === "number" && Number.isFinite(alert.current_price)
+        ? alert.current_price
+        : undefined,
+    baseline_stock:
+      typeof alert.baseline_stock === "number" && Number.isFinite(alert.baseline_stock)
+        ? alert.baseline_stock
+        : undefined,
+    current_stock:
+      typeof alert.current_stock === "number" && Number.isFinite(alert.current_stock)
+        ? alert.current_stock
+        : undefined,
+    detected_at: normalizeString(alert.detected_at),
+  };
+}
+
+export function normalizeWishlistAlertList(value: unknown): WishlistAlert[] {
+  return Array.isArray(value) ? value.map((item) => normalizeWishlistAlert(item)) : [];
+}
+
+export function normalizeNotificationPreference(value: unknown): NotificationPreference {
+  const preference = isRecord(value) ? value : {};
+
+  return {
+    user_id: normalizeString(preference.user_id),
+    topic: normalizeString(preference.topic),
+    enabled: normalizeBoolean(preference.enabled),
+    updated_at: normalizeString(preference.updated_at),
+  };
+}
+
+export function normalizeNotificationPreferenceList(value: unknown): NotificationPreference[] {
+  return Array.isArray(value)
+    ? value.map((item) => normalizeNotificationPreference(item))
+    : [];
+}
+
 /**
  * Normalize shipping address
  */
@@ -434,6 +489,7 @@ export function normalizeShippingAddress(value: unknown): ShippingAddress | unde
   return {
     recipient_name: normalizeString(value.recipient_name),
     phone: normalizeString(value.phone),
+    location: normalizeString(value.location),
   };
 }
 
@@ -645,14 +701,50 @@ export function normalizeReturnQueueHealth(value: unknown): ReturnQueueHealth {
   return {
     pending_count: normalizeNumber(health.pending_count),
     ready_now_count: normalizeNumber(health.ready_now_count),
+    ready_with_failures_count: normalizeNumber(health.ready_with_failures_count),
     in_flight_count: normalizeNumber(health.in_flight_count),
+    stale_in_flight_count: normalizeNumber(health.stale_in_flight_count),
     retry_scheduled_count: normalizeNumber(health.retry_scheduled_count),
     failed_attempt_count: normalizeNumber(health.failed_attempt_count),
     max_attempt_count: normalizeNumber(health.max_attempt_count),
     oldest_pending_at: normalizeString(health.oldest_pending_at) || undefined,
+    longest_in_flight_started_at:
+      normalizeString(health.longest_in_flight_started_at) || undefined,
     next_retry_at: normalizeString(health.next_retry_at) || undefined,
     recent_failures: Array.isArray(health.recent_failures)
       ? health.recent_failures.map((entry) => normalizeReturnQueueFailure(entry))
+      : [],
+  };
+}
+
+export function normalizeReturnEligibilityItem(value: unknown): ReturnEligibilityItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    order_item_id: normalizeString(item.order_item_id),
+    product_id: normalizeString(item.product_id),
+    product_name: normalizeString(item.product_name),
+    ordered_quantity: normalizeNumber(item.ordered_quantity),
+    already_requested_quantity: normalizeNumber(item.already_requested_quantity),
+    remaining_quantity: normalizeNumber(item.remaining_quantity),
+    eligible: normalizeBoolean(item.eligible),
+    reason: normalizeString(item.reason) || undefined,
+  };
+}
+
+export function normalizeReturnEligibilitySnapshot(value: unknown): ReturnEligibilitySnapshot {
+  const snapshot = isRecord(value) ? value : {};
+
+  return {
+    order_id: normalizeString(snapshot.order_id),
+    order_status: normalizeString(snapshot.order_status),
+    eligible: normalizeBoolean(snapshot.eligible),
+    reason: normalizeString(snapshot.reason) || undefined,
+    return_window_days: normalizeNumber(snapshot.return_window_days),
+    return_window_started_at: normalizeString(snapshot.return_window_started_at) || undefined,
+    return_window_expires_at: normalizeString(snapshot.return_window_expires_at) || undefined,
+    items: Array.isArray(snapshot.items)
+      ? snapshot.items.map((item) => normalizeReturnEligibilityItem(item))
       : [],
   };
 }
@@ -789,6 +881,38 @@ export function normalizeCoupon(value: unknown): Coupon {
  */
 export function normalizeCouponList(value: unknown): Coupon[] {
   return Array.isArray(value) ? value.map((item) => normalizeCoupon(item)) : [];
+}
+
+export function normalizeProductSearchAnalyticsEntry(
+  value: unknown,
+): ProductSearchAnalyticsEntry {
+  const entry = isRecord(value) ? value : {};
+
+  return {
+    query: normalizeString(entry.query),
+    source: normalizeString(entry.source),
+    category: normalizeString(entry.category) || undefined,
+    request_count: normalizeNumber(entry.request_count),
+    zero_result_count: normalizeNumber(entry.zero_result_count),
+    average_result_count: normalizeNumber(entry.average_result_count),
+    last_seen_at: normalizeString(entry.last_seen_at),
+  };
+}
+
+export function normalizeProductSearchAnalyticsSummary(
+  value: unknown,
+): ProductSearchAnalyticsSummary {
+  const summary = isRecord(value) ? value : {};
+
+  return {
+    window_days: normalizeNumber(summary.window_days),
+    top_queries: Array.isArray(summary.top_queries)
+      ? summary.top_queries.map((entry) => normalizeProductSearchAnalyticsEntry(entry))
+      : [],
+    zero_result_queries: Array.isArray(summary.zero_result_queries)
+      ? summary.zero_result_queries.map((entry) => normalizeProductSearchAnalyticsEntry(entry))
+      : [],
+  };
 }
 
 /**

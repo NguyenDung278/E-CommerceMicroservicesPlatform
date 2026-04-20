@@ -62,10 +62,8 @@ export function AddressesPage() {
                 </div>
 
                 <div className="addresses-route-block">
-                  <span>Saved Contact</span>
-                  <p>
-                    {address.recipient_name} · {address.phone || "No phone saved"}
-                  </p>
+                  <span>Location</span>
+                  <p>{address.location || "No delivery location saved"}</p>
                 </div>
 
                 <div className="addresses-route-actions">

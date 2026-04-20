@@ -51,6 +51,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	admin := e.Group("/api/v1/products")
 	admin.Use(middleware.JWTAuth(jwtSecret))
 	admin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	admin.GET("/analytics/search", h.GetSearchAnalytics)
 	admin.POST("", h.Create)
 	admin.POST("/uploads", h.UploadImages)
 	admin.PUT("/:id", h.Update)
@@ -237,6 +238,31 @@ func (h *ProductHandler) SearchAssist(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "search assist retrieved", assist)
+}
+
+func (h *ProductHandler) GetSearchAnalytics(c echo.Context) error {
+	days, _ := strconv.Atoi(c.QueryParam("days"))
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+
+	summary, err := h.productService.GetSearchAnalytics(c.Request().Context(), days, limit)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to retrieve search analytics")
+	}
+	if summary == nil {
+		summary = &model.ProductSearchAnalyticsSummary{
+			WindowDays:        days,
+			TopQueries:        []model.ProductSearchAnalyticsEntry{},
+			ZeroResultQueries: []model.ProductSearchAnalyticsEntry{},
+		}
+	}
+	if summary.TopQueries == nil {
+		summary.TopQueries = []model.ProductSearchAnalyticsEntry{}
+	}
+	if summary.ZeroResultQueries == nil {
+		summary.ZeroResultQueries = []model.ProductSearchAnalyticsEntry{}
+	}
+
+	return response.Success(c, http.StatusOK, "search analytics retrieved", summary)
 }
 
 func parseRequestedProductIDs(values []string) []string {

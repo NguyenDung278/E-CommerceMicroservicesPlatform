@@ -64,6 +64,7 @@ func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) 
 				return nil, nil, listErr
 			}
 
+			s.recordSearchAnalyticsBestEffort(ctx, "catalog", normalized.search, normalized.category, len(products))
 			hasNext := int64(normalized.limit) < total
 			return products, &ProductListPageInfo{HasNext: hasNext}, nil
 		}
@@ -77,6 +78,7 @@ func (s *ProductService) List(ctx context.Context, query dto.ListProductsQuery) 
 		return nil, nil, err
 	}
 
+	s.recordSearchAnalyticsBestEffort(ctx, "catalog", normalized.search, normalized.category, len(products))
 	return products, &ProductListPageInfo{NextCursor: nextCursor, HasNext: hasNext}, nil
 }
 
@@ -326,6 +328,30 @@ func (q normalizedListProductsQuery) toDTO() dto.ListProductsQuery {
 		Color:    q.color,
 		Sort:     q.sort,
 	}
+}
+
+func (s *ProductService) GetSearchAnalytics(
+	ctx context.Context,
+	days, limit int,
+) (*model.ProductSearchAnalyticsSummary, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if s.analyticsRepo == nil {
+		return &model.ProductSearchAnalyticsSummary{
+			WindowDays:        days,
+			TopQueries:        []model.ProductSearchAnalyticsEntry{},
+			ZeroResultQueries: []model.ProductSearchAnalyticsEntry{},
+		}, nil
+	}
+
+	return s.analyticsRepo.GetSummary(ctx, repository.SearchAnalyticsSummaryParams{
+		Days:  days,
+		Limit: limit,
+	})
 }
 
 // toRepositoryParams converts the normalized query into repository parameters.

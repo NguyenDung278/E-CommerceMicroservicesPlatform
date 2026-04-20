@@ -70,10 +70,7 @@ export function ProfileDashboard() {
   const [lastName, setLastName] = useState(user?.last_name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [recipientName, setRecipientName] = useState("");
-  const [street, setStreet] = useState("");
-  const [ward, setWard] = useState("");
-  const [district, setDistrict] = useState("");
-  const [city, setCity] = useState("");
+  const [location, setLocation] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationChallenge | null>(null);
   const [feedback, setFeedback] = useState<ProfileFeedback | null>(null);
@@ -97,18 +94,8 @@ export function ProfileDashboard() {
 
   useEffect(() => {
     setRecipientName(defaultAddress?.recipient_name || displayName);
-    setStreet(defaultAddress?.street || "");
-    setWard(defaultAddress?.ward || "");
-    setDistrict(defaultAddress?.district || "");
-    setCity(defaultAddress?.city || "");
-  }, [
-    defaultAddress?.city,
-    defaultAddress?.district,
-    defaultAddress?.recipient_name,
-    defaultAddress?.street,
-    defaultAddress?.ward,
-    displayName,
-  ]);
+    setLocation(defaultAddress?.location || "");
+  }, [defaultAddress?.location, defaultAddress?.recipient_name, displayName]);
 
   useEffect(() => {
     if (!token) {
@@ -176,9 +163,7 @@ export function ProfileDashboard() {
   const verificationPendingForDraft =
     phoneChanged && phoneVerification?.status === "pending" && verificationMatchesDraft;
   const otpPanelVisible = phoneChanged && !phoneIsVerifiedForDraft;
-  const profileLocation = defaultAddress
-    ? [defaultAddress.district, defaultAddress.city].filter(Boolean).join(", ")
-    : "Thêm địa chỉ mặc định để hiển thị khu vực";
+  const profileLocation = defaultAddress?.location || "Thêm địa chỉ mặc định để hiển thị khu vực";
   const profilePhone = user?.phone || "Chưa cập nhật số điện thoại";
   const phoneStatusLabel = phoneChanged
     ? phoneIsVerifiedForDraft
@@ -191,22 +176,13 @@ export function ProfileDashboard() {
   const firstNameValue = normalizeInputText(firstName);
   const lastNameValue = normalizeInputText(lastName);
   const recipientNameValue = normalizeInputText(recipientName);
-  const streetValue = street.trim();
-  const wardValue = ward.trim();
-  const districtValue = district.trim();
-  const cityValue = city.trim();
+  const locationValue = location.trim();
   const currentFirstNameValue = normalizeInputText(user?.first_name || "");
   const currentLastNameValue = normalizeInputText(user?.last_name || "");
   const fallbackRecipientName = defaultAddress?.recipient_name || displayName;
-  const currentStreetValue = defaultAddress?.street || "";
-  const currentWardValue = defaultAddress?.ward || "";
-  const currentDistrictValue = defaultAddress?.district || "";
-  const currentCityValue = defaultAddress?.city || "";
+  const currentLocationValue = defaultAddress?.location || "";
   const hasAddressFieldInput =
-    streetValue !== "" ||
-    wardValue !== "" ||
-    districtValue !== "" ||
-    cityValue !== "" ||
+    locationValue !== "" ||
     (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName);
   const nameChanged =
     (firstNameValue !== "" && firstNameValue !== currentFirstNameValue) ||
@@ -214,17 +190,11 @@ export function ProfileDashboard() {
   const addressChanged =
     (!defaultAddress && hasAddressFieldInput) ||
     (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) ||
-    (streetValue !== "" && streetValue !== currentStreetValue) ||
-    (wardValue !== "" && wardValue !== currentWardValue) ||
-    (districtValue !== "" && districtValue !== currentDistrictValue) ||
-    (cityValue !== "" && cityValue !== currentCityValue);
+    (locationValue !== "" && locationValue !== currentLocationValue);
   const mergedAddressCandidate = {
     recipientName: recipientNameValue || fallbackRecipientName,
     phone: normalizedCurrentAddressPhone,
-    street: streetValue || currentStreetValue,
-    ward: wardValue || currentWardValue,
-    district: districtValue || currentDistrictValue,
-    city: cityValue || currentCityValue,
+    location: locationValue || currentLocationValue,
   };
   const canRequestPhoneVerification = hasValidPhoneDraft && !otpBusy;
   const hasProfileChanges = nameChanged || phoneChanged || addressChanged;
@@ -239,16 +209,10 @@ export function ProfileDashboard() {
       errors.recipientName = "Tên người nhận không được để trống.";
     }
     if (addressChanged && !isValidStoredPhone(mergedAddressCandidate.phone)) {
-      errors.street = "Hãy cập nhật số điện thoại hồ sơ hợp lệ trước khi lưu địa chỉ mặc định.";
+      errors.location = "Hãy cập nhật số điện thoại hồ sơ hợp lệ trước khi lưu địa chỉ mặc định.";
     }
-    if (addressChanged && mergedAddressCandidate.street.length < 5) {
-      errors.street = "Địa chỉ cần ít nhất 5 ký tự.";
-    }
-    if (addressChanged && mergedAddressCandidate.district.length < 2) {
-      errors.district = "Quận/Huyện không được để trống.";
-    }
-    if (addressChanged && mergedAddressCandidate.city.length < 2) {
-      errors.city = "Tỉnh/Thành phố không được để trống.";
+    if (addressChanged && mergedAddressCandidate.location.length < 5) {
+      errors.location = "Địa chỉ cần ít nhất 5 ký tự.";
     }
     if (options?.requireOtp && otpCode.trim().length !== 6) {
       errors.otpCode = "OTP cần đúng 6 chữ số.";
@@ -330,17 +294,8 @@ export function ProfileDashboard() {
       } else if (recipientNameValue !== "" && recipientNameValue !== fallbackRecipientName) {
         nextAddressPatch.recipient_name = recipientNameValue;
       }
-      if (streetValue !== "" && streetValue !== currentStreetValue) {
-        nextAddressPatch.street = streetValue;
-      }
-      if (wardValue !== "" && wardValue !== currentWardValue) {
-        nextAddressPatch.ward = wardValue;
-      }
-      if (districtValue !== "" && districtValue !== currentDistrictValue) {
-        nextAddressPatch.district = districtValue;
-      }
-      if (cityValue !== "" && cityValue !== currentCityValue) {
-        nextAddressPatch.city = cityValue;
+      if (locationValue !== "" && locationValue !== currentLocationValue) {
+        nextAddressPatch.location = locationValue;
       }
       if (Object.keys(nextAddressPatch).length > 0) {
         profilePatch.default_address = nextAddressPatch;
@@ -661,12 +616,7 @@ export function ProfileDashboard() {
             {defaultAddress ? (
               <div className="mt-4 space-y-3 text-sm leading-7 text-on-surface-variant">
                 <p className="font-semibold text-primary">{defaultAddress.recipient_name}</p>
-                <p>{defaultAddress.street}</p>
-                <p>
-                  {[defaultAddress.ward, defaultAddress.district, defaultAddress.city]
-                    .filter(Boolean)
-                    .join(", ")}
-                </p>
+                <p>{defaultAddress.location}</p>
                 <p>{defaultAddress.phone}</p>
               </div>
             ) : (
@@ -790,36 +740,13 @@ export function ProfileDashboard() {
                 }}
               />
             </Field>
-            <Field htmlFor="profile-street" label="Địa chỉ" error={formErrors.street}>
+            <Field htmlFor="profile-location" label="Địa chỉ" error={formErrors.location}>
               <TextInput
-                id="profile-street"
-                value={street}
+                id="profile-location"
+                value={location}
                 onChange={(event) => {
-                  setStreet(event.target.value);
-                  setFormErrors((current) => ({ ...current, street: undefined }));
-                }}
-              />
-            </Field>
-            <Field htmlFor="profile-ward" label="Phường/Xã">
-              <TextInput id="profile-ward" value={ward} onChange={(event) => setWard(event.target.value)} />
-            </Field>
-            <Field htmlFor="profile-district" label="Quận/Huyện" error={formErrors.district}>
-              <TextInput
-                id="profile-district"
-                value={district}
-                onChange={(event) => {
-                  setDistrict(event.target.value);
-                  setFormErrors((current) => ({ ...current, district: undefined }));
-                }}
-              />
-            </Field>
-            <Field htmlFor="profile-city" label="Tỉnh/Thành phố" error={formErrors.city}>
-              <TextInput
-                id="profile-city"
-                value={city}
-                onChange={(event) => {
-                  setCity(event.target.value);
-                  setFormErrors((current) => ({ ...current, city: undefined }));
+                  setLocation(event.target.value);
+                  setFormErrors((current) => ({ ...current, location: undefined }));
                 }}
               />
             </Field>

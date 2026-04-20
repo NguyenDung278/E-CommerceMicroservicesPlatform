@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
+	"go.uber.org/zap"
 )
 
 var productSearchSynonyms = map[string][]string{
@@ -28,7 +30,7 @@ func (s *ProductService) GetSearchAssist(ctx context.Context, query dto.SearchAs
 	}
 
 	resolvedQuery, searchTerms, appliedSynonyms := expandSearchAssistTerms(query.Query)
-	return s.repo.SearchAssist(ctx, repository.SearchAssistParams{
+	assist, err := s.repo.SearchAssist(ctx, repository.SearchAssistParams{
 		Limit:           limit,
 		Query:           strings.TrimSpace(query.Query),
 		ResolvedQuery:   resolvedQuery,
@@ -37,6 +39,16 @@ func (s *ProductService) GetSearchAssist(ctx context.Context, query dto.SearchAs
 		SearchTerms:     searchTerms,
 		AppliedSynonyms: appliedSynonyms,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	resultCount := 0
+	if assist != nil {
+		resultCount = assist.ResultCount
+	}
+	s.recordSearchAnalyticsBestEffort(ctx, "assist", strings.TrimSpace(query.Query), trimText(query.Category), resultCount)
+	return assist, nil
 }
 
 func expandSearchAssistTerms(query string) (string, []string, []string) {
@@ -85,4 +97,34 @@ func normalizeAssistStatus(value string) string {
 	}
 
 	return status
+}
+
+func (s *ProductService) recordSearchAnalyticsBestEffort(
+	ctx context.Context,
+	source, query, category string,
+	resultCount int,
+) {
+	if s.analyticsRepo == nil {
+		return
+	}
+
+	trimmedQuery := strings.TrimSpace(query)
+	if trimmedQuery == "" {
+		return
+	}
+
+	if err := s.analyticsRepo.RecordQuery(ctx, repository.SearchAnalyticsRecord{
+		Source:      source,
+		Query:       trimmedQuery,
+		Normalized:  strings.ToLower(trimmedQuery),
+		Category:    category,
+		ResultCount: resultCount,
+		OccurredAt:  time.Now(),
+	}); err != nil {
+		s.log.Warn("failed to record product search analytics",
+			zap.String("source", source),
+			zap.String("query", trimmedQuery),
+			zap.Error(err),
+		)
+	}
 }

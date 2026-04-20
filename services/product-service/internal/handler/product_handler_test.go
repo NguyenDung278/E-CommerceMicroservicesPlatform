@@ -34,6 +34,10 @@ type fakeProductRepo struct {
 
 type fakeMediaStore struct{}
 
+type fakeSearchAnalyticsRepo struct {
+	summary *model.ProductSearchAnalyticsSummary
+}
+
 func (r *fakeProductRepo) Create(_ context.Context, product *model.Product) error {
 	r.created = append(r.created, product)
 	return nil
@@ -235,6 +239,26 @@ func (r *fakeProductRepo) ApplyReviewSummaryDelta(_ context.Context, _ string, _
 }
 
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
+
+func (r *fakeSearchAnalyticsRepo) RecordQuery(_ context.Context, _ repository.SearchAnalyticsRecord) error {
+	return nil
+}
+
+func (r *fakeSearchAnalyticsRepo) GetSummary(
+	_ context.Context,
+	params repository.SearchAnalyticsSummaryParams,
+) (*model.ProductSearchAnalyticsSummary, error) {
+	if r.summary == nil {
+		return &model.ProductSearchAnalyticsSummary{
+			WindowDays:        params.Days,
+			TopQueries:        []model.ProductSearchAnalyticsEntry{},
+			ZeroResultQueries: []model.ProductSearchAnalyticsEntry{},
+		}, nil
+	}
+
+	summary := *r.summary
+	return &summary, nil
+}
 
 func (s *fakeMediaStore) EnsureBucket(_ context.Context) error { return nil }
 
@@ -457,6 +481,57 @@ func TestListByIDsRejectsLargeBatch(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestGetSearchAnalyticsAllowsAdminRole(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	analyticsRepo := &fakeSearchAnalyticsRepo{
+		summary: &model.ProductSearchAnalyticsSummary{
+			WindowDays: 14,
+			TopQueries: []model.ProductSearchAnalyticsEntry{
+				{
+					Query:              "archive coat",
+					Source:             "catalog",
+					RequestCount:       9,
+					ZeroResultCount:    0,
+					AverageResultCount: 3,
+					LastSeenAt:         time.Now().UTC(),
+				},
+			},
+			ZeroResultQueries: []model.ProductSearchAnalyticsEntry{
+				{
+					Query:              "retro loafer",
+					Source:             "assist",
+					RequestCount:       4,
+					ZeroResultCount:    4,
+					AverageResultCount: 0,
+					LastSeenAt:         time.Now().UTC(),
+				},
+			},
+		},
+	}
+	productService := service.NewProductService(&fakeProductRepo{}, service.WithSearchAnalytics(analyticsRepo))
+	handler := NewProductHandler(productService, nil)
+	secret := "super-secret-test-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/analytics/search?days=14&limit=5", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"window_days":14`)) {
+		t.Fatalf("expected analytics window in payload, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"archive coat"`)) {
+		t.Fatalf("expected top query payload, got %s", rec.Body.String())
 	}
 }
 

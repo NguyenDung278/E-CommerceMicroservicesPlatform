@@ -31,6 +31,7 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminPayments := e.Group("/api/v1/admin/payments")
 	adminPayments.Use(appmw.JWTAuth(jwtSecret))
 	adminPayments.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
+	adminPayments.GET("/history", h.forward)
 	adminPayments.GET("/order/:orderId/history", h.forward)
 	adminPayments.POST("/:id/refunds", h.forward)
 

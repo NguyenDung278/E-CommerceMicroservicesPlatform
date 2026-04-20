@@ -1,5 +1,5 @@
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 import { syncWorkbookProductBatch, syncWorkbookProductFiles } from "./dev/workbook-sync.js";
 const importMetaUrl = import.meta.url;
 const workbookCsvPath = new URL("./public/content/stitchfix-home.csv", importMetaUrl).pathname;
@@ -91,7 +91,7 @@ function workbookSyncPlugin() {
         },
     };
 }
-export default defineConfig({
+const config = {
     plugins: [react(), workbookSyncPlugin()],
     test: {
         environment: "jsdom",
@@ -143,4 +143,5 @@ export default defineConfig({
         port: 4173,
         strictPort: true,
     },
-});
+};
+export default defineConfig(config);

@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AccountShell } from "@/components/account-shell";
 import { SurfaceCard } from "@/components/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrderPayments } from "@/hooks/useOrderPayments";
+import { userApi } from "@/lib/api";
+import { getErrorMessage } from "@/lib/errors/handler";
+import type { NotificationPreference, WishlistAlert } from "@/types/api";
 import {
   formatCurrency,
   formatShortDate,
@@ -17,27 +20,83 @@ import {
 
 import { getLatestPayment } from "./shared";
 
-const notificationPreferenceCards = [
-  ["emailAlerts", "Email alerts", "Nhận tóm tắt đơn hàng và cập nhật giao dịch qua email."],
-  ["smsNotifications", "SMS notifications", "Thông báo ngắn gọn cho các trạng thái cần chú ý."],
-  ["orderUpdates", "Order updates", "Cập nhật mọi bước xử lý đơn hàng."],
-  ["securityAlerts", "Security alerts", "Nhắc nhở về email verification và password changes."],
+const preferenceCards = [
+  ["order_updates", "Order updates", "Cập nhật mọi bước xử lý đơn hàng."],
+  ["payment_updates", "Payment updates", "Biên lai, lỗi thanh toán và trạng thái refund."],
+  ["return_updates", "Return updates", "Trạng thái xử lý của các yêu cầu trả hàng."],
+  ["wishlist_back_in_stock", "Back in stock", "Thông báo khi sản phẩm wishlist có hàng trở lại."],
+  ["wishlist_price_drop", "Price drop", "Thông báo khi sản phẩm wishlist giảm giá."],
 ] as const;
 
 export function NotificationsPageView() {
   const { token, user } = useAuth();
   const { orders, paymentsByOrder } = useOrderPayments(token);
-  const [prefs, setPrefs] = useState({
-    emailAlerts: true,
-    smsNotifications: false,
-    orderUpdates: true,
-    securityAlerts: true,
-  });
+  const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
+  const [wishlistAlerts, setWishlistAlerts] = useState<WishlistAlert[]>([]);
+  const [feedback, setFeedback] = useState("");
+  const [busyTopic, setBusyTopic] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    if (!token) {
+      setPreferences([]);
+      setWishlistAlerts([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.allSettled([
+      userApi.listNotificationPreferences(token),
+      userApi.listWishlistAlerts(token),
+    ]).then((results) => {
+      if (!active) {
+        return;
+      }
+
+      const [preferencesResult, alertsResult] = results;
+      if (preferencesResult.status === "fulfilled") {
+        setPreferences(preferencesResult.value.data);
+      }
+      if (alertsResult.status === "fulfilled") {
+        setWishlistAlerts(alertsResult.value.data);
+      }
+      if (
+        preferencesResult.status === "rejected" &&
+        alertsResult.status === "rejected"
+      ) {
+        setFeedback(getErrorMessage(preferencesResult.reason));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   const latestPayment = getLatestPayment(paymentsByOrder);
 
+  const preferenceMap = useMemo(
+    () => new Map(preferences.map((preference) => [preference.topic, preference.enabled])),
+    [preferences],
+  );
+
+  const sortedWishlistAlerts = useMemo(
+    () =>
+      [...wishlistAlerts].sort(
+        (left, right) => Date.parse(right.detected_at) - Date.parse(left.detected_at),
+      ),
+    [wishlistAlerts],
+  );
+
   const feed = useMemo(() => {
-    const items = [];
+    const items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      href: string;
+    }> = [];
 
     if (orders[0]) {
       items.push({
@@ -69,31 +128,94 @@ export function NotificationsPageView() {
     return items;
   }, [latestPayment, orders, user?.email_verified]);
 
+  async function handleToggle(topic: string, enabled: boolean) {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setBusyTopic(topic);
+      setFeedback("");
+      const response = await userApi.updateNotificationPreferences(token, {
+        preferences: [{ topic, enabled }],
+      });
+      setPreferences(response.data);
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setBusyTopic("");
+    }
+  }
+
   return (
     <AccountShell
       title="Thông báo & activity"
-      description="Trang này gom các tín hiệu quan trọng từ orders, payments và trạng thái tài khoản để người dùng xử lý nhanh hơn."
+      description="Trang này đã nối trực tiếp notification preferences và wishlist alerts từ backend thay vì state giả lập."
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {notificationPreferenceCards.map(([key, title, description]) => (
-          <SurfaceCard key={key} className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold text-primary">{title}</p>
-              <input
-                checked={prefs[key]}
-                type="checkbox"
-                onChange={(event) =>
-                  setPrefs((current) => ({ ...current, [key]: event.target.checked }))
-                }
-              />
-            </div>
-            <p className="mt-4 text-sm leading-7 text-on-surface-variant">{description}</p>
-          </SurfaceCard>
-        ))}
+      {feedback ? (
+        <SurfaceCard className="p-4 text-sm leading-7 text-on-surface-variant">{feedback}</SurfaceCard>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {preferenceCards.map(([topic, title, description]) => {
+          const enabled = preferenceMap.get(topic) ?? true;
+          const isBusy = busyTopic === topic;
+
+          return (
+            <SurfaceCard key={topic} className="p-6">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-primary">{title}</p>
+                <input
+                  checked={enabled}
+                  disabled={isBusy}
+                  type="checkbox"
+                  onChange={(event) => void handleToggle(topic, event.target.checked)}
+                />
+              </div>
+              <p className="mt-4 text-sm leading-7 text-on-surface-variant">{description}</p>
+            </SurfaceCard>
+          );
+        })}
       </div>
 
       <SurfaceCard className="p-6">
-        <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">Activity feed</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+            Wishlist signals
+          </h2>
+          <Link href="/wishlist" className="text-sm font-medium text-primary underline">
+            Open wishlist
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-4">
+          {sortedWishlistAlerts.length === 0 ? (
+            <div className="rounded-[1.5rem] bg-surface p-5">
+              <p className="font-semibold text-primary">Chưa có tín hiệu wishlist mới</p>
+              <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                Khi sản phẩm wishlist giảm giá hoặc có hàng trở lại, mục này sẽ hiển thị ngay.
+              </p>
+            </div>
+          ) : (
+            sortedWishlistAlerts.map((alert) => (
+              <Link
+                key={`${alert.kind}-${alert.product_id}-${alert.detected_at}`}
+                href="/wishlist"
+                className="rounded-[1.5rem] bg-surface p-5 transition hover:bg-surface-container-high"
+              >
+                <p className="font-semibold text-primary">{buildWishlistAlertTitle(alert)}</p>
+                <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                  {buildWishlistAlertDescription(alert)}
+                </p>
+              </Link>
+            ))
+          )}
+        </div>
+      </SurfaceCard>
+
+      <SurfaceCard className="p-6">
+        <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+          Activity feed
+        </h2>
         <div className="mt-6 grid gap-4">
           {feed.map((item) => (
             <Link
@@ -109,4 +231,25 @@ export function NotificationsPageView() {
       </SurfaceCard>
     </AccountShell>
   );
+}
+
+function buildWishlistAlertTitle(alert: WishlistAlert) {
+  const name = alert.product_name || alert.product_id;
+  if (alert.kind === "back_in_stock") {
+    return `${name} đã có hàng trở lại`;
+  }
+  if (alert.kind === "price_drop") {
+    return `${name} vừa giảm giá`;
+  }
+  return `${name} có cập nhật mới`;
+}
+
+function buildWishlistAlertDescription(alert: WishlistAlert) {
+  if (alert.kind === "back_in_stock") {
+    return `${alert.product_name || alert.product_id} hiện có ${alert.current_stock ?? 0} sản phẩm sẵn sàng để đặt mua.`;
+  }
+  if (alert.kind === "price_drop") {
+    return `${alert.product_name || alert.product_id} giảm từ ${formatCurrency(alert.baseline_price ?? 0)} xuống ${formatCurrency(alert.current_price ?? 0)}.`;
+  }
+  return "Một sản phẩm trong wishlist vừa có thay đổi mới.";
 }

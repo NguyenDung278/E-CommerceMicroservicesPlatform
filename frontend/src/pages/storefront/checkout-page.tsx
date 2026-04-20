@@ -26,6 +26,7 @@ type ShippingMethodChoice = "standard" | "express" | "pickup";
 
 type CheckoutFormState = {
   fullName: string;
+  location: string;
   phone: string;
 };
 
@@ -40,6 +41,7 @@ type CheckoutDisplayItem = {
 
 const emptyCheckoutForm: CheckoutFormState = {
   fullName: "",
+  location: "",
   phone: "",
 };
 
@@ -107,9 +109,10 @@ export function CheckoutPage() {
         appliedCouponCode,
         selectedShippingMethod,
         form.fullName,
+        form.location,
         form.phone
       ),
-    [appliedCouponCode, draftItems, form.fullName, form.phone, selectedShippingMethod]
+    [appliedCouponCode, draftItems, form.fullName, form.location, form.phone, selectedShippingMethod]
   );
   const [orderRequestKey, setOrderRequestKey] = useState(() =>
     generateCheckoutIdempotencyKey("order")
@@ -175,6 +178,7 @@ export function CheckoutPage() {
     setForm((current) => ({
       ...current,
       fullName: defaultAddress.recipient_name,
+      location: defaultAddress.location,
       phone: defaultAddress.phone,
     }));
   }, [addresses, form]);
@@ -261,8 +265,8 @@ export function CheckoutPage() {
     selectedShippingMethod === "pickup"
       ? "Pickup only requires your contact details."
       : addresses.length > 0
-      ? "Pre-filled from your saved contact book."
-      : "Fill in the delivery contact details for this order.";
+      ? "Pre-filled from your saved address book."
+      : "Fill in the delivery location details for this order.";
 
   useEffect(() => {
     let active = true;
@@ -393,13 +397,14 @@ export function CheckoutPage() {
     }
 
     const normalizedFullName = sanitizeText(form.fullName);
+    const normalizedLocation = sanitizeText(form.location);
     const normalizedPhone = sanitizeText(form.phone);
 
-    if (!normalizedFullName || !normalizedPhone) {
+    if (!normalizedFullName || !normalizedPhone || (selectedShippingMethod !== "pickup" && !normalizedLocation)) {
       setFeedback(
         selectedShippingMethod === "pickup"
           ? "Vui lòng điền đủ họ tên và số điện thoại để xác nhận lượt nhận tại quầy."
-          : "Vui lòng điền đủ họ tên và số điện thoại để xác nhận giao hàng."
+          : "Vui lòng điền đủ họ tên, địa chỉ và số điện thoại để xác nhận giao hàng."
       );
       return;
     }
@@ -535,6 +540,15 @@ export function CheckoutPage() {
                       type="tel"
                       value={form.phone}
                       onChange={(event) => updateForm("phone", event.target.value)}
+                    />
+                  </label>
+
+                  <label className="checkout-field checkout-field-full">
+                    <span>Location</span>
+                    <input
+                      placeholder="123 Nguyen Hue, Ben Nghe, District 1, Ho Chi Minh City"
+                      value={form.location}
+                      onChange={(event) => updateForm("location", event.target.value)}
                     />
                   </label>
                 </div>
@@ -813,7 +827,7 @@ async function syncPurchasedProductsToWorkbook(items: Array<{ product_id: string
 }
 
 function hasCheckoutFormValue(form: CheckoutFormState) {
-  return Boolean(form.fullName || form.phone);
+  return Boolean(form.fullName || form.location || form.phone);
 }
 
 function buildCheckoutItemSubtitle(product?: Product) {
@@ -830,15 +844,17 @@ function buildCheckoutPreviewAddress(
   shippingMethod: ShippingMethodChoice
 ): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
+  const locationValue = sanitizeText(form.location);
   const phone = sanitizeText(form.phone);
 
-  if (shippingMethod === "pickup" || !recipientName || !phone) {
+  if (shippingMethod === "pickup" || !recipientName || !phone || !locationValue) {
     return undefined;
   }
 
   return {
     recipient_name: recipientName,
     phone,
+    location: locationValue,
   };
 }
 
@@ -847,6 +863,7 @@ function buildCheckoutSubmissionAddress(
   shippingMethod: ShippingMethodChoice
 ): ShippingAddress | undefined {
   const recipientName = sanitizeText(form.fullName);
+  const locationValue = sanitizeText(form.location);
   const phone = sanitizeText(form.phone);
 
   if (!recipientName || !phone) {
@@ -860,6 +877,7 @@ function buildCheckoutSubmissionAddress(
   return {
     recipient_name: recipientName,
     phone,
+    location: locationValue,
   };
 }
 
@@ -944,6 +962,7 @@ function buildCheckoutRequestFingerprint(
   couponCode: string,
   shippingMethod: ShippingMethodChoice,
   fullName: string,
+  locationValue: string,
   phone: string
 ) {
   const normalizedItems = items
@@ -956,6 +975,7 @@ function buildCheckoutRequestFingerprint(
     couponCode: normalizeCheckoutCouponCode(couponCode),
     shippingMethod,
     fullName: sanitizeText(fullName),
+    location: sanitizeText(locationValue),
     phone: sanitizeText(phone),
   });
 }

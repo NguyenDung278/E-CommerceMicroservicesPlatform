@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -25,9 +26,15 @@ func (h *WishlistHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	wishlist := e.Group("/api/v1/users/wishlist")
 	wishlist.Use(middleware.JWTAuth(jwtSecret))
 	wishlist.GET("", h.List)
+	wishlist.GET("/alerts", h.ListAlerts)
 	wishlist.POST("", h.Add)
 	wishlist.POST("/sync", h.Sync)
 	wishlist.DELETE("/:productId", h.Remove)
+
+	adminWishlist := e.Group("/api/v1/admin/wishlist-alerts")
+	adminWishlist.Use(middleware.JWTAuth(jwtSecret))
+	adminWishlist.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	adminWishlist.GET("", h.ListDispatchableAlerts)
 }
 
 func (h *WishlistHandler) List(c echo.Context) error {
@@ -45,6 +52,36 @@ func (h *WishlistHandler) List(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "wishlist retrieved", items)
+}
+
+func (h *WishlistHandler) ListAlerts(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	if claims == nil {
+		return response.Error(c, http.StatusUnauthorized, "unauthorized", "missing user claims")
+	}
+
+	alerts, err := h.wishlistService.ListAlerts(c.Request().Context(), claims.UserID)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to list wishlist alerts")
+	}
+	if alerts == nil {
+		alerts = []model.WishlistAlert{}
+	}
+
+	return response.Success(c, http.StatusOK, "wishlist alerts retrieved", alerts)
+}
+
+func (h *WishlistHandler) ListDispatchableAlerts(c echo.Context) error {
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	deliveries, err := h.wishlistService.ListDispatchableAlerts(c.Request().Context(), limit)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to list dispatchable wishlist alerts")
+	}
+	if deliveries == nil {
+		deliveries = []model.WishlistAlertDelivery{}
+	}
+
+	return response.Success(c, http.StatusOK, "dispatchable wishlist alerts retrieved", deliveries)
 }
 
 func (h *WishlistHandler) Add(c echo.Context) error {

@@ -33,19 +33,13 @@ type PaymentChoice = "manual" | "momo" | "credit_card" | "demo";
 
 type CheckoutFormState = {
   fullName: string;
-  street: string;
-  city: string;
-  district: string;
-  ward: string;
+  location: string;
   phone: string;
 };
 
 const emptyForm: CheckoutFormState = {
   fullName: "",
-  street: "",
-  city: "",
-  district: "",
-  ward: "",
+  location: "",
   phone: "",
 };
 
@@ -121,7 +115,7 @@ function CheckoutPageContent() {
     }
 
     setForm((current) =>
-      current.fullName || current.street || current.city || current.phone
+      current.fullName || current.location || current.phone
         ? current
         : mapAddressToForm(defaultAddress),
     );
@@ -207,8 +201,8 @@ function CheckoutPageContent() {
 
     const shippingAddress = buildShippingAddress(form);
 
-    if (!shippingAddress.recipient_name || !shippingAddress.street || !shippingAddress.city || !shippingAddress.phone) {
-      setFeedback("Vui lòng điền đủ họ tên, địa chỉ, thành phố và số điện thoại.");
+    if (!shippingAddress.recipient_name || !shippingAddress.location || !shippingAddress.phone) {
+      setFeedback("Vui lòng điền đủ họ tên, địa chỉ và số điện thoại.");
       return;
     }
 
@@ -317,11 +311,7 @@ function CheckoutPageContent() {
                       onClick={() => setForm(mapAddressToForm(address))}
                     >
                       <p className="text-sm font-semibold text-primary">{address.recipient_name}</p>
-                      <p className="mt-2 text-sm leading-7 text-on-surface-variant">
-                        {address.street}
-                        <br />
-                        {[address.ward, address.district, address.city].filter(Boolean).join(", ")}
-                      </p>
+                      <p className="mt-2 text-sm leading-7 text-on-surface-variant">{address.location}</p>
                     </button>
                   ))}
                 </div>
@@ -335,19 +325,8 @@ function CheckoutPageContent() {
                   <TextInput id="checkout-phone" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} />
                 </Field>
                 <div className="md:col-span-2">
-                  <Field htmlFor="checkout-street" label="Địa chỉ" required>
-                    <TextInput id="checkout-street" value={form.street} onChange={(event) => setForm((current) => ({ ...current, street: event.target.value }))} />
-                  </Field>
-                </div>
-                <Field htmlFor="checkout-ward" label="Phường / xã">
-                  <TextInput id="checkout-ward" value={form.ward} onChange={(event) => setForm((current) => ({ ...current, ward: event.target.value }))} />
-                </Field>
-                <Field htmlFor="checkout-district" label="Quận / huyện" required>
-                  <TextInput id="checkout-district" value={form.district} onChange={(event) => setForm((current) => ({ ...current, district: event.target.value }))} />
-                </Field>
-                <div className="md:col-span-2">
-                  <Field htmlFor="checkout-city" label="Tỉnh / thành phố" required>
-                    <TextInput id="checkout-city" value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} />
+                  <Field htmlFor="checkout-location" label="Địa chỉ" required>
+                    <TextInput id="checkout-location" value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} />
                   </Field>
                 </div>
               </div>
@@ -457,10 +436,7 @@ function CheckoutPageContent() {
 function mapAddressToForm(address: Address): CheckoutFormState {
   return {
     fullName: address.recipient_name,
-    street: address.street,
-    city: address.city,
-    district: address.district,
-    ward: address.ward || "",
+    location: address.location,
     phone: address.phone,
   };
 }
@@ -469,9 +445,6 @@ function buildShippingAddress(form: CheckoutFormState) {
   return {
     recipient_name: form.fullName.trim(),
     phone: form.phone.trim(),
-    street: form.street.trim(),
-    ward: form.ward.trim() || undefined,
-    district: form.district.trim(),
-    city: form.city.trim(),
+    location: form.location.trim(),
   };
 }

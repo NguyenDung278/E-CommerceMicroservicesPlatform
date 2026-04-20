@@ -10,10 +10,7 @@ CREATE TABLE IF NOT EXISTS orders (
     shipping_fee            DECIMAL(10,2)  NOT NULL DEFAULT 0,
     shipping_recipient_name VARCHAR(100),
     shipping_phone          VARCHAR(20),
-    shipping_street         VARCHAR(255),
-    shipping_ward           VARCHAR(100),
-    shipping_district       VARCHAR(100),
-    shipping_city           VARCHAR(100),
+    shipping_location       VARCHAR(255),
     created_at              TIMESTAMP      NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMP      NOT NULL DEFAULT NOW()
 );

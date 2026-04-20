@@ -32,10 +32,30 @@ func TestUserHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodGet, path: "/api/v1/users/profile"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/users/profile"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/users/avatar"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/profile/phone-verification"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/profile/phone-verification/send-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/profile/phone-verification/verify-otp"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/profile/phone-verification/resend-otp"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/users/verify-email/status"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/send-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/verify-otp"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/resend-otp"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/users/password"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/verify-email/resend"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/addresses"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/addresses"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/users/addresses/:id"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/users/addresses/:id"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/users/addresses/:id/default"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/notification-preferences"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/users/notification-preferences"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/wishlist"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/users/wishlist/alerts"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/wishlist"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/users/wishlist/sync"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/users/wishlist/:productId"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/admin/users"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/admin/users/:id/role"},
 	)
 
 	assertRoutesAbsent(t, e,
@@ -77,6 +97,7 @@ func TestOrderHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/summary"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id/events"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id/return-eligibility"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/orders/:id/cancel"},
 	)
@@ -99,12 +120,38 @@ func TestPaymentHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodGet, path: "/api/v1/payments/:id"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/payments/order/:orderId"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/payments/order/:orderId/history"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/admin/payments/history"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/payments/webhooks/momo"},
 	)
 
 	assertRoutesAbsent(t, e,
 		routeExpectation{method: http.MethodGet, path: "/api/v1/payments/:id/verify"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/payments/order/:orderId/history"},
+	)
+}
+
+func TestProductHandlerRegisterRoutesParity(t *testing.T) {
+	e := echo.New()
+	handler := &ProductHandler{forward: testForwardHandler()}
+
+	handler.RegisterRoutes(e, "test-secret")
+
+	assertRoutesPresent(t, e,
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products/batch"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products/search/assist"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products/:id"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products/:id/reviews"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/products/analytics/search"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/products"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/products/uploads"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/products/:id"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/products/:id"},
+	)
+
+	assertRoutesAbsent(t, e,
+		routeExpectation{method: http.MethodPost, path: "/api/v1/products/search/assist"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/products/uploads"},
 	)
 }
 

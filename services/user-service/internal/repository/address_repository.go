@@ -34,12 +34,14 @@ func newAddressRepositoryWithExecutor(executor sqlExecutor) AddressRepository {
 
 func (r *postgresAddressRepository) Create(ctx context.Context, addr *model.Address) error {
 	query := `
-		INSERT INTO addresses (id, user_id, recipient_name, phone, is_default, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO addresses (
+			id, user_id, recipient_name, phone, location, is_default, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	_, err := r.executor.ExecContext(ctx, query,
 		addr.ID, addr.UserID, addr.RecipientName, addr.Phone,
-		addr.IsDefault, addr.CreatedAt, addr.UpdatedAt,
+		addr.Location, addr.IsDefault, addr.CreatedAt, addr.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create address: %w", err)
@@ -49,13 +51,13 @@ func (r *postgresAddressRepository) Create(ctx context.Context, addr *model.Addr
 
 func (r *postgresAddressRepository) GetByID(ctx context.Context, id string) (*model.Address, error) {
 	query := `
-		SELECT id, user_id, recipient_name, phone, is_default, created_at, updated_at
+		SELECT id, user_id, recipient_name, phone, location, is_default, created_at, updated_at
 		FROM addresses WHERE id = $1
 	`
 	addr := &model.Address{}
 	err := r.executor.QueryRowContext(ctx, query, id).Scan(
 		&addr.ID, &addr.UserID, &addr.RecipientName, &addr.Phone,
-		&addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt,
+		&addr.Location, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -68,7 +70,7 @@ func (r *postgresAddressRepository) GetByID(ctx context.Context, id string) (*mo
 
 func (r *postgresAddressRepository) GetByUserID(ctx context.Context, userID string) ([]*model.Address, error) {
 	query := `
-		SELECT id, user_id, recipient_name, phone, is_default, created_at, updated_at
+		SELECT id, user_id, recipient_name, phone, location, is_default, created_at, updated_at
 		FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC
 	`
 	rows, err := r.executor.QueryContext(ctx, query, userID)
@@ -82,7 +84,7 @@ func (r *postgresAddressRepository) GetByUserID(ctx context.Context, userID stri
 		addr := &model.Address{}
 		if err := rows.Scan(
 			&addr.ID, &addr.UserID, &addr.RecipientName, &addr.Phone,
-			&addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt,
+			&addr.Location, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan address: %w", err)
 		}
@@ -94,12 +96,11 @@ func (r *postgresAddressRepository) GetByUserID(ctx context.Context, userID stri
 func (r *postgresAddressRepository) Update(ctx context.Context, addr *model.Address) error {
 	query := `
 		UPDATE addresses
-		SET recipient_name = $1, phone = $2, is_default = $3, updated_at = $4
-		WHERE id = $5
+		SET recipient_name = $1, phone = $2, location = $3, is_default = $4, updated_at = $5
+		WHERE id = $6
 	`
 	_, err := r.executor.ExecContext(ctx, query,
-		addr.RecipientName, addr.Phone, addr.IsDefault, addr.UpdatedAt,
-		addr.ID,
+		addr.RecipientName, addr.Phone, addr.Location, addr.IsDefault, addr.UpdatedAt, addr.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update address: %w", err)

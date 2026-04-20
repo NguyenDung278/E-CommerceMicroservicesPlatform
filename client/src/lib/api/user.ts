@@ -3,41 +3,57 @@ import {
   normalizeAddress,
   normalizeAddressList,
   normalizeEmailVerificationChallenge,
+  normalizeNotificationPreferenceList,
   normalizePhoneVerificationChallenge,
   normalizeUserProfile,
   normalizeUserProfileList,
+  normalizeWishlistAlertList,
+  normalizeWishlistItem,
+  normalizeWishlistItemList,
 } from "@/lib/api/normalizers";
 import type {
   Address,
   ApiEnvelope,
   EmailVerificationChallenge,
+  NotificationPreference,
   PhoneVerificationChallenge,
   ProfileAddressPatch,
   UserProfile,
+  WishlistAlert,
+  WishlistItem,
 } from "@/types/api";
 
 export interface CreateAddressData {
   recipient_name: string;
   phone: string;
-  street: string;
-  ward?: string;
-  district: string;
-  city: string;
+  location: string;
   is_default?: boolean;
 }
 
 export interface UpdateAddressData {
   recipient_name?: string;
   phone?: string;
-  street?: string;
-  ward?: string;
-  district?: string;
-  city?: string;
+  location?: string;
   is_default?: boolean;
 }
 
 export interface UpdateUserRoleData {
   role: string;
+}
+
+export interface AddWishlistItemData {
+  product_id: string;
+}
+
+export interface SyncWishlistData {
+  product_ids: string[];
+}
+
+export interface UpdateNotificationPreferencesData {
+  preferences: Array<{
+    topic: string;
+    enabled: boolean;
+  }>;
 }
 
 export interface UpdateProfileData {
@@ -211,6 +227,72 @@ export const userApi = {
     }).then((response) => ({
       ...response,
       data: normalizeAddress(response.data),
+    }));
+  },
+
+  listWishlist(token: string): Promise<ApiEnvelope<WishlistItem[]>> {
+    return request<unknown>("/api/v1/users/wishlist", { token }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItemList(response.data),
+    }));
+  },
+
+  addWishlistItem(token: string, body: AddWishlistItemData): Promise<ApiEnvelope<WishlistItem>> {
+    return request<unknown>("/api/v1/users/wishlist", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItem(response.data),
+    }));
+  },
+
+  syncWishlist(token: string, body: SyncWishlistData): Promise<ApiEnvelope<WishlistItem[]>> {
+    return request<unknown>("/api/v1/users/wishlist/sync", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeWishlistItemList(response.data),
+    }));
+  },
+
+  removeWishlistItem(token: string, productId: string): Promise<ApiEnvelope<null>> {
+    return request<null>(`/api/v1/users/wishlist/${encodeURIComponent(productId)}`, {
+      method: "DELETE",
+      token,
+    });
+  },
+
+  listWishlistAlerts(token: string): Promise<ApiEnvelope<WishlistAlert[]>> {
+    return request<unknown>("/api/v1/users/wishlist/alerts", { token }).then((response) => ({
+      ...response,
+      data: normalizeWishlistAlertList(response.data),
+    }));
+  },
+
+  listNotificationPreferences(token: string): Promise<ApiEnvelope<NotificationPreference[]>> {
+    return request<unknown>("/api/v1/users/notification-preferences", { token }).then(
+      (response) => ({
+        ...response,
+        data: normalizeNotificationPreferenceList(response.data),
+      }),
+    );
+  },
+
+  updateNotificationPreferences(
+    token: string,
+    body: UpdateNotificationPreferencesData,
+  ): Promise<ApiEnvelope<NotificationPreference[]>> {
+    return request<unknown>("/api/v1/users/notification-preferences", {
+      method: "PUT",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeNotificationPreferenceList(response.data),
     }));
   },
 

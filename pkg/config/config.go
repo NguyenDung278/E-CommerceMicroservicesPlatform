@@ -18,24 +18,24 @@ import (
 // Config holds all configuration for a microservice.
 // Each service can embed this struct and add service-specific fields.
 type Config struct {
-	Server         ServerConfig         `mapstructure:"server"`
-	Database       DatabaseConfig       `mapstructure:"database"`
-	Redis          RedisConfig          `mapstructure:"redis"`
-	Reviews        ReviewsConfig        `mapstructure:"reviews"`
-	RabbitMQ       RabbitMQConfig       `mapstructure:"rabbitmq"`
-	JWT            JWTConfig            `mapstructure:"jwt"`
-	GRPC           GRPCConfig           `mapstructure:"grpc"`
-	SMTP           SMTPConfig           `mapstructure:"smtp"`
-	OAuth          OAuthConfig          `mapstructure:"oauth"`
-	Services       ServicesConfig       `mapstructure:"services"`
-	Frontend       FrontendConfig       `mapstructure:"frontend"`
-	Notification   NotificationConfig   `mapstructure:"notification"`
-	PaymentGateway PaymentGatewayConfig `mapstructure:"payment_gateway"`
-	ObjectStorage  ObjectStorageConfig  `mapstructure:"object_storage"`
-	Tracing        TracingConfig        `mapstructure:"tracing"`
-	Search         SearchConfig         `mapstructure:"search"`
-	Bootstrap      BootstrapConfig      `mapstructure:"bootstrap"`
-	Telegram       TelegramConfig       `mapstructure:"telegram"`
+	Server            ServerConfig            `mapstructure:"server"`
+	Database          DatabaseConfig          `mapstructure:"database"`
+	Redis             RedisConfig             `mapstructure:"redis"`
+	Reviews           ReviewsConfig           `mapstructure:"reviews"`
+	RabbitMQ          RabbitMQConfig          `mapstructure:"rabbitmq"`
+	JWT               JWTConfig               `mapstructure:"jwt"`
+	GRPC              GRPCConfig              `mapstructure:"grpc"`
+	SMTP              SMTPConfig              `mapstructure:"smtp"`
+	OAuth             OAuthConfig             `mapstructure:"oauth"`
+	Services          ServicesConfig          `mapstructure:"services"`
+	Frontend          FrontendConfig          `mapstructure:"frontend"`
+	Notification      NotificationConfig      `mapstructure:"notification"`
+	PaymentGateway    PaymentGatewayConfig    `mapstructure:"payment_gateway"`
+	ObjectStorage     ObjectStorageConfig     `mapstructure:"object_storage"`
+	Tracing           TracingConfig           `mapstructure:"tracing"`
+	Search            SearchConfig            `mapstructure:"search"`
+	Bootstrap         BootstrapConfig         `mapstructure:"bootstrap"`
+	Telegram          TelegramConfig          `mapstructure:"telegram"`
 	EmailVerification EmailVerificationConfig `mapstructure:"email_verification"`
 }
 
@@ -116,6 +116,8 @@ type NotificationConfig struct {
 	InboxTTLHours               int `mapstructure:"inbox_ttl_hours"`
 	ProcessingTTLSeconds        int `mapstructure:"processing_ttl_seconds"`
 	QueueMetricsIntervalSeconds int `mapstructure:"queue_metrics_interval_seconds"`
+	WishlistPollIntervalSeconds int `mapstructure:"wishlist_poll_interval_seconds"`
+	WishlistBatchLimit          int `mapstructure:"wishlist_batch_limit"`
 }
 
 type PaymentGatewayConfig struct {
@@ -280,6 +282,8 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("notification.inbox_ttl_hours", 168)
 	v.SetDefault("notification.processing_ttl_seconds", 300)
 	v.SetDefault("notification.queue_metrics_interval_seconds", 15)
+	v.SetDefault("notification.wishlist_poll_interval_seconds", 300)
+	v.SetDefault("notification.wishlist_batch_limit", 50)
 	v.SetDefault("payment_gateway.webhook_secret", "dev-momo-secret")
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:3000/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")

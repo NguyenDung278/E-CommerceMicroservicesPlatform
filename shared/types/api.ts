@@ -44,11 +44,13 @@ export type UserProfile = {
 export type ProfileAddressInput = {
   recipient_name: string;
   phone: string;
+  location: string;
 };
 
 export type ProfileAddressPatch = {
   recipient_name?: string;
   phone?: string;
+  location?: string;
 };
 
 export type PhoneVerificationChallenge = {
@@ -256,6 +258,7 @@ export type Address = {
   user_id: string;
   recipient_name: string;
   phone: string;
+  location: string;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -264,13 +267,34 @@ export type Address = {
 export type WishlistItem = {
   user_id: string;
   product_id: string;
+  baseline_price?: number;
+  baseline_stock?: number;
   created_at: string;
+  updated_at: string;
+};
+
+export type WishlistAlert = {
+  product_id: string;
+  product_name?: string;
+  kind: string;
+  baseline_price?: number;
+  current_price?: number;
+  baseline_stock?: number;
+  current_stock?: number;
+  detected_at: string;
+};
+
+export type NotificationPreference = {
+  user_id: string;
+  topic: string;
+  enabled: boolean;
   updated_at: string;
 };
 
 export type ShippingAddress = {
   recipient_name: string;
   phone: string;
+  location: string;
 };
 
 export type OrderItem = {
@@ -403,13 +427,38 @@ export type ReturnQueueFailure = {
 export type ReturnQueueHealth = {
   pending_count: number;
   ready_now_count: number;
+  ready_with_failures_count: number;
   in_flight_count: number;
+  stale_in_flight_count: number;
   retry_scheduled_count: number;
   failed_attempt_count: number;
   max_attempt_count: number;
   oldest_pending_at?: string;
+  longest_in_flight_started_at?: string;
   next_retry_at?: string;
   recent_failures: ReturnQueueFailure[];
+};
+
+export type ReturnEligibilityItem = {
+  order_item_id: string;
+  product_id: string;
+  product_name: string;
+  ordered_quantity: number;
+  already_requested_quantity: number;
+  remaining_quantity: number;
+  eligible: boolean;
+  reason?: string;
+};
+
+export type ReturnEligibilitySnapshot = {
+  order_id: string;
+  order_status: string;
+  eligible: boolean;
+  reason?: string;
+  return_window_days: number;
+  return_window_started_at?: string;
+  return_window_expires_at?: string;
+  items: ReturnEligibilityItem[];
 };
 
 export type Coupon = {
@@ -452,6 +501,22 @@ export type Payment = {
 export type OrderPaymentsSummary = {
   orders: Order[];
   paymentsByOrder: Record<string, Payment[]>;
+};
+
+export type ProductSearchAnalyticsEntry = {
+  query: string;
+  source: string;
+  category?: string;
+  request_count: number;
+  zero_result_count: number;
+  average_result_count: number;
+  last_seen_at: string;
+};
+
+export type ProductSearchAnalyticsSummary = {
+  window_days: number;
+  top_queries: ProductSearchAnalyticsEntry[];
+  zero_result_queries: ProductSearchAnalyticsEntry[];
 };
 
 export type AdminOrderTopProduct = {

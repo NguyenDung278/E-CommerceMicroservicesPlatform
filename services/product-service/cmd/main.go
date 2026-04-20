@@ -69,7 +69,11 @@ func main() {
 	}
 
 	productRepo := repository.NewProductRepository(db)
-	productOptions := []service.ProductServiceOption{service.WithLogger(log)}
+	searchAnalyticsRepo := repository.NewSearchAnalyticsRepository(db)
+	productOptions := []service.ProductServiceOption{
+		service.WithLogger(log),
+		service.WithSearchAnalytics(searchAnalyticsRepo),
+	}
 	if mediaStore, err := storage.NewObjectStorage(cfg.ObjectStorage); err != nil {
 		log.Warn("object storage disabled", zap.Error(err))
 	} else {

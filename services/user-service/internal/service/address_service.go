@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrAddressNotFound  = errors.New("address not found")
+	ErrInvalidAddress   = errors.New("invalid address")
 	ErrTooManyAddresses = errors.New("maximum number of addresses reached")
 )
 
@@ -31,6 +32,15 @@ func NewAddressService(repo repository.AddressRepository) *AddressService {
 // CreateAddress creates a new shipping address for a user.
 // If this is the user's first address, it is automatically set as default.
 func (s *AddressService) CreateAddress(ctx context.Context, userID string, req dto.CreateAddressRequest) (*model.Address, error) {
+	input := normalizeProfileAddressInput(dto.ProfileAddressInput{
+		RecipientName: req.RecipientName,
+		Phone:         req.Phone,
+		Location:      req.Location,
+	})
+	if !isValidProfileAddressInput(input) {
+		return nil, ErrInvalidAddress
+	}
+
 	count, err := s.repo.CountByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -51,8 +61,9 @@ func (s *AddressService) CreateAddress(ctx context.Context, userID string, req d
 	addr := &model.Address{
 		ID:            uuid.New().String(),
 		UserID:        userID,
-		RecipientName: req.RecipientName,
-		Phone:         req.Phone,
+		RecipientName: input.RecipientName,
+		Phone:         input.Phone,
+		Location:      input.Location,
 		IsDefault:     isDefault,
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -100,12 +111,14 @@ func (s *AddressService) UpsertDefaultAddress(ctx context.Context, userID string
 		return s.CreateAddress(ctx, userID, dto.CreateAddressRequest{
 			RecipientName: input.RecipientName,
 			Phone:         input.Phone,
+			Location:      input.Location,
 			IsDefault:     true,
 		})
 	}
 
 	defaultAddress.RecipientName = input.RecipientName
 	defaultAddress.Phone = input.Phone
+	defaultAddress.Location = input.Location
 	defaultAddress.UpdatedAt = time.Now()
 	if err := s.repo.ClearDefault(ctx, userID); err != nil {
 		return nil, err
@@ -127,13 +140,28 @@ func (s *AddressService) UpdateAddress(ctx context.Context, userID, addressID st
 		return nil, ErrAddressNotFound
 	}
 
-	// Apply partial updates.
+	normalized := dto.ProfileAddressInput{
+		RecipientName: addr.RecipientName,
+		Phone:         addr.Phone,
+		Location:      addr.Location,
+	}
 	if req.RecipientName != nil {
-		addr.RecipientName = *req.RecipientName
+		normalized.RecipientName = *req.RecipientName
 	}
 	if req.Phone != nil {
-		addr.Phone = *req.Phone
+		normalized.Phone = *req.Phone
 	}
+	if req.Location != nil {
+		normalized.Location = *req.Location
+	}
+	normalized = normalizeProfileAddressInput(normalized)
+	if !isValidProfileAddressInput(normalized) {
+		return nil, ErrInvalidAddress
+	}
+
+	addr.RecipientName = normalized.RecipientName
+	addr.Phone = normalized.Phone
+	addr.Location = normalized.Location
 	if req.IsDefault != nil && *req.IsDefault {
 		if err := s.repo.ClearDefault(ctx, userID); err != nil {
 			return nil, err

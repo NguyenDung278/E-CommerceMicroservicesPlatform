@@ -11,6 +11,7 @@ export default tseslint.config(
       "node_modules/**",
       ".npm-cache/**",
       "public/content/**",
+      "vite.config.d.ts",
     ],
   },
   js.configs.recommended,

@@ -19,19 +19,20 @@ import (
 )
 
 type fakeOrderRepo struct {
-	createdOrder        *model.Order
-	createdOutbox       *model.OutboxMessage
-	createdIdempotency  *model.OrderIdempotencyRecord
-	createdReturnOutbox *model.OutboxMessage
-	updatedReturnOutbox *model.OutboxMessage
-	lastReturnFilters   model.ReturnFilters
-	returnQueueHealth   *model.ReturnQueueHealth
-	coupons             map[string]*model.Coupon
-	userOrders          []*model.Order
-	createErr           error
-	ordersByID          map[string]*model.Order
-	idempotencyRecords  map[string]*model.OrderIdempotencyRecord
-	returnsByID         map[string]*model.ReturnRequest
+	createdOrder         *model.Order
+	createdOutbox        *model.OutboxMessage
+	createdIdempotency   *model.OrderIdempotencyRecord
+	createdReturnOutbox  *model.OutboxMessage
+	updatedReturnOutbox  *model.OutboxMessage
+	lastReturnFilters    model.ReturnFilters
+	returnQueueHealth    *model.ReturnQueueHealth
+	coupons              map[string]*model.Coupon
+	userOrders           []*model.Order
+	createErr            error
+	ordersByID           map[string]*model.Order
+	orderEventsByOrderID map[string][]*model.OrderEvent
+	idempotencyRecords   map[string]*model.OrderIdempotencyRecord
+	returnsByID          map[string]*model.ReturnRequest
 }
 
 func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *model.OutboxMessage) error {
@@ -283,8 +284,17 @@ func (r *fakeOrderRepo) ListAllByCursor(_ context.Context, _ model.OrderFilters)
 	return nil, "", false, nil
 }
 
-func (r *fakeOrderRepo) GetEventsByOrderID(_ context.Context, _ string) ([]*model.OrderEvent, error) {
-	return nil, nil
+func (r *fakeOrderRepo) GetEventsByOrderID(_ context.Context, orderID string) ([]*model.OrderEvent, error) {
+	source := r.orderEventsByOrderID[orderID]
+	events := make([]*model.OrderEvent, 0, len(source))
+	for _, event := range source {
+		if event == nil {
+			continue
+		}
+		copyValue := *event
+		events = append(events, &copyValue)
+	}
+	return events, nil
 }
 
 func (r *fakeOrderRepo) UpdateStatus(_ context.Context, _ string, _ model.OrderStatus, _, _, _ string, _ *model.OutboxMessage) error {
@@ -1126,15 +1136,19 @@ func TestListUserReturnsNormalizesPaginationAndScopesUser(t *testing.T) {
 
 func TestGetReturnQueueHealthReturnsRepositorySnapshot(t *testing.T) {
 	nextRetryAt := time.Now().Add(5 * time.Minute).UTC()
+	longestInFlightStartedAt := time.Now().Add(-3 * time.Minute).UTC()
 	repo := &fakeOrderRepo{
 		returnQueueHealth: &model.ReturnQueueHealth{
-			PendingCount:        4,
-			ReadyNowCount:       2,
-			InFlightCount:       1,
-			RetryScheduledCount: 1,
-			FailedAttemptCount:  1,
-			MaxAttemptCount:     3,
-			NextRetryAt:         &nextRetryAt,
+			PendingCount:             4,
+			ReadyNowCount:            2,
+			ReadyWithFailuresCount:   1,
+			InFlightCount:            1,
+			RetryScheduledCount:      1,
+			FailedAttemptCount:       1,
+			StaleInFlightCount:       1,
+			MaxAttemptCount:          3,
+			NextRetryAt:              &nextRetryAt,
+			LongestInFlightStartedAt: &longestInFlightStartedAt,
 			RecentFailures: []model.ReturnQueueFailure{
 				{
 					ReturnID:     "return-1",
@@ -1154,14 +1168,20 @@ func TestGetReturnQueueHealthReturnsRepositorySnapshot(t *testing.T) {
 		t.Fatalf("GetReturnQueueHealth returned error: %v", err)
 	}
 
-	if health.PendingCount != 4 || health.ReadyNowCount != 2 {
+	if health.PendingCount != 4 || health.ReadyNowCount != 2 || health.ReadyWithFailuresCount != 1 {
 		t.Fatalf("unexpected queue health snapshot: %#v", health)
+	}
+	if health.StaleInFlightCount != 1 {
+		t.Fatalf("expected stale_in_flight_count=1, got %#v", health.StaleInFlightCount)
 	}
 	if len(health.RecentFailures) != 1 || health.RecentFailures[0].ReturnID != "return-1" {
 		t.Fatalf("expected one recent failure, got %#v", health.RecentFailures)
 	}
 	if health.NextRetryAt == nil || !health.NextRetryAt.Equal(nextRetryAt) {
 		t.Fatalf("expected next retry %v, got %#v", nextRetryAt, health.NextRetryAt)
+	}
+	if health.LongestInFlightStartedAt == nil || !health.LongestInFlightStartedAt.Equal(longestInFlightStartedAt) {
+		t.Fatalf("expected longest in-flight started at %v, got %#v", longestInFlightStartedAt, health.LongestInFlightStartedAt)
 	}
 }
 
@@ -1387,6 +1407,50 @@ func TestCreateOrderPersistsDiscountedTotals(t *testing.T) {
 	}
 }
 
+func TestCreateOrderPersistsShippingAddressSnapshot(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	catalog := &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Travel Case",
+				Price:         60,
+				StockQuantity: 5,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
+
+	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "", dto.CreateOrderRequest{
+		Items: []dto.OrderItemRequest{
+			{ProductID: "product-1", Quantity: 1},
+		},
+		ShippingMethod: "standard",
+		ShippingAddress: &dto.ShippingAddressRequest{
+			RecipientName: "  Nguyen Van Snapshot  ",
+			Phone:         "0901234567",
+			Location:      "  45 Le Loi, Ben Thanh, District 1, Ho Chi Minh City  ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+	if order.ShippingAddress == nil {
+		t.Fatal("expected created order to contain a shipping address snapshot")
+	}
+	if order.ShippingAddress.RecipientName != "Nguyen Van Snapshot" ||
+		order.ShippingAddress.Phone != "0901234567" ||
+		order.ShippingAddress.Location != "45 Le Loi, Ben Thanh, District 1, Ho Chi Minh City" {
+		t.Fatalf("expected normalized shipping address snapshot, got %#v", order.ShippingAddress)
+	}
+	if repo.createdOrder == nil || repo.createdOrder.ShippingAddress == nil {
+		t.Fatalf("expected repository to receive persisted shipping address, got %#v", repo.createdOrder)
+	}
+	if repo.createdOrder.ShippingAddress.Location != "45 Le Loi, Ben Thanh, District 1, Ho Chi Minh City" {
+		t.Fatalf("expected repository shipping address to include location fields, got %#v", repo.createdOrder.ShippingAddress)
+	}
+}
+
 func TestPreviewOrderAppliesND2026ToSubtotalAndShipping(t *testing.T) {
 	repo := &fakeOrderRepo{
 		coupons: map[string]*model.Coupon{
@@ -1420,6 +1484,7 @@ func TestPreviewOrderAppliesND2026ToSubtotalAndShipping(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van B",
 			Phone:         "0901234567",
+			Location:      "12 Nguyen Hue, Ben Nghe, District 1, Ho Chi Minh City",
 		},
 	})
 	if err != nil {
@@ -1683,6 +1748,7 @@ func TestPreviewOrderAddsShippingFeeForStandardDelivery(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van A",
 			Phone:         "0901234567",
+			Location:      "45 Le Loi, Ben Thanh, District 1, Ho Chi Minh City",
 		},
 	})
 	if err != nil {
@@ -1752,6 +1818,7 @@ func TestPreviewOrderSupportsExpressDeliveryFromBackendContract(t *testing.T) {
 		ShippingAddress: &dto.ShippingAddressRequest{
 			RecipientName: "Nguyen Van C",
 			Phone:         "0901234567",
+			Location:      "88 Hai Ba Trung, Da Kao, District 1, Ho Chi Minh City",
 		},
 	})
 	if err != nil {

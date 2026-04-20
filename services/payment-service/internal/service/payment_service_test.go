@@ -108,6 +108,23 @@ func (r *fakePaymentRepo) ListByOrderID(_ context.Context, orderID string) ([]*m
 	return payments, nil
 }
 
+func (r *fakePaymentRepo) ListByOrderIDs(_ context.Context, orderIDs []string) ([]*model.Payment, error) {
+	allowed := make(map[string]struct{}, len(orderIDs))
+	for _, orderID := range orderIDs {
+		allowed[orderID] = struct{}{}
+	}
+
+	var payments []*model.Payment
+	for _, payment := range r.payments {
+		if _, ok := allowed[payment.OrderID]; !ok {
+			continue
+		}
+		copyValue := *payment
+		payments = append(payments, &copyValue)
+	}
+	return payments, nil
+}
+
 func (r *fakePaymentRepo) ListByOrderIDForUser(_ context.Context, orderID, userID string) ([]*model.Payment, error) {
 	var payments []*model.Payment
 	for _, payment := range r.payments {
@@ -482,6 +499,74 @@ func TestEnrichPaymentsSeparatesSummariesPerOrder(t *testing.T) {
 	}
 	if enriched[1].NetPaidAmount != 50 || enriched[1].OutstandingAmount != 150 {
 		t.Fatalf("expected order-2 summary 50/150, got %.2f/%.2f", enriched[1].NetPaidAmount, enriched[1].OutstandingAmount)
+	}
+}
+
+func TestListPaymentsByOrderIDsAdminGroupsEnrichedPayments(t *testing.T) {
+	repo := &fakePaymentRepo{
+		payments: []*model.Payment{
+			{
+				ID:              "payment-1",
+				OrderID:         "order-1",
+				UserID:          "user-1",
+				OrderTotal:      100,
+				Amount:          100,
+				Status:          model.PaymentStatusCompleted,
+				TransactionType: model.PaymentTransactionTypeCharge,
+			},
+			{
+				ID:                 "payment-2",
+				OrderID:            "order-1",
+				UserID:             "user-1",
+				OrderTotal:         100,
+				Amount:             25,
+				Status:             model.PaymentStatusRefunded,
+				TransactionType:    model.PaymentTransactionTypeRefund,
+				ReferencePaymentID: "payment-1",
+			},
+			{
+				ID:              "payment-3",
+				OrderID:         "order-2",
+				UserID:          "user-2",
+				OrderTotal:      80,
+				Amount:          40,
+				Status:          model.PaymentStatusCompleted,
+				TransactionType: model.PaymentTransactionTypeCharge,
+			},
+		},
+	}
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+
+	paymentsByOrder, err := svc.ListPaymentsByOrderIDsAdmin(
+		context.Background(),
+		[]string{"order-1", "order-2", "order-3", "order-1", "   "},
+	)
+	if err != nil {
+		t.Fatalf("ListPaymentsByOrderIDsAdmin returned error: %v", err)
+	}
+
+	if len(paymentsByOrder["order-1"]) != 2 {
+		t.Fatalf("expected 2 payments for order-1, got %d", len(paymentsByOrder["order-1"]))
+	}
+	if len(paymentsByOrder["order-2"]) != 1 {
+		t.Fatalf("expected 1 payment for order-2, got %d", len(paymentsByOrder["order-2"]))
+	}
+	if len(paymentsByOrder["order-3"]) != 0 {
+		t.Fatalf("expected empty payment history for order-3, got %d", len(paymentsByOrder["order-3"]))
+	}
+	if paymentsByOrder["order-1"][0].NetPaidAmount != 75 || paymentsByOrder["order-1"][0].OutstandingAmount != 25 {
+		t.Fatalf(
+			"expected order-1 summary 75/25, got %.2f/%.2f",
+			paymentsByOrder["order-1"][0].NetPaidAmount,
+			paymentsByOrder["order-1"][0].OutstandingAmount,
+		)
+	}
+	if paymentsByOrder["order-2"][0].NetPaidAmount != 40 || paymentsByOrder["order-2"][0].OutstandingAmount != 40 {
+		t.Fatalf(
+			"expected order-2 summary 40/40, got %.2f/%.2f",
+			paymentsByOrder["order-2"][0].NetPaidAmount,
+			paymentsByOrder["order-2"][0].OutstandingAmount,
+		)
 	}
 }
 

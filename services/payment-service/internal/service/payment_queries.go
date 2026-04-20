@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
 )
@@ -128,6 +129,33 @@ func (s *PaymentService) ListPaymentsByOrderAdmin(ctx context.Context, orderID s
 	return enrichPayments(payments), nil
 }
 
+// ListPaymentsByOrderIDsAdmin batches admin payment-history lookups for one or
+// more orders to avoid N+1 HTTP/database fetch patterns in admin surfaces.
+func (s *PaymentService) ListPaymentsByOrderIDsAdmin(
+	ctx context.Context,
+	orderIDs []string,
+) (map[string][]*model.Payment, error) {
+	normalizedOrderIDs := normalizeOrderIDs(orderIDs)
+	paymentsByOrder := make(map[string][]*model.Payment, len(normalizedOrderIDs))
+	for _, orderID := range normalizedOrderIDs {
+		paymentsByOrder[orderID] = []*model.Payment{}
+	}
+	if len(normalizedOrderIDs) == 0 {
+		return paymentsByOrder, nil
+	}
+
+	payments, err := s.repo.ListByOrderIDs(ctx, normalizedOrderIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, payment := range enrichPayments(payments) {
+		paymentsByOrder[payment.OrderID] = append(paymentsByOrder[payment.OrderID], payment)
+	}
+
+	return paymentsByOrder, nil
+}
+
 // ListPaymentHistory returns all payments owned by a user with derived balance
 // fields populated per order.
 //
@@ -194,4 +222,22 @@ func (s *PaymentService) loadEnrichedPayment(ctx context.Context, payment *model
 	}
 
 	return enrichPayment(payment, payments), nil
+}
+
+func normalizeOrderIDs(orderIDs []string) []string {
+	normalized := make([]string, 0, len(orderIDs))
+	seen := make(map[string]struct{}, len(orderIDs))
+	for _, orderID := range orderIDs {
+		trimmed := strings.TrimSpace(orderID)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	return normalized
 }

@@ -1,5 +1,0 @@
-ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS shipping_street VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS shipping_ward VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS shipping_district VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS shipping_city VARCHAR(100);

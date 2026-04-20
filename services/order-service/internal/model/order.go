@@ -55,6 +55,7 @@ type OrderPreview struct {
 type ShippingAddress struct {
 	RecipientName string `json:"recipient_name"`
 	Phone         string `json:"phone"`
+	Location      string `json:"location"`
 }
 
 type ShippingMethod string

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -34,6 +35,7 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminPayments := e.Group("/api/v1/admin/payments")
 	adminPayments.Use(middleware.JWTAuth(jwtSecret))
 	adminPayments.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
+	adminPayments.GET("/history", h.ListPaymentsByOrderIDsAdmin)
 	adminPayments.GET("/order/:orderId/history", h.ListPaymentsByOrderAdmin)
 	adminPayments.POST("/:id/refunds", h.RefundPayment)
 
@@ -195,6 +197,28 @@ func (h *PaymentHandler) ListPaymentsByOrderAdmin(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "payments retrieved", payments)
 }
 
+func (h *PaymentHandler) ListPaymentsByOrderIDsAdmin(c echo.Context) error {
+	orderIDs := parseOrderIDs(c.QueryParams()["order_ids"])
+	if len(orderIDs) > 50 {
+		return response.Error(
+			c,
+			http.StatusBadRequest,
+			"validation failed",
+			"order_ids must not exceed 50 items",
+		)
+	}
+
+	paymentsByOrder, err := h.paymentService.ListPaymentsByOrderIDsAdmin(c.Request().Context(), orderIDs)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
+	}
+	if paymentsByOrder == nil {
+		paymentsByOrder = map[string][]*model.Payment{}
+	}
+
+	return response.Success(c, http.StatusOK, "payments retrieved", paymentsByOrder)
+}
+
 func (h *PaymentHandler) HandleMomoWebhook(c echo.Context) error {
 	var req dto.MomoWebhookRequest
 	if err := c.Bind(&req); err != nil {
@@ -216,4 +240,24 @@ func (h *PaymentHandler) HandleMomoWebhook(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "webhook processed", payment)
+}
+
+func parseOrderIDs(values []string) []string {
+	orderIDs := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed == "" {
+				continue
+			}
+			if _, exists := seen[trimmed]; exists {
+				continue
+			}
+			seen[trimmed] = struct{}{}
+			orderIDs = append(orderIDs, trimmed)
+		}
+	}
+
+	return orderIDs
 }

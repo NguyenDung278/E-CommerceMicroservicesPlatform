@@ -22,10 +22,12 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
+	notificationclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/inbox"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/messaging"
+	notificationservice "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/service"
 )
 
 func main() {
@@ -62,10 +64,13 @@ func main() {
 	defer redisClient.Close()
 
 	var inboxStore inbox.Store
+	var wishlistDeduper notificationservice.WishlistAlertDeduper
 	if err := redisClient.Ping(rootCtx).Err(); err != nil {
 		log.Warn("redis not available, duplicate inbox protection is disabled", zap.Error(err))
+		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(nil, "")
 	} else {
 		inboxStore = inbox.NewRedisStore(redisClient, "notification-service:inbox")
+		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(redisClient, "notification-service:wishlist-alert")
 	}
 
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL())
@@ -121,10 +126,12 @@ func main() {
 	defer monitorCh.Close()
 
 	sender := email.NewSender(cfg.SMTP, log)
+	userClient := notificationclient.NewUserClient(cfg, log)
 	retryPublisher := messaging.NewRetryPublisher(retryCh, messaging.RetryQueue)
 	eventHandler := handler.NewEventHandler(
 		log,
 		sender,
+		userClient,
 		inboxStore,
 		retryPublisher,
 		cfg.Notification.MaxRetries,
@@ -134,6 +141,16 @@ func main() {
 
 	queueMonitor := messaging.NewQueueMonitor(monitorCh, log, messaging.MainQueue, messaging.RetryQueue, messaging.DLQQueue)
 	go queueMonitor.Start(rootCtx, time.Duration(cfg.Notification.QueueMetricsIntervalSeconds)*time.Second)
+
+	wishlistAlertWorker := notificationservice.NewWishlistAlertWorker(
+		log,
+		sender,
+		userClient,
+		wishlistDeduper,
+		time.Duration(cfg.Notification.WishlistPollIntervalSeconds)*time.Second,
+		cfg.Notification.WishlistBatchLimit,
+	)
+	go wishlistAlertWorker.Start(rootCtx)
 
 	workerCount := cfg.Notification.WorkerCount
 	if workerCount <= 0 {

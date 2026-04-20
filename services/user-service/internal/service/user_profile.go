@@ -482,6 +482,9 @@ func hasMeaningfulProfileAddressPatch(input dto.UpdateProfileAddressInput) bool 
 	if _, ok := resolveOptionalPhone(input.Phone); ok {
 		return true
 	}
+	if _, ok := resolveOptionalAddressField(input.Location); ok {
+		return true
+	}
 	return false
 }
 
@@ -510,6 +513,7 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 	if current != nil {
 		merged.RecipientName = current.RecipientName
 		merged.Phone = current.Phone
+		merged.Location = current.Location
 	} else {
 		merged.RecipientName = normalizeHumanName(fallbackRecipientName)
 		merged.Phone = normalizePhone(fallbackPhone)
@@ -524,6 +528,10 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 		merged.Phone = phone
 		hasPatch = true
 	}
+	if location, ok := resolveOptionalAddressField(input.Location); ok {
+		merged.Location = location
+		hasPatch = true
+	}
 
 	if !hasPatch {
 		return merged, false
@@ -533,7 +541,8 @@ func mergeProfileAddressInput(current *model.Address, fallbackRecipientName stri
 	}
 
 	changed := merged.RecipientName != current.RecipientName ||
-		merged.Phone != current.Phone
+		merged.Phone != current.Phone ||
+		merged.Location != current.Location
 
 	return merged, changed
 }
@@ -559,6 +568,7 @@ func normalizeProfileAddressInput(input dto.ProfileAddressInput) dto.ProfileAddr
 	return dto.ProfileAddressInput{
 		RecipientName: normalizeHumanName(input.RecipientName),
 		Phone:         normalizePhone(input.Phone),
+		Location:      normalizeAddressField(input.Location),
 	}
 }
 
@@ -583,9 +593,35 @@ func isValidProfileAddressInput(input dto.ProfileAddressInput) bool {
 	if !isValidHumanName(input.RecipientName, 100) {
 		return false
 	}
-	if input.Phone != "" && !isValidVNPhone(input.Phone) {
+	if !isValidVNPhone(input.Phone) {
+		return false
+	}
+	if !isValidRequiredAddressField(input.Location, 5, 255) {
 		return false
 	}
 
 	return true
+}
+
+func normalizeAddressField(value string) string {
+	parts := strings.Fields(strings.TrimSpace(value))
+	return strings.Join(parts, " ")
+}
+
+func resolveOptionalAddressField(input *string) (string, bool) {
+	if input == nil {
+		return "", false
+	}
+
+	normalized := normalizeAddressField(*input)
+	if normalized == "" {
+		return "", false
+	}
+
+	return normalized, true
+}
+
+func isValidRequiredAddressField(value string, minLength int, maxLength int) bool {
+	normalized := normalizeAddressField(value)
+	return normalized != "" && len(normalized) >= minLength && len(normalized) <= maxLength
 }

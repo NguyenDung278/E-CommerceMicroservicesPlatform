@@ -29,10 +29,11 @@ type ProductListPageInfo struct {
 
 // ProductService contains business logic for product operations.
 type ProductService struct {
-	repo       repository.ProductRepository
-	mediaStore MediaStore
-	search     ProductSearchIndex
-	log        *zap.Logger
+	repo          repository.ProductRepository
+	mediaStore    MediaStore
+	search        ProductSearchIndex
+	analyticsRepo repository.SearchAnalyticsRepository
+	log           *zap.Logger
 }
 
 type ProductSearchIndex interface {
@@ -107,6 +108,12 @@ func WithSearchIndex(search ProductSearchIndex) ProductServiceOption {
 func WithLogger(log *zap.Logger) ProductServiceOption {
 	return func(service *ProductService) {
 		service.log = log
+	}
+}
+
+func WithSearchAnalytics(repo repository.SearchAnalyticsRepository) ProductServiceOption {
+	return func(service *ProductService) {
+		service.analyticsRepo = repo
 	}
 }
 

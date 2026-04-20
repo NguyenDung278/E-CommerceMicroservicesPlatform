@@ -380,7 +380,7 @@ function RegisterPageContent() {
       }
 
       try {
-        setPhone(normalizedPhoneInput);
+        setIdentifier(normalizedPhoneInput);
         setPhoneBusy(true);
         const challenge = await sendPhoneSignupOtp(
           normalizedPhoneInput,
@@ -774,7 +774,7 @@ function RegisterPageContent() {
                   Email xác minh
                 </p>
                 <p className="mt-3 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-                  {maskEmail(registeredEmail || user?.email || identifier)}
+                  {maskEmail(registeredEmail || identifier)}
                 </p>
                 <p className="mt-4 text-sm leading-7 text-on-surface-variant">
                   Kiểm tra email và nhập OTP gồm 6 chữ số để kích hoạt tài khoản ngay trong màn hình này.

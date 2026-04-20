@@ -30,6 +30,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	protected := e.Group("/api/v1/products")
 	protected.Use(appmw.JWTAuth(jwtSecret))
 	protected.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
+	protected.GET("/analytics/search", h.forward)
 	protected.POST("", h.forward)
 	protected.POST("/uploads", h.forward)
 	protected.PUT("/:id", h.forward)

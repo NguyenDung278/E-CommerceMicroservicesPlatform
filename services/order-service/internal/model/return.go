@@ -101,13 +101,16 @@ type ReturnQueueFailure struct {
 }
 
 type ReturnQueueHealth struct {
-	PendingCount        int                  `json:"pending_count"`
-	ReadyNowCount       int                  `json:"ready_now_count"`
-	InFlightCount       int                  `json:"in_flight_count"`
-	RetryScheduledCount int                  `json:"retry_scheduled_count"`
-	FailedAttemptCount  int                  `json:"failed_attempt_count"`
-	MaxAttemptCount     int                  `json:"max_attempt_count"`
-	OldestPendingAt     *time.Time           `json:"oldest_pending_at,omitempty"`
-	NextRetryAt         *time.Time           `json:"next_retry_at,omitempty"`
-	RecentFailures      []ReturnQueueFailure `json:"recent_failures,omitempty"`
+	PendingCount             int                  `json:"pending_count"`
+	ReadyNowCount            int                  `json:"ready_now_count"`
+	ReadyWithFailuresCount   int                  `json:"ready_with_failures_count"`
+	InFlightCount            int                  `json:"in_flight_count"`
+	StaleInFlightCount       int                  `json:"stale_in_flight_count"`
+	RetryScheduledCount      int                  `json:"retry_scheduled_count"`
+	FailedAttemptCount       int                  `json:"failed_attempt_count"`
+	MaxAttemptCount          int                  `json:"max_attempt_count"`
+	OldestPendingAt          *time.Time           `json:"oldest_pending_at,omitempty"`
+	LongestInFlightStartedAt *time.Time           `json:"longest_in_flight_started_at,omitempty"`
+	NextRetryAt              *time.Time           `json:"next_retry_at,omitempty"`
+	RecentFailures           []ReturnQueueFailure `json:"recent_failures,omitempty"`
 }

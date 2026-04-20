@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { AccountShell } from "@/components/account-shell";
@@ -19,7 +20,13 @@ import { getErrorMessage } from "@/lib/errors/handler";
 import { invalidateOrderPaymentsResource } from "@/lib/resources/account-resources";
 import { readProductLookupResource } from "@/lib/resources/product-resources";
 import { fallbackImageForProduct } from "@/lib/utils";
-import type { Order, OrderEvent, Payment, Product } from "@/types/api";
+import type {
+  Order,
+  OrderEvent,
+  Payment,
+  Product,
+  ReturnEligibilitySnapshot,
+} from "@/types/api";
 import {
   formatCurrency,
   formatDateTime,
@@ -40,6 +47,9 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
   const [order, setOrder] = useState<Order | null>(null);
   const [events, setEvents] = useState<OrderEvent[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [returnEligibility, setReturnEligibility] = useState<ReturnEligibilitySnapshot | null>(
+    null,
+  );
   const [productLookup, setProductLookup] = useState<Record<string, Product>>({});
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -62,8 +72,11 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
       orderApi.getOrderById(token, orderId),
       orderApi.getOrderEvents(token, orderId).catch(() => ({ data: [] as OrderEvent[] })),
       paymentApi.listPaymentsByOrder(token, orderId).catch(() => ({ data: [] as Payment[] })),
+      orderApi.getReturnEligibility(token, orderId).catch(
+        () => ({ data: null as ReturnEligibilitySnapshot | null }),
+      ),
     ])
-      .then(async ([orderResponse, eventsResponse, paymentsResponse]) => {
+      .then(async ([orderResponse, eventsResponse, paymentsResponse, eligibilityResponse]) => {
         if (!active) {
           return;
         }
@@ -71,6 +84,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
         setOrder(orderResponse.data);
         setEvents(eventsResponse.data);
         setPayments(paymentsResponse.data);
+        setReturnEligibility(eligibilityResponse.data);
 
         const productIds = Array.from(
           new Set(orderResponse.data.items.map((item) => item.product_id).filter(Boolean)),
@@ -304,6 +318,69 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                     ))
                   )}
                 </div>
+              </SurfaceCard>
+
+              <SurfaceCard className="p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                    Return eligibility
+                  </h3>
+                  {returnEligibility ? (
+                    <StatusPill status={returnEligibility.eligible ? "eligible" : "locked"} />
+                  ) : null}
+                </div>
+
+                {!returnEligibility ? (
+                  <p className="mt-6 text-sm leading-7 text-on-surface-variant">
+                    Chưa tải được snapshot eligibility cho đơn này.
+                  </p>
+                ) : (
+                  <div className="mt-6 space-y-4">
+                    <p className="text-sm leading-7 text-on-surface-variant">
+                      {returnEligibility.reason ||
+                        "Backend snapshot này là source of truth cho số lượng còn có thể trả của từng line item."}
+                    </p>
+
+                    {returnEligibility.return_window_expires_at ? (
+                      <p className="text-sm leading-7 text-on-surface-variant">
+                        Return window closes at{" "}
+                        {formatDateTime(returnEligibility.return_window_expires_at)}.
+                      </p>
+                    ) : null}
+
+                    <div className="space-y-3">
+                      {returnEligibility.items.map((item) => (
+                        <div
+                          key={item.order_item_id}
+                          className="rounded-[1.25rem] bg-surface p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="font-semibold text-primary">{item.product_name}</p>
+                            <StatusPill
+                              status={item.eligible && item.remaining_quantity > 0 ? "eligible" : "locked"}
+                            />
+                          </div>
+                          <p className="mt-2 text-sm text-on-surface-variant">
+                            Đã mua {item.ordered_quantity} · Đã yêu cầu {item.already_requested_quantity}
+                            {" "}· Còn lại {item.remaining_quantity}
+                          </p>
+                          {item.reason ? (
+                            <p className="mt-2 text-sm text-on-surface-variant">{item.reason}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+
+                    {returnEligibility.eligible ? (
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="inline-flex text-sm font-medium text-primary underline"
+                      >
+                        Refresh order snapshot
+                      </Link>
+                    ) : null}
+                  </div>
+                )}
               </SurfaceCard>
             </div>
           </div>

@@ -11,19 +11,24 @@ export default async function Page({
 }) {
   const { categoryName } = await params;
   const identifier = decodeURIComponent(categoryName);
+  let pageData: Awaited<ReturnType<typeof getEditorialPageInitialData>>["pageData"];
+  let categories: Awaited<ReturnType<typeof getEditorialPageInitialData>>["categories"];
 
   try {
-    const { pageData, categories } = await getEditorialPageInitialData(identifier);
-    return (
-      <AtelierCategoryPage
-        config={buildAtelierPageConfig(pageData)}
-        navItems={buildAtelierNavItems(categories)}
-      />
-    );
+    const initialData = await getEditorialPageInitialData(identifier);
+    pageData = initialData.pageData;
+    categories = initialData.categories;
   } catch (reason) {
     if (isServerHttpStatus(reason, 404)) {
       notFound();
     }
     throw reason;
   }
+
+  return (
+    <AtelierCategoryPage
+      config={buildAtelierPageConfig(pageData)}
+      navItems={buildAtelierNavItems(categories)}
+    />
+  );
 }

@@ -15,6 +15,11 @@ notification:
   inbox_ttl_hours: 168
   processing_ttl_seconds: 300
   queue_metrics_interval_seconds: 15
+  wishlist_poll_interval_seconds: 300
+  wishlist_batch_limit: 50
+
+services:
+  user_service: "http://user-service:8081"
 
 rabbitmq:
   host: "rabbitmq"

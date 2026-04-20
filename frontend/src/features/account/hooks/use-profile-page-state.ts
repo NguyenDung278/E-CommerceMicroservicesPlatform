@@ -56,11 +56,8 @@ export function useProfilePageState() {
   const memberSince = useMemo(() => buildMemberSinceLabel(user?.created_at), [user?.created_at]);
   const initials = useMemo(() => buildProfileInitials(displayName), [displayName]);
   const locationLabel = defaultAddress
-    ? [defaultAddress.recipient_name, defaultAddress.phone]
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .join(" · ") || "No saved delivery contact yet"
-    : "No saved delivery contact yet";
+    ? defaultAddress.location.trim() || "No saved delivery location yet"
+    : "No saved delivery location yet";
   const showDevBadge = isDevelopmentAccount(user);
 
   useEffect(() => {

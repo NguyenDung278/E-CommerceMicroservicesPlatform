@@ -42,6 +42,20 @@ var (
 		Help:      "Highest retry attempt count observed in the refund_pending queue.",
 	})
 
+	returnRefundQueueStaleInFlightGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ecommerce",
+		Subsystem: "order",
+		Name:      "return_refund_queue_stale_in_flight_jobs",
+		Help:      "Number of refund_pending jobs whose worker lease appears stale.",
+	})
+
+	returnRefundQueueLongestInFlightAgeGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "ecommerce",
+		Subsystem: "order",
+		Name:      "return_refund_queue_longest_in_flight_age_seconds",
+		Help:      "Age in seconds of the longest-running in-flight refund job.",
+	})
+
 	returnRefundAttemptTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "ecommerce",
 		Subsystem: "order",
@@ -96,23 +110,33 @@ func recordReturnRefundQueueHealth(health *model.ReturnQueueHealth, measuredAt t
 		returnRefundQueueGauge.WithLabelValues("in_flight").Set(0)
 		returnRefundQueueGauge.WithLabelValues("retry_scheduled").Set(0)
 		returnRefundQueueGauge.WithLabelValues("failed").Set(0)
+		returnRefundQueueGauge.WithLabelValues("ready_with_failures").Set(0)
 		returnRefundQueueOldestAgeGauge.Set(0)
 		returnRefundQueueNextRetryDelayGauge.Set(0)
 		returnRefundQueueMaxAttemptGauge.Set(0)
+		returnRefundQueueStaleInFlightGauge.Set(0)
+		returnRefundQueueLongestInFlightAgeGauge.Set(0)
 		return
 	}
 
 	returnRefundQueueGauge.WithLabelValues("pending").Set(float64(health.PendingCount))
 	returnRefundQueueGauge.WithLabelValues("ready_now").Set(float64(health.ReadyNowCount))
+	returnRefundQueueGauge.WithLabelValues("ready_with_failures").Set(float64(health.ReadyWithFailuresCount))
 	returnRefundQueueGauge.WithLabelValues("in_flight").Set(float64(health.InFlightCount))
 	returnRefundQueueGauge.WithLabelValues("retry_scheduled").Set(float64(health.RetryScheduledCount))
 	returnRefundQueueGauge.WithLabelValues("failed").Set(float64(health.FailedAttemptCount))
 	returnRefundQueueMaxAttemptGauge.Set(float64(health.MaxAttemptCount))
+	returnRefundQueueStaleInFlightGauge.Set(float64(health.StaleInFlightCount))
 
 	if health.OldestPendingAt != nil {
 		returnRefundQueueOldestAgeGauge.Set(measuredAt.Sub(*health.OldestPendingAt).Seconds())
 	} else {
 		returnRefundQueueOldestAgeGauge.Set(0)
+	}
+	if health.LongestInFlightStartedAt != nil {
+		returnRefundQueueLongestInFlightAgeGauge.Set(measuredAt.Sub(*health.LongestInFlightStartedAt).Seconds())
+	} else {
+		returnRefundQueueLongestInFlightAgeGauge.Set(0)
 	}
 	if health.NextRetryAt != nil {
 		delay := health.NextRetryAt.Sub(measuredAt).Seconds()

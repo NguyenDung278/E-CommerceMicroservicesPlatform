@@ -36,10 +36,11 @@ func hashCreateOrderRequest(req dto.CreateOrderRequest) string {
 	}
 
 	address := normalizeShippingAddress(req.ShippingAddress)
-	addressParts := []string{"", ""}
+	addressParts := []string{"", "", ""}
 	if address != nil {
 		addressParts[0] = strings.TrimSpace(address.RecipientName)
 		addressParts[1] = strings.TrimSpace(address.Phone)
+		addressParts[2] = strings.TrimSpace(address.Location)
 	}
 
 	items := make([]string, 0, len(req.Items))
@@ -52,8 +53,7 @@ func hashCreateOrderRequest(req dto.CreateOrderRequest) string {
 		strings.Join(items, ","),
 		normalizeCouponCode(req.CouponCode),
 		method,
-		addressParts[0],
-		addressParts[1],
+		strings.Join(addressParts, "|"),
 	}, "|")))
 
 	return hex.EncodeToString(sum[:])

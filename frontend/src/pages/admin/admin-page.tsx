@@ -40,9 +40,10 @@ import type {
   Coupon,
   Order,
   Payment,
-  ReturnQueueHealth,
   Product,
+  ProductSearchAnalyticsSummary,
   ReturnRequest,
+  ReturnQueueHealth,
   UserProfile,
 } from "@/types/api";
 import { formatRoleLabel, isDevelopmentAccount } from "@/utils/dev-accounts";
@@ -66,6 +67,7 @@ export function AdminPage() {
   const [paymentsByOrder, setPaymentsByOrder] = useState<Record<string, Payment[]>>({});
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [report, setReport] = useState<AdminOrderReport | null>(null);
+  const [searchAnalytics, setSearchAnalytics] = useState<ProductSearchAnalyticsSummary | null>(null);
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
@@ -174,8 +176,20 @@ export function AdminPage() {
 
       try {
         setIsLoadingReport(true);
-        const response = await api.getAdminOrderReport(token, days);
-        setReport(response.data);
+        const [reportResult, analyticsResult] = await Promise.allSettled([
+          api.getAdminOrderReport(token, days),
+          api.getSearchAnalytics(token, { days, limit: 8 }),
+        ]);
+
+        if (reportResult.status === "fulfilled") {
+          setReport(reportResult.value.data);
+        }
+        if (analyticsResult.status === "fulfilled") {
+          setSearchAnalytics(analyticsResult.value.data);
+        }
+        if (reportResult.status === "rejected" && analyticsResult.status === "rejected") {
+          setFeedback(getErrorMessage(reportResult.reason));
+        }
       } catch (reason) {
         setFeedback(getErrorMessage(reason));
       } finally {
@@ -235,25 +249,29 @@ export function AdminPage() {
         next_cursor: response.meta?.next_cursor ?? "",
         has_next: response.meta?.has_next ?? false,
       });
-
-      const paymentEntries = await Promise.all(
-        response.data.map(async (order) => {
-          try {
-            const paymentResponse = await api.listAdminPaymentsByOrder(token, order.id);
-            return [order.id, paymentResponse.data] as const;
-          } catch {
-            return [order.id, []] as const;
-          }
-        })
+      const requestedOrderIds = response.data.map((order) => order.id);
+      const emptyPaymentMap = Object.fromEntries(
+        requestedOrderIds.map((orderId) => [orderId, [] as Payment[]])
       );
+
+      let nextPaymentsByOrder = emptyPaymentMap;
+      try {
+        const paymentResponse = await api.listAdminPaymentsByOrders(token, requestedOrderIds);
+        nextPaymentsByOrder = {
+          ...emptyPaymentMap,
+          ...paymentResponse.data,
+        };
+      } catch {
+        setFeedback("Đơn hàng đã được tải nhưng payment history batch hiện chưa phản hồi.");
+      }
 
       setPaymentsByOrder((current) =>
         options.append
           ? {
               ...current,
-              ...Object.fromEntries(paymentEntries),
+              ...nextPaymentsByOrder,
             }
-          : Object.fromEntries(paymentEntries)
+          : nextPaymentsByOrder
       );
     } catch (reason) {
       setFeedback(getErrorMessage(reason));
@@ -969,6 +987,7 @@ export function AdminPage() {
           <AdminReportSection
             isLoadingReport={isLoadingReport}
             report={report}
+            searchAnalytics={searchAnalytics}
             reportDays={reportDays}
             reportWindowOptions={reportWindowOptions}
             onSelectWindow={setReportDays}

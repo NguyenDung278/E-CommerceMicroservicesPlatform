@@ -60,6 +60,9 @@ func (h *AddressHandler) Create(c echo.Context) error {
 		if errors.Is(err, service.ErrTooManyAddresses) {
 			return response.Error(c, http.StatusBadRequest, "limit reached", "maximum 10 addresses allowed")
 		}
+		if errors.Is(err, service.ErrInvalidAddress) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid address")
+		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to create address")
 	}
 
@@ -102,6 +105,9 @@ func (h *AddressHandler) Update(c echo.Context) error {
 	if err != nil {
 		if errors.Is(err, service.ErrAddressNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "address not found")
+		}
+		if errors.Is(err, service.ErrInvalidAddress) {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid address")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to update address")
 	}

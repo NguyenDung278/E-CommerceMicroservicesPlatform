@@ -32,6 +32,7 @@ Ba lớp tài liệu chính:
 5. [learning/12-production-readiness-roadmap.md](./learning/12-production-readiness-roadmap.md)
 6. [learning/13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md)
 7. [learning/14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md)
+8. [learning/17-performance-feature-parity-roadmap.md](./learning/17-performance-feature-parity-roadmap.md)
 
 Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết", mà muốn dùng repo này để luyện tư duy backend Go thực chiến, hiểu production risk, và xây một nền tảng nghề nghiệp rõ ràng hơn.
 
@@ -66,6 +67,8 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 - [13-repo-based-career-roadmap.md](./learning/13-repo-based-career-roadmap.md): tài liệu chi tiết để hiểu project theo flow thật và chuyển kiến thức đó thành năng lực nghề nghiệp Golang Developer
 - [14-go-sql-idempotency-interview-playbook.md](./learning/14-go-sql-idempotency-interview-playbook.md): hướng dẫn thực dụng về Go foundation trước microservice, cách luyện SQL/transaction/idempotency, và các feature nên build để đi phỏng vấn backend mạnh hơn
 - [15-end-to-end-verification-checklists.md](./learning/15-end-to-end-verification-checklists.md): checklist verify theo flow thật cho catalog, checkout, payment, returns, và admin
+- [16-refund-queue-operations-playbook.md](./learning/16-refund-queue-operations-playbook.md): playbook vận hành khi `refund_pending` backlog, retry nhiều, hoặc có dấu hiệu stale worker lease
+- [17-performance-feature-parity-roadmap.md](./learning/17-performance-feature-parity-roadmap.md): audit hiệu năng, khoảng trống BE/FE hiện tại, feature backend nên thêm tiếp, và các cụm source code nên đọc nếu mục tiêu là phát triển sự nghiệp backend Golang
 
 ### `deep-dive/`
 

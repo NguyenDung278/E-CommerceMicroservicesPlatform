@@ -174,13 +174,21 @@ export function AdminReturnsSection({
               <article className="admin-return-health-card">
                 <span className="admin-return-health-label">Sẵn sàng chạy</span>
                 <strong>{queueHealth?.ready_now_count ?? 0}</strong>
-                <p>Có thể nhận lease ngay trong vòng quét worker kế tiếp.</p>
+                <p>
+                  {queueHealth?.ready_with_failures_count
+                    ? `${queueHealth.ready_with_failures_count} job từng lỗi nhưng đã tới lượt retry lại.`
+                    : "Có thể nhận lease ngay trong vòng quét worker kế tiếp."}
+                </p>
               </article>
 
               <article className="admin-return-health-card">
                 <span className="admin-return-health-label">Đang xử lý</span>
                 <strong>{queueHealth?.in_flight_count ?? 0}</strong>
-                <p>Job đang có worker giữ lease và gọi payment-service.</p>
+                <p>
+                  {queueHealth?.stale_in_flight_count
+                    ? `${queueHealth.stale_in_flight_count} job có dấu hiệu giữ lease quá lâu.`
+                    : "Job đang có worker giữ lease và gọi payment-service."}
+                </p>
               </article>
 
               <article className="admin-return-health-card">
@@ -476,6 +484,26 @@ function buildReturnQueueAlerts(queueHealth: ReturnQueueHealth | null, queueLast
       severity: "warning",
       title: "Có job refund thất bại gần đây",
       description: `${queueHealth.failed_attempt_count} job đang mang lỗi gần nhất và cần theo dõi retry hoặc can thiệp tay.`,
+    });
+  }
+
+  if (queueHealth.ready_with_failures_count > 0) {
+    alerts.push({
+      id: "ready-with-failures",
+      severity: "warning",
+      title: "Nhiều job đang vào vòng retry",
+      description: `${queueHealth.ready_with_failures_count} job đã từng lỗi nhưng hiện đã sẵn sàng chạy lại. Nên kiểm tra xem worker có đang thực sự tiêu thụ backlog không.`,
+    });
+  }
+
+  if (queueHealth.stale_in_flight_count > 0) {
+    alerts.push({
+      id: "stale-in-flight",
+      severity: "danger",
+      title: "Có job có dấu hiệu giữ lease quá lâu",
+      description: queueHealth.longest_in_flight_started_at
+        ? `Ít nhất ${queueHealth.stale_in_flight_count} job đang in-flight quá lâu. Job lâu nhất bắt đầu từ ${formatDateTime(queueHealth.longest_in_flight_started_at)}.`
+        : `${queueHealth.stale_in_flight_count} job đang in-flight quá lâu. Hãy kiểm tra worker, payment-service, hoặc lease không được release đúng cách.`,
     });
   }
 

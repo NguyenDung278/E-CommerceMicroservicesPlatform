@@ -28,11 +28,12 @@ import (
 )
 
 type fakeOrderHandlerRepo struct {
-	coupons             map[string]*model.Coupon
-	ordersByID          map[string]*model.Order
-	returnsByID         map[string]*model.ReturnRequest
-	queueHealth         *model.ReturnQueueHealth
-	forceNilQueueHealth bool
+	coupons              map[string]*model.Coupon
+	ordersByID           map[string]*model.Order
+	orderEventsByOrderID map[string][]*model.OrderEvent
+	returnsByID          map[string]*model.ReturnRequest
+	queueHealth          *model.ReturnQueueHealth
+	forceNilQueueHealth  bool
 }
 
 func (r *fakeOrderHandlerRepo) Create(_ context.Context, _ *model.Order, _ *model.OutboxMessage) error {
@@ -228,8 +229,17 @@ func (r *fakeOrderHandlerRepo) MarkReturnRefundAttemptFailed(_ context.Context, 
 	return nil
 }
 
-func (r *fakeOrderHandlerRepo) GetEventsByOrderID(_ context.Context, _ string) ([]*model.OrderEvent, error) {
-	return nil, nil
+func (r *fakeOrderHandlerRepo) GetEventsByOrderID(_ context.Context, orderID string) ([]*model.OrderEvent, error) {
+	source := r.orderEventsByOrderID[orderID]
+	events := make([]*model.OrderEvent, 0, len(source))
+	for _, event := range source {
+		if event == nil {
+			continue
+		}
+		copyValue := *event
+		events = append(events, &copyValue)
+	}
+	return events, nil
 }
 
 func (r *fakeOrderHandlerRepo) UpdateStatus(_ context.Context, _ string, _ model.OrderStatus, _, _, _ string, _ *model.OutboxMessage) error {
@@ -405,6 +415,7 @@ func TestPreviewOrderReturnsShippingMethodsContract(t *testing.T) {
 		"shipping_address": map[string]any{
 			"recipient_name": "Nguyen Van D",
 			"phone":          "0901234567",
+			"location":       "123 Nguyen Hue, Ben Nghe, District 1, Ho Chi Minh City",
 		},
 	})
 
@@ -560,6 +571,78 @@ func TestCreateReturnRouteCreatesRequestedReturn(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"requested"`)) {
 		t.Fatalf("expected requested return status, got %s", rec.Body.String())
+	}
+}
+
+func TestGetReturnEligibilityRouteReturnsPerItemSnapshot(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	deliveredAt := time.Now().AddDate(0, 0, -3).UTC()
+	repo := &fakeOrderHandlerRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:     "order-1",
+				UserID: "user-1",
+				Status: model.OrderStatusDelivered,
+				Items: []model.OrderItem{
+					{
+						ID:        "item-1",
+						OrderID:   "order-1",
+						ProductID: "product-1",
+						Name:      "Archive Coat",
+						Quantity:  2,
+					},
+				},
+			},
+		},
+		orderEventsByOrderID: map[string][]*model.OrderEvent{
+			"order-1": {
+				{
+					ID:        "event-delivered",
+					OrderID:   "order-1",
+					Status:    model.OrderStatusDelivered,
+					CreatedAt: deliveredAt,
+				},
+			},
+		},
+		returnsByID: map[string]*model.ReturnRequest{
+			"return-1": {
+				ID:      "return-1",
+				OrderID: "order-1",
+				UserID:  "user-1",
+				Status:  model.ReturnStatusRequested,
+				Items: []model.ReturnItem{
+					{
+						ID:          "return-item-1",
+						ReturnID:    "return-1",
+						OrderItemID: "item-1",
+						ProductID:   "product-1",
+						Quantity:    1,
+					},
+				},
+			},
+		},
+	}
+
+	handler := NewOrderHandler(service.NewOrderService(repo, nil, zap.NewNop(), nil, nil))
+	secret := "super-secret-order-handler-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/order-1/return-eligibility", http.NoBody)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedOrderToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"remaining_quantity":1`)) {
+		t.Fatalf("expected remaining quantity payload, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"eligible":true`)) {
+		t.Fatalf("expected eligibility flag in response, got %s", rec.Body.String())
 	}
 }
 
@@ -905,15 +988,19 @@ func TestGetReturnQueueHealthRouteReturnsSnapshot(t *testing.T) {
 	e.Validator = validation.New()
 
 	nextRetryAt := time.Now().Add(5 * time.Minute).UTC()
+	longestInFlightStartedAt := time.Now().Add(-3 * time.Minute).UTC()
 	repo := &fakeOrderHandlerRepo{
 		queueHealth: &model.ReturnQueueHealth{
-			PendingCount:        4,
-			ReadyNowCount:       2,
-			InFlightCount:       1,
-			RetryScheduledCount: 1,
-			FailedAttemptCount:  1,
-			MaxAttemptCount:     3,
-			NextRetryAt:         &nextRetryAt,
+			PendingCount:             4,
+			ReadyNowCount:            2,
+			ReadyWithFailuresCount:   1,
+			InFlightCount:            1,
+			RetryScheduledCount:      1,
+			FailedAttemptCount:       1,
+			StaleInFlightCount:       1,
+			MaxAttemptCount:          3,
+			NextRetryAt:              &nextRetryAt,
+			LongestInFlightStartedAt: &longestInFlightStartedAt,
 			RecentFailures: []model.ReturnQueueFailure{
 				{
 					ReturnID:     "return-1",
@@ -942,6 +1029,12 @@ func TestGetReturnQueueHealthRouteReturnsSnapshot(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"pending_count":4`)) {
 		t.Fatalf("expected pending_count=4, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"ready_with_failures_count":1`)) {
+		t.Fatalf("expected ready_with_failures_count=1, got %s", rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"stale_in_flight_count":1`)) {
+		t.Fatalf("expected stale_in_flight_count=1, got %s", rec.Body.String())
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte("gateway timeout")) {
 		t.Fatalf("expected recent failure payload, got %s", rec.Body.String())

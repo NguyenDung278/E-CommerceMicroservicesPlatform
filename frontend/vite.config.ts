@@ -1,5 +1,5 @@
-import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig, type Plugin, type UserConfig } from "vite";
 import { syncWorkbookProductBatch, syncWorkbookProductFiles } from "./dev/workbook-sync.js";
 
 const importMetaUrl = (import.meta as ImportMeta & { url: string }).url;
@@ -21,6 +21,20 @@ type JsonRequest = {
 type WorkbookMutationPayload = Parameters<typeof syncWorkbookProductFiles>[2];
 type WorkbookBatchPayload = {
   mutations: WorkbookMutationPayload[];
+};
+
+type FrontendTestConfig = {
+  environment: string;
+  coverage: {
+    provider: string;
+    reporter: string[];
+    reportsDirectory: string;
+    include: string[];
+  };
+};
+
+type FrontendViteConfig = UserConfig & {
+  test?: FrontendTestConfig;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,7 +151,7 @@ function workbookSyncPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+const config: FrontendViteConfig = {
   plugins: [react(), workbookSyncPlugin()],
   test: {
     environment: "jsdom",
@@ -193,4 +207,6 @@ export default defineConfig({
     port: 4173,
     strictPort: true,
   },
-} as any);
+};
+
+export default defineConfig(config);

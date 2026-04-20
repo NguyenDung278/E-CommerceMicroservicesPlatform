@@ -9,6 +9,18 @@ Trạng thái hiện tại của UI có hai nhánh:
 
 README này ưu tiên phản ánh đúng source code hiện tại. Một số tài liệu sâu hơn trong `docs/` vẫn hữu ích, nhưng nếu có chỗ lệch nhau thì hãy tin `cmd/main.go`, `internal/handler`, `internal/service`, `deployments/docker/` và cấu hình thật trong repo.
 
+## Ghi chú tối ưu và parity hiện tại
+
+Hai điểm quan trọng nên biết ngay trước khi tiếp tục đầu tư vào repo:
+
+- admin order ledger đã được tối ưu để batch payment history qua `GET /api/v1/admin/payments/history`, giảm fan-out request từ UI xuống `payment-service`
+- backend hiện đã đi trước `client/` ở một số capability như wishlist sync theo account, shopper returns center, search assist/facet, và admin surface; `frontend/` hiện vẫn là UI local đầy đủ hơn cho admin và một phần parity account flow
+
+Nếu bạn muốn xem backlog parity và roadmap học từ chính source code:
+
+- `feature_tracker.md`
+- `docs/learning/17-performance-feature-parity-roadmap.md`
+
 ## Mục tiêu và kiến trúc tổng quan
 
 Hệ thống đang được tổ chức theo hướng microservices vừa đủ cho domain hiện tại:

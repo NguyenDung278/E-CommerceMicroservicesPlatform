@@ -5,12 +5,21 @@
  */
 
 import { request } from "../http-client";
-import type { ApiEnvelope, Address, UserProfile, WishlistItem } from "@/types/api";
+import type {
+  Address,
+  ApiEnvelope,
+  NotificationPreference,
+  UserProfile,
+  WishlistAlert,
+  WishlistItem,
+} from "@/types/api";
 import {
   normalizeAddress,
   normalizeAddressList,
+  normalizeNotificationPreferenceList,
   normalizeUserProfile,
   normalizeUserProfileList,
+  normalizeWishlistAlertList,
   normalizeWishlistItem,
   normalizeWishlistItemList,
 } from "../normalizers";
@@ -21,6 +30,7 @@ import {
 export interface CreateAddressData {
   recipient_name: string;
   phone: string;
+  location: string;
   is_default?: boolean;
 }
 
@@ -37,6 +47,13 @@ export interface AddWishlistItemData {
 
 export interface SyncWishlistData {
   product_ids: string[];
+}
+
+export interface UpdateNotificationPreferencesData {
+  preferences: Array<{
+    topic: string;
+    enabled: boolean;
+  }>;
 }
 
 export interface UploadAvatarResult {
@@ -129,6 +146,36 @@ export const userApi = {
       method: "DELETE",
       token,
     });
+  },
+
+  listWishlistAlerts(token: string): Promise<ApiEnvelope<WishlistAlert[]>> {
+    return request<unknown>("/api/v1/users/wishlist/alerts", { token }).then((response) => ({
+      ...response,
+      data: normalizeWishlistAlertList(response.data),
+    }));
+  },
+
+  listNotificationPreferences(token: string): Promise<ApiEnvelope<NotificationPreference[]>> {
+    return request<unknown>("/api/v1/users/notification-preferences", { token }).then(
+      (response) => ({
+        ...response,
+        data: normalizeNotificationPreferenceList(response.data),
+      })
+    );
+  },
+
+  updateNotificationPreferences(
+    token: string,
+    body: UpdateNotificationPreferencesData
+  ): Promise<ApiEnvelope<NotificationPreference[]>> {
+    return request<unknown>("/api/v1/users/notification-preferences", {
+      method: "PUT",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeNotificationPreferenceList(response.data),
+    }));
   },
 
   /**

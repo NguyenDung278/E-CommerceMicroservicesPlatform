@@ -1,9 +1,10 @@
 import { formatCurrency } from "@/utils/format";
-import type { AdminOrderReport } from "@/types/api";
+import type { AdminOrderReport, ProductSearchAnalyticsSummary } from "@/types/api";
 
 type AdminReportSectionProps = {
   isLoadingReport: boolean;
   report: AdminOrderReport | null;
+  searchAnalytics: ProductSearchAnalyticsSummary | null;
   reportDays: number;
   reportWindowOptions: readonly number[];
   onSelectWindow: (days: number) => void;
@@ -12,6 +13,7 @@ type AdminReportSectionProps = {
 export function AdminReportSection({
   isLoadingReport,
   report,
+  searchAnalytics,
   reportDays,
   reportWindowOptions,
   onSelectWindow,
@@ -69,6 +71,40 @@ export function AdminReportSection({
                   <span>Giá trị: {formatCurrency(item.revenue)}</span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="admin-console-subpanel">
+            <h3>Top search queries</h3>
+            <div className="history-grid">
+              {searchAnalytics?.top_queries.map((item) => (
+                <div className="history-item-preview" key={`${item.source}-${item.query}`}>
+                  <strong>{item.query}</strong>
+                  <span>Source: {item.source}</span>
+                  <span>Requests: {item.request_count}</span>
+                  <span>Avg results: {item.average_result_count.toFixed(1)}</span>
+                </div>
+              ))}
+              {(searchAnalytics?.top_queries.length ?? 0) === 0 ? (
+                <p className="history-empty">Chưa có dữ liệu search query đủ lớn trong giai đoạn này.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="admin-console-subpanel">
+            <h3>Zero-result queries</h3>
+            <div className="history-grid">
+              {searchAnalytics?.zero_result_queries.map((item) => (
+                <div className="history-item-preview" key={`${item.source}-${item.query}-zero`}>
+                  <strong>{item.query}</strong>
+                  <span>Source: {item.source}</span>
+                  <span>Zero-result hits: {item.zero_result_count}</span>
+                  <span>Last seen: {item.last_seen_at || "n/a"}</span>
+                </div>
+              ))}
+              {(searchAnalytics?.zero_result_queries.length ?? 0) === 0 ? (
+                <p className="history-empty">Không có truy vấn zero-result nổi bật trong giai đoạn này.</p>
+              ) : null}
             </div>
           </div>
         </div>
