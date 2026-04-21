@@ -69,6 +69,7 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 - [15-end-to-end-verification-checklists.md](./learning/15-end-to-end-verification-checklists.md): checklist verify theo flow thật cho catalog, checkout, payment, returns, và admin
 - [16-refund-queue-operations-playbook.md](./learning/16-refund-queue-operations-playbook.md): playbook vận hành khi `refund_pending` backlog, retry nhiều, hoặc có dấu hiệu stale worker lease
 - [17-performance-feature-parity-roadmap.md](./learning/17-performance-feature-parity-roadmap.md): audit hiệu năng, khoảng trống BE/FE hiện tại, feature backend nên thêm tiếp, và các cụm source code nên đọc nếu mục tiêu là phát triển sự nghiệp backend Golang
+- [18-comprehensive-source-code-understanding-development-guide.md](./learning/18-comprehensive-source-code-understanding-development-guide.md): bản đồ chức năng-to-source cho auth, catalog, order/payment, notification, cùng các pattern đáng học nếu mục tiêu là backend Golang
 
 ### `deep-dive/`
 
@@ -99,7 +100,7 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 
 - Nếu tài liệu và source mâu thuẫn, hãy tin source thật ở `cmd/main.go`, `internal/handler`, `internal/service`, `internal/repository`, `frontend/src/`, `deployments/docker/`.
 - Frontend hiện ở trạng thái refactor chuyển tiếp, nhưng source of truth bây giờ là `app/`, `pages/`, `features/`, `services/`, `components/`, `styles/`. Bộ docs mới gom lại để tránh tài liệu frontend chồng chéo.
-- `frontend/` là admin/workbook app và UI local chính; `client/` là shopper app dài hạn cho storefront/account nhưng chưa phải runtime Compose mặc định.
+- `frontend/` là admin/workbook app và UI local chính; `client/` là shopper app dài hạn cho storefront/account và hiện là storefront runtime Compose mặc định.
 - Không phải mọi doc cũ đều sai, nhưng các doc frontend và local runtime đã được nâng cấp mạnh để bám hơn với source hiện tại.
 
 ## Nếu muốn hiểu repo ở mức senior

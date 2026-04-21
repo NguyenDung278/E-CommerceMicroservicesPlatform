@@ -20,6 +20,7 @@ Nếu bạn đang phân vân "nên đọc gì trước để vừa hiểu projec
 12. [15-end-to-end-verification-checklists.md](./15-end-to-end-verification-checklists.md)
 13. [16-refund-queue-operations-playbook.md](./16-refund-queue-operations-playbook.md)
 14. [17-performance-feature-parity-roadmap.md](./17-performance-feature-parity-roadmap.md)
+15. [18-comprehensive-source-code-understanding-development-guide.md](./18-comprehensive-source-code-understanding-development-guide.md)
 
 ## Bộ tài liệu này giúp bạn làm gì
 
@@ -65,3 +66,4 @@ Lý do:
 - [15-end-to-end-verification-checklists.md](./15-end-to-end-verification-checklists.md): checklist ngắn gọn nhưng sát production để verify end-to-end theo flow thay vì test rời từng API
 - [16-refund-queue-operations-playbook.md](./16-refund-queue-operations-playbook.md): cách đọc refund queue health, nhận diện stale lease/retry-heavy queue, và thứ tự điều tra khi refund backlog tăng
 - [17-performance-feature-parity-roadmap.md](./17-performance-feature-parity-roadmap.md): một bản đồ ngắn nhưng thực dụng để biết repo đang nghẽn hiệu năng ở đâu, FE nào chưa theo kịp backend, backend nên thêm gì tiếp, và nên đọc cụm source nào để học backend Golang chắc tay hơn
+- [18-comprehensive-source-code-understanding-development-guide.md](./18-comprehensive-source-code-understanding-development-guide.md): bản đồ tổng hợp để hiểu project theo functional area, biết mở file nào khi debug/thêm feature, và nối việc đọc source với các năng lực backend Go nên luyện
