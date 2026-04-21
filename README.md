@@ -19,7 +19,7 @@ Hai điểm quan trọng nên biết ngay trước khi tiếp tục đầu tư v
 Nếu bạn muốn xem backlog parity và roadmap học từ chính source code:
 
 - `feature_tracker.md`
-- `docs/learning/17-performance-feature-parity-roadmap.md`
+- `docs/learning/README.md`
 
 ## Mục tiêu và kiến trúc tổng quan
 
@@ -359,7 +359,7 @@ Một vài lưu ý khi dùng lệnh:
 - `make test` và `make vet` chạy qua toàn bộ Go modules trong repo
 - `frontend` và `client` dùng `npm`, không dùng `pnpm` hay `yarn`
 - CI hiện chạy Go checks cho mọi module, test/build `frontend`, và lint/build `client`
-- pipeline publish Docker hiện build/push `api-gateway`, toàn bộ Go services và `frontend`; `client` hiện chưa publish theo chủ đích vì chưa chốt entrypoint storefront cuối cùng
+- pipeline publish Docker hiện build/push `api-gateway`, toàn bộ Go services, `frontend` và `client`
 
 ## Cấu trúc thư mục nên đọc đầu tiên
 
@@ -412,9 +412,9 @@ Khi debug end-to-end, hãy bám flow:
 
 Ba điểm bắt đầu thực dụng nhất:
 
-1. hiểu runtime và boundary thật của repo này qua [docs/learning/03-source-reading-roadmap.md](./docs/learning/03-source-reading-roadmap.md)
-2. học cách verify, debug và review thay đổi như một senior qua [docs/learning/06-testing-and-verification.md](./docs/learning/06-testing-and-verification.md) và [docs/learning/11-senior-source-code-review-guide.md](./docs/learning/11-senior-source-code-review-guide.md)
-3. nối việc đọc code với lộ trình học sản phẩm commerce thực chiến qua [docs/learning/12-production-readiness-roadmap.md](./docs/learning/12-production-readiness-roadmap.md)
+1. hiểu runtime và boundary thật của repo này qua [docs/README.md](./docs/README.md)
+2. đọc [docs/deep-dive/README.md](./docs/deep-dive/README.md) để thấy flow order, payment, notification và boundary giữa các service
+3. dùng [docs/learning/README.md](./docs/learning/README.md) để học best practice, pitfall thực tế và backlog nên làm tiếp
 
 ## Tài liệu liên quan
 
@@ -422,7 +422,6 @@ Ba điểm bắt đầu thực dụng nhất:
 - [feature_tracker.md](./feature_tracker.md): feature inventory và roadmap gợi ý bám theo source hiện tại
 - [DOCKER_GUIDE.md](./DOCKER_GUIDE.md): hướng dẫn Docker/Compose thực chiến cho chính repo này
 - [docs/README.md](./docs/README.md): bản đồ tài liệu tổng thể
-- [docs/learning/README.md](./docs/learning/README.md): lộ trình onboarding
-- [docs/learning/12-production-readiness-roadmap.md](./docs/learning/12-production-readiness-roadmap.md): codebase map, learning path, production hardening checklist và gợi ý feature tiếp theo
-- [docs/deep-dive/README.md](./docs/deep-dive/README.md): đọc sâu hơn về kiến trúc và runtime
-- [docs/annotated/README.md](./docs/annotated/README.md): đọc source theo block quan trọng
+- [docs/learning/README.md](./docs/learning/README.md): lộ trình học repo, best practice, pitfall và đề xuất cải tiến
+- [docs/deep-dive/README.md](./docs/deep-dive/README.md): runtime map, boundary, data flow order/payment/notification
+- [docs/annotated/README.md](./docs/annotated/README.md): feature-to-source map và các pattern đáng học

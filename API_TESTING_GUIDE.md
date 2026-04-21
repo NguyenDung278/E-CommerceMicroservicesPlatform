@@ -16,7 +16,7 @@ Collection và environment starter hiện có sẵn tại:
 
 Checklist verify theo flow hiện có tại:
 
-- `docs/learning/15-end-to-end-verification-checklists.md`
+- `docs/learning/README.md`
 
 ---
 

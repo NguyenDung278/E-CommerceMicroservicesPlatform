@@ -6,7 +6,7 @@ Nếu cần bức tranh đầy đủ hơn về runtime và định hướng họ
 
 - `README.md`
 - `docs/README.md`
-- `docs/learning/17-performance-feature-parity-roadmap.md`
+- `docs/learning/README.md`
 
 ---
 
