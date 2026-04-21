@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/addressrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/authrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/userrepo"
 )
 
 type ProfileTxRepositories struct {
@@ -31,9 +35,9 @@ func (m *postgresProfileTxManager) RunInTx(ctx context.Context, fn func(ProfileT
 	}
 
 	repos := ProfileTxRepositories{
-		Users:              newUserRepositoryWithExecutor(tx),
-		Addresses:          newAddressRepositoryWithExecutor(tx),
-		PhoneVerifications: newPhoneVerificationRepositoryWithExecutor(tx),
+		Users:              userrepo.NewWithExecutor(tx),
+		Addresses:          addressrepo.NewWithExecutor(tx),
+		PhoneVerifications: authrepo.NewPhoneVerificationWithExecutor(tx),
 	}
 
 	if err := fn(repos); err != nil {
