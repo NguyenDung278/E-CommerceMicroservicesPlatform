@@ -1,204 +1,72 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"io"
-	"time"
-
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 
-	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
+	ordersvc "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service/order"
 )
 
 var (
-	ErrOrderNotFound                    = errors.New("order not found")
-	ErrEmptyOrder                       = errors.New("order must contain at least one item")
-	ErrProductNotFound                  = errors.New("product not found")
-	ErrProductUnavailable               = errors.New("product is unavailable")
-	ErrInsufficientStock                = errors.New("insufficient stock")
-	ErrOrderNotCancellable              = errors.New("only pending orders can be cancelled")
-	ErrAdminCancelNotAllowed            = errors.New("only pending or paid orders can be cancelled manually")
-	ErrInvalidOrderStatus               = errors.New("invalid order status")
-	ErrInvalidIdempotencyKey            = errors.New("idempotency key is invalid")
-	ErrIdempotencyKeyConflict           = errors.New("idempotency key is already used for a different order request")
-	ErrInvalidOrderCursor               = repository.ErrInvalidOrderCursor
-	ErrCouponAlreadyExists              = errors.New("coupon code already exists")
-	ErrCouponNotFound                   = repository.ErrCouponNotFound
-	ErrCouponInactive                   = repository.ErrCouponInactive
-	ErrCouponExpired                    = repository.ErrCouponExpired
-	ErrCouponMinimumNotMet              = repository.ErrCouponMinimumNotMet
-	ErrCouponUsageLimit                 = repository.ErrCouponUsageLimitReached
-	ErrInvalidShippingMethod            = errors.New("invalid shipping method")
-	ErrShippingAddressRequired          = errors.New("shipping address is required")
-	ErrReturnNotFound                   = errors.New("return not found")
-	ErrReturnReasonRequired             = errors.New("return reason is required")
-	ErrReturnItemsRequired              = errors.New("return items are required")
-	ErrReturnNotAllowed                 = errors.New("only delivered orders can start a return")
-	ErrReturnOrderItemNotFound          = errors.New("return item does not belong to the order")
-	ErrReturnQuantityExceeded           = errors.New("return quantity exceeds purchased quantity")
-	ErrDuplicateReturnItem              = errors.New("return request contains duplicate order item")
-	ErrInvalidReturnStatus              = errors.New("invalid return status")
-	ErrReturnStatusTransition           = errors.New("return status transition is not allowed")
-	ErrReturnRefundUnavailable          = errors.New("return refund could not be matched to a refundable payment")
-	ErrReturnRefundAmount               = errors.New("return refund amount is invalid")
-	ErrReturnRefundPending              = errors.New("return refund is already queued for processing")
-	ErrReturnEvidenceRequired           = errors.New("at least one evidence file is required")
-	ErrReturnEvidenceClosed             = errors.New("cannot upload evidence to a closed return")
-	ErrReturnEvidenceStorageUnavailable = errors.New("return evidence storage is not configured")
+	ErrOrderNotFound                    = ordersvc.ErrOrderNotFound
+	ErrEmptyOrder                       = ordersvc.ErrEmptyOrder
+	ErrProductNotFound                  = ordersvc.ErrProductNotFound
+	ErrProductUnavailable               = ordersvc.ErrProductUnavailable
+	ErrInsufficientStock                = ordersvc.ErrInsufficientStock
+	ErrOrderNotCancellable              = ordersvc.ErrOrderNotCancellable
+	ErrAdminCancelNotAllowed            = ordersvc.ErrAdminCancelNotAllowed
+	ErrInvalidOrderStatus               = ordersvc.ErrInvalidOrderStatus
+	ErrInvalidIdempotencyKey            = ordersvc.ErrInvalidIdempotencyKey
+	ErrIdempotencyKeyConflict           = ordersvc.ErrIdempotencyKeyConflict
+	ErrInvalidOrderCursor               = ordersvc.ErrInvalidOrderCursor
+	ErrCouponAlreadyExists              = ordersvc.ErrCouponAlreadyExists
+	ErrCouponNotFound                   = ordersvc.ErrCouponNotFound
+	ErrCouponInactive                   = ordersvc.ErrCouponInactive
+	ErrCouponExpired                    = ordersvc.ErrCouponExpired
+	ErrCouponMinimumNotMet              = ordersvc.ErrCouponMinimumNotMet
+	ErrCouponUsageLimit                 = ordersvc.ErrCouponUsageLimit
+	ErrInvalidShippingMethod            = ordersvc.ErrInvalidShippingMethod
+	ErrShippingAddressRequired          = ordersvc.ErrShippingAddressRequired
+	ErrReturnNotFound                   = ordersvc.ErrReturnNotFound
+	ErrReturnReasonRequired             = ordersvc.ErrReturnReasonRequired
+	ErrReturnItemsRequired              = ordersvc.ErrReturnItemsRequired
+	ErrReturnNotAllowed                 = ordersvc.ErrReturnNotAllowed
+	ErrReturnOrderItemNotFound          = ordersvc.ErrReturnOrderItemNotFound
+	ErrReturnQuantityExceeded           = ordersvc.ErrReturnQuantityExceeded
+	ErrDuplicateReturnItem              = ordersvc.ErrDuplicateReturnItem
+	ErrInvalidReturnStatus              = ordersvc.ErrInvalidReturnStatus
+	ErrReturnStatusTransition           = ordersvc.ErrReturnStatusTransition
+	ErrReturnRefundUnavailable          = ordersvc.ErrReturnRefundUnavailable
+	ErrReturnRefundAmount               = ordersvc.ErrReturnRefundAmount
+	ErrReturnRefundPending              = ordersvc.ErrReturnRefundPending
+	ErrReturnEvidenceRequired           = ordersvc.ErrReturnEvidenceRequired
+	ErrReturnEvidenceClosed             = ordersvc.ErrReturnEvidenceClosed
+	ErrReturnEvidenceStorageUnavailable = ordersvc.ErrReturnEvidenceStorageUnavailable
 )
 
-// OrderEvent is published to RabbitMQ when an order is created or cancelled so
-// downstream services can react asynchronously.
-type OrderEvent struct {
-	EventID    string  `json:"event_id"`
-	OrderID    string  `json:"order_id"`
-	UserID     string  `json:"user_id"`
-	UserEmail  string  `json:"user_email"`
-	TotalPrice float64 `json:"total_price"`
-	Status     string  `json:"status"`
-	RequestID  string  `json:"request_id,omitempty"`
-}
+type OrderEvent = ordersvc.OrderEvent
+type ReturnLifecycleEvent = ordersvc.ReturnLifecycleEvent
+type PaymentLifecycleEvent = ordersvc.PaymentLifecycleEvent
+type ProductCatalog = ordersvc.ProductCatalog
+type PaymentHistorySource = ordersvc.PaymentHistorySource
+type ReturnEvidenceStore = ordersvc.ReturnEvidenceStore
+type OrderService = ordersvc.OrderService
 
-type ReturnLifecycleEvent struct {
-	EventID      string  `json:"event_id"`
-	ReturnID     string  `json:"return_id"`
-	OrderID      string  `json:"order_id"`
-	UserID       string  `json:"user_id"`
-	UserEmail    string  `json:"user_email"`
-	Status       string  `json:"status"`
-	Reason       string  `json:"reason,omitempty"`
-	RefundAmount float64 `json:"refund_amount,omitempty"`
-	RequestID    string  `json:"request_id,omitempty"`
-}
-
-// OrderService coordinates order pricing, persistence, and event publication.
-type OrderService struct {
-	repo             repository.OrderRepository
-	amqpCh           *amqp.Channel
-	log              *zap.Logger
-	productClient    productCatalog
-	paymentClient    paymentHistorySource
-	returnMediaStore returnEvidenceStore
-}
-
-const orderReservationHoldDuration = 15 * time.Minute
-
-// productCatalog describes the downstream product capabilities the order
-// service needs for pricing and stock restoration.
-type productCatalog interface {
-	GetProduct(ctx context.Context, productID string) (*pb.Product, error)
-	DecreaseStock(ctx context.Context, productID string, quantity int) error
-	RestoreStock(ctx context.Context, productID string, quantity int) error
-}
-
-// paymentHistorySource describes the downstream payment lookup needed to build
-// user order summaries without coupling the service to a concrete client.
-type paymentHistorySource interface {
-	ListPaymentHistory(ctx context.Context, authHeader string) ([]model.PaymentSummary, error)
-	ListPaymentsByOrder(ctx context.Context, orderID string) ([]model.PaymentSummary, error)
-	RefundPayment(ctx context.Context, paymentID string, amount float64, message, idempotencyKey string) (*model.PaymentSummary, error)
-}
-
-type returnEvidenceStore interface {
-	EnsureBucket(ctx context.Context) error
-	Upload(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) (string, error)
-}
-
-type pricedOrderItem struct {
-	ProductID string
-	Name      string
-	Price     float64
-	Quantity  int
-}
-
-type pricedOrderQuote struct {
-	Items             []pricedOrderItem
-	SubtotalPrice     float64
-	DiscountAmount    float64
-	CouponCode        string
-	CouponDescription string
-	ShippingMethod    string
-	ShippingAddress   *model.ShippingAddress
-	ShippingFee       float64
-	TotalPrice        float64
-}
-
-// ToPreview converts the internal pricing quote into the API-facing preview
-// shape.
-//
-// Inputs:
-//   - q contains already calculated pricing fields.
-//
-// Returns:
-//   - a new preview instance suitable for handlers to serialize.
-//
-// Edge cases:
-//   - nil receivers are not expected; callers build the quote first.
-//
-// Side effects:
-//   - none.
-//
-// Performance:
-//   - O(1) time and allocation cost for one preview object.
-func (q *pricedOrderQuote) ToPreview() *model.OrderPreview {
-	shippingOptions := buildShippingOptions(q.SubtotalPrice)
-	etaLabel, deliveryPromise := resolveShippingPromise(q.ShippingMethod, shippingOptions)
-
-	return &model.OrderPreview{
-		SubtotalPrice:            q.SubtotalPrice,
-		DiscountAmount:           q.DiscountAmount,
-		CouponCode:               q.CouponCode,
-		CouponDescription:        q.CouponDescription,
-		ShippingMethod:           q.ShippingMethod,
-		ShippingFee:              q.ShippingFee,
-		ETALabel:                 etaLabel,
-		DeliveryPromise:          deliveryPromise,
-		SupportedShippingMethods: shippingOptions,
-		TotalPrice:               q.TotalPrice,
-	}
-}
-
-// NewOrderService wires the dependencies required by the order domain.
-//
-// Inputs:
-//   - repo persists order state and audit data.
-//   - amqpCh publishes lifecycle events when RabbitMQ is available.
-//   - log captures structured diagnostics.
-//   - productClient resolves live catalog data and stock restoration.
-//   - paymentClient loads payment history for summary endpoints.
-//
-// Returns:
-//   - a ready-to-use service value.
-//
-// Edge cases:
-//   - optional dependencies such as amqpCh or paymentClient may be nil; callers
-//     must avoid code paths that require them.
-//
-// Side effects:
-//   - none during construction.
-//
-// Performance:
-//   - O(1); the constructor stores references only.
 func NewOrderService(
 	repo repository.OrderRepository,
 	amqpCh *amqp.Channel,
 	log *zap.Logger,
-	productClient productCatalog,
-	paymentClient paymentHistorySource,
+	productClient ProductCatalog,
+	paymentClient PaymentHistorySource,
 ) *OrderService {
-	return &OrderService{
-		repo:          repo,
-		amqpCh:        amqpCh,
-		log:           log,
-		productClient: productClient,
-		paymentClient: paymentClient,
-	}
+	return ordersvc.NewOrderService(repo, amqpCh, log, productClient, paymentClient)
 }
 
-func (s *OrderService) SetReturnMediaStore(store returnEvidenceStore) {
-	s.returnMediaStore = store
+func SetupExchange(ch *amqp.Channel) error {
+	return ordersvc.SetupExchange(ch)
+}
+
+func StartPaymentEventConsumer(ch *amqp.Channel, log *zap.Logger, service *OrderService) error {
+	return ordersvc.StartPaymentEventConsumer(ch, log, service)
 }

@@ -23,11 +23,11 @@ type ProductSearchSortOption struct {
 }
 
 type ProductSearchAssist struct {
-	Query           string                  `json:"query"`
-	ResolvedQuery   string                  `json:"resolved_query"`
-	AppliedSynonyms []string                `json:"applied_synonyms"`
-	ResultCount     int                     `json:"result_count"`
+	Query           string                    `json:"query"`
+	ResolvedQuery   string                    `json:"resolved_query"`
+	AppliedSynonyms []string                  `json:"applied_synonyms"`
+	ResultCount     int                       `json:"result_count"`
 	Suggestions     []ProductSearchSuggestion `json:"suggestions"`
-	Facets          []ProductSearchFacet    `json:"facets"`
+	Facets          []ProductSearchFacet      `json:"facets"`
 	SortOptions     []ProductSearchSortOption `json:"sort_options"`
 }

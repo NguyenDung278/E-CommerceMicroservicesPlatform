@@ -1,46 +1,58 @@
 package model
 
-import "time"
+import (
+	"time"
 
-type ProductStatus string
-
-const (
-	ProductStatusDraft    ProductStatus = "draft"
-	ProductStatusActive   ProductStatus = "active"
-	ProductStatusInactive ProductStatus = "inactive"
+	productmodel "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/model/product"
 )
 
-type ProductVariant struct {
-	SKU         string   `json:"sku"`
-	Label       string   `json:"label"`
-	Size        string   `json:"size,omitempty"`
-	Color       string   `json:"color,omitempty"`
-	Price       float64  `json:"price"`
-	Stock       int      `json:"stock"`
-	ImageURLs   []string `json:"image_urls,omitempty"`
-	FitNote     string   `json:"fit_note,omitempty"`
-	SizeGuideID string   `json:"size_guide_id,omitempty"`
-	Restockable bool     `json:"restockable"`
-	LeadTime    string   `json:"lead_time,omitempty"`
-	Badge       string   `json:"badge,omitempty"`
+type ProductStatus = productmodel.ProductStatus
+
+const (
+	ProductStatusDraft    = productmodel.ProductStatusDraft
+	ProductStatusActive   = productmodel.ProductStatusActive
+	ProductStatusInactive = productmodel.ProductStatusInactive
+)
+
+type ProductVariant = productmodel.ProductVariant
+type Product = productmodel.Product
+type ProductReview = productmodel.ProductReview
+type ProductRatingBreakdown = productmodel.ProductRatingBreakdown
+type ProductReviewSummary = productmodel.ProductReviewSummary
+type ProductReviewList = productmodel.ProductReviewList
+
+var (
+	ErrProductReviewNotFound      = productmodel.ErrProductReviewNotFound
+	ErrProductReviewAlreadyExists = productmodel.ErrProductReviewAlreadyExists
+)
+
+type ProductRatingBreakdownDelta = productmodel.ProductRatingBreakdownDelta
+type ProductReviewSummaryDelta = productmodel.ProductReviewSummaryDelta
+
+func NewProductReviewCreateDelta(rating int, updatedAt time.Time) ProductReviewSummaryDelta {
+	return productmodel.NewProductReviewCreateDelta(rating, updatedAt)
 }
 
-// Product represents a product in the catalog.
-type Product struct {
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Price       float64          `json:"price"`
-	Stock       int              `json:"stock"`
-	Category    string           `json:"category"`
-	Brand       string           `json:"brand"`
-	Tags        []string         `json:"tags"`
-	Status      string           `json:"status"`
-	SKU         string           `json:"sku"`
-	Variants    []ProductVariant `json:"variants"`
-	ImageURL    string           `json:"image_url"`
-	ImageURLs   []string         `json:"image_urls"`
-	MerchandisingRank int        `json:"merchandising_rank,omitempty"`
-	CreatedAt   time.Time        `json:"created_at"`
-	UpdatedAt   time.Time        `json:"updated_at"`
+func NewProductReviewUpdateDelta(oldRating int, newRating int, updatedAt time.Time) ProductReviewSummaryDelta {
+	return productmodel.NewProductReviewUpdateDelta(oldRating, newRating, updatedAt)
 }
+
+func NewProductReviewDeleteDelta(rating int, updatedAt time.Time) ProductReviewSummaryDelta {
+	return productmodel.NewProductReviewDeleteDelta(rating, updatedAt)
+}
+
+type ProductSearchSuggestion = productmodel.ProductSearchSuggestion
+type ProductSearchFacetValue = productmodel.ProductSearchFacetValue
+type ProductSearchFacet = productmodel.ProductSearchFacet
+type ProductSearchSortOption = productmodel.ProductSearchSortOption
+type ProductSearchAssist = productmodel.ProductSearchAssist
+type ProductSearchAnalyticsEntry = productmodel.ProductSearchAnalyticsEntry
+type ProductSearchClickAnalyticsEntry = productmodel.ProductSearchClickAnalyticsEntry
+type ProductSearchFilterAnalyticsEntry = productmodel.ProductSearchFilterAnalyticsEntry
+type ProductSearchAnalyticsSummary = productmodel.ProductSearchAnalyticsSummary
+type StorefrontCategory = productmodel.StorefrontCategory
+type StorefrontEditorialSection = productmodel.StorefrontEditorialSection
+type StorefrontProduct = productmodel.StorefrontProduct
+type StorefrontFeaturedProduct = productmodel.StorefrontFeaturedProduct
+type StorefrontCategoryPage = productmodel.StorefrontCategoryPage
+type StorefrontHome = productmodel.StorefrontHome
