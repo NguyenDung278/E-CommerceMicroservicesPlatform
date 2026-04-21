@@ -4,8 +4,8 @@ Repo này là một nền tảng thương mại điện tử nhiều service vi�
 
 Trạng thái hiện tại của UI có hai nhánh:
 
-- `frontend/`: React + Vite, là đường chạy local chính, là frontend đang được dùng để verify end-to-end, và hiện vẫn là bề mặt admin rõ nhất của repo.
-- `client/`: Next.js App Router cho storefront/account, đã được CI lint/build, có profile Compose riêng để smoke test runtime, nhưng chưa phải entrypoint mặc định và chưa được publish image như `frontend/`.
+- `frontend/`: React + Vite, là đường chạy local chính cho admin/workbook/smoke-test và là bề mặt admin chính của repo.
+- `client/`: Next.js App Router, là storefront runtime chính thức của repo ở mức publish/deploy cho shopper/account.
 
 README này ưu tiên phản ánh đúng source code hiện tại. Một số tài liệu sâu hơn trong `docs/` vẫn hữu ích, nhưng nếu có chỗ lệch nhau thì hãy tin `cmd/main.go`, `internal/handler`, `internal/service`, `deployments/docker/` và cấu hình thật trong repo.
 
@@ -14,7 +14,7 @@ README này ưu tiên phản ánh đúng source code hiện tại. Một số t�
 Hai điểm quan trọng nên biết ngay trước khi tiếp tục đầu tư vào repo:
 
 - admin order ledger đã được tối ưu để batch payment history qua `GET /api/v1/admin/payments/history`, giảm fan-out request từ UI xuống `payment-service`
-- backend hiện đã đi trước `client/` ở một số capability như wishlist sync theo account, shopper returns center, search assist/facet, và admin surface; `frontend/` hiện vẫn là UI local đầy đủ hơn cho admin và một phần parity account flow
+- phần lớn parity storefront/account đã được nối sang `client/`, còn `frontend/` tiếp tục giữ vai trò admin/workbook thay vì tiếp tục nhân đôi toàn bộ surface storefront
 
 Nếu bạn muốn xem backlog parity và roadmap học từ chính source code:
 
@@ -67,8 +67,8 @@ flowchart LR
 | `services/notification-service/` | Worker consume RabbitMQ ứng dụng Redis store vào Inbox pattern, hỗ trợ tính năng retry publisher và đo lường metrics, gửi email cho `order` và `payment` event. |
 | `pkg/` | Shared packages cho config, database, logger, middleware, observability, response, validation. |
 | `proto/` | Contract gRPC dùng giữa service, hiện rõ nhất ở product gRPC và user gRPC definitions. |
-| `frontend/` | Frontend React + Vite được tổ chức kiến trúc theo feature-based modular design, kèm codebase API quy hoạch gọn gàng, và là entrypoint local chính. |
-| `client/` | Frontend Next.js App Router cho storefront/account flow, đã có CI lint/build, hỗ trợ standalone scripts và profile Compose riêng để smoke test, nhưng chưa là entrypoint mặc định và chưa có admin surface tương đương `frontend/`. |
+| `frontend/` | Frontend React + Vite được tổ chức kiến trúc theo feature-based modular design, là entrypoint local chính cho admin/workbook/smoke-test và là admin app chính của repo. |
+| `client/` | Frontend Next.js App Router cho storefront/account flow, là shopper app chính thức, đã có CI lint/build và được chạy mặc định trong Docker Compose. |
 | `deployments/docker/` | Docker Compose, config YAML cho từng service, Prometheus, Grafana provisioning, Nginx edge config, Postgres init script. |
 
 ## Hạ tầng, dữ liệu và trạng thái runtime
@@ -135,13 +135,15 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml up
 
 ```bash
 curl http://localhost:8080/health
+curl http://localhost:3000
 curl http://localhost:4173/health
 curl http://localhost/health
 ```
 
 Các URL thường dùng khi compose đang chạy:
 
-- `http://localhost:4173`: frontend Docker, là UI nên mở đầu tiên
+- `http://localhost:3000`: client Docker, là storefront nên mở đầu tiên
+- `http://localhost:4173`: frontend Docker cho admin/workbook
 - `http://localhost:8080`: API Gateway
 - `http://localhost`: Nginx edge trong `deployments/docker/nginx.conf`, hiện chỉ route `/api/*` và `/health`, không serve frontend
 - `http://localhost:9000`: MinIO API
@@ -151,7 +153,8 @@ Các URL thường dùng khi compose đang chạy:
 
 Điểm dễ nhầm:
 
-- `frontend` service chạy ở `4173` và tự proxy `/api` sang `api-gateway`
+- `client` service chạy ở `3000` và là storefront runtime mặc định
+- `frontend` service chạy ở `4173` cho admin/workbook và vẫn tự proxy `/api` sang `api-gateway`
 - `nginx` service chạy ở `80` nhưng config hiện tại chỉ proxy API, không phải entrypoint chính cho UI
 - PostgreSQL, Redis, RabbitMQ, Prometheus và Grafana không publish port ra host trong compose hiện tại
 
@@ -220,9 +223,10 @@ Lệnh này sẽ import workbook mẫu ở `artifacts/import-templates/catalog-i
 
 ## Phạm vi UI được chốt hiện tại
 
-- `client/` là hướng ưu tiên cho storefront/account trong trung hạn.
-- `frontend/` vẫn là UI local mặc định và là bề mặt admin chính cho đến khi `client/` có admin surface tương đương hoặc repo tách một admin app riêng.
-- `client/` đã được bảo vệ bằng CI và có runtime Compose tùy chọn, nhưng chưa được đưa vào pipeline publish image để tránh ngầm coi đây là entrypoint production cuối cùng quá sớm.
+- `client/` là app dài hạn cho storefront/account.
+- `frontend/` là app dài hạn cho admin, workbook import, và local verification.
+- `frontend/` không nên nhận thêm feature storefront mới trừ parity fix hoặc smoke-test support.
+- `client/` đã được bảo vệ bằng CI, có image publish riêng, và là shopper runtime mặc định trong Docker Compose.
 
 ## Chạy `client/` trên host để smoke test App Router runtime
 
@@ -243,25 +247,25 @@ make client-dev
 Hiện trạng:
 
 - có Dockerfile riêng trong `client/Dockerfile`
-- đã có profile `client` trong `deployments/docker/docker-compose.yml` để smoke test runtime khi cần
+- `deployments/docker/docker-compose.yml` nay đã chạy `client` mặc định cùng local stack
 - workflow CI hiện build `frontend/` và lint/build `client/`
-- workflow publish Docker vẫn chỉ publish `frontend` cho UI, chưa publish `client` theo chủ đích
+- workflow publish Docker hiện publish cả `frontend` và `client`; `client` là storefront image chính thức
 - đã có tool chuẩn bị standalone chạy độc lập trên production với API types chung
 - host-based runtime mặc định của `client` là `http://localhost:3000`
 
-Khi cần chạy `client` trong Compose thay vì trên host:
+Khi cần chạy `client` trong Compose:
 
 ```bash
-COMPOSE_PROFILES=client make compose-up
+make compose-up
 ```
 
 hoặc:
 
 ```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml --profile client up --build
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml up --build
 ```
 
-Trong profile này:
+Trong runtime này:
 
 - browser-side API call đi qua `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
 - server-side fetch của Next.js đi qua `API_GATEWAY_URL=http://api-gateway:8080`
@@ -372,8 +376,8 @@ Một vài lưu ý khi dùng lệnh:
 | `pkg/` | Shared code mà nhiều service đang dùng chung. |
 | `proto/` | Contract gRPC giữa service. |
 | `deployments/docker/` | Compose, config file, init SQL, observability stack. |
-| `frontend/src/` | UI chính đang dùng để đọc flow end-to-end và admin flow. |
-| `client/src/` | Nhánh Next.js thử nghiệm. |
+| `frontend/src/` | Admin/workbook app và UI local chính để verify end-to-end. |
+| `client/src/` | Shopper app dài hạn cho storefront/account. |
 
 ## Cách hiểu nhanh source code
 
@@ -396,12 +400,12 @@ Khi debug end-to-end, hãy bám flow:
 
 ## Trạng thái hiện tại và lưu ý khi phát triển
 
-- `frontend/` vẫn là UI Compose mặc định nên ưu tiên đọc trước khi debug local stack
-- `client/` đã hỗ trợ runtime standalone ổn định trên host và có profile Compose riêng, nhưng vẫn chưa được đưa vào Compose mặc định
+- `client/` là storefront runtime Compose mặc định và là nơi nên tiếp tục đầu tư mọi feature shopper/account
+- `frontend/` vẫn được giữ trong Compose để phục vụ admin/workbook ổn định cho local stack
 - `product-service` đã có cursor pagination cho catalog, nhưng `order-service` admin listing vẫn theo offset/count
 - frontend account section đã có backend thật ở phía authentication/profile (ví dụ: đổi mật khẩu và verify rate-limiting), một số tính năng preference phụ trợ vẫn còn theo hướng UI.
 - `frontend` có các trang editorial (Shop Men, Shop Women, Footwear, Accessories) sở hữu thiết kế layout khác biệt và filtering logic riêng so với API list mặc định.
-- đừng assume `http://localhost` là frontend chính; trong compose hiện tại frontend chính là `http://localhost:4173`
+- đừng assume `http://localhost` là UI chính; storefront chạy ở `http://localhost:3000`, còn admin/workbook ở `http://localhost:4173`
 - đừng assume Postgres ở `localhost:5432` khi chỉ dùng compose mặc định; database nằm trong network nội bộ compose
 
 ## Nếu mục tiêu của bạn là build một e-commerce production-ready

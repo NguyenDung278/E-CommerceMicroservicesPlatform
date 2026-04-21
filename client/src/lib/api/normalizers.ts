@@ -5,6 +5,7 @@ import type {
   EmailVerificationChallenge,
   JsonObject,
   JsonValue,
+  NotificationInboxItem,
   NotificationPreference,
   Order,
   OrderEvent,
@@ -19,12 +20,23 @@ import type {
   ProductReview,
   ProductReviewList,
   ProductReviewSummary,
+  ProductSearchClickAnalyticsEntry,
+  ProductSearchAssist,
   ProductSearchAnalyticsEntry,
+  ProductSearchFilterAnalyticsEntry,
   ProductSearchAnalyticsSummary,
+  ProductSearchFacet,
+  ProductSearchFacetValue,
+  ProductSearchSortOption,
+  ProductSearchSuggestion,
   ProductVariant,
   ProfileAddressInput,
+  ReturnEvent,
+  ReturnEvidence,
   ReturnEligibilityItem,
   ReturnEligibilitySnapshot,
+  ReturnItem,
+  ReturnRequest,
   ShippingAddress,
   ShippingOption,
   StorefrontCategory,
@@ -141,6 +153,70 @@ export function normalizeStorefrontProduct(value: unknown): StorefrontProduct {
 
 export function normalizeProductList(value: unknown): Product[] {
   return Array.isArray(value) ? value.map((item) => normalizeProduct(item)) : [];
+}
+
+export function normalizeProductSearchSuggestion(value: unknown): ProductSearchSuggestion {
+  const suggestion = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(suggestion.value),
+    kind: normalizeString(suggestion.kind),
+    match_count: normalizeNumber(suggestion.match_count),
+  };
+}
+
+export function normalizeProductSearchFacetValue(value: unknown): ProductSearchFacetValue {
+  const facetValue = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(facetValue.value),
+    count: normalizeNumber(facetValue.count),
+  };
+}
+
+export function normalizeProductSearchFacet(value: unknown): ProductSearchFacet {
+  const facet = isRecord(value) ? value : {};
+
+  return {
+    key: normalizeString(facet.key),
+    label: normalizeString(facet.label),
+    values: Array.isArray(facet.values)
+      ? facet.values.map((entry) => normalizeProductSearchFacetValue(entry))
+      : [],
+  };
+}
+
+export function normalizeProductSearchSortOption(value: unknown): ProductSearchSortOption {
+  const sortOption = isRecord(value) ? value : {};
+
+  return {
+    value: normalizeString(sortOption.value),
+    label: normalizeString(sortOption.label),
+  };
+}
+
+export function normalizeProductSearchAssist(value: unknown): ProductSearchAssist {
+  const assist = isRecord(value) ? value : {};
+
+  return {
+    query: normalizeString(assist.query),
+    resolved_query: normalizeString(assist.resolved_query),
+    applied_synonyms: Array.isArray(assist.applied_synonyms)
+      ? assist.applied_synonyms.filter(
+          (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [],
+    result_count: normalizeNumber(assist.result_count),
+    suggestions: Array.isArray(assist.suggestions)
+      ? assist.suggestions.map((entry) => normalizeProductSearchSuggestion(entry))
+      : [],
+    facets: Array.isArray(assist.facets)
+      ? assist.facets.map((entry) => normalizeProductSearchFacet(entry))
+      : [],
+    sort_options: Array.isArray(assist.sort_options)
+      ? assist.sort_options.map((entry) => normalizeProductSearchSortOption(entry))
+      : [],
+  };
 }
 
 export function normalizeStorefrontCategory(value: unknown): StorefrontCategory {
@@ -337,6 +413,37 @@ export function normalizeNotificationPreferenceList(value: unknown): Notificatio
     : [];
 }
 
+export function normalizeNotificationInboxItem(value: unknown): NotificationInboxItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(item.id),
+    user_id: normalizeString(item.user_id),
+    topic: normalizeString(item.topic),
+    routing_key: normalizeString(item.routing_key),
+    delivery_status: normalizeString(item.delivery_status),
+    visible_to_user:
+      item.visible_to_user === undefined ? undefined : normalizeBoolean(item.visible_to_user),
+    attempt_count:
+      item.attempt_count === undefined ? undefined : normalizeNumber(item.attempt_count),
+    last_error: normalizeString(item.last_error) || undefined,
+    next_retry_at: normalizeString(item.next_retry_at) || undefined,
+    title: normalizeString(item.title),
+    message: normalizeString(item.message),
+    action_href: normalizeString(item.action_href) || undefined,
+    action_label: normalizeString(item.action_label) || undefined,
+    order_id: normalizeString(item.order_id) || undefined,
+    payment_id: normalizeString(item.payment_id) || undefined,
+    return_id: normalizeString(item.return_id) || undefined,
+    created_at: normalizeString(item.created_at),
+    read_at: normalizeString(item.read_at) || undefined,
+  };
+}
+
+export function normalizeNotificationInboxList(value: unknown): NotificationInboxItem[] {
+  return Array.isArray(value) ? value.map((item) => normalizeNotificationInboxItem(item)) : [];
+}
+
 export function normalizeShippingAddress(value: unknown): ShippingAddress | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -425,6 +532,95 @@ export function normalizeOrderEvent(value: unknown): OrderEvent {
 
 export function normalizeOrderEventList(value: unknown): OrderEvent[] {
   return Array.isArray(value) ? value.map((item) => normalizeOrderEvent(item)) : [];
+}
+
+export function normalizeReturnItem(value: unknown): ReturnItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(item.id),
+    return_id: normalizeString(item.return_id),
+    order_item_id: normalizeString(item.order_item_id),
+    product_id: normalizeString(item.product_id),
+    quantity: normalizeNumber(item.quantity),
+    reason: normalizeString(item.reason) || undefined,
+    created_at: normalizeString(item.created_at),
+    updated_at: normalizeString(item.updated_at),
+  };
+}
+
+export function normalizeReturnEvent(value: unknown): ReturnEvent {
+  const event = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(event.id),
+    return_id: normalizeString(event.return_id),
+    status: normalizeString(event.status),
+    actor_id: normalizeString(event.actor_id) || undefined,
+    actor_role: normalizeString(event.actor_role) || undefined,
+    message: normalizeString(event.message),
+    created_at: normalizeString(event.created_at),
+  };
+}
+
+export function normalizeReturnEvidence(value: unknown): ReturnEvidence {
+  const evidence = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(evidence.id),
+    return_id: normalizeString(evidence.return_id),
+    file_name: normalizeString(evidence.file_name),
+    content_type: normalizeString(evidence.content_type),
+    size_bytes: normalizeNumber(evidence.size_bytes),
+    url: normalizeString(evidence.url),
+    uploaded_by: normalizeString(evidence.uploaded_by) || undefined,
+    uploaded_by_role: normalizeString(evidence.uploaded_by_role) || undefined,
+    created_at: normalizeString(evidence.created_at),
+  };
+}
+
+export function normalizeReturnRequest(value: unknown): ReturnRequest {
+  const request = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(request.id),
+    order_id: normalizeString(request.order_id),
+    user_id: normalizeString(request.user_id),
+    user_email: normalizeString(request.user_email) || undefined,
+    status: normalizeString(request.status),
+    reason: normalizeString(request.reason),
+    items: Array.isArray(request.items)
+      ? request.items.map((item) => normalizeReturnItem(item))
+      : [],
+    events: Array.isArray(request.events)
+      ? request.events.map((event) => normalizeReturnEvent(event))
+      : [],
+    evidence: Array.isArray(request.evidence)
+      ? request.evidence.map((entry) => normalizeReturnEvidence(entry))
+      : [],
+    refund_amount:
+      typeof request.refund_amount === "number" && Number.isFinite(request.refund_amount)
+        ? request.refund_amount
+        : undefined,
+    refund_charge_payment_id:
+      normalizeString(request.refund_charge_payment_id) || undefined,
+    refund_payment_id: normalizeString(request.refund_payment_id) || undefined,
+    refund_last_error: normalizeString(request.refund_last_error) || undefined,
+    refund_attempt_count:
+      typeof request.refund_attempt_count === "number" &&
+      Number.isFinite(request.refund_attempt_count)
+        ? request.refund_attempt_count
+        : undefined,
+    refund_requested_at: normalizeString(request.refund_requested_at) || undefined,
+    refund_completed_at: normalizeString(request.refund_completed_at) || undefined,
+    refund_next_retry_at: normalizeString(request.refund_next_retry_at) || undefined,
+    created_at: normalizeString(request.created_at),
+    updated_at: normalizeString(request.updated_at),
+  };
+}
+
+export function normalizeReturnRequestList(value: unknown): ReturnRequest[] {
+  return Array.isArray(value) ? value.map((item) => normalizeReturnRequest(item)) : [];
 }
 
 export function normalizeReturnEligibilityItem(value: unknown): ReturnEligibilityItem {
@@ -558,6 +754,35 @@ export function normalizeProductSearchAnalyticsEntry(
   };
 }
 
+export function normalizeProductSearchClickAnalyticsEntry(
+  value: unknown,
+): ProductSearchClickAnalyticsEntry {
+  const entry = isRecord(value) ? value : {};
+
+  return {
+    query: normalizeString(entry.query),
+    source: normalizeString(entry.source),
+    category: normalizeString(entry.category) || undefined,
+    click_count: normalizeNumber(entry.click_count),
+    last_seen_at: normalizeString(entry.last_seen_at),
+  };
+}
+
+export function normalizeProductSearchFilterAnalyticsEntry(
+  value: unknown,
+): ProductSearchFilterAnalyticsEntry {
+  const entry = isRecord(value) ? value : {};
+
+  return {
+    source: normalizeString(entry.source),
+    category: normalizeString(entry.category) || undefined,
+    filter_key: normalizeString(entry.filter_key),
+    filter_value: normalizeString(entry.filter_value),
+    apply_count: normalizeNumber(entry.apply_count),
+    last_seen_at: normalizeString(entry.last_seen_at),
+  };
+}
+
 export function normalizeProductSearchAnalyticsSummary(
   value: unknown,
 ): ProductSearchAnalyticsSummary {
@@ -570,6 +795,14 @@ export function normalizeProductSearchAnalyticsSummary(
       : [],
     zero_result_queries: Array.isArray(summary.zero_result_queries)
       ? summary.zero_result_queries.map((entry) => normalizeProductSearchAnalyticsEntry(entry))
+      : [],
+    top_clicked_queries: Array.isArray(summary.top_clicked_queries)
+      ? summary.top_clicked_queries.map((entry) =>
+          normalizeProductSearchClickAnalyticsEntry(entry)
+        )
+      : [],
+    top_filters: Array.isArray(summary.top_filters)
+      ? summary.top_filters.map((entry) => normalizeProductSearchFilterAnalyticsEntry(entry))
       : [],
   };
 }

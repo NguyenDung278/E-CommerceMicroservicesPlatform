@@ -1,13 +1,13 @@
 id,category_slug,section_type,position,payload,published
-30000000-0000-4000-8000-000000000001,shop-men,hero-banner,1,"{""variant"":""dark-immersive"",""title"":""Structured Essentials"",""subtitle"":""Twelve menswear products seeded for local catalog demos.""}",true
+30000000-0000-4000-8000-000000000001,shop-men,hero-banner,1,"{""variant"":""dark-immersive"",""title"":""Structured Essentials""}",true
 30000000-0000-4000-8000-000000000002,shop-men,product-grid,2,"{""columns"":4,""productIds"":[""SM-001"",""SM-002"",""SM-003"",""SM-004"",""SM-005"",""SM-006""]}",true
 30000000-0000-4000-8000-000000000003,shop-men,story-block,3,"{""heading"":""Material Study"",""body"":""Dense wool, washed linen, and refined cotton give the men's sample catalog a sharper backbone.""}",true
-30000000-0000-4000-8000-000000000004,atelier-women,hero-banner,1,"{""variant"":""light-editorial"",""title"":""Quiet Luxury Pieces"",""subtitle"":""Twelve women's products seeded for local editorial demos.""}",true
+30000000-0000-4000-8000-000000000004,atelier-women,hero-banner,1,"{""variant"":""light-editorial"",""title"":""Quiet Luxury Pieces""}",true
 30000000-0000-4000-8000-000000000005,atelier-women,product-grid,2,"{""columns"":4,""productIds"":[""AW-001"",""AW-002"",""AW-003"",""AW-004"",""AW-005"",""AW-006""]}",true
 30000000-0000-4000-8000-000000000006,atelier-women,story-block,3,"{""heading"":""Soft Structure"",""body"":""Fluid dresses, sculptural coats, and richer knit textures define the women's sample catalog.""}",true
-30000000-0000-4000-8000-000000000007,footwear,hero-banner,1,"{""variant"":""workshop-editorial"",""title"":""Workshop Built"",""subtitle"":""Twelve footwear products seeded for local catalog demos.""}",true
+30000000-0000-4000-8000-000000000007,footwear,hero-banner,1,"{""variant"":""workshop-editorial"",""title"":""Workshop Built""}",true
 30000000-0000-4000-8000-000000000008,footwear,product-grid,2,"{""columns"":4,""productIds"":[""FW-001"",""FW-002"",""FW-003"",""FW-004"",""FW-005"",""FW-006""]}",true
 30000000-0000-4000-8000-000000000009,footwear,story-block,3,"{""heading"":""Craft & Hardware"",""body"":""Edge finishing, leather character, and durable hardware shape the footwear sample catalog.""}",true
-30000000-0000-4000-8000-000000000010,accessories,hero-banner,1,"{""variant"":""warm-object-study"",""title"":""Objects In Focus"",""subtitle"":""Twelve accessories products seeded for local editorial demos.""}",true
+30000000-0000-4000-8000-000000000010,accessories,hero-banner,1,"{""variant"":""warm-object-study"",""title"":""Objects In Focus""}",true
 30000000-0000-4000-8000-000000000011,accessories,product-grid,2,"{""columns"":4,""productIds"":[""AC-001"",""AC-002"",""AC-003"",""AC-004"",""AC-005"",""AC-006""]}",true
 30000000-0000-4000-8000-000000000012,accessories,story-block,3,"{""heading"":""Finishing Pieces"",""body"":""Bags, jewelry, belts, and softer fabric accents keep the accessories sample set balanced.""}",true

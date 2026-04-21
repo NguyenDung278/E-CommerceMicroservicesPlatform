@@ -291,6 +291,29 @@ export type NotificationPreference = {
   updated_at: string;
 };
 
+export type NotificationInboxItem = {
+  id: string;
+  user_id: string;
+  topic: string;
+  routing_key: string;
+  delivery_status: string;
+  visible_to_user?: boolean;
+  attempt_count?: number;
+  last_error?: string;
+  next_retry_at?: string;
+  title: string;
+  message: string;
+  action_href?: string;
+  action_label?: string;
+  order_id?: string;
+  payment_id?: string;
+  return_id?: string;
+  created_at: string;
+  read_at?: string;
+};
+
+export type NotificationDeliveryAuditItem = NotificationInboxItem;
+
 export type ShippingAddress = {
   recipient_name: string;
   phone: string;
@@ -513,10 +536,29 @@ export type ProductSearchAnalyticsEntry = {
   last_seen_at: string;
 };
 
+export type ProductSearchClickAnalyticsEntry = {
+  query: string;
+  source: string;
+  category?: string;
+  click_count: number;
+  last_seen_at: string;
+};
+
+export type ProductSearchFilterAnalyticsEntry = {
+  source: string;
+  category?: string;
+  filter_key: string;
+  filter_value: string;
+  apply_count: number;
+  last_seen_at: string;
+};
+
 export type ProductSearchAnalyticsSummary = {
   window_days: number;
   top_queries: ProductSearchAnalyticsEntry[];
   zero_result_queries: ProductSearchAnalyticsEntry[];
+  top_clicked_queries: ProductSearchClickAnalyticsEntry[];
+  top_filters: ProductSearchFilterAnalyticsEntry[];
 };
 
 export type AdminOrderTopProduct = {

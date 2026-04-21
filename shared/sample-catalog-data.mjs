@@ -297,13 +297,11 @@ export const sampleCatalogCollections = [
     ],
     seo: {
       title: "Women's Atelier",
-      description: "Quiet luxury silhouettes, soft structure, and tactile layers seeded for local demos.",
     },
     editorial: {
       heroBanner: {
         variant: "light-editorial",
         title: "Quiet Luxury Pieces",
-        subtitle: "Twelve women's products seeded for local editorial demos.",
       },
       storyBlock: {
         heading: "Soft Structure",

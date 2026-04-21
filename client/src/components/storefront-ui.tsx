@@ -160,11 +160,13 @@ export function ProductCard({
   saved,
   actionSlot,
   footerSlot,
+  onNavigate,
 }: {
   product: Product;
   saved?: boolean;
   actionSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
+  onNavigate?: () => void;
 }) {
   const images = getProductImages(product.image_url, product.image_urls);
   const previewImage = images[0] || fallbackImageForProduct(product.name);
@@ -173,7 +175,11 @@ export function ProductCard({
 
   return (
     <article className="group">
-      <Link href={`/products/${product.id}`} className="block overflow-hidden rounded-[1.25rem]">
+      <Link
+        href={`/products/${product.id}`}
+        className="block overflow-hidden rounded-[1.25rem]"
+        onClick={onNavigate}
+      >
         <div className="relative aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-surface-container mb-5">
           <StorefrontImage
             alt={product.name}
@@ -195,7 +201,11 @@ export function ProductCard({
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
               {product.brand || "Commerce Platform"}
             </p>
-            <Link href={`/products/${product.id}`} className="mt-2 block font-serif text-[1.7rem] font-semibold leading-[1.1] tracking-[-0.03em] text-primary">
+            <Link
+              href={`/products/${product.id}`}
+              className="mt-2 block font-serif text-[1.7rem] font-semibold leading-[1.1] tracking-[-0.03em] text-primary"
+              onClick={onNavigate}
+            >
               {product.name}
             </Link>
           </div>

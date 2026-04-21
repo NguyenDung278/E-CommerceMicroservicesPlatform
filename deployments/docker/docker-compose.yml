@@ -167,13 +167,13 @@ services:
     depends_on:
       api-gateway:
         condition: service_started
-      frontend:
+      client:
         condition: service_started
     networks:
       - ecommerce-network
 
-  # Primary Compose UI path. The Next.js client is still run separately on the
-  # host, but its standalone runtime is supported for smoke tests.
+  # Admin/workbook runtime kept on Vite so local operations tooling and the
+  # admin console stay stable while shopper traffic moves to the Next.js client.
   frontend:
     build:
       context: ../..
@@ -186,11 +186,8 @@ services:
     networks:
       - ecommerce-network
 
-  # Optional storefront/account smoke-test runtime. This is intentionally kept
-  # behind a profile until the repo finishes choosing the long-term storefront
-  # entrypoint and admin remains on the Vite frontend.
+  # Primary storefront/account runtime.
   client:
-    profiles: ["client"]
     build:
       context: ../..
       dockerfile: client/Dockerfile
@@ -247,7 +244,7 @@ services:
       CONFIG_PATH: /config/config.yaml
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:4173}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -367,7 +364,7 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
-      PAYMENT_GATEWAY_MOMO_RETURN_URL: ${PAYMENT_GATEWAY_MOMO_RETURN_URL:-http://localhost:4173/payments}
+      PAYMENT_GATEWAY_MOMO_RETURN_URL: ${PAYMENT_GATEWAY_MOMO_RETURN_URL:-http://localhost:3000/payments}
     volumes:
       - ./config/payment-service.yaml:/config/config.yaml
     networks:
@@ -391,6 +388,7 @@ services:
     environment:
       CONFIG_PATH: /config/config.yaml
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/notification-service.yaml:/config/config.yaml
     networks:

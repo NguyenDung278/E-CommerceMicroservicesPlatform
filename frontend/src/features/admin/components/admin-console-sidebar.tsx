@@ -21,7 +21,6 @@ export function AdminConsoleSidebar({
     <aside className="admin-console-sidebar">
       <div className="admin-console-sidebar-brand">
         <span className="admin-console-sidebar-mark">ND Admin</span>
-        <p>Manage sales, catalog updates, offers, orders, and customer access from one place.</p>
       </div>
 
       <div className="admin-console-sidebar-groups">

@@ -24,6 +24,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public.GET("", h.forward)
 	public.GET("/batch", h.forward)
 	public.GET("/search/assist", h.forward)
+	public.POST("/analytics/search/events", h.forward)
 	public.GET("/:id", h.forward)
 	public.GET("/:id/reviews", h.forward)
 

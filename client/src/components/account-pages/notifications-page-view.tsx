@@ -9,7 +9,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrderPayments } from "@/hooks/useOrderPayments";
 import { userApi } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors/handler";
-import type { NotificationPreference, WishlistAlert } from "@/types/api";
+import type {
+  NotificationInboxItem,
+  NotificationPreference,
+  WishlistAlert,
+} from "@/types/api";
 import {
   formatCurrency,
   formatShortDate,
@@ -33,8 +37,10 @@ export function NotificationsPageView() {
   const { orders, paymentsByOrder } = useOrderPayments(token);
   const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
   const [wishlistAlerts, setWishlistAlerts] = useState<WishlistAlert[]>([]);
+  const [notificationInbox, setNotificationInbox] = useState<NotificationInboxItem[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busyTopic, setBusyTopic] = useState("");
+  const [isMarkingInboxRead, setIsMarkingInboxRead] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -50,21 +56,26 @@ export function NotificationsPageView() {
     void Promise.allSettled([
       userApi.listNotificationPreferences(token),
       userApi.listWishlistAlerts(token),
+      userApi.listNotificationInbox(token, 20),
     ]).then((results) => {
       if (!active) {
         return;
       }
 
-      const [preferencesResult, alertsResult] = results;
+      const [preferencesResult, alertsResult, inboxResult] = results;
       if (preferencesResult.status === "fulfilled") {
         setPreferences(preferencesResult.value.data);
       }
       if (alertsResult.status === "fulfilled") {
         setWishlistAlerts(alertsResult.value.data);
       }
+      if (inboxResult.status === "fulfilled") {
+        setNotificationInbox(inboxResult.value.data);
+      }
       if (
         preferencesResult.status === "rejected" &&
-        alertsResult.status === "rejected"
+        alertsResult.status === "rejected" &&
+        inboxResult.status === "rejected"
       ) {
         setFeedback(getErrorMessage(preferencesResult.reason));
       }
@@ -90,12 +101,13 @@ export function NotificationsPageView() {
     [wishlistAlerts],
   );
 
-  const feed = useMemo(() => {
+  const fallbackFeed = useMemo(() => {
     const items: Array<{
       id: string;
       title: string;
       description: string;
       href: string;
+      unread?: boolean;
     }> = [];
 
     if (orders[0]) {
@@ -128,6 +140,20 @@ export function NotificationsPageView() {
     return items;
   }, [latestPayment, orders, user?.email_verified]);
 
+  const inboxFeed = useMemo(
+    () =>
+      notificationInbox.map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: `${buildDeliveryStatusLabel(item.delivery_status)} · ${formatShortDate(item.created_at)} · ${item.message}`,
+        href: item.action_href || "/notifications",
+        unread: !item.read_at,
+      })),
+    [notificationInbox],
+  );
+  const feed = inboxFeed.length > 0 ? inboxFeed : fallbackFeed;
+  const unreadInboxCount = notificationInbox.filter((item) => !item.read_at).length;
+
   async function handleToggle(topic: string, enabled: boolean) {
     if (!token) {
       return;
@@ -144,6 +170,28 @@ export function NotificationsPageView() {
       setFeedback(getErrorMessage(reason));
     } finally {
       setBusyTopic("");
+    }
+  }
+
+  async function handleMarkInboxRead() {
+    if (!token || unreadInboxCount === 0) {
+      return;
+    }
+
+    try {
+      setIsMarkingInboxRead(true);
+      await userApi.markNotificationInboxRead(token, { mark_all: true });
+      const now = new Date().toISOString();
+      setNotificationInbox((current) =>
+        current.map((item) => ({
+          ...item,
+          read_at: item.read_at || now,
+        })),
+      );
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsMarkingInboxRead(false);
     }
   }
 
@@ -213,15 +261,31 @@ export function NotificationsPageView() {
       </SurfaceCard>
 
       <SurfaceCard className="p-6">
-        <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-          Activity feed
-        </h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+            Inbox & delivery history
+          </h2>
+          {notificationInbox.length > 0 ? (
+            <button
+              type="button"
+              className="text-sm font-medium text-primary underline"
+              disabled={isMarkingInboxRead || unreadInboxCount === 0}
+              onClick={() => void handleMarkInboxRead()}
+            >
+              {isMarkingInboxRead ? "Marking..." : `Mark all read${unreadInboxCount > 0 ? ` (${unreadInboxCount})` : ""}`}
+            </button>
+          ) : null}
+        </div>
         <div className="mt-6 grid gap-4">
           {feed.map((item) => (
             <Link
               key={item.id}
               href={item.href}
-              className="rounded-[1.5rem] bg-surface p-5 transition hover:bg-surface-container-high"
+              className={
+                item.unread
+                  ? "rounded-[1.5rem] bg-surface-container-low p-5 transition hover:bg-surface-container-high"
+                  : "rounded-[1.5rem] bg-surface p-5 transition hover:bg-surface-container-high"
+              }
             >
               <p className="font-semibold text-primary">{item.title}</p>
               <p className="mt-3 text-sm leading-7 text-on-surface-variant">{item.description}</p>
@@ -231,6 +295,16 @@ export function NotificationsPageView() {
       </SurfaceCard>
     </AccountShell>
   );
+}
+
+function buildDeliveryStatusLabel(status: string) {
+  if (status === "suppressed") {
+    return "Email off";
+  }
+  if (status === "delivered") {
+    return "Email sent";
+  }
+  return status || "Recorded";
 }
 
 function buildWishlistAlertTitle(alert: WishlistAlert) {

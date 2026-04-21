@@ -18,3 +18,4 @@ services:
   cart_service: "http://cart-service:8083"
   order_service: "http://order-service:8084"
   payment_service: "http://payment-service:8085"
+  notification_service: "http://notification-service:8086"

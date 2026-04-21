@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
@@ -42,7 +43,7 @@ type ServiceProxy struct {
 //   - O(1); construction only stores configuration and shared client state.
 func NewServiceProxy(baseURL string, log *zap.Logger) *ServiceProxy {
 	return &ServiceProxy{
-		baseURL: baseURL,
+		baseURL: normalizeBaseURL(baseURL),
 		log:     log,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
@@ -66,4 +67,15 @@ func NewServiceProxy(baseURL string, log *zap.Logger) *ServiceProxy {
 		}),
 		maxRetries: 2,
 	}
+}
+
+func normalizeBaseURL(value string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(value), "/")
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
+		return trimmed
+	}
+	return "http://" + trimmed
 }

@@ -5,6 +5,7 @@ import {
   normalizeProductPopularity,
   normalizeProductReview,
   normalizeProductReviewList,
+  normalizeProductSearchAssist,
 } from "@/lib/api/normalizers";
 import type {
   ApiEnvelope,
@@ -12,6 +13,7 @@ import type {
   ProductPopularity,
   ProductReview,
   ProductReviewList,
+  ProductSearchAssist,
   UploadedProductImages,
 } from "@/types/api";
 
@@ -25,7 +27,7 @@ export interface ProductListOptions {
   maxPrice?: number;
   size?: string;
   color?: string;
-  sort?: "latest" | "price_asc" | "price_desc" | "popular";
+  sort?: "latest" | "price_asc" | "price_desc" | "popular" | "merchandising";
   limit?: number;
   cursor?: string;
 }
@@ -38,6 +40,22 @@ export interface ProductReviewListOptions {
 export interface ProductReviewData {
   rating: number;
   comment?: string;
+}
+
+export interface SearchAssistOptions {
+  query?: string;
+  category?: string;
+  status?: string;
+  limit?: number;
+}
+
+export interface SearchAnalyticsEventData {
+  source: string;
+  event_kind: "result_click" | "filter_apply";
+  query?: string;
+  category?: string;
+  filter_key?: string;
+  filter_value?: string;
 }
 
 export const productApi = {
@@ -83,6 +101,29 @@ export const productApi = {
       ...response,
       data: normalizeProductList(response.data),
     }));
+  },
+
+  getSearchAssist(options: SearchAssistOptions = {}): Promise<ApiEnvelope<ProductSearchAssist>> {
+    const params = new URLSearchParams();
+    params.set("limit", String(options.limit ?? 8));
+
+    if (options.query) params.set("q", options.query);
+    if (options.category) params.set("category", options.category);
+    if (options.status) params.set("status", options.status);
+
+    return request<unknown>(`/api/v1/products/search/assist?${params.toString()}`).then(
+      (response) => ({
+        ...response,
+        data: normalizeProductSearchAssist(response.data),
+      }),
+    );
+  },
+
+  recordSearchEvent(body: SearchAnalyticsEventData): Promise<ApiEnvelope<{ accepted: boolean }>> {
+    return request<{ accepted: boolean }>("/api/v1/products/analytics/search/events", {
+      method: "POST",
+      body,
+    });
   },
 
   listProductReviews(productId: string, options: ProductReviewListOptions = {}): Promise<ApiEnvelope<ProductReviewList>> {

@@ -14,24 +14,37 @@ import (
 type RetryPublisher struct {
 	ch        *amqp.Channel
 	queueName string
+	baseDelay time.Duration
+	maxDelay  time.Duration
 	mu        sync.Mutex
 }
 
-func NewRetryPublisher(ch *amqp.Channel, queueName string) *RetryPublisher {
+func NewRetryPublisher(ch *amqp.Channel, queueName string, baseDelay, maxDelay time.Duration) *RetryPublisher {
+	if baseDelay <= 0 {
+		baseDelay = 30 * time.Second
+	}
+	if maxDelay < baseDelay {
+		maxDelay = baseDelay
+	}
 	return &RetryPublisher{
 		ch:        ch,
 		queueName: queueName,
+		baseDelay: baseDelay,
+		maxDelay:  maxDelay,
 	}
 }
 
-func (p *RetryPublisher) Publish(ctx context.Context, msg amqp.Delivery, retryCount int, firstSeenAt time.Time) error {
+func (p *RetryPublisher) Publish(ctx context.Context, msg amqp.Delivery, retryCount int, firstSeenAt time.Time) (time.Time, time.Duration, error) {
 	if p == nil || p.ch == nil {
-		return fmt.Errorf("retry publisher is not configured")
+		return time.Time{}, 0, fmt.Errorf("retry publisher is not configured")
 	}
 
 	headers := cloneHeaders(msg.Headers)
 	headers[HeaderRetryCount] = retryCount
 	headers[HeaderFirstSeen] = firstSeenAt.UTC().Format(time.RFC3339Nano)
+	delay := p.delayForRetry(retryCount)
+	nextRetryAt := time.Now().UTC().Add(delay)
+	headers[HeaderNextRetryAt] = nextRetryAt.Format(time.RFC3339Nano)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -48,16 +61,35 @@ func (p *RetryPublisher) Publish(ctx context.Context, msg amqp.Delivery, retryCo
 			DeliveryMode:    amqp.Persistent,
 			Body:            msg.Body,
 			Headers:         headers,
+			Expiration:      fmt.Sprintf("%d", delay.Milliseconds()),
 			MessageId:       messageIDFromDelivery(msg),
 			Timestamp:       time.Now(),
 			Type:            msg.Type,
 			AppId:           msg.AppId,
 		},
 	); err != nil {
-		return fmt.Errorf("failed to publish notification retry message: %w", err)
+		return time.Time{}, 0, fmt.Errorf("failed to publish notification retry message: %w", err)
 	}
 
-	return nil
+	return nextRetryAt, delay, nil
+}
+
+func (p *RetryPublisher) delayForRetry(retryCount int) time.Duration {
+	if retryCount <= 1 {
+		return p.baseDelay
+	}
+
+	delay := p.baseDelay
+	for attempt := 1; attempt < retryCount; attempt++ {
+		if delay >= p.maxDelay/2 {
+			return p.maxDelay
+		}
+		delay *= 2
+	}
+	if delay > p.maxDelay {
+		return p.maxDelay
+	}
+	return delay
 }
 
 func cloneHeaders(source amqp.Table) amqp.Table {

@@ -36,6 +36,7 @@ type fakeMediaStore struct{}
 
 type fakeSearchAnalyticsRepo struct {
 	summary *model.ProductSearchAnalyticsSummary
+	events  []repository.SearchAnalyticsEventRecord
 }
 
 func (r *fakeProductRepo) Create(_ context.Context, product *model.Product) error {
@@ -241,6 +242,11 @@ func (r *fakeProductRepo) ApplyReviewSummaryDelta(_ context.Context, _ string, _
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
 
 func (r *fakeSearchAnalyticsRepo) RecordQuery(_ context.Context, _ repository.SearchAnalyticsRecord) error {
+	return nil
+}
+
+func (r *fakeSearchAnalyticsRepo) RecordEvent(_ context.Context, record repository.SearchAnalyticsEventRecord) error {
+	r.events = append(r.events, record)
 	return nil
 }
 
@@ -532,6 +538,33 @@ func TestGetSearchAnalyticsAllowsAdminRole(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte(`"archive coat"`)) {
 		t.Fatalf("expected top query payload, got %s", rec.Body.String())
+	}
+}
+
+func TestRecordSearchEventAcceptsPublicFilterEvent(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+
+	analyticsRepo := &fakeSearchAnalyticsRepo{}
+	productService := service.NewProductService(&fakeProductRepo{}, service.WithSearchAnalytics(analyticsRepo))
+	handler := NewProductHandler(productService, nil)
+	handler.RegisterRoutes(e, "unused-secret")
+
+	body := strings.NewReader(`{"source":"catalog","event_kind":"filter_apply","filter_key":"brand","filter_value":"Acme","category":"outerwear"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/products/analytics/search/events", body)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(analyticsRepo.events) != 1 {
+		t.Fatalf("expected one analytics event, got %d", len(analyticsRepo.events))
+	}
+	if analyticsRepo.events[0].EventKind != "filter_apply" || analyticsRepo.events[0].FilterKey != "brand" {
+		t.Fatalf("unexpected analytics event: %#v", analyticsRepo.events[0])
 	}
 }
 

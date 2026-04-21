@@ -28,104 +28,68 @@ Các nhãn trạng thái:
 
 ## 1. Commerce UX Và Feature Parity
 
-### P1 · Partial · Shopper Return Flow Chưa Có Trong `client/`
+### P1 · Partial · Storefront Ownership Đã Được Promote, Còn Thiếu Rollout Discipline
 
 Hiện trạng:
 
-- backend đã có create/list/detail/evidence cho returns
-- `frontend/` đã có returns center
-- `client/` hiện mới đọc được `return eligibility` ở order detail
-- `client/` vẫn chưa có returns center, return detail, create return, hoặc upload evidence
-
-Tác động:
-
-- App Router storefront/account chưa khép kín post-purchase lifecycle
+- `client/` là shopper app dài hạn cho storefront/account và đã được publish/deploy trong pipeline
+- `frontend/` là admin/workbook app và vẫn chạy song song để hỗ trợ local operations
+- rủi ro còn lại là vô tình thêm feature shopper mới vào `frontend/` khi đã có `client`
 
 Gợi ý:
 
-- thêm returns list
-- thêm return detail
-- thêm create return từ order detail
-- thêm upload evidence
+- giữ review discipline để feature shopper mới chỉ đi vào `client/`
+- tiếp tục smoke test OAuth, payment return và asset pipeline trên `client` sau các lần đổi infra
 
-### P1 · Partial · Payment Method Parity Giữa Hai UI Chưa Thống Nhất
-
-Hiện trạng:
-
-- `client/` expose nhiều method hơn
-- `frontend/` checkout hiện nghiêng về `manual` và `momo`
-- backend/payment layer đang rộng hơn một số surface UI
-
-Gợi ý:
-
-- chốt danh sách method thực sự muốn support cho local/runtime
-- ẩn những method chưa có flow hoàn chỉnh
-
-### P2 · Partial · Search Assist Và Facet Chưa Đồng Bộ Sang `client/`
-
-Hiện trạng:
-
-- backend đã có `search/assist`
-- `frontend/` đã tận dụng facet/suggestion tốt hơn
-- `client/` catalog chưa bám theo capability này
-
-Gợi ý:
-
-- autocomplete
-- facet theo category/size/color/price
-- sort option bám response backend
-
----
-
-## 2. Admin, Reporting, Và Runtime Direction
-
-### P1 · Partial · Admin Surface Mới Chỉ Thật Sự Hoàn Chỉnh Ở `frontend/`
+### P1 · Partial · Admin Surface Cố Ý Ở `frontend/`, Chưa Nên Nhân Đôi Sang `client/`
 
 Hiện trạng:
 
 - backend đã có admin orders, payments, coupons, returns queue, users
-- `frontend/` có admin console rõ hơn nhiều
-- `client/` mới có rất ít admin-facing surface
+- `frontend/` đã có admin console dùng được
+- `client/` không nên tiếp tục nhận thêm admin surface trừ khi repo tách một admin app riêng
 
 Gợi ý:
 
-- nếu `client/` là hướng dài hạn, cần plan migrate admin rõ ràng
-- nếu không, nên giữ `frontend/` như admin app và nói rõ điều đó trong docs/runtime
+- ưu tiên làm sâu admin workflow trong `frontend/`
+- dùng `client/` cho shopper/account, tránh lặp cùng một feature ở hai app
 
-### P1 · Decision · Chốt Vai Trò `frontend/` Và `client/`
+### P2 · Partial · Search Analytics Đã Có Query, Click, Và Filter-Level
 
-Điều cần chốt:
+Hiện trạng:
 
-- storefront dài hạn thuộc app nào
-- admin ở lại `frontend/` hay tách riêng
-- CI/CD và publish image sẽ bám app nào
-
-Nếu chưa chốt, tránh refactor lớn theo cả hai hướng cùng lúc.
-
-### P2 · Open · Order / Payment / Return Narrative Cho Support
-
-Mục tiêu:
-
-- giúp support đọc trạng thái đơn, payment, return nhanh hơn
+- backend đã có top queries, zero-result queries, click-through queries, và top filter combinations
+- chưa có conversion-ish signal hoặc funnel từ search -> cart -> order
 
 Gợi ý:
 
-- narrative timeline ít kỹ thuật hơn
-- deep link giữa order detail, payment detail, return detail
+- nếu muốn đi xa hơn, thêm conversion-ish signal nhẹ trước khi nghĩ tới stack analytics riêng
+
+### P2 · Partial · Notification Delivery Ops Đã Có Audit Và Exponential Backoff
+
+Hiện trạng:
+
+- đã có notification inbox, delivery history, preference gating, wishlist signals, admin audit, và exponential backoff
+- chưa có digest policy hoặc delivery analytics sâu theo channel/template
+
+Gợi ý:
+
+- thêm delivery analytics sâu theo channel/template nếu support cần tối ưu vận hành email
+- cân nhắc audit filtering theo routing key hoặc outcome khi backlog lớn hơn
 
 ---
 
-## 3. 5 Việc Nên Ưu Tiên Tiếp
+## 2. 5 Việc Nên Ưu Tiên Tiếp
 
-1. Hoàn thiện shopper return flow trong `client/`.
-2. Chốt payment method parity giữa backend, `frontend/`, và `client/`.
-3. Dùng search assist/facet thật trong `client/`.
-4. Chốt vai trò dài hạn của `frontend/` và `client/`.
-5. Thêm support narrative hoặc in-app inbox nếu muốn mở rộng notification experience sau lớp email hiện tại.
+1. Giữ `frontend/` tập trung vào admin/workbook và tránh nhận thêm feature shopper mới.
+2. Nếu muốn đi xa hơn ở search, thêm conversion-ish signal trước khi nghĩ tới stack analytics mới.
+3. Làm sâu hơn delivery analytics cho `notification-service` theo channel/template nếu support cần.
+4. Tiếp tục tối ưu các hot path admin còn dùng `COUNT(*) + OFFSET` khi dữ liệu lớn dần.
+5. Cân nhắc tách admin app riêng chỉ khi `frontend/` thực sự trở thành nút thắt vận hành.
 
 ---
 
-## 4. Cách Dùng Tracker Này
+## 3. Cách Dùng Tracker Này
 
 Khi một hạng mục hoàn thành thật sự:
 

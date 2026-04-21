@@ -9,6 +9,7 @@ import type {
   Address,
   ApiEnvelope,
   NotificationPreference,
+  NotificationInboxItem,
   UserProfile,
   WishlistAlert,
   WishlistItem,
@@ -17,6 +18,7 @@ import {
   normalizeAddress,
   normalizeAddressList,
   normalizeNotificationPreferenceList,
+  normalizeNotificationInboxList,
   normalizeUserProfile,
   normalizeUserProfileList,
   normalizeWishlistAlertList,
@@ -54,6 +56,10 @@ export interface UpdateNotificationPreferencesData {
     topic: string;
     enabled: boolean;
   }>;
+}
+
+export interface MarkNotificationInboxReadData {
+  mark_all: boolean;
 }
 
 export interface UploadAvatarResult {
@@ -176,6 +182,26 @@ export const userApi = {
       ...response,
       data: normalizeNotificationPreferenceList(response.data),
     }));
+  },
+
+  listNotificationInbox(token: string, limit = 20): Promise<ApiEnvelope<NotificationInboxItem[]>> {
+    return request<unknown>(`/api/v1/notifications/inbox?limit=${encodeURIComponent(String(limit))}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeNotificationInboxList(response.data),
+    }));
+  },
+
+  markNotificationInboxRead(
+    token: string,
+    body: MarkNotificationInboxReadData = { mark_all: true }
+  ): Promise<ApiEnvelope<{ updated_count: number }>> {
+    return request<{ updated_count: number }>("/api/v1/notifications/inbox/read", {
+      method: "PUT",
+      token,
+      body,
+    });
   },
 
   /**

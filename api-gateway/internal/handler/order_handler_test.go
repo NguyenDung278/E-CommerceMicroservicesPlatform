@@ -130,6 +130,24 @@ func TestPaymentHandlerRegisterRoutesParity(t *testing.T) {
 	)
 }
 
+func TestNotificationHandlerRegisterRoutesParity(t *testing.T) {
+	e := echo.New()
+	handler := &NotificationHandler{forward: testForwardHandler()}
+
+	handler.RegisterRoutes(e, "test-secret")
+
+	assertRoutesPresent(t, e,
+		routeExpectation{method: http.MethodGet, path: "/api/v1/notifications/inbox"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/notifications/inbox/read"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/notifications/audit"},
+	)
+
+	assertRoutesAbsent(t, e,
+		routeExpectation{method: http.MethodPost, path: "/api/v1/notifications/inbox"},
+		routeExpectation{method: http.MethodDelete, path: "/api/v1/notifications/inbox/read"},
+	)
+}
+
 func TestProductHandlerRegisterRoutesParity(t *testing.T) {
 	e := echo.New()
 	handler := &ProductHandler{forward: testForwardHandler()}
@@ -140,6 +158,7 @@ func TestProductHandlerRegisterRoutesParity(t *testing.T) {
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products/batch"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products/search/assist"},
+		routeExpectation{method: http.MethodPost, path: "/api/v1/products/analytics/search/events"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products/:id"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products/:id/reviews"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/products/analytics/search"},

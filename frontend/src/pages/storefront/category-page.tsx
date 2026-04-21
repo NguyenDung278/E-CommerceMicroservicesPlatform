@@ -518,12 +518,12 @@ function EditorialCategoryPage({
     {
       label: "Curated pieces",
       value: String(products.length),
-      description: "Ready to browse",
+      description: "Số sản phẩm đang tham gia layout editorial của collection hiện tại.",
     },
     {
       label: "Editorial moments",
       value: String(pageData.sections.length),
-      description: "Stories shaping the edit",
+      description: "Các khối story, hero, và product grid được publish cho category page này.",
     },
     {
       label: "Price range",
@@ -533,7 +533,7 @@ function EditorialCategoryPage({
               Math.min(...products.map((product) => product.price))
             )} - ${formatCurrency(Math.max(...products.map((product) => product.price)))}`
           : "--",
-      description: "Current collection range",
+      description: "Khoảng giá nhanh để đọc độ rộng merchandising của bộ sưu tập hiện tại.",
     },
   ];
 

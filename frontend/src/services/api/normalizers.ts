@@ -15,6 +15,7 @@ import type {
   EmailVerificationChallenge,
   JsonObject,
   JsonValue,
+  NotificationInboxItem,
   NotificationPreference,
   Order,
   OrderEvent,
@@ -28,7 +29,9 @@ import type {
   ProductReview,
   ProductReviewList,
   ProductReviewSummary,
+  ProductSearchClickAnalyticsEntry,
   ProductSearchAnalyticsEntry,
+  ProductSearchFilterAnalyticsEntry,
   ProductSearchAnalyticsSummary,
   ProductSearchAssist,
   ProductSearchFacet,
@@ -478,6 +481,37 @@ export function normalizeNotificationPreferenceList(value: unknown): Notificatio
     : [];
 }
 
+export function normalizeNotificationInboxItem(value: unknown): NotificationInboxItem {
+  const item = isRecord(value) ? value : {};
+
+  return {
+    id: normalizeString(item.id),
+    user_id: normalizeString(item.user_id),
+    topic: normalizeString(item.topic),
+    routing_key: normalizeString(item.routing_key),
+    delivery_status: normalizeString(item.delivery_status),
+    visible_to_user:
+      item.visible_to_user === undefined ? undefined : normalizeBoolean(item.visible_to_user),
+    attempt_count:
+      item.attempt_count === undefined ? undefined : normalizeNumber(item.attempt_count),
+    last_error: normalizeString(item.last_error) || undefined,
+    next_retry_at: normalizeString(item.next_retry_at) || undefined,
+    title: normalizeString(item.title),
+    message: normalizeString(item.message),
+    action_href: normalizeString(item.action_href) || undefined,
+    action_label: normalizeString(item.action_label) || undefined,
+    order_id: normalizeString(item.order_id) || undefined,
+    payment_id: normalizeString(item.payment_id) || undefined,
+    return_id: normalizeString(item.return_id) || undefined,
+    created_at: normalizeString(item.created_at),
+    read_at: normalizeString(item.read_at) || undefined,
+  };
+}
+
+export function normalizeNotificationInboxList(value: unknown): NotificationInboxItem[] {
+  return Array.isArray(value) ? value.map((item) => normalizeNotificationInboxItem(item)) : [];
+}
+
 /**
  * Normalize shipping address
  */
@@ -899,6 +933,35 @@ export function normalizeProductSearchAnalyticsEntry(
   };
 }
 
+export function normalizeProductSearchClickAnalyticsEntry(
+  value: unknown,
+): ProductSearchClickAnalyticsEntry {
+  const entry = isRecord(value) ? value : {};
+
+  return {
+    query: normalizeString(entry.query),
+    source: normalizeString(entry.source),
+    category: normalizeString(entry.category) || undefined,
+    click_count: normalizeNumber(entry.click_count),
+    last_seen_at: normalizeString(entry.last_seen_at),
+  };
+}
+
+export function normalizeProductSearchFilterAnalyticsEntry(
+  value: unknown,
+): ProductSearchFilterAnalyticsEntry {
+  const entry = isRecord(value) ? value : {};
+
+  return {
+    source: normalizeString(entry.source),
+    category: normalizeString(entry.category) || undefined,
+    filter_key: normalizeString(entry.filter_key),
+    filter_value: normalizeString(entry.filter_value),
+    apply_count: normalizeNumber(entry.apply_count),
+    last_seen_at: normalizeString(entry.last_seen_at),
+  };
+}
+
 export function normalizeProductSearchAnalyticsSummary(
   value: unknown,
 ): ProductSearchAnalyticsSummary {
@@ -911,6 +974,14 @@ export function normalizeProductSearchAnalyticsSummary(
       : [],
     zero_result_queries: Array.isArray(summary.zero_result_queries)
       ? summary.zero_result_queries.map((entry) => normalizeProductSearchAnalyticsEntry(entry))
+      : [],
+    top_clicked_queries: Array.isArray(summary.top_clicked_queries)
+      ? summary.top_clicked_queries.map((entry) =>
+          normalizeProductSearchClickAnalyticsEntry(entry)
+        )
+      : [],
+    top_filters: Array.isArray(summary.top_filters)
+      ? summary.top_filters.map((entry) => normalizeProductSearchFilterAnalyticsEntry(entry))
       : [],
   };
 }

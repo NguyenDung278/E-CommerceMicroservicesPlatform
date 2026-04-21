@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import { Heart, PackagePlus, Search, SlidersHorizontal, X } from "lucide-react";
 import {
   Suspense,
+  useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -46,9 +47,23 @@ import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
 import type { CatalogPageInitialData } from "@/lib/storefront/initial-data";
 import { buildSearchParams, cn } from "@/lib/utils";
-import type { Product, ProductPopularity } from "@/types/api";
+import type {
+  Product,
+  ProductPopularity,
+  ProductSearchFacet,
+  ProductSearchFacetValue,
+  ProductSearchSuggestion,
+} from "@/types/api";
 
-type SortMode = "latest" | "price_asc" | "price_desc" | "popular";
+type SortMode = "latest" | "price_asc" | "price_desc" | "popular" | "merchandising";
+
+const defaultSortOptions: Array<{ label: string; value: SortMode }> = [
+  { value: "latest", label: "Mới nhất" },
+  { value: "merchandising", label: "Merchandising" },
+  { value: "price_asc", label: "Giá tăng dần" },
+  { value: "price_desc", label: "Giá giảm dần" },
+  { value: "popular", label: "Phổ biến" },
+];
 
 type FilterPanelProps = {
   mobileOpen: boolean;
@@ -63,6 +78,10 @@ type FilterPanelProps = {
   brandOptions: string[];
   sizeOptions: string[];
   colorOptions: string[];
+  categoryCounts: Record<string, number>;
+  brandCounts: Record<string, number>;
+  sizeCounts: Record<string, number>;
+  colorCounts: Record<string, number>;
   onClose: () => void;
   onCategoryChange: (value: string) => void;
   onBrandChange: (value: string) => void;
@@ -73,6 +92,46 @@ type FilterPanelProps = {
   onSavedOnlyChange: (value: boolean) => void;
   onReset: () => void;
 };
+
+function normalizeCatalogText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function buildFacetCountLookup(values: ProductSearchFacetValue[] | undefined) {
+  return Object.fromEntries(
+    (values ?? []).map((item) => [normalizeCatalogText(item.value), item.count] as const),
+  );
+}
+
+function readAssistFacetValues(facets: ProductSearchFacet[] | undefined, key: string) {
+  return facets?.find((facet) => normalizeCatalogText(facet.key) === normalizeCatalogText(key))
+    ?.values;
+}
+
+function buildOptionsFromValues(
+  values: string[],
+  counts: Record<string, number>,
+  fallbackValues: string[],
+) {
+  const normalizedValues = Object.keys(counts);
+  if (normalizedValues.length === 0) {
+    return fallbackValues;
+  }
+
+  return normalizedValues
+    .map((value) => {
+      const matchingValue = values.find(
+        (candidate) => normalizeCatalogText(candidate) === normalizeCatalogText(value),
+      );
+      return matchingValue || value;
+    })
+    .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+function buildFacetOptionLabel(value: string, counts: Record<string, number>) {
+  const count = counts[normalizeCatalogText(value)];
+  return typeof count === "number" && count > 0 ? `${value} (${count})` : value;
+}
 
 function applyCatalogClientTransforms(
   products: Product[],
@@ -145,6 +204,15 @@ function CatalogPageContent({
   const [isPending, startTransition] = useTransition();
   const skipInitialIndexLoad = useRef(Boolean(initialData));
   const skipInitialProductLoad = useRef(Boolean(initialData));
+  const [searchSuggestions, setSearchSuggestions] = useState<ProductSearchSuggestion[]>([]);
+  const [assistResultCount, setAssistResultCount] = useState(0);
+  const [searchHint, setSearchHint] = useState("");
+  const [sortOptions, setSortOptions] = useState(defaultSortOptions);
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
+  const [brandCounts, setBrandCounts] = useState<Record<string, number>>({});
+  const [sizeCounts, setSizeCounts] = useState<Record<string, number>>({});
+  const [colorCounts, setColorCounts] = useState<Record<string, number>>({});
+  const lastRecordedFilterSignature = useRef("");
 
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [category, setCategory] = useState(initialCategory ?? searchParams.get("category") ?? "");
@@ -247,6 +315,86 @@ function CatalogPageContent({
   }, [brand, category, color, deferredSearch, maxPrice, minPrice, pathname, router, savedOnly, size, sort]);
 
   useEffect(() => {
+    let active = true;
+
+    void productApi
+      .getSearchAssist({
+        query: deferredSearch.trim() || undefined,
+        category: category || undefined,
+        status: "active",
+        limit: 8,
+      })
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        const categoryFacetValues = readAssistFacetValues(response.data.facets, "category");
+        const brandFacetValues = readAssistFacetValues(response.data.facets, "brand");
+        const sizeFacetValues = readAssistFacetValues(response.data.facets, "size");
+        const colorFacetValues = readAssistFacetValues(response.data.facets, "color");
+
+        setSearchSuggestions(
+          response.data.suggestions.filter(
+            (suggestion) =>
+              normalizeCatalogText(suggestion.value) !== normalizeCatalogText(deferredSearch),
+          ),
+        );
+        setAssistResultCount(response.data.result_count);
+        setCategoryCounts(buildFacetCountLookup(categoryFacetValues));
+        setBrandCounts(buildFacetCountLookup(brandFacetValues));
+        setSizeCounts(buildFacetCountLookup(sizeFacetValues));
+        setColorCounts(buildFacetCountLookup(colorFacetValues));
+
+        const nextSortOptions = response.data.sort_options
+          .map((option) => ({
+            label: option.label,
+            value: option.value as SortMode,
+          }))
+          .filter((option) =>
+            ["latest", "price_asc", "price_desc", "popular", "merchandising"].includes(
+              option.value,
+            ),
+          );
+        setSortOptions(nextSortOptions.length > 0 ? nextSortOptions : defaultSortOptions);
+
+        if (response.data.applied_synonyms.length > 0) {
+          setSearchHint(`Bao gồm từ liên quan: ${response.data.applied_synonyms.join(", ")}.`);
+          return;
+        }
+
+        if (
+          response.data.resolved_query &&
+          normalizeCatalogText(response.data.resolved_query) !==
+            normalizeCatalogText(deferredSearch)
+        ) {
+          setSearchHint(`Đang hiển thị kết quả gần đúng cho "${response.data.resolved_query}".`);
+          return;
+        }
+
+        setSearchHint("");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        setSearchSuggestions([]);
+        setAssistResultCount(0);
+        setSearchHint("");
+        setSortOptions(defaultSortOptions);
+        setCategoryCounts({});
+        setBrandCounts({});
+        setSizeCounts({});
+        setColorCounts({});
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [category, deferredSearch]);
+
+  useEffect(() => {
     if (skipInitialProductLoad.current) {
       skipInitialProductLoad.current = false;
       return;
@@ -297,17 +445,25 @@ function CatalogPageContent({
 
   const categoryOptions = useMemo(
     () =>
-      Array.from(new Set(catalogIndex.map((product) => product.category).filter(Boolean))).sort(),
-    [catalogIndex],
+      buildOptionsFromValues(
+        catalogIndex.map((product) => product.category).filter(Boolean),
+        categoryCounts,
+        Array.from(new Set(catalogIndex.map((product) => product.category).filter(Boolean))).sort(),
+      ),
+    [catalogIndex, categoryCounts],
   );
   const brandOptions = useMemo(
     () =>
-      Array.from(new Set(catalogIndex.map((product) => product.brand).filter(Boolean))).sort(),
-    [catalogIndex],
+      buildOptionsFromValues(
+        catalogIndex.map((product) => product.brand).filter(Boolean),
+        brandCounts,
+        Array.from(new Set(catalogIndex.map((product) => product.brand).filter(Boolean))).sort(),
+      ),
+    [brandCounts, catalogIndex],
   );
   const sizeOptions = useMemo(
-    () =>
-      Array.from(
+    () => {
+      const fallbackValues = Array.from(
         new Set(
           catalogIndex.flatMap((product) =>
             product.variants
@@ -315,12 +471,14 @@ function CatalogPageContent({
               .filter((item): item is string => Boolean(item)),
           ),
         ),
-      ).sort(),
-    [catalogIndex],
+      ).sort();
+      return buildOptionsFromValues(fallbackValues, sizeCounts, fallbackValues);
+    },
+    [catalogIndex, sizeCounts],
   );
   const colorOptions = useMemo(
-    () =>
-      Array.from(
+    () => {
+      const fallbackValues = Array.from(
         new Set(
           catalogIndex.flatMap((product) =>
             product.variants
@@ -328,8 +486,10 @@ function CatalogPageContent({
               .filter((item): item is string => Boolean(item)),
           ),
         ),
-      ).sort(),
-    [catalogIndex],
+      ).sort();
+      return buildOptionsFromValues(fallbackValues, colorCounts, fallbackValues);
+    },
+    [catalogIndex, colorCounts],
   );
 
   const activeProduct =
@@ -338,6 +498,9 @@ function CatalogPageContent({
         catalogIndex.find((product) => product.id === activeProductId) ??
         null
       : null;
+  const isAssistSummaryActive = Boolean(
+    (deferredSearch.trim() || category) && !brand && !size && !color && !minPrice && !maxPrice && !savedOnly,
+  );
 
   function announce(message: string) {
     setAnnouncement(message);
@@ -377,6 +540,24 @@ function CatalogPageContent({
     setSavedOnly(false);
   }
 
+  function handleSelectSearchSuggestion(suggestion: ProductSearchSuggestion) {
+    startTransition(() => {
+      if (suggestion.kind === "category") {
+        setCategory(suggestion.value);
+        setSearch("");
+        return;
+      }
+
+      if (suggestion.kind === "brand") {
+        setBrand(suggestion.value);
+        setSearch("");
+        return;
+      }
+
+      setSearch(suggestion.value);
+    });
+  }
+
   function handleDragStart(event: DragStartEvent) {
     setActiveProductId(String(event.active.id));
   }
@@ -401,6 +582,68 @@ function CatalogPageContent({
     }
   }
 
+  const recordFilterAnalytics = useCallback((resultCount: number) => {
+    const normalizedSearch = deferredSearch.trim();
+    const activeFilters = [
+      category ? { key: "category", value: category } : null,
+      brand ? { key: "brand", value: brand } : null,
+      size ? { key: "size", value: size } : null,
+      color ? { key: "color", value: color } : null,
+      minPrice ? { key: "min_price", value: minPrice } : null,
+      maxPrice ? { key: "max_price", value: maxPrice } : null,
+      savedOnly ? { key: "saved", value: "1" } : null,
+    ].filter((entry): entry is { key: string; value: string } => Boolean(entry));
+
+    const signature = JSON.stringify({
+      search: normalizedSearch,
+      category,
+      brand,
+      size,
+      color,
+      minPrice,
+      maxPrice,
+      savedOnly,
+      resultCount,
+    });
+    if (lastRecordedFilterSignature.current === signature) {
+      return;
+    }
+    lastRecordedFilterSignature.current = signature;
+
+    activeFilters.forEach((filter) => {
+      void productApi.recordSearchEvent({
+        source: "catalog",
+        event_kind: "filter_apply",
+        query: normalizedSearch || undefined,
+        category: category || undefined,
+        filter_key: filter.key,
+        filter_value: filter.value,
+      });
+    });
+  }, [brand, category, color, deferredSearch, maxPrice, minPrice, savedOnly, size]);
+
+  function handleProductNavigate(product: Product) {
+    const query = deferredSearch.trim();
+    if (!query) {
+      return;
+    }
+
+    void productApi.recordSearchEvent({
+      source: "catalog",
+      event_kind: "result_click",
+      query,
+      category: category || product.category || undefined,
+    });
+  }
+
+  useEffect(() => {
+    if (isLoadingProducts) {
+      return;
+    }
+
+    recordFilterAnalytics(listingProducts.length);
+  }, [isLoadingProducts, listingProducts.length, recordFilterAnalytics]);
+
   return (
     <>
       <SiteHeader />
@@ -416,15 +659,39 @@ function CatalogPageContent({
         </div>
 
         <div className="mt-10 flex flex-col gap-4 rounded-[1.8rem] bg-surface-container-low p-4 md:flex-row md:items-center md:justify-between md:p-5">
-          <div className="flex flex-1 items-center gap-3 rounded-full bg-background px-4 py-3">
-            <Search className="h-4 w-4 text-outline" />
-            <TextInput
-              aria-label="Tìm kiếm sản phẩm"
-              className="border-0 bg-transparent py-0 shadow-none"
-              placeholder="Tìm theo tên, mô tả, brand hoặc category..."
-              value={search}
-              onChange={(event) => startTransition(() => setSearch(event.target.value))}
-            />
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-3 rounded-full bg-background px-4 py-3">
+              <Search className="h-4 w-4 text-outline" />
+              <TextInput
+                aria-label="Tìm kiếm sản phẩm"
+                className="border-0 bg-transparent py-0 shadow-none"
+                placeholder="Tìm theo tên, mô tả, brand hoặc category..."
+                value={search}
+                onChange={(event) => startTransition(() => setSearch(event.target.value))}
+              />
+            </div>
+
+            {search.trim() && searchSuggestions.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {searchSuggestions.map((suggestion) => (
+                  <button
+                    key={`${suggestion.kind}-${suggestion.value}`}
+                    type="button"
+                    className="rounded-full border border-outline-variant/30 bg-background px-3 py-2 text-xs font-medium text-primary transition hover:border-outline hover:bg-surface"
+                    onClick={() => handleSelectSearchSuggestion(suggestion)}
+                  >
+                    {suggestion.value}
+                    <span className="ml-2 text-on-surface-variant">
+                      {suggestion.kind} {suggestion.match_count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {searchHint ? (
+              <p className="text-sm leading-7 text-on-surface-variant">{searchHint}</p>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-3">
@@ -443,10 +710,11 @@ function CatalogPageContent({
               value={sort}
               onChange={(event) => setSort(event.target.value as SortMode)}
             >
-              <option value="latest">Mới nhất</option>
-              <option value="price_asc">Giá tăng dần</option>
-              <option value="price_desc">Giá giảm dần</option>
-              <option value="popular">Phổ biến</option>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </Select>
           </div>
         </div>
@@ -471,6 +739,10 @@ function CatalogPageContent({
             brandOptions,
             sizeOptions,
             colorOptions,
+            categoryCounts,
+            brandCounts,
+            sizeCounts,
+            colorCounts,
             onClose: () => setIsFilterOpen(false),
             onCategoryChange: setCategory,
             onBrandChange: setBrand,
@@ -485,8 +757,18 @@ function CatalogPageContent({
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-on-surface-variant">
               <span>
-                Hiển thị <strong className="text-primary">{products.length}</strong> /{" "}
-                {catalogIndex.length || products.length} sản phẩm
+                Hiển thị <strong className="text-primary">{products.length}</strong>
+                {isAssistSummaryActive ? (
+                  <>
+                    {" "}
+                    / <strong className="text-primary">{assistResultCount}</strong> kết quả gợi ý
+                  </>
+                ) : (
+                  <>
+                    {" "}
+                    / {catalogIndex.length || products.length} sản phẩm
+                  </>
+                )}
               </span>
               <span>{isPending || isLoadingProducts ? "Đang cập nhật kết quả..." : "Kết quả đã đồng bộ"}</span>
             </div>
@@ -525,6 +807,7 @@ function CatalogPageContent({
                       saved={isSaved(product.id)}
                       busy={busyProductId === product.id}
                       onAddToCart={() => void handleAddToCart(product)}
+                      onNavigate={() => handleProductNavigate(product)}
                       onToggleWishlist={() => handleToggleWishlist(product.id)}
                     />
                   ))}
@@ -609,7 +892,7 @@ function CatalogFilters(props: FilterPanelProps) {
           <option value="">Tất cả category</option>
           {props.categoryOptions.map((item) => (
             <option key={item} value={item}>
-              {item}
+              {buildFacetOptionLabel(item, props.categoryCounts)}
             </option>
           ))}
         </Select>
@@ -622,7 +905,7 @@ function CatalogFilters(props: FilterPanelProps) {
           <option value="">Tất cả brand</option>
           {props.brandOptions.map((item) => (
             <option key={item} value={item}>
-              {item}
+              {buildFacetOptionLabel(item, props.brandCounts)}
             </option>
           ))}
         </Select>
@@ -636,7 +919,7 @@ function CatalogFilters(props: FilterPanelProps) {
             <option value="">Mọi size</option>
             {props.sizeOptions.map((item) => (
               <option key={item} value={item}>
-                {item}
+                {buildFacetOptionLabel(item, props.sizeCounts)}
               </option>
             ))}
           </Select>
@@ -649,7 +932,7 @@ function CatalogFilters(props: FilterPanelProps) {
             <option value="">Mọi màu</option>
             {props.colorOptions.map((item) => (
               <option key={item} value={item}>
-                {item}
+                {buildFacetOptionLabel(item, props.colorCounts)}
               </option>
             ))}
           </Select>
@@ -714,12 +997,14 @@ function DraggableCatalogCard({
   saved,
   busy,
   onAddToCart,
+  onNavigate,
   onToggleWishlist,
 }: {
   product: Product;
   saved: boolean;
   busy: boolean;
   onAddToCart: () => void;
+  onNavigate: () => void;
   onToggleWishlist: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -736,6 +1021,7 @@ function DraggableCatalogCard({
         <ProductCard
           product={product}
           saved={saved}
+          onNavigate={onNavigate}
           footerSlot={
             <button
               type="button"

@@ -67,7 +67,7 @@ func (m *QueueMonitor) observeQueues(ctx context.Context) {
 	}
 }
 
-func DeclareQueues(ch *amqp.Channel, retryDelay time.Duration) error {
+func DeclareQueues(ch *amqp.Channel, _ time.Duration) error {
 	if ch == nil {
 		return fmt.Errorf("rabbitmq channel is required")
 	}
@@ -90,7 +90,6 @@ func DeclareQueues(ch *amqp.Channel, retryDelay time.Duration) error {
 	if _, err := ch.QueueDeclare(RetryQueue, true, false, false, false, amqp.Table{
 		"x-dead-letter-exchange":    "",
 		"x-dead-letter-routing-key": MainQueue,
-		"x-message-ttl":             int(retryDelay / time.Millisecond),
 	}); err != nil {
 		return fmt.Errorf("failed to declare notification retry queue: %w", err)
 	}

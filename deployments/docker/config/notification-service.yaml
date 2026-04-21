@@ -12,6 +12,7 @@ notification:
   prefetch_count: 8
   max_retries: 5
   retry_delay_seconds: 30
+  retry_max_delay_seconds: 300
   inbox_ttl_hours: 168
   processing_ttl_seconds: 300
   queue_metrics_interval_seconds: 15

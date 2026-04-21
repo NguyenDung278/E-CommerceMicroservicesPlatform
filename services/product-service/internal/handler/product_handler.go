@@ -23,6 +23,15 @@ type ProductHandler struct {
 	reviewService  *service.ProductReviewService
 }
 
+type searchAnalyticsEventRequest struct {
+	Source      string `json:"source"`
+	EventKind   string `json:"event_kind"`
+	Query       string `json:"query"`
+	Category    string `json:"category"`
+	FilterKey   string `json:"filter_key"`
+	FilterValue string `json:"filter_value"`
+}
+
 func NewProductHandler(productService *service.ProductService, reviewService *service.ProductReviewService) *ProductHandler {
 	return &ProductHandler{
 		productService: productService,
@@ -44,6 +53,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	public.GET("", h.List)
 	public.GET("/batch", h.ListByIDs)
 	public.GET("/search/assist", h.SearchAssist)
+	public.POST("/analytics/search/events", h.RecordSearchEvent)
 	public.GET("/:id", h.GetByID)
 	public.GET("/:id/reviews", h.ListReviews)
 
@@ -263,6 +273,39 @@ func (h *ProductHandler) GetSearchAnalytics(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "search analytics retrieved", summary)
+}
+
+func (h *ProductHandler) RecordSearchEvent(c echo.Context) error {
+	var request searchAnalyticsEventRequest
+	if err := c.Bind(&request); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request body", "invalid request body")
+	}
+
+	eventKind := strings.TrimSpace(strings.ToLower(request.EventKind))
+	switch eventKind {
+	case "result_click":
+		if strings.TrimSpace(request.Query) == "" {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "query is required for result_click")
+		}
+	case "filter_apply":
+		if strings.TrimSpace(request.FilterKey) == "" || strings.TrimSpace(request.FilterValue) == "" {
+			return response.Error(c, http.StatusBadRequest, "validation failed", "filter_key and filter_value are required for filter_apply")
+		}
+	default:
+		return response.Error(c, http.StatusBadRequest, "validation failed", "event_kind must be result_click or filter_apply")
+	}
+
+	h.productService.RecordSearchEvent(
+		c.Request().Context(),
+		request.Source,
+		eventKind,
+		request.Query,
+		request.Category,
+		request.FilterKey,
+		request.FilterValue,
+	)
+
+	return response.Success(c, http.StatusAccepted, "search analytics event recorded", map[string]bool{"accepted": true})
 }
 
 func parseRequestedProductIDs(values []string) []string {

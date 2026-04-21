@@ -128,3 +128,33 @@ func (s *ProductService) recordSearchAnalyticsBestEffort(
 		)
 	}
 }
+
+func (s *ProductService) RecordSearchEvent(
+	ctx context.Context,
+	source, eventKind, query, category, filterKey, filterValue string,
+) {
+	if s.analyticsRepo == nil {
+		return
+	}
+
+	trimmedQuery := strings.TrimSpace(query)
+	if err := s.analyticsRepo.RecordEvent(ctx, repository.SearchAnalyticsEventRecord{
+		Source:      strings.TrimSpace(source),
+		EventKind:   strings.TrimSpace(eventKind),
+		Query:       trimmedQuery,
+		Normalized:  strings.ToLower(trimmedQuery),
+		Category:    trimText(category),
+		FilterKey:   strings.TrimSpace(filterKey),
+		FilterValue: strings.TrimSpace(filterValue),
+		OccurredAt:  time.Now(),
+	}); err != nil {
+		s.log.Warn("failed to record product search analytics event",
+			zap.String("source", strings.TrimSpace(source)),
+			zap.String("event_kind", strings.TrimSpace(eventKind)),
+			zap.String("query", trimmedQuery),
+			zap.String("filter_key", strings.TrimSpace(filterKey)),
+			zap.String("filter_value", strings.TrimSpace(filterValue)),
+			zap.Error(err),
+		)
+	}
+}

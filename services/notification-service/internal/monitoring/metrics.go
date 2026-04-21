@@ -50,6 +50,14 @@ var (
 		Name:      "retry_oldest_age_seconds",
 		Help:      "Largest retry age observed recently for each routing key.",
 	}, []string{"routing_key"})
+
+	retryDelaySeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ecommerce",
+		Subsystem: "notification",
+		Name:      "retry_delay_seconds",
+		Help:      "Scheduled retry delay for notification messages.",
+		Buckets:   []float64{5, 15, 30, 60, 120, 300, 600, 1800, 3600},
+	}, []string{"routing_key"})
 )
 
 func ObserveDelivery(routingKey, outcome string) {
@@ -65,6 +73,10 @@ func ObserveRetryAge(routingKey string, age time.Duration) {
 	label := normalize(routingKey)
 	retryAgeSeconds.WithLabelValues(label).Observe(seconds)
 	oldestRetryAgeSeconds.WithLabelValues(label).Set(seconds)
+}
+
+func ObserveRetryDelay(routingKey string, delay time.Duration) {
+	retryDelaySeconds.WithLabelValues(normalize(routingKey)).Observe(delay.Seconds())
 }
 
 func SetQueueDepth(queue string, messages int) {

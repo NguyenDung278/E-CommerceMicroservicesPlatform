@@ -6,11 +6,11 @@ import {
 } from "../../../../shared/web-sdk/api/payment";
 
 export type ProcessPaymentData = SharedProcessPaymentData<
-  "manual" | "momo" | "credit_card" | "digital_wallet" | "demo"
+  "manual" | "momo"
 >;
 
 export const paymentApi = createPaymentApi<
-  "manual" | "momo" | "credit_card" | "digital_wallet" | "demo"
+  "manual" | "momo"
 >({
   request,
   normalizePayment,

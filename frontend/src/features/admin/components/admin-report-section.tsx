@@ -1,10 +1,15 @@
 import { formatCurrency } from "@/utils/format";
-import type { AdminOrderReport, ProductSearchAnalyticsSummary } from "@/types/api";
+import type {
+  AdminOrderReport,
+  NotificationDeliveryAuditItem,
+  ProductSearchAnalyticsSummary,
+} from "@/types/api";
 
 type AdminReportSectionProps = {
   isLoadingReport: boolean;
   report: AdminOrderReport | null;
   searchAnalytics: ProductSearchAnalyticsSummary | null;
+  notificationAudit: NotificationDeliveryAuditItem[];
   reportDays: number;
   reportWindowOptions: readonly number[];
   onSelectWindow: (days: number) => void;
@@ -14,6 +19,7 @@ export function AdminReportSection({
   isLoadingReport,
   report,
   searchAnalytics,
+  notificationAudit,
   reportDays,
   reportWindowOptions,
   onSelectWindow,
@@ -104,6 +110,62 @@ export function AdminReportSection({
               ))}
               {(searchAnalytics?.zero_result_queries.length ?? 0) === 0 ? (
                 <p className="history-empty">Không có truy vấn zero-result nổi bật trong giai đoạn này.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="admin-console-subpanel">
+            <h3>Top click-through queries</h3>
+            <div className="history-grid">
+              {searchAnalytics?.top_clicked_queries.map((item) => (
+                <div className="history-item-preview" key={`${item.source}-${item.query}-click`}>
+                  <strong>{item.query}</strong>
+                  <span>Source: {item.source}</span>
+                  <span>Clicks: {item.click_count}</span>
+                  <span>Last seen: {item.last_seen_at || "n/a"}</span>
+                </div>
+              ))}
+              {(searchAnalytics?.top_clicked_queries.length ?? 0) === 0 ? (
+                <p className="history-empty">Chưa có dữ liệu click-through nổi bật trong giai đoạn này.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="admin-console-subpanel">
+            <h3>Top filter combinations</h3>
+            <div className="history-grid">
+              {searchAnalytics?.top_filters.map((item) => (
+                <div
+                  className="history-item-preview"
+                  key={`${item.source}-${item.filter_key}-${item.filter_value}-${item.category ?? ""}`}
+                >
+                  <strong>
+                    {item.filter_key}: {item.filter_value}
+                  </strong>
+                  <span>Source: {item.source}</span>
+                  <span>Applies: {item.apply_count}</span>
+                  <span>Context: {item.category || "all categories"}</span>
+                </div>
+              ))}
+              {(searchAnalytics?.top_filters.length ?? 0) === 0 ? (
+                <p className="history-empty">Chưa có dữ liệu filter analytics nổi bật trong giai đoạn này.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="admin-console-subpanel">
+            <h3>Notification delivery audit</h3>
+            <div className="history-grid">
+              {notificationAudit.map((item) => (
+                <div className="history-item-preview" key={item.id}>
+                  <strong>{item.title}</strong>
+                  <span>Status: {item.delivery_status}</span>
+                  <span>Attempts: {item.attempt_count ?? 0}</span>
+                  <span>{item.next_retry_at ? `Next retry: ${item.next_retry_at}` : item.last_error || item.message}</span>
+                </div>
+              ))}
+              {notificationAudit.length === 0 ? (
+                <p className="history-empty">Chưa có delivery audit item nào mới.</p>
               ) : null}
             </div>
           </div>

@@ -10,7 +10,7 @@ import { formatCompactCount, formatCurrency } from "@/utils/format";
 import "@/styles/pages/storefront/wishlist-page.css";
 
 export function WishlistPage() {
-  const { token } = useAuth();
+  useAuth();
   const { addItem } = useCart();
   const { wishlist, wishlistCount, toggleWishlist, clearWishlist, isLoading, error } =
     useWishlist();
@@ -142,11 +142,6 @@ export function WishlistPage() {
           <div className="wishlist-heading-copy">
             <span className="section-kicker">Wishlist</span>
             <h1>Saved for later</h1>
-            <p>
-              {token
-                ? "Các món đã lưu được đồng bộ với tài khoản của bạn trên nhiều thiết bị."
-                : "Các món đã lưu hiện được giữ trong trình duyệt này và sẽ được hợp nhất khi bạn đăng nhập."}
-            </p>
           </div>
           <div className="wishlist-heading-side">
             <div className="wishlist-heading-meta">
@@ -185,22 +180,18 @@ export function WishlistPage() {
             <article className="wishlist-insight-card">
               <span>Ready to bag</span>
               <strong>{formatCompactCount(wishlistSummary.readyToBagCount)}</strong>
-              <p>Saved pieces currently available for immediate checkout.</p>
             </article>
             <article className="wishlist-insight-card">
               <span>Collections</span>
               <strong>{formatCompactCount(wishlistSummary.categoryCount)}</strong>
-              <p>Distinct product groups represented inside your saved edit.</p>
             </article>
             <article className="wishlist-insight-card">
               <span>Variant-rich</span>
               <strong>{formatCompactCount(wishlistSummary.variantReadyCount)}</strong>
-              <p>Pieces with size or finish options ready for comparison.</p>
             </article>
             <article className="wishlist-insight-card">
               <span>Saved value</span>
               <strong>{formatCurrency(wishlistSummary.totalValue)}</strong>
-              <p>Total list value across your current shortlist.</p>
             </article>
           </div>
         ) : null}
@@ -255,12 +246,6 @@ export function WishlistPage() {
                       <span className="wishlist-meta-chip">#{product.tags[0]}</span>
                     ) : null}
                   </div>
-
-                  <p>
-                    {product.description ||
-                      "Một thiết kế đã được lưu lại để bạn quay lại so sánh, cân nhắc và đặt mua khi sẵn sàng."}
-                  </p>
-
                   <div className="wishlist-card-actions">
                     <Link className="secondary-button" to={`/products/${encodeURIComponent(product.id)}`}>
                       View details

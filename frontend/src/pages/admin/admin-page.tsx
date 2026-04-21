@@ -38,6 +38,7 @@ import type {
   AdminOrderReport,
   ApiMeta,
   Coupon,
+  NotificationDeliveryAuditItem,
   Order,
   Payment,
   Product,
@@ -68,6 +69,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [report, setReport] = useState<AdminOrderReport | null>(null);
   const [searchAnalytics, setSearchAnalytics] = useState<ProductSearchAnalyticsSummary | null>(null);
+  const [notificationAudit, setNotificationAudit] = useState<NotificationDeliveryAuditItem[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busyProductId, setBusyProductId] = useState("");
   const [busyOrderId, setBusyOrderId] = useState("");
@@ -176,9 +178,10 @@ export function AdminPage() {
 
       try {
         setIsLoadingReport(true);
-        const [reportResult, analyticsResult] = await Promise.allSettled([
+        const [reportResult, analyticsResult, auditResult] = await Promise.allSettled([
           api.getAdminOrderReport(token, days),
           api.getSearchAnalytics(token, { days, limit: 8 }),
+          api.listNotificationAudit(token, { limit: 8 }),
         ]);
 
         if (reportResult.status === "fulfilled") {
@@ -187,7 +190,14 @@ export function AdminPage() {
         if (analyticsResult.status === "fulfilled") {
           setSearchAnalytics(analyticsResult.value.data);
         }
-        if (reportResult.status === "rejected" && analyticsResult.status === "rejected") {
+        if (auditResult.status === "fulfilled") {
+          setNotificationAudit(auditResult.value.data);
+        }
+        if (
+          reportResult.status === "rejected" &&
+          analyticsResult.status === "rejected" &&
+          auditResult.status === "rejected"
+        ) {
           setFeedback(getErrorMessage(reportResult.reason));
         }
       } catch (reason) {
@@ -988,6 +998,7 @@ export function AdminPage() {
             isLoadingReport={isLoadingReport}
             report={report}
             searchAnalytics={searchAnalytics}
+            notificationAudit={notificationAudit}
             reportDays={reportDays}
             reportWindowOptions={reportWindowOptions}
             onSelectWindow={setReportDays}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -81,5 +82,26 @@ func TestServiceProxyPreservesRedirectResponses(t *testing.T) {
 	}
 	if got := rec.Header().Get("Location"); got == "" {
 		t.Fatal("expected forwarded Location header to be present")
+	}
+}
+
+func TestServiceProxyNormalizesBaseURLWithoutScheme(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+
+	normalized := strings.TrimPrefix(backend.URL, "http://")
+	proxy := NewServiceProxy(normalized, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	resp, err := proxy.Do(context.Background(), req)
+	if err != nil {
+		t.Fatalf("proxy.Do returned error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected status 204, got %d", resp.StatusCode)
 	}
 }

@@ -21,6 +21,7 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/logger"
+	appmw "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	notificationclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/notification-service/internal/email"
@@ -64,12 +65,14 @@ func main() {
 	defer redisClient.Close()
 
 	var inboxStore inbox.Store
+	var historyStore inbox.HistoryStore
 	var wishlistDeduper notificationservice.WishlistAlertDeduper
 	if err := redisClient.Ping(rootCtx).Err(); err != nil {
 		log.Warn("redis not available, duplicate inbox protection is disabled", zap.Error(err))
 		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(nil, "")
 	} else {
 		inboxStore = inbox.NewRedisStore(redisClient, "notification-service:inbox")
+		historyStore = inbox.NewRedisHistoryStore(redisClient, "notification-service:history")
 		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(redisClient, "notification-service:wishlist-alert")
 	}
 
@@ -127,12 +130,18 @@ func main() {
 
 	sender := email.NewSender(cfg.SMTP, log)
 	userClient := notificationclient.NewUserClient(cfg, log)
-	retryPublisher := messaging.NewRetryPublisher(retryCh, messaging.RetryQueue)
+	retryPublisher := messaging.NewRetryPublisher(
+		retryCh,
+		messaging.RetryQueue,
+		time.Duration(cfg.Notification.RetryDelaySeconds)*time.Second,
+		time.Duration(cfg.Notification.RetryMaxDelaySeconds)*time.Second,
+	)
 	eventHandler := handler.NewEventHandler(
 		log,
 		sender,
 		userClient,
 		inboxStore,
+		historyStore,
 		retryPublisher,
 		cfg.Notification.MaxRetries,
 		time.Duration(cfg.Notification.InboxTTLHours)*time.Hour,
@@ -166,6 +175,13 @@ func main() {
 	e.Use(appobs.EchoMiddleware("notification-service"))
 	e.Use(echoprometheus.NewMiddleware("notification_service"))
 	e.GET("/metrics", echoprometheus.NewHandler())
+	inboxHandler := handler.NewNotificationInboxHandler(historyStore)
+	notifications := e.Group("/api/v1/notifications")
+	notifications.Use(appmw.JWTAuth(cfg.JWT.Secret))
+	notifications.GET("/inbox", inboxHandler.List)
+	notifications.PUT("/inbox/read", inboxHandler.MarkRead)
+	notifications.Use(appmw.RequireRole(appmw.RoleAdmin, appmw.RoleStaff))
+	notifications.GET("/audit", inboxHandler.Audit)
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{
 			"status":  "healthy",

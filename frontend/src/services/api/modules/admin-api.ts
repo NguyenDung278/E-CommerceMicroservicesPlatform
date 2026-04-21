@@ -3,6 +3,7 @@ import type {
   AdminOrderReport,
   ApiEnvelope,
   Coupon,
+  NotificationDeliveryAuditItem,
   Order,
   Payment,
   ProductSearchAnalyticsSummary,
@@ -13,6 +14,7 @@ import {
   normalizeAdminOrderReport,
   normalizeCoupon,
   normalizeCouponList,
+  normalizeNotificationInboxList,
   normalizeOrder,
   normalizeOrderList,
   normalizePayment,
@@ -74,6 +76,10 @@ export interface SearchAnalyticsOptions {
   limit?: number;
 }
 
+export interface NotificationAuditOptions {
+  limit?: number;
+}
+
 export const adminApi = {
   /**
    * Load the paginated admin returns queue with optional filters.
@@ -131,6 +137,21 @@ export const adminApi = {
     }).then((response) => ({
       ...response,
       data: normalizeProductSearchAnalyticsSummary(response.data),
+    }));
+  },
+
+  listNotificationAudit(
+    token: string,
+    options: NotificationAuditOptions = {}
+  ): Promise<ApiEnvelope<NotificationDeliveryAuditItem[]>> {
+    const params = new URLSearchParams();
+    params.set("limit", String(options.limit ?? 20));
+
+    return request<unknown>(`/api/v1/notifications/audit?${params.toString()}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeNotificationInboxList(response.data),
     }));
   },
 

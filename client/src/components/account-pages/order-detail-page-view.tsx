@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AccountShell } from "@/components/account-shell";
 import { StorefrontImage } from "@/components/storefront-image";
@@ -26,6 +26,7 @@ import type {
   Payment,
   Product,
   ReturnEligibilitySnapshot,
+  ReturnRequest,
 } from "@/types/api";
 import {
   formatCurrency,
@@ -50,10 +51,16 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
   const [returnEligibility, setReturnEligibility] = useState<ReturnEligibilitySnapshot | null>(
     null,
   );
+  const [orderReturns, setOrderReturns] = useState<ReturnRequest[]>([]);
   const [productLookup, setProductLookup] = useState<Record<string, Product>>({});
   const [feedback, setFeedback] = useState("");
+  const [returnFeedback, setReturnFeedback] = useState("");
+  const [returnReason, setReturnReason] = useState("");
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, number>>({});
+  const [returnItemReasons, setReturnItemReasons] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
   const isConfirmation = searchParams.get("confirmation") === "1";
   const selectedPaymentId = searchParams.get("paymentId") ?? "";
@@ -75,8 +82,16 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
       orderApi.getReturnEligibility(token, orderId).catch(
         () => ({ data: null as ReturnEligibilitySnapshot | null }),
       ),
+      orderApi.listReturnsByOrder(token, orderId).catch(() => ({ data: [] as ReturnRequest[] })),
     ])
-      .then(async ([orderResponse, eventsResponse, paymentsResponse, eligibilityResponse]) => {
+      .then(
+        async ([
+          orderResponse,
+          eventsResponse,
+          paymentsResponse,
+          eligibilityResponse,
+          returnsResponse,
+        ]) => {
         if (!active) {
           return;
         }
@@ -85,6 +100,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
         setEvents(eventsResponse.data);
         setPayments(paymentsResponse.data);
         setReturnEligibility(eligibilityResponse.data);
+        setOrderReturns(returnsResponse.data);
 
         const productIds = Array.from(
           new Set(orderResponse.data.items.map((item) => item.product_id).filter(Boolean)),
@@ -93,7 +109,8 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
         if (active) {
           setProductLookup(nextLookup);
         }
-      })
+        },
+      )
       .catch((reason) => {
         if (active) {
           setFeedback(getErrorMessage(reason));
@@ -109,6 +126,16 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
       active = false;
     };
   }, [orderId, token]);
+
+  const sortedReturns = useMemo(
+    () => [...orderReturns].sort((left, right) => right.created_at.localeCompare(left.created_at)),
+    [orderReturns],
+  );
+  const returnableItems = useMemo(() => returnEligibility?.items ?? [], [returnEligibility]);
+  const hasReturnableItems = returnableItems.some(
+    (item) => item.eligible && item.remaining_quantity > 0,
+  );
+  const canRequestReturn = Boolean(returnEligibility?.eligible && hasReturnableItems);
 
   async function handleCancelOrder() {
     if (!token || !order) {
@@ -130,6 +157,62 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
       setFeedback(getErrorMessage(reason));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSubmitReturn() {
+    if (!token || !order) {
+      setReturnFeedback("Bạn cần đăng nhập để gửi yêu cầu trả hàng.");
+      return;
+    }
+
+    const normalizedReason = returnReason.trim();
+    const selectedItems = returnableItems
+      .map((item) => ({
+        order_item_id: item.order_item_id,
+        quantity: Math.max(
+          0,
+          Math.min(item.remaining_quantity, returnQuantities[item.order_item_id] ?? 0),
+        ),
+        reason: returnItemReasons[item.order_item_id]?.trim() || undefined,
+      }))
+      .filter((item) => item.quantity > 0);
+
+    if (!normalizedReason) {
+      setReturnFeedback("Hãy điền lý do chung cho yêu cầu trả hàng.");
+      return;
+    }
+    if (selectedItems.length === 0) {
+      setReturnFeedback("Hãy chọn ít nhất một mặt hàng và số lượng cần trả.");
+      return;
+    }
+
+    try {
+      setIsSubmittingReturn(true);
+      const response = await orderApi.createReturn(token, order.id, {
+        reason: normalizedReason,
+        items: selectedItems,
+      });
+      const [eligibilityResponse, returnsResponse] = await Promise.allSettled([
+        orderApi.getReturnEligibility(token, order.id),
+        orderApi.listReturnsByOrder(token, order.id),
+      ]);
+
+      setOrderReturns((current) => [response.data, ...current]);
+      if (eligibilityResponse.status === "fulfilled") {
+        setReturnEligibility(eligibilityResponse.value.data);
+      }
+      if (returnsResponse.status === "fulfilled") {
+        setOrderReturns(returnsResponse.value.data);
+      }
+      setReturnReason("");
+      setReturnQuantities({});
+      setReturnItemReasons({});
+      setReturnFeedback(`Đã tạo yêu cầu trả hàng ${response.data.id}.`);
+    } catch (reason) {
+      setReturnFeedback(getErrorMessage(reason));
+    } finally {
+      setIsSubmittingReturn(false);
     }
   }
 
@@ -262,6 +345,178 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                   )}
                 </div>
               </SurfaceCard>
+
+              <SurfaceCard className="p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                      Returns for this order
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                      Tạo return request, xem history theo từng order và theo dõi refund state từ
+                      backend thật.
+                    </p>
+                  </div>
+                  <Link href="/returns" className="text-sm font-medium text-primary underline">
+                    Open returns center
+                  </Link>
+                </div>
+
+                {returnFeedback ? (
+                  <div className="mt-6">
+                    <InlineAlert tone="info">{returnFeedback}</InlineAlert>
+                  </div>
+                ) : null}
+
+                {canRequestReturn ? (
+                  <div className="mt-6 space-y-5">
+                    {returnEligibility?.return_window_expires_at ? (
+                      <p className="text-sm leading-7 text-on-surface-variant">
+                        Return window closes at{" "}
+                        {formatDateTime(returnEligibility.return_window_expires_at)}.
+                      </p>
+                    ) : null}
+
+                    <label className="block space-y-2">
+                      <span className="text-xs font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                        Overall reason
+                      </span>
+                      <textarea
+                        className="min-h-28 w-full rounded-[1rem] border border-outline-variant/30 bg-background px-4 py-3 text-sm text-primary outline-none"
+                        placeholder="Example: wrong size, damaged packaging, or product mismatch"
+                        value={returnReason}
+                        onChange={(event) => setReturnReason(event.target.value)}
+                      />
+                    </label>
+
+                    <div className="space-y-4">
+                      {returnableItems.map((item) => (
+                        <div
+                          key={item.order_item_id}
+                          className="rounded-[1.25rem] bg-surface p-4"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-primary">{item.product_name}</p>
+                              <p className="mt-1 text-sm text-on-surface-variant">
+                                Purchased {item.ordered_quantity} · Already requested{" "}
+                                {item.already_requested_quantity} · Remaining{" "}
+                                {item.remaining_quantity}
+                              </p>
+                              {item.reason ? (
+                                <p className="mt-1 text-sm text-on-surface-variant">
+                                  {item.reason}
+                                </p>
+                              ) : null}
+                            </div>
+                            <StatusPill
+                              status={
+                                item.eligible && item.remaining_quantity > 0 ? "eligible" : "locked"
+                              }
+                            />
+                          </div>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
+                            <label className="space-y-2">
+                              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                                Quantity
+                              </span>
+                              <select
+                                className="w-full rounded-[1rem] border border-outline-variant/30 bg-background px-4 py-3 text-sm text-primary outline-none"
+                                disabled={!item.eligible || item.remaining_quantity === 0}
+                                value={String(returnQuantities[item.order_item_id] ?? 0)}
+                                onChange={(event) =>
+                                  setReturnQuantities((current) => ({
+                                    ...current,
+                                    [item.order_item_id]: Math.max(
+                                      0,
+                                      Math.min(
+                                        item.remaining_quantity,
+                                        Number.parseInt(event.target.value, 10) || 0,
+                                      ),
+                                    ),
+                                  }))
+                                }
+                              >
+                                {Array.from({ length: item.remaining_quantity + 1 }, (_, index) => (
+                                  <option key={`${item.order_item_id}-${index}`} value={index}>
+                                    {index}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <label className="space-y-2">
+                              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                                Line note
+                              </span>
+                              <input
+                                className="w-full rounded-[1rem] border border-outline-variant/30 bg-background px-4 py-3 text-sm text-primary outline-none"
+                                disabled={!item.eligible || item.remaining_quantity === 0}
+                                placeholder="Optional note for this item"
+                                value={returnItemReasons[item.order_item_id] ?? ""}
+                                onChange={(event) =>
+                                  setReturnItemReasons((current) => ({
+                                    ...current,
+                                    [item.order_item_id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      className={buttonStyles()}
+                      disabled={isSubmittingReturn}
+                      onClick={() => void handleSubmitReturn()}
+                    >
+                      {isSubmittingReturn ? "Submitting..." : "Request return"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-[1.25rem] bg-surface p-4 text-sm leading-7 text-on-surface-variant">
+                    {returnEligibility?.reason ||
+                      "Return request is unavailable for this order right now."}
+                  </div>
+                )}
+
+                {sortedReturns.length > 0 ? (
+                  <div className="mt-6 space-y-4">
+                    {sortedReturns.map((returnRequest) => (
+                      <div key={returnRequest.id} className="rounded-[1.25rem] bg-surface p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <Link
+                              href={`/returns/${returnRequest.id}`}
+                              className="font-semibold text-primary underline"
+                            >
+                              {returnRequest.id}
+                            </Link>
+                            <p className="mt-1 text-sm text-on-surface-variant">
+                              Created {formatDateTime(returnRequest.created_at)}
+                            </p>
+                          </div>
+                          <StatusPill status={returnRequest.status} />
+                        </div>
+                        <p className="mt-3 text-sm text-on-surface-variant">
+                          {returnRequest.reason}
+                        </p>
+                        <p className="mt-2 text-sm text-on-surface-variant">
+                          Refund: {buildReturnRefundCopy(returnRequest)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6 rounded-[1.25rem] bg-surface p-4 text-sm leading-7 text-on-surface-variant">
+                    No return requests have been created for this order yet.
+                  </div>
+                )}
+              </SurfaceCard>
             </div>
 
             <div className="space-y-6">
@@ -388,4 +643,20 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
       )}
     </AccountShell>
   );
+}
+
+function buildReturnRefundCopy(returnRequest: ReturnRequest) {
+  if (typeof returnRequest.refund_amount !== "number") {
+    return "Chờ review";
+  }
+
+  if (returnRequest.status === "refunded") {
+    return formatCurrency(returnRequest.refund_amount);
+  }
+
+  if (returnRequest.status === "refund_pending") {
+    return `${formatCurrency(returnRequest.refund_amount)} đang chờ xử lý`;
+  }
+
+  return `${formatCurrency(returnRequest.refund_amount)} dự kiến`;
 }

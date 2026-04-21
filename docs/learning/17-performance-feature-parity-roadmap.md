@@ -49,8 +49,8 @@ Giá trị backend học được:
 
 Phần này phân biệt rõ giữa 2 nhánh UI:
 
-- `frontend/`: React + Vite, hiện là UI local chính và có admin surface đầy đủ hơn
-- `client/`: Next.js App Router, hiện mạnh ở storefront/account nhưng chưa đồng bộ hết capability của backend
+- `frontend/`: React + Vite, là admin/workbook app và UI local chính để verify runtime
+- `client/`: Next.js App Router, là app dài hạn cho storefront/account
 
 ### 2.1. Wishlist parity giữa hai UI đã được khép kín
 
@@ -73,7 +73,7 @@ Giá trị học được:
 - chuyển dữ liệu tạm cục bộ thành account state mà không làm vỡ trải nghiệm guest
 - chuẩn bị nền cho alert, retention, và personalization
 
-### 2.2. `client/` chưa có returns center cho shopper
+### 2.2. Shopper return flow trong `client/` đã được khép kín
 
 Backend đã có:
 
@@ -86,14 +86,19 @@ Backend đã có:
 Hiện trạng UI:
 
 - `frontend/` đã có `returns-page`, `return-detail-page`, upload evidence
-- `client/` đã đọc `return eligibility snapshot` trong order detail
-- `client/` vẫn chưa có returns page, return detail, create return, hoặc upload evidence
+- `client/` hiện đã có:
+  - returns center `/returns`
+  - return detail `/returns/[returnId]`
+  - create return trực tiếp từ order detail
+  - upload evidence trong return detail
+  - account navigation dẫn tới returns center
 
 Hệ quả:
 
-- account experience trong `client/` chưa khép kín cho post-purchase lifecycle
+- account experience trong `client/` đã khép kín được post-purchase lifecycle cơ bản
+- shopper có thể đi hết flow `order detail -> create return -> upload evidence -> theo dõi refund`
 
-### 2.3. `client/` chưa có search assist/facet flow bám backend
+### 2.3. Search assist/facet đã được nối sang `client/` catalog
 
 Backend đã có:
 
@@ -103,13 +108,18 @@ Backend đã có:
 Hiện trạng UI:
 
 - `frontend/` đã dùng search assist trong catalog/archive
-- `client/` chưa gọi flow này
+- `client/` catalog hiện đã:
+  - gọi `GET /api/v1/products/search/assist`
+  - hiển thị suggestion chips theo backend
+  - render facet counts cho category / brand / size / color
+  - dùng sort options từ response backend
+  - giữ fallback local khi assist endpoint lỗi
 
 Hệ quả:
 
-- catalog App Router chưa tận dụng được phần tìm kiếm/discovery tốt nhất của backend hiện tại
+- App Router storefront giờ đã bám được capability discovery chính của product-service
 
-### 2.4. Capability admin của backend chưa có surface tương đương trong `client/`
+### 2.4. Capability admin của backend được chốt giữ ở `frontend/`
 
 Backend đã có:
 
@@ -122,24 +132,25 @@ Backend đã có:
 Hiện trạng UI:
 
 - `frontend/` có admin console khá rõ
-- `client/` có API admin user nhưng chưa có admin surface hoàn chỉnh
+- `client/` không còn là nơi nên tiếp tục nhân đôi admin surface
 
 Hệ quả:
 
-- repo đang có hai UI với độ phủ capability rất khác nhau
+- repo tránh được việc đầu tư song song vào hai admin app
+- `client/` tập trung vào shopper/account, còn `frontend/` tập trung vào admin/workbook
 
-### 2.5. Payment method parity giữa hai nhánh UI chưa thống nhất
+### 2.5. Payment method parity giữa hai nhánh UI đã được chốt cho local/runtime
 
 Hiện trạng:
 
-- backend/payment layer đang chấp nhận nhiều method hơn
-- `client/` checkout đang expose `manual`, `momo`, `credit_card`, `demo`
-- `frontend/` checkout hiện mới chốt `manual` và `momo`
+- backend/payment layer vẫn có thể rộng hơn một số surface UI
+- `frontend/` checkout đã chốt `manual` và `momo`
+- `client/` checkout nay cũng chỉ expose `manual` và `momo`
 
 Điều cần làm:
 
-- chốt danh sách method thực sự muốn support ở local/runtime
-- chỉ expose method có flow hoàn chỉnh và có copy rõ ràng
+- nếu sau này mở thêm method, chỉ bật UI khi flow end-to-end đã thật sự chạy được
+- giữ docs/runtime nói rõ method nào là supported path trong môi trường local
 
 ### 2.6. Address và shipping contract đã được dọn về một source of truth đơn giản hơn
 
@@ -187,10 +198,15 @@ Giá trị học được:
   - back-in-stock
   - price-drop
 
+Đã khép kín thêm:
+
+- `notification-service` hiện đã có in-app inbox và delivery history cho event `order/payment/return`
+- `frontend/` và `client/` đều đã đọc inbox này thay vì chỉ dựng feed giả lập từ state cục bộ
+
 Chưa khép kín:
 
-- chưa có in-app inbox để gom notification history ngoài email delivery
 - chưa có batching/digest policy nếu sau này muốn giảm tần suất email ở production lớn
+- chưa có admin audit view riêng cho delivery ops nếu support cần tra soát tập trung
 
 Vì sao đáng đọc:
 
@@ -212,11 +228,13 @@ Vì sao đáng đọc:
   - return window 30 ngày
   - quantity đã request trước đó
 - `frontend/` order detail đã dùng snapshot này để render CTA, quantity còn lại, và empty-state copy
-- `client/` order detail đã đọc snapshot này để hiển thị trạng thái returnable per line item
+- `client/` order detail hiện đã dùng snapshot này để:
+  - hiển thị trạng thái returnable per line item
+  - tạo return request trực tiếp từ order detail
+  - refresh lại eligibility sau khi tạo return
 
 Chưa khép kín:
 
-- `client/` vẫn chưa có full create-return flow và evidence upload
 - `CreateReturn` hiện chưa reuse snapshot này như một guard tập trung ở boundary handler/service path
 
 Vì sao đáng đọc:
@@ -280,11 +298,11 @@ Vì sao đáng làm:
 
 ## 4. 5 ưu tiên nên làm tiếp nếu mục tiêu là hoàn chỉnh sản phẩm
 
-1. Hoàn thiện shopper return flow trong `client/`.
-2. Chốt payment method parity giữa `frontend/`, `client/`, và backend.
-3. Dùng search assist/facet thật trong `client/` catalog.
-4. Nối UI/admin surface cho wishlist alerts, notification preferences, return eligibility, và search analytics.
-5. Nếu muốn đi xa hơn ở backend, nối notification-service để thật sự tôn trọng notification preferences theo domain event.
+1. Giữ `frontend/` tập trung vào admin/workbook, không mở thêm nhánh feature shopper mới trừ parity fix.
+2. Nếu muốn đi xa hơn ở backend search, thêm conversion-ish signal sau lớp query/click/filter analytics hiện có.
+3. Làm sâu delivery ops cho `notification-service` theo channel/template sau lớp audit + backoff đã có.
+4. Tiếp tục tối ưu các list/admin hot path còn phụ thuộc `COUNT(*) + OFFSET`.
+5. Chỉ cân nhắc tách admin app riêng nếu `frontend/` thực sự trở thành nút thắt vận hành hoặc deploy.
 
 ---
 
@@ -372,7 +390,7 @@ Nếu mục tiêu là vừa hoàn thiện sản phẩm vừa học nghề backen
 
 Thứ đáng làm hơn là:
 
-- khép kín parity giữa backend với hai nhánh UI
+- giữ ownership giữa hai nhánh UI đủ rõ để không lặp công
 - tiếp tục tối ưu những chỗ fan-out hoặc query shape chưa đẹp
 - ưu tiên các flow có idempotency, transaction, queue, observability rõ ràng
 

@@ -345,6 +345,8 @@ func (s *ProductService) GetSearchAnalytics(
 			WindowDays:        days,
 			TopQueries:        []model.ProductSearchAnalyticsEntry{},
 			ZeroResultQueries: []model.ProductSearchAnalyticsEntry{},
+			TopClickedQueries: []model.ProductSearchClickAnalyticsEntry{},
+			TopFilters:        []model.ProductSearchFilterAnalyticsEntry{},
 		}, nil
 	}
 

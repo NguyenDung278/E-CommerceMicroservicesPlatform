@@ -55,15 +55,36 @@ type fakeRetryPublisher struct {
 	err        error
 }
 
+type fakeHistoryStore struct {
+	items []inbox.HistoryItem
+}
+
+func (s *fakeHistoryStore) Append(_ context.Context, item inbox.HistoryItem, _ time.Duration) error {
+	s.items = append(s.items, item)
+	return nil
+}
+
+func (s *fakeHistoryStore) ListByUser(_ context.Context, _ string, _ int) ([]inbox.HistoryItem, error) {
+	return append([]inbox.HistoryItem(nil), s.items...), nil
+}
+
+func (s *fakeHistoryStore) ListRecent(_ context.Context, _ int) ([]inbox.HistoryItem, error) {
+	return append([]inbox.HistoryItem(nil), s.items...), nil
+}
+
+func (s *fakeHistoryStore) MarkAllRead(_ context.Context, _ string, _ time.Time) (int, error) {
+	return 0, nil
+}
+
 type fakePreferenceReader struct {
 	preferencesByUser map[string]map[string]bool
 	err               error
 }
 
-func (p *fakeRetryPublisher) Publish(_ context.Context, _ amqp.Delivery, retryCount int, _ time.Time) error {
+func (p *fakeRetryPublisher) Publish(_ context.Context, _ amqp.Delivery, retryCount int, _ time.Time) (time.Time, time.Duration, error) {
 	p.calls++
 	p.retryCount = retryCount
-	return p.err
+	return time.Now().UTC().Add(30 * time.Second), 30 * time.Second, p.err
 }
 
 func (r *fakePreferenceReader) PreferenceMap(_ context.Context, userID string) (map[string]bool, error) {
@@ -111,7 +132,8 @@ func (a *fakeAcknowledger) Reject(uint64, bool) error {
 func TestHandleMessagePaymentRefundedAcknowledgesAndSendsEmail(t *testing.T) {
 	sender := &stubSender{}
 	inboxStore := &fakeInboxStore{claimStatus: inbox.Claimed}
-	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
+	historyStore := &fakeHistoryStore{}
+	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, historyStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
 	ack := &fakeAcknowledger{}
 
 	body, err := json.Marshal(PaymentEvent{
@@ -143,13 +165,17 @@ func TestHandleMessagePaymentRefundedAcknowledgesAndSendsEmail(t *testing.T) {
 	if len(inboxStore.processed) != 1 || inboxStore.processed[0] != "msg-1" {
 		t.Fatalf("expected message to be marked processed, got %#v", inboxStore.processed)
 	}
+	if len(historyStore.items) != 1 || historyStore.items[0].PaymentID != "pay_refund_1" {
+		t.Fatalf("expected payment refund history item to be appended, got %#v", historyStore.items)
+	}
 }
 
 func TestHandleMessageOrderCancelledSchedulesRetryWhenSendFails(t *testing.T) {
 	sender := &stubSender{err: errors.New("smtp unavailable")}
 	inboxStore := &fakeInboxStore{claimStatus: inbox.Claimed}
 	retryPublisher := &fakeRetryPublisher{}
-	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, retryPublisher, 3, 24*time.Hour, time.Minute)
+	historyStore := &fakeHistoryStore{}
+	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, historyStore, retryPublisher, 3, 24*time.Hour, time.Minute)
 	ack := &fakeAcknowledger{}
 
 	body, err := json.Marshal(OrderEvent{
@@ -180,12 +206,15 @@ func TestHandleMessageOrderCancelledSchedulesRetryWhenSendFails(t *testing.T) {
 	if len(inboxStore.released) != 1 || inboxStore.released[0] != "msg-2" {
 		t.Fatalf("expected inbox claim release on retry path, got %#v", inboxStore.released)
 	}
+	if len(historyStore.items) != 1 || historyStore.items[0].DeliveryStatus != "retry_scheduled" {
+		t.Fatalf("expected retry scheduling to append audit history, got %#v", historyStore.items)
+	}
 }
 
 func TestHandleMessageSkipsDuplicateEvent(t *testing.T) {
 	sender := &stubSender{}
 	inboxStore := &fakeInboxStore{claimStatus: inbox.AlreadyProcessed}
-	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
+	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, nil, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
 	ack := &fakeAcknowledger{}
 
 	handler.HandleMessage(context.Background(), amqp.Delivery{
@@ -207,7 +236,7 @@ func TestHandleMessageSkipsDuplicateEvent(t *testing.T) {
 func TestHandleMessageRejectsPermanentDecodeFailuresToDLQ(t *testing.T) {
 	sender := &stubSender{}
 	inboxStore := &fakeInboxStore{claimStatus: inbox.Claimed}
-	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
+	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, nil, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
 	ack := &fakeAcknowledger{}
 
 	handler.HandleMessage(context.Background(), amqp.Delivery{
@@ -229,7 +258,7 @@ func TestHandleMessageRejectsPermanentDecodeFailuresToDLQ(t *testing.T) {
 func TestHandleMessageReturnApprovedAcknowledgesAndSendsEmail(t *testing.T) {
 	sender := &stubSender{}
 	inboxStore := &fakeInboxStore{claimStatus: inbox.Claimed}
-	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
+	handler := NewEventHandler(zap.NewNop(), sender, nil, inboxStore, nil, &fakeRetryPublisher{}, 3, 24*time.Hour, time.Minute)
 	ack := &fakeAcknowledger{}
 
 	body, err := json.Marshal(ReturnEvent{
@@ -278,6 +307,7 @@ func TestHandleMessageSkipsEmailWhenTopicDisabled(t *testing.T) {
 		sender,
 		preferenceReader,
 		inboxStore,
+		nil,
 		&fakeRetryPublisher{},
 		3,
 		24*time.Hour,
@@ -322,6 +352,7 @@ func TestHandleMessageRetriesWhenPreferenceLookupFails(t *testing.T) {
 		sender,
 		&fakePreferenceReader{err: errors.New("user-service unavailable")},
 		inboxStore,
+		nil,
 		retryPublisher,
 		3,
 		24*time.Hour,

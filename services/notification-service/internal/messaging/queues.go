@@ -8,4 +8,5 @@ const (
 	ConsumerTag      = "notification-consumer"
 	HeaderRetryCount = "x-notification-retry-count"
 	HeaderFirstSeen  = "x-notification-first-seen-at"
+	HeaderNextRetryAt = "x-notification-next-retry-at"
 )

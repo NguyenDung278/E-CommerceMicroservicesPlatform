@@ -77,12 +77,13 @@ type GRPCConfig struct {
 
 // ServicesConfig holds URLs to other microservices.
 type ServicesConfig struct {
-	ProductService     string `mapstructure:"product_service"`
-	ProductServiceGRPC string `mapstructure:"product_service_grpc"`
-	UserService        string `mapstructure:"user_service"`
-	CartService        string `mapstructure:"cart_service"`
-	OrderService       string `mapstructure:"order_service"`
-	PaymentService     string `mapstructure:"payment_service"`
+	ProductService      string `mapstructure:"product_service"`
+	ProductServiceGRPC  string `mapstructure:"product_service_grpc"`
+	UserService         string `mapstructure:"user_service"`
+	CartService         string `mapstructure:"cart_service"`
+	OrderService        string `mapstructure:"order_service"`
+	PaymentService      string `mapstructure:"payment_service"`
+	NotificationService string `mapstructure:"notification_service"`
 }
 
 type SMTPConfig struct {
@@ -113,6 +114,7 @@ type NotificationConfig struct {
 	PrefetchCount               int `mapstructure:"prefetch_count"`
 	MaxRetries                  int `mapstructure:"max_retries"`
 	RetryDelaySeconds           int `mapstructure:"retry_delay_seconds"`
+	RetryMaxDelaySeconds        int `mapstructure:"retry_max_delay_seconds"`
 	InboxTTLHours               int `mapstructure:"inbox_ttl_hours"`
 	ProcessingTTLSeconds        int `mapstructure:"processing_ttl_seconds"`
 	QueueMetricsIntervalSeconds int `mapstructure:"queue_metrics_interval_seconds"`
@@ -268,17 +270,19 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("oauth.google.client_id", "")
 	v.SetDefault("oauth.google.client_secret", "")
 	v.SetDefault("oauth.google.redirect_url", "http://localhost:8080/api/v1/auth/oauth/google/callback")
-	v.SetDefault("services.product_service", "product-service:8082")
+	v.SetDefault("services.product_service", "http://product-service:8082")
 	v.SetDefault("services.product_service_grpc", "product-service:50052")
-	v.SetDefault("services.user_service", "user-service:8081")
-	v.SetDefault("services.cart_service", "cart-service:8083")
-	v.SetDefault("services.order_service", "order-service:8084")
-	v.SetDefault("services.payment_service", "payment-service:8085")
+	v.SetDefault("services.user_service", "http://user-service:8081")
+	v.SetDefault("services.cart_service", "http://cart-service:8083")
+	v.SetDefault("services.order_service", "http://order-service:8084")
+	v.SetDefault("services.payment_service", "http://payment-service:8085")
+	v.SetDefault("services.notification_service", "http://notification-service:8086")
 	v.SetDefault("frontend.base_url", "http://localhost:3000")
 	v.SetDefault("notification.worker_count", 4)
 	v.SetDefault("notification.prefetch_count", 8)
 	v.SetDefault("notification.max_retries", 5)
 	v.SetDefault("notification.retry_delay_seconds", 30)
+	v.SetDefault("notification.retry_max_delay_seconds", 300)
 	v.SetDefault("notification.inbox_ttl_hours", 168)
 	v.SetDefault("notification.processing_ttl_seconds", 300)
 	v.SetDefault("notification.queue_metrics_interval_seconds", 15)

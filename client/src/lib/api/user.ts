@@ -3,6 +3,7 @@ import {
   normalizeAddress,
   normalizeAddressList,
   normalizeEmailVerificationChallenge,
+  normalizeNotificationInboxList,
   normalizeNotificationPreferenceList,
   normalizePhoneVerificationChallenge,
   normalizeUserProfile,
@@ -15,6 +16,7 @@ import type {
   Address,
   ApiEnvelope,
   EmailVerificationChallenge,
+  NotificationInboxItem,
   NotificationPreference,
   PhoneVerificationChallenge,
   ProfileAddressPatch,
@@ -54,6 +56,10 @@ export interface UpdateNotificationPreferencesData {
     topic: string;
     enabled: boolean;
   }>;
+}
+
+export interface MarkNotificationInboxReadData {
+  mark_all: boolean;
 }
 
 export interface UpdateProfileData {
@@ -294,6 +300,29 @@ export const userApi = {
       ...response,
       data: normalizeNotificationPreferenceList(response.data),
     }));
+  },
+
+  listNotificationInbox(
+    token: string,
+    limit = 20,
+  ): Promise<ApiEnvelope<NotificationInboxItem[]>> {
+    return request<unknown>(`/api/v1/notifications/inbox?limit=${encodeURIComponent(String(limit))}`, {
+      token,
+    }).then((response) => ({
+      ...response,
+      data: normalizeNotificationInboxList(response.data),
+    }));
+  },
+
+  markNotificationInboxRead(
+    token: string,
+    body: MarkNotificationInboxReadData = { mark_all: true },
+  ): Promise<ApiEnvelope<{ updated_count: number }>> {
+    return request<{ updated_count: number }>("/api/v1/notifications/inbox/read", {
+      method: "PUT",
+      token,
+      body,
+    });
   },
 
   listUsers(token: string): Promise<ApiEnvelope<UserProfile[]>> {

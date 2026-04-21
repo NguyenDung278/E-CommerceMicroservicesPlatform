@@ -25,6 +25,7 @@ type EventHandler struct {
 	sender         email.Sender
 	preferences    notificationPreferenceReader
 	inboxStore     inbox.Store
+	historyStore   inbox.HistoryStore
 	retryPublisher retryPublisher
 	maxRetries     int
 	inboxTTL       time.Duration
@@ -36,7 +37,7 @@ type notificationPreferenceReader interface {
 }
 
 type retryPublisher interface {
-	Publish(ctx context.Context, msg amqp.Delivery, retryCount int, firstSeenAt time.Time) error
+	Publish(ctx context.Context, msg amqp.Delivery, retryCount int, firstSeenAt time.Time) (time.Time, time.Duration, error)
 }
 
 func NewEventHandler(
@@ -44,6 +45,7 @@ func NewEventHandler(
 	sender email.Sender,
 	preferences notificationPreferenceReader,
 	inboxStore inbox.Store,
+	historyStore inbox.HistoryStore,
 	retryPublisher retryPublisher,
 	maxRetries int,
 	inboxTTL time.Duration,
@@ -64,6 +66,7 @@ func NewEventHandler(
 		sender:         sender,
 		preferences:    preferences,
 		inboxStore:     inboxStore,
+		historyStore:   historyStore,
 		retryPublisher: retryPublisher,
 		maxRetries:     maxRetries,
 		inboxTTL:       inboxTTL,
@@ -157,7 +160,8 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 		}
 	}
 
-	if err := h.processMessage(ctx, msg); err != nil {
+	historyItem, err := h.processMessage(ctx, msg, meta.MessageID, msg.RoutingKey, meta.FirstSeenAt)
+	if err != nil {
 		if h.inboxStore != nil {
 			if releaseErr := h.inboxStore.Release(ctx, meta.MessageID); releaseErr != nil {
 				requestLog.Warn("failed to release notification inbox claim", zap.Error(releaseErr))
@@ -165,6 +169,15 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 		}
 
 		if isPermanentDeliveryError(err) {
+			h.appendHistoryBestEffort(ctx, requestLog, buildRetryAuditItem(
+				meta.MessageID,
+				msg.RoutingKey,
+				meta.FirstSeenAt,
+				meta.RetryCount,
+				"failed",
+				err.Error(),
+				nil,
+			))
 			monitoring.ObserveDelivery(msg.RoutingKey, "permanent_failure")
 			requestLog.Warn("notification event rejected to dlq", zap.Error(err))
 			_ = msg.Reject(false)
@@ -172,6 +185,15 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 		}
 
 		if meta.RetryCount >= h.maxRetries {
+			h.appendHistoryBestEffort(ctx, requestLog, buildRetryAuditItem(
+				meta.MessageID,
+				msg.RoutingKey,
+				meta.FirstSeenAt,
+				meta.RetryCount,
+				"retry_exhausted",
+				err.Error(),
+				nil,
+			))
 			monitoring.ObserveDelivery(msg.RoutingKey, "retry_exhausted")
 			requestLog.Warn("notification retries exhausted, rejecting to dlq", zap.Error(err))
 			_ = msg.Reject(false)
@@ -179,7 +201,7 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 		}
 
 		retryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		retryErr := h.retryPublisher.Publish(retryCtx, msg, meta.RetryCount+1, meta.FirstSeenAt)
+		nextRetryAt, delay, retryErr := h.retryPublisher.Publish(retryCtx, msg, meta.RetryCount+1, meta.FirstSeenAt)
 		cancel()
 		if retryErr != nil {
 			monitoring.ObserveDelivery(msg.RoutingKey, "retry_publish_error")
@@ -188,14 +210,28 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 			return
 		}
 
+		monitoring.ObserveRetryDelay(msg.RoutingKey, delay)
+		h.appendHistoryBestEffort(ctx, requestLog, buildRetryAuditItem(
+			meta.MessageID,
+			msg.RoutingKey,
+			meta.FirstSeenAt,
+			meta.RetryCount+1,
+			"retry_scheduled",
+			err.Error(),
+			&nextRetryAt,
+		))
 		monitoring.ObserveDelivery(msg.RoutingKey, "retry_scheduled")
 		requestLog.Warn("scheduled notification retry",
 			zap.Int("next_retry_count", meta.RetryCount+1),
+			zap.Duration("retry_delay", delay),
+			zap.Time("next_retry_at", nextRetryAt),
 			zap.Error(err),
 		)
 		_ = msg.Ack(false)
 		return
 	}
+
+	h.appendHistoryBestEffort(ctx, requestLog, historyItem)
 
 	if h.inboxStore != nil {
 		if err := h.inboxStore.MarkProcessed(ctx, meta.MessageID, h.inboxTTL); err != nil {
@@ -211,62 +247,80 @@ func (h *EventHandler) HandleMessage(ctx context.Context, msg amqp.Delivery) {
 	_ = msg.Ack(false)
 }
 
-func (h *EventHandler) processMessage(ctx context.Context, msg amqp.Delivery) error {
+func (h *EventHandler) processMessage(
+	ctx context.Context,
+	msg amqp.Delivery,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+) (*inbox.HistoryItem, error) {
 	switch msg.RoutingKey {
 	case "order.created":
 		var event OrderEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode order created event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode order created event: %w", err))
 		}
-		return h.handleOrderCreated(ctx, event)
+		return h.handleOrderCreated(ctx, messageID, routingKey, createdAt, event)
 
 	case "payment.completed":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment completed event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode payment completed event: %w", err))
 		}
-		return h.handlePaymentCompleted(ctx, event)
+		return h.handlePaymentCompleted(ctx, messageID, routingKey, createdAt, event)
 
 	case "payment.failed":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment failed event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode payment failed event: %w", err))
 		}
-		return h.handlePaymentFailed(ctx, event)
+		return h.handlePaymentFailed(ctx, messageID, routingKey, createdAt, event)
 
 	case "payment.refunded":
 		var event PaymentEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode payment refunded event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode payment refunded event: %w", err))
 		}
-		return h.handlePaymentRefunded(ctx, event)
+		return h.handlePaymentRefunded(ctx, messageID, routingKey, createdAt, event)
 
 	case "order.cancelled":
 		var event OrderEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode order cancelled event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode order cancelled event: %w", err))
 		}
-		return h.handleOrderCancelled(ctx, event)
+		return h.handleOrderCancelled(ctx, messageID, routingKey, createdAt, event)
 	}
 
 	if strings.HasPrefix(msg.RoutingKey, "return.") {
 		var event ReturnEvent
 		if err := json.Unmarshal(msg.Body, &event); err != nil {
-			return newPermanentDeliveryError(fmt.Errorf("failed to decode return event: %w", err))
+			return nil, newPermanentDeliveryError(fmt.Errorf("failed to decode return event: %w", err))
 		}
-		return h.handleReturnEvent(ctx, event)
+		return h.handleReturnEvent(ctx, messageID, routingKey, createdAt, event)
 	}
 
-	return newPermanentDeliveryError(fmt.Errorf("unsupported routing key %s", msg.RoutingKey))
+	return nil, newPermanentDeliveryError(fmt.Errorf("unsupported routing key %s", msg.RoutingKey))
 }
 
-func (h *EventHandler) handleOrderCreated(ctx context.Context, event OrderEvent) error {
+func (h *EventHandler) handleOrderCreated(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event OrderEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicOrderUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicOrderUpdates, deliveryStatus(deliver),
+		event.UserID, fmt.Sprintf("Don hang %s da duoc tao", event.OrderID),
+		fmt.Sprintf("Tong thanh toan %.2f. Trang thai hien tai: %s.", event.TotalPrice, event.Status),
+		"/orders/"+event.OrderID, "Mo chi tiet don hang",
+		event.OrderID, "", "",
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Info("notification: order confirmation",
@@ -274,21 +328,36 @@ func (h *EventHandler) handleOrderCreated(ctx context.Context, event OrderEvent)
 		zap.String("order_id", event.OrderID),
 		zap.String("status", event.Status),
 	)
-	return h.sendEmail(event.UserEmail, "Xac nhan don hang", fmt.Sprintf(
+	if err := h.sendEmail(event.UserEmail, "Xac nhan don hang", fmt.Sprintf(
 		"Chao ban,\n\nDon hang %s da duoc tao thanh cong.\nTong thanh toan: %.2f\nTrang thai: %s\n\nCam on ban da mua hang tai ND Shop.",
 		event.OrderID,
 		event.TotalPrice,
 		event.Status,
-	))
+	)); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
-func (h *EventHandler) handlePaymentCompleted(ctx context.Context, event PaymentEvent) error {
+func (h *EventHandler) handlePaymentCompleted(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event PaymentEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicPaymentUpdates, deliveryStatus(deliver),
+		event.UserID, fmt.Sprintf("Thanh toan %s thanh cong", event.PaymentID),
+		fmt.Sprintf("Don hang %s da thanh toan thanh cong %.2f.", event.OrderID, event.Amount),
+		"/payments", "Mo lich su thanh toan",
+		event.OrderID, event.PaymentID, "",
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Info("notification: payment completed",
@@ -296,21 +365,36 @@ func (h *EventHandler) handlePaymentCompleted(ctx context.Context, event Payment
 		zap.String("order_id", event.OrderID),
 		zap.String("payment_id", event.PaymentID),
 	)
-	return h.sendEmail(event.UserEmail, "Bien lai thanh toan", fmt.Sprintf(
+	if err := h.sendEmail(event.UserEmail, "Bien lai thanh toan", fmt.Sprintf(
 		"Chao ban,\n\nThanh toan %s cho don hang %s da thanh cong.\nSo tien: %.2f\n\nCam on ban da mua hang tai ND Shop.",
 		event.PaymentID,
 		event.OrderID,
 		event.Amount,
-	))
+	)); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
-func (h *EventHandler) handlePaymentFailed(ctx context.Context, event PaymentEvent) error {
+func (h *EventHandler) handlePaymentFailed(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event PaymentEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicPaymentUpdates, deliveryStatus(deliver),
+		event.UserID, fmt.Sprintf("Thanh toan %s that bai", event.PaymentID),
+		fmt.Sprintf("Don hang %s co giao dich that bai %.2f.", event.OrderID, event.Amount),
+		"/payments", "Xem lich su thanh toan",
+		event.OrderID, event.PaymentID, "",
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Warn("notification: payment failed",
@@ -318,21 +402,36 @@ func (h *EventHandler) handlePaymentFailed(ctx context.Context, event PaymentEve
 		zap.String("order_id", event.OrderID),
 		zap.String("payment_id", event.PaymentID),
 	)
-	return h.sendEmail(event.UserEmail, "Thanh toan that bai", fmt.Sprintf(
+	if err := h.sendEmail(event.UserEmail, "Thanh toan that bai", fmt.Sprintf(
 		"Chao ban,\n\nThanh toan %s cho don hang %s da that bai.\nSo tien: %.2f\nVui long thu lai hoac chon phuong thuc thanh toan khac.",
 		event.PaymentID,
 		event.OrderID,
 		event.Amount,
-	))
+	)); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
-func (h *EventHandler) handlePaymentRefunded(ctx context.Context, event PaymentEvent) error {
+func (h *EventHandler) handlePaymentRefunded(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event PaymentEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicPaymentUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicPaymentUpdates, deliveryStatus(deliver),
+		event.UserID, fmt.Sprintf("Khoan tien %s da duoc hoan", event.PaymentID),
+		fmt.Sprintf("Don hang %s da hoan tien %.2f.", event.OrderID, event.Amount),
+		"/payments", "Mo lich su thanh toan",
+		event.OrderID, event.PaymentID, "",
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Info("notification: payment refunded",
@@ -340,21 +439,36 @@ func (h *EventHandler) handlePaymentRefunded(ctx context.Context, event PaymentE
 		zap.String("order_id", event.OrderID),
 		zap.String("payment_id", event.PaymentID),
 	)
-	return h.sendEmail(event.UserEmail, "Hoan tien thanh cong", fmt.Sprintf(
+	if err := h.sendEmail(event.UserEmail, "Hoan tien thanh cong", fmt.Sprintf(
 		"Chao ban,\n\nKhoan hoan tien %s cho don hang %s da duoc xu ly thanh cong.\nSo tien hoan: %.2f\n\nNeu ban can ho tro them, vui long lien he chung toi.",
 		event.PaymentID,
 		event.OrderID,
 		event.Amount,
-	))
+	)); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
-func (h *EventHandler) handleOrderCancelled(ctx context.Context, event OrderEvent) error {
+func (h *EventHandler) handleOrderCancelled(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event OrderEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicOrderUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicOrderUpdates, deliveryStatus(deliver),
+		event.UserID, fmt.Sprintf("Don hang %s da bi huy", event.OrderID),
+		fmt.Sprintf("Tong gia tri don hang: %.2f. Trang thai hien tai: %s.", event.TotalPrice, event.Status),
+		"/orders/"+event.OrderID, "Mo chi tiet don hang",
+		event.OrderID, "", "",
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Info("notification: order cancelled",
@@ -362,20 +476,36 @@ func (h *EventHandler) handleOrderCancelled(ctx context.Context, event OrderEven
 		zap.String("order_id", event.OrderID),
 		zap.String("status", event.Status),
 	)
-	return h.sendEmail(event.UserEmail, "Don hang da bi huy", fmt.Sprintf(
+	if err := h.sendEmail(event.UserEmail, "Don hang da bi huy", fmt.Sprintf(
 		"Chao ban,\n\nDon hang %s da duoc huy thanh cong.\nSo tien: %.2f\n\nNeu ban can ho tro, vui long lien he chung toi.",
 		event.OrderID,
 		event.TotalPrice,
-	))
+	)); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
-func (h *EventHandler) handleReturnEvent(ctx context.Context, event ReturnEvent) error {
+func (h *EventHandler) handleReturnEvent(
+	ctx context.Context,
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	event ReturnEvent,
+) (*inbox.HistoryItem, error) {
 	deliver, err := h.shouldDeliverTopic(ctx, event.UserID, notificationTopicReturnUpdates)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	subject, body := returnEmailContent(event)
+	item := buildHistoryItem(messageID, routingKey, createdAt, notificationTopicReturnUpdates, deliveryStatus(deliver),
+		event.UserID, subject,
+		buildReturnNarrative(event),
+		"/returns/"+event.ReturnID, "Mo yeu cau tra hang",
+		event.OrderID, "", event.ReturnID,
+	)
 	if !deliver {
-		return nil
+		return item, nil
 	}
 
 	h.log.Info("notification: return updated",
@@ -385,8 +515,10 @@ func (h *EventHandler) handleReturnEvent(ctx context.Context, event ReturnEvent)
 		zap.String("status", event.Status),
 	)
 
-	subject, body := returnEmailContent(event)
-	return h.sendEmail(event.UserEmail, subject, body)
+	if err := h.sendEmail(event.UserEmail, subject, body); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
 func (h *EventHandler) shouldDeliverTopic(
@@ -483,6 +615,91 @@ func returnEmailContent(event ReturnEvent) (string, string) {
 			event.OrderID,
 			event.Status,
 		)
+	}
+}
+
+func buildHistoryItem(
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	topic string,
+	deliveryStatus string,
+	userID string,
+	title string,
+	message string,
+	actionHref string,
+	actionLabel string,
+	orderID string,
+	paymentID string,
+	returnID string,
+) *inbox.HistoryItem {
+	return &inbox.HistoryItem{
+		ID:             strings.TrimSpace(messageID),
+		UserID:         strings.TrimSpace(userID),
+		Topic:          strings.TrimSpace(topic),
+		RoutingKey:     strings.TrimSpace(routingKey),
+		DeliveryStatus: strings.TrimSpace(deliveryStatus),
+		VisibleToUser:  true,
+		Title:          strings.TrimSpace(title),
+		Message:        strings.TrimSpace(message),
+		ActionHref:     strings.TrimSpace(actionHref),
+		ActionLabel:    strings.TrimSpace(actionLabel),
+		OrderID:        strings.TrimSpace(orderID),
+		PaymentID:      strings.TrimSpace(paymentID),
+		ReturnID:       strings.TrimSpace(returnID),
+		CreatedAt:      createdAt.UTC(),
+	}
+}
+
+func buildRetryAuditItem(
+	messageID string,
+	routingKey string,
+	createdAt time.Time,
+	attemptCount int,
+	deliveryStatus string,
+	lastError string,
+	nextRetryAt *time.Time,
+) *inbox.HistoryItem {
+	return &inbox.HistoryItem{
+		ID:             strings.TrimSpace(messageID) + ":" + strings.TrimSpace(deliveryStatus),
+		UserID:         "",
+		Topic:          "delivery_audit",
+		RoutingKey:     strings.TrimSpace(routingKey),
+		DeliveryStatus: strings.TrimSpace(deliveryStatus),
+		VisibleToUser:  false,
+		AttemptCount:   attemptCount,
+		LastError:      strings.TrimSpace(lastError),
+		NextRetryAt:    nextRetryAt,
+		Title:          "Notification delivery audit",
+		Message:        "Notification worker recorded a retry or failure transition.",
+		CreatedAt:      createdAt.UTC(),
+	}
+}
+
+func deliveryStatus(delivered bool) string {
+	if delivered {
+		return "delivered"
+	}
+	return "suppressed"
+}
+
+func buildReturnNarrative(event ReturnEvent) string {
+	base := fmt.Sprintf("Yeu cau tra hang %s cua don %s da chuyen sang trang thai %s.", event.ReturnID, event.OrderID, event.Status)
+	if strings.TrimSpace(event.Reason) != "" {
+		base += " Ly do: " + strings.TrimSpace(event.Reason) + "."
+	}
+	if event.RefundAmount > 0 {
+		base += fmt.Sprintf(" So tien lien quan: %.2f.", event.RefundAmount)
+	}
+	return base
+}
+
+func (h *EventHandler) appendHistoryBestEffort(ctx context.Context, requestLog *zap.Logger, item *inbox.HistoryItem) {
+	if h.historyStore == nil || item == nil {
+		return
+	}
+	if err := h.historyStore.Append(ctx, *item, h.inboxTTL); err != nil {
+		requestLog.Warn("failed to append notification history item", zap.Error(err))
 	}
 }
 

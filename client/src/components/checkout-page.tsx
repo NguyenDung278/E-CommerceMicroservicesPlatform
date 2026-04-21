@@ -29,7 +29,7 @@ import { cn, fallbackImageForProduct } from "@/lib/utils";
 import type { Address, OrderPreview, Product } from "@/types/api";
 import { formatCurrency, formatShippingMethodLabel } from "@/utils/format";
 
-type PaymentChoice = "manual" | "momo" | "credit_card" | "demo";
+type PaymentChoice = "manual" | "momo";
 
 type CheckoutFormState = {
   fullName: string;
@@ -278,7 +278,7 @@ function CheckoutPageContent() {
         <SectionHeading
           eyebrow="Checkout"
           title="Tạo order thật trên order-service rồi chuyển thẳng sang payment-service."
-          description="Checkout này dùng cùng contract backend hiện có, hỗ trợ địa chỉ đã lưu, preview tổng tiền và nhiều phương thức thanh toán."
+          description="Checkout này dùng cùng contract backend hiện có, hỗ trợ địa chỉ đã lưu, preview tổng tiền và các phương thức thanh toán đã được runtime local hỗ trợ."
         />
 
         {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
@@ -347,8 +347,6 @@ function CheckoutPageContent() {
                   <Select id="payment-method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentChoice)}>
                     <option value="manual">Manual</option>
                     <option value="momo">MoMo</option>
-                    <option value="credit_card">Credit card</option>
-                    <option value="demo">Demo</option>
                   </Select>
                 </Field>
               </div>

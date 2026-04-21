@@ -10,7 +10,11 @@ import {
 } from "@/features/account/utils/account-presentation";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { api, getErrorMessage } from "@/services/api";
-import type { NotificationPreference, WishlistAlert } from "@/types/api";
+import type {
+  NotificationInboxItem,
+  NotificationPreference,
+  WishlistAlert,
+} from "@/types/api";
 import { formatCurrency, formatStatusLabel } from "@/utils/format";
 import "@/styles/pages/account/notifications-page.css";
 
@@ -62,8 +66,10 @@ export function NotificationsPage() {
   const { orders, paymentsByOrder } = useOrderPayments(token);
   const [preferences, setPreferences] = useState<NotificationPreference[]>([]);
   const [wishlistAlerts, setWishlistAlerts] = useState<WishlistAlert[]>([]);
+  const [notificationInbox, setNotificationInbox] = useState<NotificationInboxItem[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busyTopic, setBusyTopic] = useState("");
+  const [isMarkingInboxRead, setIsMarkingInboxRead] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -79,22 +85,27 @@ export function NotificationsPage() {
     void Promise.allSettled([
       api.listNotificationPreferences(token),
       api.listWishlistAlerts(token),
+      api.listNotificationInbox(token, 20),
     ]).then((results) => {
       if (!active) {
         return;
       }
 
-      const [preferencesResult, alertsResult] = results;
+      const [preferencesResult, alertsResult, inboxResult] = results;
       if (preferencesResult.status === "fulfilled") {
         setPreferences(preferencesResult.value.data);
       }
       if (alertsResult.status === "fulfilled") {
         setWishlistAlerts(alertsResult.value.data);
       }
+      if (inboxResult.status === "fulfilled") {
+        setNotificationInbox(inboxResult.value.data);
+      }
 
       if (
         preferencesResult.status === "rejected" &&
-        alertsResult.status === "rejected"
+        alertsResult.status === "rejected" &&
+        inboxResult.status === "rejected"
       ) {
         setFeedback(getErrorMessage(preferencesResult.reason));
       }
@@ -127,7 +138,7 @@ export function NotificationsPage() {
     [wishlistAlerts]
   );
 
-  const feedItems = useMemo<NotificationFeedItem[]>(() => {
+  const fallbackFeedItems = useMemo<NotificationFeedItem[]>(() => {
     const items: NotificationFeedItem[] = [];
 
     if (orders[0]) {
@@ -170,6 +181,23 @@ export function NotificationsPage() {
     return items;
   }, [latestPayment, orders, user?.email_verified]);
 
+  const inboxFeedItems = useMemo<NotificationFeedItem[]>(
+    () =>
+      notificationInbox.map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: item.message,
+        meta: `${buildDeliveryStatusLabel(item.delivery_status)} · ${formatShortDate(item.created_at)}`,
+        unread: !item.read_at,
+        actionHref: item.action_href,
+        actionLabel: item.action_label || "Open detail",
+      })),
+    [notificationInbox]
+  );
+
+  const feedItems = inboxFeedItems.length > 0 ? inboxFeedItems : fallbackFeedItems;
+  const unreadInboxCount = notificationInbox.filter((item) => !item.read_at).length;
+
   async function handleToggle(topic: string, enabled: boolean) {
     if (!token) {
       return;
@@ -186,6 +214,28 @@ export function NotificationsPage() {
       setFeedback(getErrorMessage(reason));
     } finally {
       setBusyTopic("");
+    }
+  }
+
+  async function handleMarkInboxRead() {
+    if (!token || unreadInboxCount === 0) {
+      return;
+    }
+
+    try {
+      setIsMarkingInboxRead(true);
+      await api.markNotificationInboxRead(token, { mark_all: true });
+      const now = new Date().toISOString();
+      setNotificationInbox((current) =>
+        current.map((item) => ({
+          ...item,
+          read_at: item.read_at || now,
+        }))
+      );
+    } catch (reason) {
+      setFeedback(getErrorMessage(reason));
+    } finally {
+      setIsMarkingInboxRead(false);
     }
   }
 
@@ -275,10 +325,21 @@ export function NotificationsPage() {
 
         <section className="notifications-route-feed">
           <div className="notifications-route-feed-head">
-            <h2>Recent Activity</h2>
-            <Link className="notifications-route-mark" to="/products">
-              Explore New Arrivals
-            </Link>
+            <h2>Inbox & Delivery History</h2>
+            {notificationInbox.length > 0 ? (
+              <button
+                className="notifications-route-mark"
+                disabled={isMarkingInboxRead || unreadInboxCount === 0}
+                type="button"
+                onClick={() => void handleMarkInboxRead()}
+              >
+                {isMarkingInboxRead ? "Marking..." : `Mark all read${unreadInboxCount > 0 ? ` (${unreadInboxCount})` : ""}`}
+              </button>
+            ) : (
+              <Link className="notifications-route-mark" to="/products">
+                Explore New Arrivals
+              </Link>
+            )}
           </div>
 
           <div className="notifications-route-feed-list">
@@ -308,6 +369,16 @@ export function NotificationsPage() {
       </div>
     </AccountPageLayout>
   );
+}
+
+function buildDeliveryStatusLabel(status: string) {
+  if (status === "suppressed") {
+    return "Email off";
+  }
+  if (status === "delivered") {
+    return "Email sent";
+  }
+  return status || "Recorded";
 }
 
 function buildWishlistAlertTitle(alert: WishlistAlert) {

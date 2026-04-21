@@ -19,6 +19,17 @@ type SearchAnalyticsRecord struct {
 	OccurredAt  time.Time
 }
 
+type SearchAnalyticsEventRecord struct {
+	Source      string
+	EventKind   string
+	Query       string
+	Normalized  string
+	Category    string
+	FilterKey   string
+	FilterValue string
+	OccurredAt  time.Time
+}
+
 type SearchAnalyticsSummaryParams struct {
 	Days  int
 	Limit int
@@ -26,6 +37,7 @@ type SearchAnalyticsSummaryParams struct {
 
 type SearchAnalyticsRepository interface {
 	RecordQuery(ctx context.Context, record SearchAnalyticsRecord) error
+	RecordEvent(ctx context.Context, record SearchAnalyticsEventRecord) error
 	GetSummary(ctx context.Context, params SearchAnalyticsSummaryParams) (*model.ProductSearchAnalyticsSummary, error)
 }
 
@@ -93,6 +105,8 @@ func (r *postgresSearchAnalyticsRepository) GetSummary(
 		WindowDays:        params.Days,
 		TopQueries:        []model.ProductSearchAnalyticsEntry{},
 		ZeroResultQueries: []model.ProductSearchAnalyticsEntry{},
+		TopClickedQueries: []model.ProductSearchClickAnalyticsEntry{},
+		TopFilters:        []model.ProductSearchFilterAnalyticsEntry{},
 	}
 
 	topQueries, err := r.listSummaryEntries(ctx, params, "SUM(request_count) DESC, MAX(last_seen_at) DESC")
@@ -112,7 +126,72 @@ func (r *postgresSearchAnalyticsRepository) GetSummary(
 	}
 	summary.ZeroResultQueries = zeroResultQueries
 
+	topClickedQueries, err := r.listTopClickedQueries(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	summary.TopClickedQueries = topClickedQueries
+
+	topFilters, err := r.listTopFilters(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	summary.TopFilters = topFilters
+
 	return summary, nil
+}
+
+func (r *postgresSearchAnalyticsRepository) RecordEvent(ctx context.Context, record SearchAnalyticsEventRecord) error {
+	source := strings.TrimSpace(record.Source)
+	eventKind := strings.TrimSpace(record.EventKind)
+	queryNormalized := strings.TrimSpace(record.Normalized)
+	queryDisplay := strings.TrimSpace(record.Query)
+	category := strings.TrimSpace(record.Category)
+	filterKey := strings.TrimSpace(record.FilterKey)
+	filterValue := strings.TrimSpace(record.FilterValue)
+
+	if eventKind == "" || source == "" {
+		return nil
+	}
+	if eventKind == "result_click" && queryNormalized == "" {
+		return nil
+	}
+	if eventKind == "filter_apply" && (filterKey == "" || filterValue == "") {
+		return nil
+	}
+
+	occurredAt := record.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = time.Now()
+	}
+
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO product_search_event_metrics (
+			day_bucket, source, event_kind, query_normalized, query_display, category,
+			filter_key, filter_value, event_count, last_seen_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9)
+		ON CONFLICT (day_bucket, source, event_kind, query_normalized, category, filter_key, filter_value)
+		DO UPDATE SET
+			query_display = EXCLUDED.query_display,
+			event_count = product_search_event_metrics.event_count + 1,
+			last_seen_at = EXCLUDED.last_seen_at
+	`,
+		occurredAt.UTC().Format("2006-01-02"),
+		source,
+		eventKind,
+		queryNormalized,
+		queryDisplay,
+		category,
+		filterKey,
+		filterValue,
+		occurredAt.UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to record product search analytics event: %w", err)
+	}
+
+	return nil
 }
 
 func (r *postgresSearchAnalyticsRepository) listSummaryEntries(
@@ -171,6 +250,99 @@ func (r *postgresSearchAnalyticsRepository) listSummaryEntries(
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate product search analytics summary rows: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (r *postgresSearchAnalyticsRepository) listTopClickedQueries(
+	ctx context.Context,
+	params SearchAnalyticsSummaryParams,
+) ([]model.ProductSearchClickAnalyticsEntry, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			query_display,
+			source,
+			category,
+			COALESCE(SUM(event_count), 0) AS click_count,
+			MAX(last_seen_at) AS last_seen_at
+		FROM product_search_event_metrics
+		WHERE day_bucket >= CURRENT_DATE - ($1::integer - 1)
+		  AND event_kind = 'result_click'
+		  AND query_normalized <> ''
+		GROUP BY query_display, source, category
+		ORDER BY SUM(event_count) DESC, MAX(last_seen_at) DESC
+		LIMIT $2
+	`, params.Days, params.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query top clicked search queries: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]model.ProductSearchClickAnalyticsEntry, 0)
+	for rows.Next() {
+		var entry model.ProductSearchClickAnalyticsEntry
+		if err := rows.Scan(
+			&entry.Query,
+			&entry.Source,
+			&entry.Category,
+			&entry.ClickCount,
+			&entry.LastSeenAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan top clicked search query row: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate top clicked search query rows: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (r *postgresSearchAnalyticsRepository) listTopFilters(
+	ctx context.Context,
+	params SearchAnalyticsSummaryParams,
+) ([]model.ProductSearchFilterAnalyticsEntry, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			source,
+			category,
+			filter_key,
+			filter_value,
+			COALESCE(SUM(event_count), 0) AS apply_count,
+			MAX(last_seen_at) AS last_seen_at
+		FROM product_search_event_metrics
+		WHERE day_bucket >= CURRENT_DATE - ($1::integer - 1)
+		  AND event_kind = 'filter_apply'
+		  AND filter_key <> ''
+		  AND filter_value <> ''
+		GROUP BY source, category, filter_key, filter_value
+		ORDER BY SUM(event_count) DESC, MAX(last_seen_at) DESC
+		LIMIT $2
+	`, params.Days, params.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query top search filters: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]model.ProductSearchFilterAnalyticsEntry, 0)
+	for rows.Next() {
+		var entry model.ProductSearchFilterAnalyticsEntry
+		if err := rows.Scan(
+			&entry.Source,
+			&entry.Category,
+			&entry.FilterKey,
+			&entry.FilterValue,
+			&entry.ApplyCount,
+			&entry.LastSeenAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan top search filter row: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate top search filter rows: %w", err)
 	}
 
 	return entries, nil

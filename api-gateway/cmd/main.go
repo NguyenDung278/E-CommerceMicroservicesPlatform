@@ -53,6 +53,7 @@ func main() {
 		zap.Strings("cart_service", []string{cfg.Services.CartService}),
 		zap.Strings("order_service", []string{cfg.Services.OrderService}),
 		zap.Strings("payment_service", []string{cfg.Services.PaymentService}),
+		zap.Strings("notification_service", []string{cfg.Services.NotificationService}),
 	)
 
 	// 3. Create service proxies.
@@ -61,6 +62,7 @@ func main() {
 	cartProxy := proxy.NewServiceProxy(cfg.Services.CartService, log)
 	orderProxy := proxy.NewServiceProxy(cfg.Services.OrderService, log)
 	paymentProxy := proxy.NewServiceProxy(cfg.Services.PaymentService, log)
+	notificationProxy := proxy.NewServiceProxy(cfg.Services.NotificationService, log)
 
 	// 4. Create handlers.
 	userHandler := handler.NewUserHandler(userProxy)
@@ -69,6 +71,7 @@ func main() {
 	cartHandler := handler.NewCartHandler(cartProxy)
 	orderHandler := handler.NewOrderHandler(orderProxy)
 	paymentHandler := handler.NewPaymentHandler(paymentProxy)
+	notificationHandler := handler.NewNotificationHandler(notificationProxy)
 
 	// 5. Set up Echo and register routes.
 	e := echo.New()
@@ -99,6 +102,7 @@ func main() {
 	cartHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	orderHandler.RegisterRoutes(e, cfg.JWT.Secret)
 	paymentHandler.RegisterRoutes(e, cfg.JWT.Secret)
+	notificationHandler.RegisterRoutes(e, cfg.JWT.Secret)
 
 	// 6. Start server with graceful shutdown.
 	go func() {

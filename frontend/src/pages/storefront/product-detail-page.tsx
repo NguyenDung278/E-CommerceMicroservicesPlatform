@@ -727,12 +727,7 @@ export function ProductDetailPage() {
       })
     : [];
   const savedForLater = product ? isSaved(product.id) : false;
-  const deliveryPromise =
-    selectedVariant?.lead_time
-      ? selectedVariant.lead_time
-      : activePrice >= 100
-      ? "Complimentary standard delivery on this order."
-      : "Free standard delivery unlocks from $100.";
+  const deliveryPromise = selectedVariant?.lead_time ?? "";
   const variantGallery = useMemo(
     () => (product ? buildVariantImageGallery(product, selectedVariant) : []),
     [product, selectedVariant]
@@ -747,9 +742,7 @@ export function ProductDetailPage() {
     selectedColorOption?.label
   );
   const selectedVariantBadge = selectedVariant?.badge || product?.tags[0] || "";
-  const selectedVariantFitNote =
-    selectedVariant?.fit_note ||
-    "A considered silhouette selected to feel effortless on first wear.";
+  const selectedVariantFitNote = selectedVariant?.fit_note ?? "";
   const galleryInsightCards = [
     {
       label: "Gallery focus",
@@ -924,12 +917,13 @@ export function ProductDetailPage() {
                   <p className="detail-price-display">{formatCurrency(activePrice)}</p>
                 </div>
 
-                <p className="detail-description-editorial">
-                  {product.description ||
-                    "Một thiết kế tối giản với phom dáng linh hoạt, phù hợp để mặc riêng hoặc phối theo lớp."}
-                </p>
+                {product.description ? (
+                  <p className="detail-description-editorial">{product.description}</p>
+                ) : null}
 
-                <p className="detail-variant-fit-note">{selectedVariantFitNote}</p>
+                {selectedVariantFitNote ? (
+                  <p className="detail-variant-fit-note">{selectedVariantFitNote}</p>
+                ) : null}
 
                 <div className="detail-utility-row">
                   <button
@@ -944,7 +938,9 @@ export function ProductDetailPage() {
                   >
                     {savedForLater ? "Saved for later" : "Save for later"}
                   </button>
-                  <span className="detail-utility-note">{deliveryPromise}</span>
+                  {deliveryPromise ? (
+                    <span className="detail-utility-note">{deliveryPromise}</span>
+                  ) : null}
                 </div>
 
                 {colorOptions.length > 0 ? (
@@ -994,13 +990,6 @@ export function ProductDetailPage() {
                         );
                       })}
                     </div>
-                    {selectedColorOption ? (
-                      <p className="detail-option-summary">
-                        {selectedColorOption.availableCount > 0
-                          ? `${selectedColorOption.label} hiện còn ${selectedColorOption.availableCount} lựa chọn để đặt mua.`
-                          : `${selectedColorOption.label} hiện chưa có sẵn. Hãy thử màu khác để tiếp tục mua ngay.`}
-                      </p>
-                    ) : null}
                   </div>
                 ) : null}
 
@@ -1116,10 +1105,12 @@ export function ProductDetailPage() {
                   </label>
 
                   <div className="detail-assurance-grid">
-                    <article className="detail-assurance-card">
-                      <span>Delivery</span>
-                      <strong>{deliveryPromise}</strong>
-                    </article>
+                    {deliveryPromise ? (
+                      <article className="detail-assurance-card">
+                        <span>Delivery</span>
+                        <strong>{deliveryPromise}</strong>
+                      </article>
+                    ) : null}
                     <article className="detail-assurance-card">
                       <span>Selected finish</span>
                       <strong>{selectedColorOption?.label || "Signature finish"}</strong>

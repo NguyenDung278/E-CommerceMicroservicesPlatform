@@ -90,7 +90,7 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 - [README.md](./annotated/README.md): lộ trình đọc source theo module
 - [frontend-source-map.md](./annotated/frontend-source-map.md): bản đồ thư mục frontend, API boundary, provider flow và nơi nên mở source đầu tiên
 - [frontend-app.md](./annotated/frontend-app.md): entrypoint, providers, route shell, AppLayout, ProtectedRoute
-- [client-experimental.md](./annotated/client-experimental.md): nhánh Next.js experimental và cách nó liên hệ với frontend chính
+- [client-experimental.md](./annotated/client-experimental.md): tài liệu lịch sử về giai đoạn thử nghiệm của nhánh Next.js, hiện là shopper app dài hạn cho storefront/account
 - [shared-packages.md](./annotated/shared-packages.md): `pkg/` và nền tảng backend dùng chung
 - [api-gateway-main.md](./annotated/api-gateway-main.md): entrypoint gateway
 - Các doc service/repository/line-by-line còn lại trong `annotated/` giữ vai trò đọc sâu backend
@@ -99,7 +99,7 @@ Lộ trình này phù hợp nếu bạn không chỉ muốn "đọc cho biết",
 
 - Nếu tài liệu và source mâu thuẫn, hãy tin source thật ở `cmd/main.go`, `internal/handler`, `internal/service`, `internal/repository`, `frontend/src/`, `deployments/docker/`.
 - Frontend hiện ở trạng thái refactor chuyển tiếp, nhưng source of truth bây giờ là `app/`, `pages/`, `features/`, `services/`, `components/`, `styles/`. Bộ docs mới gom lại để tránh tài liệu frontend chồng chéo.
-- `frontend/` là UI local chính; `client/` là nhánh Next.js experimental, có giá trị học tập nhưng chưa phải runtime mặc định.
+- `frontend/` là admin/workbook app và UI local chính; `client/` là shopper app dài hạn cho storefront/account nhưng chưa phải runtime Compose mặc định.
 - Không phải mọi doc cũ đều sai, nhưng các doc frontend và local runtime đã được nâng cấp mạnh để bám hơn với source hiện tại.
 
 ## Nếu muốn hiểu repo ở mức senior
