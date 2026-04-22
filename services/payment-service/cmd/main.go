@@ -22,9 +22,9 @@ import (
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/client"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/handler"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/handler/payment"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository/payment"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service/payment"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/migrations"
 )
 

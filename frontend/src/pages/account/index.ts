@@ -1,9 +1,0 @@
-export { ProfilePage } from "./profile-page";
-export { OrdersPage } from "./orders-page";
-export { ReturnDetailPage } from "./return-detail-page";
-export { ReturnsPage } from "./returns-page";
-export { AddressesPage } from "./addresses-page";
-export { OrderDetailPage } from "./order-detail-page";
-export { PaymentHistoryPage } from "./payment-history-page";
-export { SecurityPage } from "./security-page";
-export { NotificationsPage } from "./notifications-page";

@@ -127,7 +127,7 @@ export function RegisterPage() {
   const navigationState = location.state as AuthLocationState | null;
   const redirectTo = navigationState?.from
     ? `${navigationState.from.pathname}${navigationState.from.search}${navigationState.from.hash}`
-    : "/profile";
+    : "/admin";
   const formErrors = validateRegisterFields(form);
   const visibleErrors = getVisibleErrors(formErrors, touched, submitted);
   const identifierKind = detectIdentifierKind(form.identifier);

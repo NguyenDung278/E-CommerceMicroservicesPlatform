@@ -12,7 +12,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/service/payment"
 )
 
 type PaymentHandler struct {

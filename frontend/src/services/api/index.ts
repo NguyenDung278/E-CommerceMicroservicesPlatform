@@ -149,93 +149,33 @@ export {
 import { authApi } from "./modules/auth-api";
 import { userApi } from "./modules/user-api";
 import { productApi } from "./modules/product-api";
-import { cartApi } from "./modules/cart-api";
 import { orderApi } from "./modules/order-api";
 import { paymentApi } from "./modules/payment-api";
 import { adminApi } from "./modules/admin-api";
-import { storefrontApi } from "./modules/storefront-api";
 
-export { authApi, userApi, productApi, cartApi, orderApi, paymentApi, adminApi, storefrontApi };
+export { authApi, userApi, productApi, orderApi, paymentApi, adminApi };
 
 // Backward compatibility unified api object
 import { authApi as _authApi } from "./modules/auth-api";
-import { cartApi as _cartApi } from "./modules/cart-api";
-import { orderApi as _orderApi } from "./modules/order-api";
-import { paymentApi as _paymentApi } from "./modules/payment-api";
 import { productApi as _productApi } from "./modules/product-api";
 import { userApi as _userApi } from "./modules/user-api";
 import { adminApi as _adminApi } from "./modules/admin-api";
-import { storefrontApi as _storefrontApi } from "./modules/storefront-api";
 import { getErrorMessage as _getErrorMessage } from "./error-handler";
 
 export const api = {
-  register: _authApi.register,
-  login: _authApi.login,
-  refreshToken: _authApi.refreshToken,
   verifyEmail: _authApi.verifyEmail,
   forgotPassword: _authApi.forgotPassword,
   resetPassword: _authApi.resetPassword,
-  changePassword: _authApi.changePassword,
-  exchangeOAuthTicket: _authApi.exchangeOAuthTicket,
-  getProfile: _authApi.getProfile,
-  updateProfile: _authApi.updateProfile,
-  resendVerificationEmail: _authApi.resendVerificationEmail,
-  listAddresses: _userApi.listAddresses,
-  createAddress: _userApi.createAddress,
-  listNotificationPreferences: _userApi.listNotificationPreferences,
-  listNotificationInbox: _userApi.listNotificationInbox,
-  updateNotificationPreferences: _userApi.updateNotificationPreferences,
-  markNotificationInboxRead: _userApi.markNotificationInboxRead,
-  listWishlist: _userApi.listWishlist,
-  listWishlistAlerts: _userApi.listWishlistAlerts,
-  addWishlistItem: _userApi.addWishlistItem,
-  syncWishlist: _userApi.syncWishlist,
-  removeWishlistItem: _userApi.removeWishlistItem,
   listUsers: _userApi.listUsers,
   updateUserRole: _userApi.updateUserRole,
   listProducts: _productApi.listProducts,
-  listProductsByIds: _productApi.listProductsByIds,
-  getProductById: _productApi.getProductById,
-  getProductSearchAssist: _productApi.getSearchAssist,
-  listProductReviews: _productApi.listProductReviews,
-  getMyProductReview: _productApi.getMyProductReview,
-  createProductReview: _productApi.createProductReview,
-  updateMyProductReview: _productApi.updateMyProductReview,
-  deleteMyProductReview: _productApi.deleteMyProductReview,
-  getProductPopularity: _productApi.getProductPopularity,
-  listStorefrontCategories: _storefrontApi.listCategories,
-  getStorefrontHome: _storefrontApi.getHome,
-  getStorefrontCategoryPage: _storefrontApi.getCategoryPage,
   createProduct: _productApi.createProduct,
   uploadProductImages: _productApi.uploadProductImages,
   updateProduct: _productApi.updateProduct,
   deleteProduct: _productApi.deleteProduct,
-  getCart: _cartApi.getCart,
-  addToCart: _cartApi.addToCart,
-  updateCartItem: _cartApi.updateCartItem,
-  removeCartItem: _cartApi.removeCartItem,
-  clearCart: _cartApi.clearCart,
-  createOrder: _orderApi.createOrder,
-  previewOrder: _orderApi.previewOrder,
-  listOrders: _orderApi.listOrders,
-  getOrderById: _orderApi.getOrderById,
-  getOrderEvents: _orderApi.getOrderEvents,
-  getReturnEligibility: _orderApi.getReturnEligibility,
-  listReturns: _orderApi.listReturns,
-  listOrderReturns: _orderApi.listReturnsByOrder,
-  getReturnById: _orderApi.getReturnById,
-  uploadReturnEvidence: _orderApi.uploadReturnEvidence,
-  createReturn: _orderApi.createReturn,
-  cancelOrder: _orderApi.cancelOrder,
   getAdminOrderReport: _adminApi.getOrderReport,
   getSearchAnalytics: _adminApi.getSearchAnalytics,
   listNotificationAudit: _adminApi.listNotificationAudit,
-  processPayment: _paymentApi.processPayment,
-  listPayments: _paymentApi.listPayments,
-  listPaymentHistory: _paymentApi.listPaymentHistory,
-  getPaymentById: _paymentApi.getPaymentById,
-  getPaymentsByOrderId: _paymentApi.getPaymentsByOrderId,
-  listPaymentsByOrder: _paymentApi.listPaymentsByOrder,
   listCoupons: _adminApi.listCoupons,
   createCoupon: _adminApi.createCoupon,
   listAdminOrders: _adminApi.listOrders,
@@ -244,7 +184,6 @@ export const api = {
   cancelAdminOrder: _adminApi.cancelOrder,
   updateAdminReturnStatus: _adminApi.updateReturnStatus,
   requestAdminReturnRefund: _adminApi.requestReturnRefund,
-  listAdminPaymentsByOrder: _adminApi.listPaymentsByOrder,
   listAdminPaymentsByOrders: _adminApi.listPaymentsByOrders,
   refundPayment: _adminApi.refundPayment,
   getErrorMessage: _getErrorMessage,

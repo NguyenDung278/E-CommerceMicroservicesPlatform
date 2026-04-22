@@ -1,20 +1,12 @@
 const routeModuleLoaders = {
-  home: () => import("@/pages/storefront/home-page"),
-  catalog: () => import("@/pages/storefront/catalog-page"),
-  product: () => import("@/pages/storefront/product-detail-page"),
-  category: () => import("@/pages/storefront/category-page"),
-  cart: () => import("@/pages/storefront/cart-page"),
-  wishlist: () => import("@/pages/storefront/wishlist-page"),
-  checkout: () => import("@/pages/storefront/checkout-page"),
   login: () => import("@/pages/auth/login-page"),
-  profile: () => import("@/pages/account/profile-page"),
-  orders: () => import("@/pages/account/orders-page"),
-  orderDetail: () => import("@/pages/account/order-detail-page"),
-  addresses: () => import("@/pages/account/addresses-page"),
-  payments: () => import("@/pages/account/payment-history-page"),
-  security: () => import("@/pages/account/security-page"),
-  notifications: () => import("@/pages/account/notifications-page"),
+  register: () => import("@/pages/auth/register-page"),
+  forgotPassword: () => import("@/pages/auth/forgot-password-page"),
+  resetPassword: () => import("@/pages/auth/reset-password-page"),
+  verifyEmail: () => import("@/pages/auth/verify-email-page"),
+  authCallback: () => import("@/pages/auth/auth-callback-page"),
   admin: () => import("@/pages/admin/admin-page"),
+  forbidden: () => Promise.resolve(),
 } as const;
 
 type RouteModuleKey = keyof typeof routeModuleLoaders;
@@ -42,79 +34,40 @@ export function preloadRouteByPath(href: string) {
   const pathname = normalizePathname(href);
 
   if (pathname === "/") {
-    return preloadRouteModule("home");
-  }
-
-  if (pathname === "/products") {
-    return preloadRouteModule("catalog");
-  }
-
-  if (pathname.startsWith("/products/")) {
-    return preloadRouteModule("product");
-  }
-
-  if (pathname.startsWith("/categories/")) {
-    return preloadRouteModule("category");
-  }
-
-  if (pathname === "/cart") {
-    return preloadRouteModule("cart");
-  }
-
-  if (pathname === "/wishlist") {
-    return preloadRouteModule("wishlist");
-  }
-
-  if (pathname === "/checkout") {
-    return preloadRouteModule("checkout");
+    return preloadRouteModule("login");
   }
 
   if (pathname === "/login") {
     return preloadRouteModule("login");
   }
 
-  if (pathname === "/profile") {
-    return preloadRouteModule("profile");
+  if (pathname === "/register") {
+    return preloadRouteModule("register");
   }
 
-  if (pathname === "/myorders" || pathname === "/orders") {
-    return preloadRouteModule("orders");
+  if (pathname === "/forgot-password") {
+    return preloadRouteModule("forgotPassword");
   }
 
-  if (pathname.startsWith("/orders/")) {
-    return preloadRouteModule("orderDetail");
+  if (pathname === "/reset-password") {
+    return preloadRouteModule("resetPassword");
   }
 
-  if (pathname === "/addresses") {
-    return preloadRouteModule("addresses");
+  if (pathname === "/verify-email") {
+    return preloadRouteModule("verifyEmail");
   }
 
-  if (pathname === "/payments") {
-    return preloadRouteModule("payments");
-  }
-
-  if (pathname === "/security") {
-    return preloadRouteModule("security");
-  }
-
-  if (pathname === "/notifications") {
-    return preloadRouteModule("notifications");
+  if (pathname === "/auth/callback") {
+    return preloadRouteModule("authCallback");
   }
 
   if (pathname === "/admin") {
     return preloadRouteModule("admin");
   }
 
+  if (pathname === "/forbidden") {
+    return preloadRouteModule("forbidden");
+  }
+
   return null;
-}
-
-export function warmCommonStorefrontRoutes(isAuthenticated: boolean) {
-  const commonRoutes: RouteModuleKey[] = ["home", "catalog", "category", "cart", "wishlist"];
-  const accountRoutes: RouteModuleKey[] = isAuthenticated
-    ? ["profile", "orders", "addresses", "payments", "security", "notifications"]
-    : ["login"];
-
-  [...commonRoutes, ...accountRoutes].forEach((routeKey) => {
-    void preloadRouteModule(routeKey);
-  });
 }

@@ -21,6 +21,7 @@ Stack mặc định hiện có:
 
 | Service | Vai trò | Truy cập từ host |
 | --- | --- | --- |
+| `client` | storefront/account runtime Next.js mặc định | `http://localhost:3000` |
 | `frontend` | frontend React + Vite build static, serve bằng Nginx | `http://localhost:4173` |
 | `nginx` | edge proxy riêng cho `/api` và `/health` | `http://localhost` |
 | `api-gateway` | public HTTP entrypoint cho backend | `http://localhost:8080` |
@@ -41,36 +42,34 @@ Stack mặc định hiện có:
 
 Lưu ý rất quan trọng:
 
-- UI local mặc định trong compose là `http://localhost:4173`
+- shopper UI mặc định trong compose là `http://localhost:3000`
+- admin/workbook UI mặc định trong compose là `http://localhost:4173`
 - `http://localhost` không phải storefront chính
 - Postgres, Redis, RabbitMQ không publish port ra host theo mặc định
 
 ---
 
-## 2. Client Next.js Đang Ở Trạng Thái Nào
+## 2. Client Next.js Đang Chạy Mặc Định Ra Sao
 
-`client/` hiện không còn là một ý tưởng rời rạc nữa. Compose đã có service `client`, nhưng được đặt sau profile:
+`client/` hiện là storefront/account runtime mặc định trong Compose, không còn là profile tùy chọn như trước.
 
-```yaml
-profiles: ["client"]
-```
+Trạng thái runtime đúng theo `deployments/docker/docker-compose.yml`:
+
+- `client` chạy mặc định ở `http://localhost:3000`
+- `frontend` vẫn chạy song song ở `http://localhost:4173` cho admin/workbook/local verification
+- `nginx` ở `http://localhost` vẫn chỉ proxy `/api` và `/health`, không serve shopper UI
 
 Điều đó có nghĩa:
 
-- runtime mặc định vẫn là `frontend`
-- `client` chỉ bật khi bạn chủ động muốn smoke test hướng Next.js
+- shopper/account flow nên được verify trước trên `3000`
+- admin/workbook flow nên được verify trên `4173`
+- khi debug API riêng, vẫn gọi trực tiếp `http://localhost:8080`
 
-Chạy profile `client`:
+Luồng network quan trọng:
 
-```bash
-COMPOSE_PROFILES=client make compose-up
-```
-
-Khi bật profile này, `client` sẽ chạy ở:
-
-```text
-http://localhost:3000
-```
+- browser-side fetch của `client` dùng `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
+- server-side fetch của `client` dùng `API_GATEWAY_URL=http://api-gateway:8080`
+- `frontend` Docker static build vẫn tự proxy `/api` về gateway qua nginx trong image của nó
 
 ---
 
@@ -176,9 +175,9 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml re
 
 | URL | Mục đích |
 | --- | --- |
-| `http://localhost:4173` | frontend Docker mặc định |
+| `http://localhost:3000` | client Next.js mặc định trong Compose |
+| `http://localhost:4173` | frontend Docker cho admin/workbook |
 | `http://localhost:5174` | frontend Vite dev trên host |
-| `http://localhost:3000` | client Next.js khi bật profile `client` hoặc chạy host |
 | `http://localhost:8080` | API Gateway |
 | `http://localhost` | nginx edge proxy |
 | `http://localhost:9000` | MinIO API |
@@ -358,15 +357,15 @@ Các database chính:
 
 ### "localhost:80 là frontend chính"
 
-Sai. UI local mặc định trong compose là:
+Sai. `localhost:80` hiện chỉ là edge proxy cho `/api` và `/health`. Shopper UI mặc định trong compose là:
 
 ```text
-http://localhost:4173
+http://localhost:3000
 ```
 
 ### "client đã là runtime mặc định"
 
-Sai. `client` hiện là runtime tùy chọn sau compose profile.
+Đúng. `client` hiện là shopper/account runtime mặc định trong compose, còn `frontend` giữ vai trò admin/workbook song song.
 
 ### "Postgres/Redis/RabbitMQ truy cập localhost được ngay"
 
@@ -399,3 +398,95 @@ Nếu local stack có vấn đề, đi theo thứ tự:
 7. nếu nghi env/config, inspect env + file config mount
 
 Cách này giúp bạn tìm lỗi nhanh hơn rất nhiều so với down/up toàn bộ stack theo phản xạ.
+
+---
+
+## 14. Runtime Truth Matrix
+
+Khi local stack đang chạy, hãy coi đây là bảng sự thật để tránh debug nhầm process:
+
+| Bề mặt | URL | Process thật đang trả response |
+| --- | --- | --- |
+| Shopper storefront/account | `http://localhost:3000` | `client` |
+| Admin/workbook local UI | `http://localhost:4173` | `frontend` |
+| Public API | `http://localhost:8080` | `api-gateway` |
+| Edge `/api` và `/health` | `http://localhost` | `nginx` -> `api-gateway` |
+| Tracing UI | `http://localhost:16686` | `jaeger` |
+| Object storage console | `http://localhost:9001` | `minio` |
+
+Nếu UI và API cùng lỗi, nhìn `api-gateway` trước.
+
+Nếu shopper lỗi nhưng admin vẫn ổn:
+
+- nhìn `client`
+- rồi kiểm tra `NEXT_PUBLIC_API_BASE_URL`, `API_GATEWAY_URL`
+
+Nếu admin lỗi nhưng shopper vẫn ổn:
+
+- nhìn `frontend`
+- rồi kiểm tra build static, nginx trong image và proxy `/api`
+
+## 15. Playbook Debug Theo Triệu Chứng
+
+### Shopper `3000` lên trang trắng hoặc lỗi fetch
+
+Kiểm tra theo thứ tự:
+
+1. `docker compose ... logs -f client`
+2. `curl http://localhost:3000`
+3. `curl http://localhost:8080/health`
+4. inspect env của container `client`
+5. kiểm tra `NEXT_PUBLIC_API_BASE_URL` và `API_GATEWAY_URL`
+
+### Admin `4173` lên nhưng API fail hoặc bị 401/403
+
+Kiểm tra theo thứ tự:
+
+1. `curl http://localhost:4173/health`
+2. `docker compose ... logs -f frontend api-gateway`
+3. xem token, cookie, `Authorization` header ở browser devtools
+4. kiểm tra `FRONTEND_BASE_URL` nếu flow lỗi ở OAuth/email link
+
+### Gateway sống nhưng một domain API trả 502/timeout
+
+Kiểm tra theo thứ tự:
+
+1. log `api-gateway`
+2. log service upstream tương ứng
+3. probe nội bộ service đó trên `ecommerce-network`
+4. kiểm tra config YAML mount của service
+5. nếu nghi DB, vào `postgres` để xem migration/data
+
+### Tạo order được nhưng payment/webhook không cập nhật
+
+Kiểm tra theo thứ tự:
+
+1. log `payment-service`
+2. log `order-service`
+3. kiểm tra route `/api/v1/payments/webhooks/momo`
+4. kiểm tra record `payments`, `outbox_events`, `inbox_messages`
+5. dùng Jaeger để xem trace qua gateway -> payment -> order
+
+### Return đã queue refund nhưng mãi không hoàn tất
+
+Kiểm tra theo thứ tự:
+
+1. log `order-service` refund worker
+2. log `payment-service`
+3. bảng `returns`:
+   - `refund_attempt_count`
+   - `refund_last_error`
+   - `refund_next_retry_at`
+   - `refund_processing_started_at`
+4. bảng `outbox_events`
+5. nếu nghi auth nội bộ, kiểm tra service JWT giữa order và payment
+
+### Notification không gửi hoặc gửi lặp
+
+Kiểm tra theo thứ tự:
+
+1. log `notification-service`
+2. `rabbitmqctl list_queues`
+3. Redis claim state nếu nghi dedupe
+4. route/user preference source ở `user-service`
+5. retry queue headers và DLQ nếu flow đã đi xa tới broker

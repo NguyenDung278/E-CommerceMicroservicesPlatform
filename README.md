@@ -398,6 +398,73 @@ Khi debug end-to-end, hãy bám flow:
 4. repository đang chạm Postgres/Redis/RabbitMQ như thế nào
 5. có event bất đồng bộ nào phát ra sau đó không
 
+## 6 Backend Flows Nên Hiểu Đầu Tiên
+
+Nếu bạn chỉ có nửa ngày để nắm backend của repo, đừng đọc dàn trải. Hãy đi theo 6 flow này:
+
+1. `login -> profile`
+   - mở `services/user-service/internal/handler/`, `internal/service/account/`, `internal/repository/userrepo/`
+2. `catalog -> product detail -> search assist`
+   - mở `services/product-service/internal/service/product_queries.go`, `internal/repository/product/`
+3. `cart -> merge cart -> checkout preview`
+   - mở `services/cart-service/internal/service/cart/`, `services/order-service/internal/service/order_pricing.go`
+4. `create order`
+   - mở `services/order-service/internal/service/order/order_lifecycle.go`, `internal/repository/order_repository.go`
+5. `create payment -> webhook -> sync order`
+   - mở `services/payment-service/internal/service/payment/`, `services/order-service/internal/repository/order_repository.go`
+6. `return -> refund queue -> notification`
+   - mở `services/order-service/internal/service/order_return_refund_worker.go`, `services/payment-service/internal/service/payment_refunds.go`, `services/notification-service/internal/handler/event_handler.go`
+
+Nếu bạn hiểu đủ 6 flow này, bạn sẽ chạm được hầu hết những pattern quan trọng nhất của repo:
+
+- HTTP gateway
+- service layering
+- transaction bundle
+- SQL compare-and-set
+- gRPC nội bộ
+- outbox/inbox
+- retry-safe async
+
+## Repository Và Hot Path Nên Mở Khi Audit Issue
+
+Khi bug không còn là “API trả 500” mà là duplicate side effect, race condition, pagination lệch hoặc worker bị kẹt, hãy mở thẳng các hot path sau:
+
+| Tình huống | File / function nên mở đầu tiên |
+| --- | --- |
+| Order bị tạo lặp hoặc replay lạ | `services/order-service/internal/service/order/order_lifecycle.go`, `createOrderTx`, `GetIdempotencyKey` |
+| Coupon bị dùng quá số lần | `services/order-service/internal/repository/order_repository.go#lockAndConsumeCoupon` |
+| Admin list order chậm / pagination lệch | `ListAll`, `ListAllByCursor` trong `order_repository.go` |
+| Payment webhook replay hoặc update sai trạng thái | `services/payment-service/internal/repository/payment/payment_repository.go#ApplyWebhookResult` |
+| Inventory bị âm hoặc oversell | `services/product-service/internal/repository/product/product_repository.go#UpdateStock` |
+| Review aggregate sai | `product_review_repository.go#ApplyReviewSummaryDelta` |
+| Profile update dính address/phone verification | `services/user-service/internal/repository/profile_tx_manager.go` |
+| Notification gửi lặp | `services/notification-service/internal/inbox/redis_store.go`, `retry_publisher.go` |
+| Refund worker bị kẹt hoặc retry vô hạn | `ClaimPendingReturnRefunds`, `MarkReturnRefundAttemptFailed`, `CompleteReturnRefund` |
+| Cart bị mất update khi thao tác nhanh | `services/cart-service/internal/repository/cart/cart_repository.go` |
+
+Đây là những file giữ invariant thật của backend, không phải chỉ là helper phụ.
+
+## Chọn Đúng Tài Liệu Trước Khi Bắt Đầu
+
+Repo hiện có khá nhiều tài liệu. Mỗi file nên được dùng đúng mục đích:
+
+- [README.md](./README.md)
+  - overview, runtime thật, đường đọc source
+- [DOCKER_GUIDE.md](./DOCKER_GUIDE.md)
+  - compose, container, debug local stack
+- [API_TESTING_GUIDE.md](./API_TESTING_GUIDE.md)
+  - route public, smoke flow, negative flow, replay/idempotency test
+- [LOGIC_FLOW.md](./LOGIC_FLOW.md)
+  - flow end-to-end từ UI/API boundary xuống service/repository/async worker
+- [PROJECTS.md](./PROJECTS.md)
+  - trạng thái triển khai, coverage, verify/deploy checklist
+- [docs/annotated/README.md](./docs/annotated/README.md)
+  - source map chi tiết theo service/file/function
+- [docs/deep-dive/README.md](./docs/deep-dive/README.md)
+  - code quality, failure mode, hardening direction
+- [docs/learning/README.md](./docs/learning/README.md)
+  - roadmap học repo và checklist audit khi tự đọc source
+
 ## Trạng thái hiện tại và lưu ý khi phát triển
 
 - `client/` là storefront runtime Compose mặc định và là nơi nên tiếp tục đầu tư mọi feature shopper/account

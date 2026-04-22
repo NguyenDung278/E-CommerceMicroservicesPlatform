@@ -15,7 +15,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service/order"
 )
 
 type OrderHandler struct {

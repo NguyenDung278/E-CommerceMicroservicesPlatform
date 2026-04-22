@@ -486,6 +486,184 @@ Mọi tài liệu hoặc roadmap mới phải ưu tiên những việc này trư
 
 ---
 
+## 18. Kỷ Luật Cập Nhật Tài Liệu
+
+Repo này có nhiều file tài liệu ở root và trong `docs/`. Nếu flow, route, runtime hoặc contract đổi mà docs không đổi theo, nợ kỹ thuật sẽ tăng rất nhanh.
+
+Khi thay đổi code liên quan tới runtime thật, contributor và AI agent phải tự hỏi:
+
+1. Route public có đổi không?
+2. Docker Compose/runtime local có đổi không?
+3. Flow end-to-end hoặc async semantics có đổi không?
+4. Trạng thái triển khai, test hoặc backlog có đổi không?
+
+Nếu câu trả lời là có, phải cập nhật tài liệu tương ứng ngay trong cùng thay đổi hoặc cùng đợt làm việc.
+
+### 18.1. Source of truth khi viết docs
+
+Khi viết hoặc sửa docs, ưu tiên kiểm tra các file sau trước:
+
+- `deployments/docker/docker-compose.yml`
+- `deployments/docker/config/*.yaml`
+- `api-gateway/cmd/main.go`
+- `api-gateway/internal/handler/*.go`
+- `api-gateway/internal/proxy/*.go`
+- `services/*-service/cmd/main.go`
+- `services/*-service/internal/handler/`
+- `services/*-service/internal/service/`
+- `services/*-service/internal/repository/`
+- `pkg/config/config.go`
+- `pkg/middleware/*`
+- `pkg/observability/*`
+
+Không copy-paste hoặc lặp lại route/path cũ chỉ vì tài liệu khác đã ghi như vậy.
+
+### 18.2. Cách viết docs đúng trong repo này
+
+Tài liệu tốt trong repo này nên:
+
+- chỉ rõ file path thật
+- chỉ rõ service, handler, service layer, repository nào giữ invariant
+- nói rõ source of truth nằm ở Postgres, Redis, RabbitMQ hay client state
+- nói rõ chỗ nào đã production-oriented và chỗ nào mới dừng ở mức “đủ chạy local”
+- nói rõ failure mode và trade-off, không chỉ mô tả happy path
+
+Tài liệu không nên:
+
+- mô tả repo như monolith
+- nói “có thể”, “có lẽ”, “thường là” khi source code đã thể hiện rõ
+- gọi `client/` hay `frontend/` là entrypoint chính nếu compose/runtime thật đang khác
+- biến những route/helper test cũ thành contract chính thức
+
+---
+
+## 19. Những Pattern Backend Phải Giữ Khi Sửa Code
+
+Một số pattern hiện tại là xương sống reliability của hệ thống. Khi refactor hoặc mở rộng, phải giữ hoặc nâng cấp chúng một cách có chủ đích, không được vô tình làm yếu đi.
+
+### 19.1. Transaction bundle
+
+Ví dụ:
+
+- `createOrderTx`
+- `CreateWithIdempotency` ở payment
+- `ProfileTxManager.RunInTx`
+- `ProductReviewTxManager.RunInTx`
+
+Ý nghĩa:
+
+- nhiều write phải cùng commit hoặc cùng rollback
+- event/outbox/idempotency record không được tách rời entity chính
+
+### 19.2. SQL compare-and-set
+
+Ví dụ:
+
+- `UpdateStock`
+- `ExpirePendingReservation`
+- `ApplyWebhookResult`
+
+Ý nghĩa:
+
+- condition phải nằm trong `WHERE`
+- quyết định mutate hay no-op bằng `RowsAffected`, không dựa vào snapshot cũ trong memory
+
+### 19.3. Row lock
+
+Ví dụ:
+
+- `lockAndConsumeCoupon`
+- `GetReviewByProductAndUserForUpdate`
+- `SELECT status ... FOR UPDATE` trong `ApplyInboxStatusTransition`
+
+Ý nghĩa:
+
+- serialize critical section ngay ở DB row
+- tránh lost update và race condition khi nhiều replica cùng chạy
+
+### 19.4. Cursor pagination
+
+Ví dụ:
+
+- `product-service` catalog list
+- `order-service` list by cursor
+
+Ý nghĩa:
+
+- hot path phải ưu tiên cursor khi dữ liệu tăng nhanh
+- ordering phải có tie-breaker ổn định như `created_at, id`
+
+### 19.5. Lease claim + retry-safe async
+
+Ví dụ:
+
+- `ClaimPendingOutbox`
+- `ClaimPendingReturnRefunds`
+- `notification-service/internal/inbox/redis_store.go`
+
+Ý nghĩa:
+
+- worker có thể scale ngang
+- process crash giữa chừng không làm mất việc
+- downstream phải vẫn chịu được duplicate delivery
+
+### 19.6. Outbox / inbox / idempotency
+
+Ví dụ:
+
+- outbox ở order/payment
+- inbox transition ở order/payment
+- payment/order idempotency key
+
+Ý nghĩa:
+
+- publish retry-safe
+- webhook replay-safe
+- POST quan trọng chịu được client retry
+
+Nếu một thay đổi làm suy yếu một trong các pattern này, phải nêu rõ trong PR hoặc proposal:
+
+- pattern cũ là gì
+- vì sao nó không còn phù hợp
+- pattern mới thay thế bằng gì
+- test nào chứng minh behavior vẫn an toàn
+
+---
+
+## 20. Trách Nhiệm Của Từng File Tài Liệu Ở Root
+
+Để tránh trùng lặp lộn xộn, mỗi file tài liệu ở root nên giữ một vai trò rõ ràng:
+
+- `README.md`
+  - entrypoint tổng quan cho người mới
+  - runtime local thật, thành phần chính, đường đọc source
+- `DOCKER_GUIDE.md`
+  - compose/runtime/debug/playbook vận hành local
+  - URL, container, network, config, symptom-based debugging
+- `API_TESTING_GUIDE.md`
+  - route public testable qua gateway
+  - smoke flow, negative flow, idempotency flow, webhook/replay verification
+- `LOGIC_FLOW.md`
+  - flow end-to-end từ UI/API boundary tới service/repository/async worker
+  - source of truth, invariant, file map theo flow
+- `PROJECTS.md`
+  - trạng thái triển khai theo feature/layer
+  - test/coverage/verify/deploy checklist
+- `docs/annotated/README.md`
+  - source map chi tiết nhất theo service, file, function, hot path
+- `docs/deep-dive/README.md`
+  - phân tích hành vi runtime, code quality, failure mode, hardening direction
+- `docs/learning/README.md`
+  - roadmap học source và checklist audit khi tự đọc repo
+
+Nếu sửa một file mà nội dung thực ra thuộc trách nhiệm của file khác, hãy:
+
+1. rút gọn phần overview ở file hiện tại
+2. link sang file đúng vai trò
+3. giữ thông tin không bị nhân bản mâu thuẫn
+
+---
+
 ## Kết luận
 
 Tiêu chuẩn của repo này không phải “code chạy được”, mà là:

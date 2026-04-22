@@ -23,9 +23,9 @@ import (
 	appvalidator "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	paymentclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/grpc_client"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/handler/order"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service/order"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/storage"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/migrations"
 )

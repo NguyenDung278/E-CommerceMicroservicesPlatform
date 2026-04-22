@@ -21,7 +21,6 @@ import {
   type TouchedFields,
 } from "@/features/auth/utils/auth-form";
 import { NotificationStack, type NotificationItem } from "@/components/feedback/notification-stack";
-import { StorefrontOverlayHeader } from "@/components/navigation/storefront-overlay-header";
 import { FormField } from "@/components/form/form-field";
 import { getErrorMessage } from "@/services/api";
 import { type LoginFormValues, validateLoginFields } from "@/utils/validation";
@@ -39,8 +38,8 @@ const defaultLoginForm: LoginFormValues = {
 };
 
 const loginVisualHighlights = [
-  "Sustainably sourced forest-inspired goods.",
-  "Editorial storefront with a calm, tactile authentication flow.",
+  "Operational visibility across catalog, orders, returns, and payments.",
+  "One runtime focused on admin, support, and workbook coordination.",
 ];
 
 export function LoginPage() {
@@ -70,7 +69,7 @@ export function LoginPage() {
   const navigationState = location.state as AuthLocationState | null;
   const redirectTo = navigationState?.from
     ? `${navigationState.from.pathname}${navigationState.from.search}${navigationState.from.hash}`
-    : "/profile";
+    : "/admin";
   const loginPromptMessage = navigationState?.message?.trim() ?? "";
   const loginErrors = validateLoginFields(loginForm);
   const visibleErrors = getVisibleErrors(loginErrors, touched, submitted);
@@ -159,7 +158,11 @@ export function LoginPage() {
       }
 
       setDelayRedirect(true);
-      pushNotification("success", "Đăng nhập thành công", "Đang đưa bạn quay lại khu vực mua sắm.");
+      pushNotification(
+        "success",
+        "Đăng nhập thành công",
+        "Đang đưa bạn vào khu vực quản trị và workbook."
+      );
       window.setTimeout(() => navigate(redirectTo, { replace: true }), 450);
     } catch (reason) {
       pushNotification("error", "Không thể đăng nhập", getErrorMessage(reason));
@@ -180,9 +183,11 @@ export function LoginPage() {
     <div className="auth-page auth-page-login">
       <NotificationStack items={notifications} onDismiss={dismissNotification} />
 
-      <header className="auth-shared-header">
-        <div className="auth-shared-header-inner">
-          <StorefrontOverlayHeader tone="light" />
+      <header className="auth-minimal-topbar">
+        <div className="auth-minimal-topbar-inner">
+          <Link className="auth-minimal-brand" to="/">
+            ND Admin
+          </Link>
         </div>
       </header>
 
@@ -195,12 +200,12 @@ export function LoginPage() {
             <div className="auth-login-visual-overlay" />
 
             <div className="auth-login-visual-content">
-              <div className="auth-login-brand">ND Shop</div>
+              <div className="auth-login-brand">ND Admin</div>
               <div className="auth-login-copy">
-                <h1>Curated items for the modern hearth.</h1>
+                <h1>Admin workspace for operations, catalog, and order control.</h1>
                 <p>
-                  Connecting ancestral quality with contemporary living through sustainably sourced
-                  forest-inspired goods.
+                  Sign in to manage catalog data, order operations, returns, payments, and workbook
+                  synchronization from one place.
                 </p>
               </div>
 
@@ -212,8 +217,8 @@ export function LoginPage() {
             </div>
 
             <div className="auth-login-featured-note">
-              <span>Featured Collection</span>
-              <strong>The Evergreen Series</strong>
+              <span>Runtime</span>
+              <strong>Admin + Workbook</strong>
             </div>
           </section>
 

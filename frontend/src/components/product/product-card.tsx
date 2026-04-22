@@ -51,7 +51,8 @@ export function ProductCard({
   const productVariants = Array.isArray(product.variants) ? product.variants : [];
   const productPrice = Number.isFinite(product.price) ? product.price : 0;
   const primaryImage = productImages[0] ?? "";
-  const productHref = `/products/${product.id}`;
+  const canNavigateToProduct = !isAdminCard && Boolean(product.id);
+  const productHref = canNavigateToProduct ? `/products/${product.id}` : "";
   const accentTag = productTags[0] ?? "";
   const stockLabel = product.stock === 0 ? "Hết hàng" : `${product.stock} còn lại`;
   const stockSignalClassName =
@@ -59,7 +60,9 @@ export function ProductCard({
       ? "product-card-archive-signal product-card-archive-signal-alert"
       : "product-card-archive-signal";
   const handleProductPrefetch = () => {
-    void prefetchRouteIntent(productHref);
+    if (canNavigateToProduct) {
+      void prefetchRouteIntent(productHref);
+    }
   };
 
   if (variant === "archive") {
@@ -161,23 +164,33 @@ export function ProductCard({
       }
     >
       <div className="product-card-media-shell">
-        <Link
-          className="product-card-media-link"
-          onFocus={handleProductPrefetch}
-          onMouseEnter={handleProductPrefetch}
-          onTouchStart={handleProductPrefetch}
-          to={productHref}
-        >
-          {primaryImage ? (
-            <div className="product-card-media">
-              <img alt={product.name} decoding="async" loading="lazy" src={primaryImage} />
-            </div>
-          ) : (
-            <div className="product-card-media product-card-media-fallback">
-              <span>{product.name.slice(0, 1).toUpperCase()}</span>
-            </div>
-          )}
-        </Link>
+        {canNavigateToProduct ? (
+          <Link
+            className="product-card-media-link"
+            onFocus={handleProductPrefetch}
+            onMouseEnter={handleProductPrefetch}
+            onTouchStart={handleProductPrefetch}
+            to={productHref}
+          >
+            {primaryImage ? (
+              <div className="product-card-media">
+                <img alt={product.name} decoding="async" loading="lazy" src={primaryImage} />
+              </div>
+            ) : (
+              <div className="product-card-media product-card-media-fallback">
+                <span>{product.name.slice(0, 1).toUpperCase()}</span>
+              </div>
+            )}
+          </Link>
+        ) : primaryImage ? (
+          <div className="product-card-media">
+            <img alt={product.name} decoding="async" loading="lazy" src={primaryImage} />
+          </div>
+        ) : (
+          <div className="product-card-media product-card-media-fallback">
+            <span>{product.name.slice(0, 1).toUpperCase()}</span>
+          </div>
+        )}
 
         <div className="product-card-badge-row">
           <span className="product-card-badge">{product.category || "atelier item"}</span>
@@ -229,15 +242,17 @@ export function ProductCard({
             <strong>{formatCurrency(productPrice)}</strong>
             <span>{product.category || "General collection"}</span>
           </div>
-          <Link
-            className="text-link"
-            onFocus={handleProductPrefetch}
-            onMouseEnter={handleProductPrefetch}
-            onTouchStart={handleProductPrefetch}
-            to={productHref}
-          >
-            Xem chi tiết
-          </Link>
+          {canNavigateToProduct ? (
+            <Link
+              className="text-link"
+              onFocus={handleProductPrefetch}
+              onMouseEnter={handleProductPrefetch}
+              onTouchStart={handleProductPrefetch}
+              to={productHref}
+            >
+              Xem chi tiết
+            </Link>
+          ) : null}
         </div>
       </div>
 

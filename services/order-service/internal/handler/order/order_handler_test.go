@@ -24,7 +24,7 @@ import (
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/repository"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/service/order"
 )
 
 type fakeOrderHandlerRepo struct {

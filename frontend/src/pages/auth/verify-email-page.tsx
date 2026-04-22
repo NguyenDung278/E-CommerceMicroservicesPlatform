@@ -104,11 +104,11 @@ export function VerifyEmailPage() {
             </div>
 
             <div className="auth-status-actions">
-              <Link className="primary-link" to={isAuthenticated ? "/profile" : "/login"}>
-                {isAuthenticated ? "Quay lại tài khoản" : "Đi đến đăng nhập"}
+              <Link className="primary-link" to={isAuthenticated ? "/admin" : "/login"}>
+                {isAuthenticated ? "Quay lại admin" : "Đi đến đăng nhập"}
               </Link>
               <Link className="ghost-button" to="/">
-                Về trang chủ
+                Về route mặc định
               </Link>
             </div>
           </div>

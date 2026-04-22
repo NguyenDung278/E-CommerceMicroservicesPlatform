@@ -334,6 +334,7 @@ Lưu ý quan trọng:
 | `GET` | `/api/v1/orders/summary` |
 | `GET` | `/api/v1/orders` |
 | `GET` | `/api/v1/orders/:id/events` |
+| `GET` | `/api/v1/orders/:id/return-eligibility` |
 | `GET` | `/api/v1/orders/:id` |
 | `PUT` | `/api/v1/orders/:id/cancel` |
 | `POST` | `/api/v1/orders/:id/returns` |
@@ -364,6 +365,7 @@ Lưu ý quan trọng:
 | `GET` | `/api/v1/payments/order/:orderId` |
 | `GET` | `/api/v1/payments/order/:orderId/history` |
 | `POST` | `/api/v1/payments/webhooks/momo` |
+| `GET` | `/api/v1/admin/payments/history` |
 | `GET` | `/api/v1/admin/payments/order/:orderId/history` |
 | `POST` | `/api/v1/admin/payments/:id/refunds` |
 
@@ -501,3 +503,207 @@ Nếu bạn chỉ có 10 phút để smoke test nhanh, hãy chạy:
 7. create payment
 
 Chỉ cần 7 bước này fail là bạn đã biết runtime đang có vấn đề ở boundary quan trọng nào đó.
+
+---
+
+## 13. Audit-Level Test Cases Bắt Buộc Nên Có Trong Collection
+
+Đây là các case giúp bạn bắt đúng bug production-oriented thay vì chỉ test API “có trả 200 hay không”.
+
+### 13.1. Order idempotency replay
+
+Mục tiêu:
+
+- xác nhận `POST /api/v1/orders` chịu được client retry
+- xác nhận backend phát hiện reuse key sai payload
+
+Cách test:
+
+1. Gửi `POST /api/v1/orders` với header `Idempotency-Key: {{order_idempotency_key}}`
+2. Gửi lại đúng body và đúng key
+3. Gửi lại body khác nhưng vẫn dùng đúng key
+
+Kỳ vọng:
+
+- request 1: tạo order thành công
+- request 2: replay an toàn, không tạo order mới
+- request 3: `409 idempotency conflict`
+
+### 13.2. Payment create và refund idempotency
+
+Mục tiêu:
+
+- xác nhận payment create/refund không nhân đôi side effect khi retry
+
+Cách test:
+
+1. `POST /api/v1/payments` với `Idempotency-Key`
+2. replay cùng body
+3. replay body khác cùng key
+4. `POST /api/v1/admin/payments/:id/refunds` với `Idempotency-Key`
+5. replay lại refund request y hệt
+
+Kỳ vọng:
+
+- create/refund cùng key + cùng payload phải replay an toàn
+- create/refund cùng key + payload khác phải conflict
+
+### 13.3. Product cursor pagination
+
+Mục tiêu:
+
+- xác nhận catalog public không bị duplicate hoặc skip item giữa các trang
+
+Cách test:
+
+1. `GET /api/v1/products?limit=5`
+2. lấy `meta.next_cursor`
+3. gọi tiếp `GET /api/v1/products?limit=5&cursor={{next_cursor}}`
+4. thử thay sort rồi reuse cursor cũ
+
+Kỳ vọng:
+
+- trang 1 và 2 không trùng item
+- `has_next` và `next_cursor` hợp lý
+- reuse cursor sai sort phải trả `400 invalid cursor`
+
+### 13.4. Return evidence upload dạng multipart
+
+Mục tiêu:
+
+- xác nhận route evidence không bị test sai như JSON endpoint thường
+
+Route thật:
+
+- `POST /api/v1/returns/:id/evidence`
+
+Cách test:
+
+- dùng `form-data`
+- key file phải là `evidence`
+- gửi 1-2 file ảnh nhỏ hợp lệ
+
+Kỳ vọng:
+
+- `201`
+- payload trả về `return.evidence`
+- event/timeline của return tăng thêm mốc evidence upload
+
+### 13.5. Webhook replay và signature fail
+
+Mục tiêu:
+
+- xác nhận webhook MoMo vừa verify chữ ký vừa replay-safe
+
+Cách test:
+
+1. gửi webhook payload hợp lệ một lần
+2. gửi lại đúng payload lần hai
+3. gửi payload với signature sai
+
+Kỳ vọng:
+
+- lần 1: payment state đổi đúng
+- lần 2: backend không nhân đôi state transition/outbox effect
+- signature sai: bị reject
+
+### 13.6. Admin batch/history path
+
+Mục tiêu:
+
+- xác nhận UI admin có thể dùng đúng các endpoint batch/read-heavy hiện có
+
+Ít nhất nên test:
+
+- `GET /api/v1/admin/orders`
+- `GET /api/v1/admin/payments/history`
+- `GET /api/v1/admin/payments/order/:orderId/history`
+- `GET /api/v1/admin/returns`
+- `GET /api/v1/admin/returns/health`
+
+Khi test, đừng chỉ nhìn status code. Hãy verify:
+
+- `meta`
+- shape của item list
+- filter/sort/pagination hoạt động
+- role staff/admin được phép, user thường bị chặn
+
+## 14. Kiểm Tra DB Và Log Sau Khi Test Hot Path
+
+Với các flow write quan trọng, nên verify thêm state thật ở DB/log thay vì chỉ dừng ở HTTP response.
+
+### 14.1. Sau create order
+
+Kiểm tra:
+
+- bảng `orders`
+- bảng `order_items`
+- bảng `order_events`
+- bảng `order_idempotency_keys`
+- bảng `outbox_events`
+
+### 14.2. Sau create payment hoặc refund
+
+Kiểm tra:
+
+- bảng `payments`
+- bảng `payment_idempotency_keys`
+- bảng `outbox_events`
+- bảng `audit_entries`
+
+### 14.3. Sau webhook
+
+Kiểm tra:
+
+- `payments.status`
+- `inbox_messages`
+- `outbox_events`
+- `orders.status` nếu flow đã sync sang order
+
+### 14.4. Sau queue refund return
+
+Kiểm tra:
+
+- bảng `returns`
+- `refund_attempt_count`
+- `refund_last_error`
+- `refund_next_retry_at`
+- `refund_processing_started_at`
+
+Log nên xem cùng lúc:
+
+```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f api-gateway order-service payment-service notification-service
+```
+
+## 15. Bộ Smoke Test 15 Phút Nên Có Sẵn
+
+Nếu bạn muốn một collection gọn nhưng vẫn có giá trị thật, hãy giữ 3 folder:
+
+1. `00. Health`
+   - `/health`
+   - login
+   - profile
+2. `10. Shopper Core`
+   - list products
+   - cart add/update
+   - order preview
+   - create order với `Idempotency-Key`
+   - create payment với `Idempotency-Key`
+3. `20. Admin And Async`
+   - admin orders
+   - admin payments history
+   - create/list coupon
+   - create return
+   - queue refund
+   - webhook replay
+
+Nếu chỉ cần một bộ smoke test tối thiểu cho release, đây là bộ đáng giữ nhất vì nó chạm đủ:
+
+- auth
+- catalog
+- cart
+- order
+- payment
+- admin
+- async/refund path

@@ -26,11 +26,11 @@ export function ProtectedRoute({
   }
 
   if (allowStaff && !canAccessAdmin) {
-    return <Navigate replace to="/" />;
+    return <Navigate replace to="/forbidden" />;
   }
 
   if (requireAdmin && !isAdmin) {
-    return <Navigate replace to="/" />;
+    return <Navigate replace to="/forbidden" />;
   }
 
   return <>{children}</>;

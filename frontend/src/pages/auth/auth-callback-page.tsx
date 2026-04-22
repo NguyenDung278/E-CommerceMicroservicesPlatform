@@ -19,7 +19,7 @@ export function AuthCallbackPage() {
   const { exchangeOAuthTicket } = useAuth();
   const [status, setStatus] = useState<AuthCallbackStatus>("idle");
   const [message, setMessage] = useState("Đang hoàn tất đăng nhập mạng xã hội...");
-  const [nextPath, setNextPath] = useState("/profile");
+  const [nextPath, setNextPath] = useState("/admin");
 
   useEffect(() => {
     const hashParams = new URLSearchParams(
@@ -70,7 +70,7 @@ export function AuthCallbackPage() {
         }
 
         setStatus("success");
-        setMessage("Đăng nhập thành công. Đang đưa bạn quay lại trải nghiệm mua sắm...");
+        setMessage("Đăng nhập thành công. Đang đưa bạn quay lại khu vực quản trị...");
         appendAuthFlowLog("oauth_exchange_succeeded", {
           next,
         });
@@ -140,8 +140,8 @@ export function AuthCallbackPage() {
             <article>
               <strong>Redirect chính xác</strong>
               <span>
-                Bạn sẽ được đưa về đúng route trước khi đăng nhập, thay vì luôn rơi về profile hoặc
-                trang chủ.
+                Bạn sẽ được đưa về đúng route trước khi đăng nhập, thay vì luôn rơi về dashboard
+                mặc định.
               </span>
             </article>
           </div>
@@ -185,7 +185,7 @@ export function AuthCallbackPage() {
 function normalizeClientRedirect(value: string | null): string {
   const trimmed = value?.trim() ?? "";
   if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//")) {
-    return "/profile";
+    return "/admin";
   }
 
   return trimmed;

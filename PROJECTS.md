@@ -1,6 +1,6 @@
 # Bảng Theo Dõi Triển Khai Dự Án
 
-Cập nhật lần cuối: 2026-04-13
+Cập nhật lần cuối: 2026-04-21
 
 Tài liệu này ghi lại trạng thái triển khai theo lát cắt chức năng đang được phát triển mạnh nhất trong repo. Mục tiêu là để người mới vào dự án có thể:
 
@@ -11,11 +11,14 @@ Tài liệu này ghi lại trạng thái triển khai theo lát cắt chức nă
 
 Phạm vi ưu tiên hiện tại:
 
+- `services/user-service`
+- `services/product-service`
+- `services/cart-service`
 - `services/order-service`
 - `services/payment-service`
 - `services/notification-service`
 - `api-gateway`
-- `frontend` cho các bề mặt admin/storefront liên quan đến order, payment, returns
+- `frontend` và `client` cho các bề mặt admin/storefront/account liên quan
 
 Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source code.
 
@@ -26,6 +29,8 @@ Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source c
 - [3. Front-end](#3-front-end)
 - [4. Test, coverage và cách verify](#4-test-coverage-và-cách-verify)
 - [5. Gợi ý mở rộng tiếp theo](#5-gợi-ý-mở-rộng-tiếp-theo)
+- [6. Snapshot Platform Theo Service](#6-snapshot-platform-theo-service)
+- [7. Ưu tiên kỹ thuật toàn platform](#7-ưu-tiên-kỹ-thuật-toàn-platform)
 
 ## 1. Tóm tắt trạng thái
 
@@ -255,3 +260,102 @@ go tool cover -func=coverage_returns_portal_handler.out | grep 'ListUserReturns\
 - SLA / timeline hợp nhất cho `order.*`, `payment.*`, `return.*`.
 - Recommendation hoặc recently viewed trên storefront.
 - Return analytics dashboard: lý do trả hàng phổ biến, tỷ lệ refund thành công, thời gian xử lý trung bình.
+
+## 6. Snapshot Platform Theo Service
+
+Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó bổ sung góc nhìn “toàn backend hiện đang ở mức nào”.
+
+### 6.1. Gateway và shared runtime
+
+| Thành phần | Trạng thái | Đã có | Cần theo dõi tiếp |
+| --- | --- | --- | --- |
+| `api-gateway` | `done` | reverse proxy theo domain, JWT auth, role gate, tracing, structured logging, Redis-backed rate limiter, retry/circuit breaker trong proxy | giữ route map khớp docs, tránh drift với service route thật |
+| `pkg/config` | `done` | load default + YAML + env override, helper DSN/URL | tiếp tục fail-fast rõ hơn ở config production-critical |
+| `pkg/observability` | `done` | request id, tracing Echo/HTTP/gRPC, logger fields | mở rộng dashboard/metric cho worker paths |
+
+### 6.2. User service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Email/password auth | `done` | register, login, forgot/reset, refresh, verify email |
+| Google OAuth | `done` | start/callback/exchange flow đã có |
+| Profile update | `done` | có profile tx manager để ghép user/address/phone verification |
+| Addresses | `done` | CRUD + set default |
+| Wishlist | `done` | add/list/delete/sync, là source cho wishlist alerts |
+| Notification preferences | `done` | list/upsert để notification-service gọi ngược |
+| Điểm cần theo dõi | `in progress` | default address invariant cần tiếp tục giữ transaction-safe ở mọi write path; login protection hiện còn là in-memory state |
+
+### 6.3. Product service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Product CRUD | `done` | admin/staff create/update/delete |
+| Public catalog | `done` | filter + cursor pagination + search assist |
+| Storefront data | `done` | categories, editorial sections, featured products |
+| Review system | `done` | create/update/delete, summary delta, tx manager, cache |
+| Product gRPC | `done` | cart/order gọi để lấy truth sản phẩm |
+| Optional MinIO / Elasticsearch | `done` | degrade gracefully khi dependency phụ lỗi |
+| Điểm cần theo dõi | `in progress` | benchmark search assist và variant facet; review list public vẫn là offset path |
+
+### 6.4. Cart service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Redis cart storage | `done` | get/save/delete toàn bộ cart blob với TTL |
+| Product truth validation | `done` | gọi product-service qua gRPC |
+| Guest merge | `done` | route backend `/api/v1/cart/merge` đã có |
+| Điểm cần theo dõi | `in progress` | concurrent write hiện theo kiểu last-write-wins; chưa có version/CAS |
+
+### 6.5. Order service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Order preview | `done` | pricing, shipping, coupon |
+| Create order idempotent | `done` | `Idempotency-Key`, outbox, event, coupon transaction |
+| Order history/detail/timeline | `done` | user + admin path |
+| Admin report / coupons | `done` | reporting cơ bản, coupon CRUD admin |
+| Return / refund queue | `done` | requested -> approved -> refund_pending -> refunded |
+| Outbox / inbox transition | `done` | relay-safe và event-safe khá rõ |
+| Điểm cần theo dõi | `in progress` | admin list lớn vẫn còn `COUNT(*) + OFFSET`; inventory reservation vẫn là invariant xuyên service cần tiếp tục hardening |
+
+### 6.6. Payment service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Create payment | `done` | idempotency + outbox |
+| Payment history/detail | `done` | user/admin/history by order |
+| Refund payment | `done` | idempotent refund path |
+| Webhook MoMo | `done` | signature verify + inbox + guarded update |
+| Audit trail | `done` | audit entries cho payment write path |
+| Điểm cần theo dõi | `in progress` | gateway abstraction hiện vẫn khá MoMo-centric; cần giữ contract replay-safe khi thêm provider mới |
+
+### 6.7. Notification service
+
+| Hạng mục | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| Consume order/payment/return event | `done` | handler + routing key + email content |
+| Redis inbox dedupe | `done` | claim/processed/release rõ ràng |
+| Retry publisher | `done` | exponential backoff qua retry queue |
+| History/inbox API | `done` | history feed, mark-all-read |
+| Wishlist alert worker | `done` | poll user-service, dedupe, dispatch |
+| Điểm cần theo dõi | `in progress` | Redis là dependency khá nhạy của reliability path; mark-all-read hiện rewrite payload theo O(n) |
+
+### 6.8. Frontend và client
+
+| Surface | Trạng thái | Ghi chú |
+| --- | --- | --- |
+| `client/` shopper/account runtime | `done` | compose mặc định ở `3000` |
+| `frontend/` admin/workbook runtime | `done` | compose chạy song song ở `4173` |
+| Admin returns/payment/order surfaces | `done` | đủ dùng cho local verify và operations flow |
+| Storefront/account parity | `in progress` | shopper/account tiếp tục nên đi vào `client/`; `frontend/` không nên nhận thêm feature storefront mới trừ support/smoke-test |
+
+## 7. Ưu tiên kỹ thuật Toàn Platform
+
+Nếu chỉ được chọn vài việc thật sự đáng tiền sau lớp returns/refund hiện tại, nên ưu tiên:
+
+1. Giảm các admin list lớn còn phụ thuộc `COUNT(*) + OFFSET/LIMIT`.
+2. Bổ sung metric/dashboard rõ hơn cho refund worker, outbox lag và notification retry.
+3. Chuẩn hóa thêm transaction helper cho các write flow nhiều bước ngoài review/profile.
+4. Benchmark `product-service` search assist, storefront query và review path thay vì tối ưu cảm tính.
+5. Làm rõ hơn invariant inventory xuyên service khi checkout/payment volume tăng.
+6. Giữ root docs và `docs/*` bám đúng compose/gateway/runtime thật mỗi khi route hoặc flow đổi.

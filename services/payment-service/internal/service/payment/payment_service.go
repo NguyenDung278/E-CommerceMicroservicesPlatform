@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/client"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/payment-service/internal/repository/payment"
 )
 
 // PaymentEvent is published to RabbitMQ after payment processing.

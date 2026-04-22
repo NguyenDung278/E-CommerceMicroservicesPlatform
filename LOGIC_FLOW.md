@@ -15,8 +15,8 @@ Tài liệu này ưu tiên thực dụng. Nó không cố mô tả một kiến 
 
 Các khối chính hiện tại:
 
-- `frontend/`: React + Vite, local UI chính, có cả storefront/account/admin
-- `client/`: Next.js runtime tùy chọn, đang ở trạng thái smoke-test profile hơn là entrypoint mặc định
+- `frontend/`: React + Vite, giữ vai trò admin/workbook/local verification
+- `client/`: Next.js runtime mặc định cho shopper/account trong Docker Compose
 - `api-gateway/`: cửa vào HTTP chung
 - `services/user-service/`
 - `services/product-service/`
@@ -33,7 +33,7 @@ Các khối chính hiện tại:
 ```mermaid
 flowchart LR
     Browser --> Frontend[frontend/]
-    Browser --> Client[client/ optional]
+    Browser --> Client[client/]
 
     Frontend -->|/api| Gateway[api-gateway]
     Client -->|HTTP fetch| Gateway
@@ -69,17 +69,18 @@ flowchart LR
 
 ## 2. Những Điều Cần Hiểu Đúng Ngay Từ Đầu
 
-### 2.1. Frontend local chính là `frontend/`
+### 2.1. `frontend/` không còn là shopper runtime chính
 
 Trong local compose:
 
-- `frontend` chạy ở `http://localhost:4173`
+- `client` chạy ở `http://localhost:3000` và là shopper/account runtime mặc định
+- `frontend` chạy ở `http://localhost:4173` cho admin/workbook
 - `api-gateway` chạy ở `http://localhost:8080`
 - `nginx` ở `http://localhost` không phải storefront chính
 
-### 2.2. `client/` đã có runtime nhưng chưa là đường mặc định
+### 2.2. `client/` đã là đường mặc định cho shopper flow
 
-Compose hiện có profile `client`, nhưng repo vẫn đang dùng `frontend/` làm local surface chính, đặc biệt cho admin và verify end-to-end.
+Compose hiện chạy `client` mặc định, còn `frontend` vẫn được giữ song song để admin/workbook không bị phụ thuộc vào cùng runtime của shopper.
 
 ### 2.3. PostgreSQL là source of truth
 
@@ -105,7 +106,7 @@ Một số flow đã khá chắc, một số flow vẫn là vùng nên đầu t�
 
 Nếu bạn muốn hiểu một flow thật, hãy đi theo trình tự:
 
-1. bắt đầu từ page frontend
+1. bắt đầu từ page `client/` hoặc `frontend/` đang thật sự gọi flow đó
 2. tìm API module frontend gọi
 3. mở gateway handler tương ứng
 4. mở service handler
@@ -168,7 +169,7 @@ Các lớp trách nhiệm:
 
 ### Người dùng đi qua đâu
 
-1. user mở login/register/profile pages trong `frontend/`
+1. user mở login/register/profile pages ở shopper surface (`client/`) hoặc local verification/admin-adjacent surface (`frontend/`)
 2. frontend gọi `frontend/src/services/api/modules/auth-api.ts` hoặc `user-api.ts`
 3. request vào `api-gateway/internal/handler/user_handler.go`
 4. gateway forward tới `user-service`
@@ -426,9 +427,9 @@ Một số helper/test expectation cũ có thể vẫn nhắc tới route không
 
 Một số trang account/admin có thể đi trước hoặc đi sau backend capability. Khi sửa, cần rà cả UI lẫn gateway route thật.
 
-### `client/` không nên được giả định là source of truth mặc định
+### `frontend/` không nên được giả định là shopper runtime mặc định
 
-Hiện tại đây vẫn là nhánh runtime tùy chọn hơn là bề mặt chính của local/dev.
+Hiện tại shopper/account flow trong local stack nên được verify trên `client` ở `3000`, không phải trên `frontend` ở `4173`.
 
 ---
 
@@ -463,3 +464,170 @@ Repo này đáng học vì nó không chỉ là CRUD đơn giản. Nó có đủ
 Nếu bạn muốn dùng repo này để trưởng thành theo hướng Golang backend developer, hãy giữ một thói quen rất quan trọng:
 
 > Mỗi lần đọc hoặc sửa code, luôn đi theo flow thật từ UI hoặc API boundary vào tận service và persistence, thay vì chỉ mở ngẫu nhiên từng file.
+
+---
+
+## 11. Invariant Thật Nằm Ở Đâu Theo Flow
+
+Đây là phần rất hay bị bỏ qua khi đọc theo kiểu “handler gọi service rồi xong”. Với repo này, correctness thật thường nằm ở một số file và function rất cụ thể.
+
+### 11.1. Auth và profile
+
+Invariant chính:
+
+- email/phone uniqueness không nằm ở pre-check frontend hay service, mà nằm ở constraint và map lỗi trong `userrepo`
+- profile update nhiều bước được gom lại nhờ `ProfileTxManager.RunInTx`
+
+File nên mở:
+
+- `services/user-service/internal/repository/userrepo/user_repository.go`
+- `services/user-service/internal/repository/profile_tx_manager.go`
+- `services/user-service/internal/repository/addressrepo/repository.go`
+
+### 11.2. Catalog và inventory
+
+Invariant chính:
+
+- cursor catalog phải stable theo sort thật
+- stock không được âm khi concurrent write
+
+File nên mở:
+
+- `services/product-service/internal/repository/product/product_repository.go`
+- `decodeProductListCursor`
+- `appendCursorClause`
+- `UpdateStock`
+
+### 11.3. Create order
+
+Invariant chính:
+
+- order, order items, first event, outbox và idempotency record phải cùng commit
+- coupon usage limit phải được serialize ở DB row
+
+File nên mở:
+
+- `services/order-service/internal/service/order/order_lifecycle.go`
+- `services/order-service/internal/repository/order_repository.go`
+- `createOrderTx`
+- `lockAndConsumeCoupon`
+
+### 11.4. Payment create, refund, webhook
+
+Invariant chính:
+
+- create/refund phải replay-safe qua `Idempotency-Key`
+- webhook duplicate không được nhân đôi state transition
+
+File nên mở:
+
+- `services/payment-service/internal/service/payment/payment_processing.go`
+- `services/payment-service/internal/service/payment/payment_refunds.go`
+- `services/payment-service/internal/repository/payment/payment_repository.go`
+- `ApplyWebhookResult`
+
+### 11.5. Returns và refund worker
+
+Invariant chính:
+
+- mỗi return chỉ được một worker claim ở một thời điểm
+- retry metadata phải nằm lại trong DB để reclaim khi worker chết
+
+File nên mở:
+
+- `services/order-service/internal/service/order_return_refund_worker.go`
+- `services/order-service/internal/repository/order_repository.go`
+- `ClaimPendingReturnRefunds`
+- `MarkReturnRefundAttemptFailed`
+- `CompleteReturnRefund`
+
+### 11.6. Notification async
+
+Invariant chính:
+
+- message có thể bị giao lại, nên dedupe và retry phải explicit
+
+File nên mở:
+
+- `services/notification-service/internal/inbox/redis_store.go`
+- `services/notification-service/internal/messaging/retry_publisher.go`
+- `services/notification-service/internal/handler/event_handler.go`
+
+## 12. Pattern Hot Path Nên Nhận Ra Ngay Khi Đọc Repo
+
+Nếu bạn đọc source mà nhận ra được 6 pattern dưới đây, bạn đã bắt đầu nhìn repo như một backend production thay vì một bài CRUD.
+
+### 12.1. Transaction bundle
+
+Ví dụ:
+
+- `createOrderTx`
+- `CreateWithIdempotency`
+- `ProfileTxManager.RunInTx`
+
+Ý nghĩa:
+
+- nhiều write phải thành công hoặc thất bại cùng nhau
+
+### 12.2. Compare-and-set bằng SQL
+
+Ví dụ:
+
+- `UpdateStock`
+- `ExpirePendingReservation`
+- `ApplyWebhookResult`
+
+Ý nghĩa:
+
+- condition giữ invariant nằm trong `WHERE`
+- `RowsAffected` quyết định mutate hay no-op
+
+### 12.3. Row lock
+
+Ví dụ:
+
+- `lockAndConsumeCoupon`
+- `GetReviewByProductAndUserForUpdate`
+- `SELECT ... FOR UPDATE` trong inbox transition
+
+Ý nghĩa:
+
+- serialize critical state ở DB thay vì mutex trong Go
+
+### 12.4. Cursor pagination
+
+Ví dụ:
+
+- product catalog
+- order list by cursor
+
+Ý nghĩa:
+
+- tránh cost `COUNT(*) + OFFSET`
+- giữ ordering deterministic với tie-breaker
+
+### 12.5. Lease claim
+
+Ví dụ:
+
+- `ClaimPendingOutbox`
+- `ClaimPendingReturnRefunds`
+- Redis claim trong notification inbox
+
+Ý nghĩa:
+
+- nhiều worker chạy song song mà không xử lý cùng một việc cùng lúc
+
+### 12.6. Outbox / inbox / idempotency
+
+Ví dụ:
+
+- outbox ở order/payment
+- inbox transition ở order/payment
+- idempotency key cho order/payment/refund
+
+Ý nghĩa:
+
+- retry-safe async
+- webhook replay-safe
+- POST side effect chịu được client retry

@@ -1,776 +1,2470 @@
 # Backend Annotated Source Map
 
-File này là bản đồ backend chi tiết theo source hiện tại. Mục tiêu không chỉ là biết “feature nằm ở đâu”, mà còn biết:
+Tài liệu này là bản đồ source code backend theo đúng runtime hiện tại của repo. Mục tiêu không chỉ là biết “file nào nằm ở đâu”, mà còn trả lời các câu hỏi thực tế hơn:
 
-- hàm nào là entrypoint thật
-- hàm nào giữ business invariant
-- hàm nào chỉ làm transport, normalize, persistence hoặc retry plumbing
-- file nào đáng đọc đầu tiên nếu muốn học backend Go từ repo này
+- request đi vào từ đâu
+- service nào giữ source of truth nào
+- function nào là entrypoint thật
+- business invariant nằm ở tầng nào
+- repository nào đang giữ transaction, outbox, inbox, pagination hay retry lease
+- integration nào là bắt buộc, integration nào là optional và degrade được
 
-## Cách dùng tài liệu này
+File này thiên về **source map chi tiết**. Nếu muốn hiểu sâu hơn về chất lượng code, failure mode và đề xuất cải thiện, đọc thêm [docs/deep-dive/README.md](/Users/nguyendung/FPT/projects/ecommerce-platform/docs/deep-dive/README.md). Nếu muốn học repo theo lộ trình, đọc [docs/learning/README.md](/Users/nguyendung/FPT/projects/ecommerce-platform/docs/learning/README.md).
 
-1. Mỗi khi đọc một feature, bắt đầu từ `cmd/main.go` của service để thấy wiring thật.
-2. Đi tiếp vào `RegisterRoutes` hoặc gRPC server để thấy contract public.
-3. Mở service method chính để hiểu rule nghiệp vụ.
-4. Chỉ xuống repository khi cần hiểu transaction, SQL, lock, pagination hoặc outbox/inbox.
-5. Nếu gặp helper như `normalize*`, `build*`, `scan*`, `Claim*`, `Mark*`, hãy hiểu chúng như “hàm giữ boundary” chứ không phải code phụ vô nghĩa.
+---
 
-## Nền backend dùng chung
+## 1. Toàn Cảnh Backend
 
-| Nhóm | File hoặc hàm | Ý nghĩa |
+### 1.1. Runtime topology
+
+```text
+Browser / Mobile Client
+        |
+        v
+   api-gateway
+        |
+        +--> user-service
+        +--> product-service
+        +--> cart-service
+        +--> order-service
+        +--> payment-service
+        +--> notification-service
+```
+
+### 1.2. Hạ tầng dùng chung
+
+| Thành phần | Vai trò |
+| --- | --- |
+| PostgreSQL | Source of truth chính cho `user-service`, `product-service`, `order-service`, `payment-service` |
+| Redis | Cart state, rate limit, review cache, notification inbox/history/dedupe |
+| RabbitMQ | Event bus cho order/payment/notification |
+| gRPC | Internal RPC chủ yếu giữa cart/order với product và user với consumer nội bộ |
+| Elasticsearch | Search backend optional của `product-service` |
+| MinIO / object storage | Upload ảnh product và return evidence |
+| Prometheus + Grafana + Jaeger | Metrics, dashboard, tracing |
+
+### 1.3. Data ownership thật
+
+| Domain | Service sở hữu | Ghi chú |
 | --- | --- | --- |
-| Config | `pkg/config/config.go:236` `Load` | Gom config runtime của từng service về một điểm vào thống nhất, giúp startup fail-fast nếu thiếu giá trị bắt buộc. |
-| PostgreSQL | `pkg/database/postgres.go:34` `NewPostgresDB`, `:54` `RunPostgresMigrations` | Mở DB và chạy migration tại boot; đây là nền chung cho hầu hết service dữ liệu. |
-| Auth middleware | `pkg/middleware/auth.go:43` `JWTAuth`, `:99` `RequireRole` | JWT parse và role guard được đẩy ra middleware thay vì lặp ở handler. |
-| Logging | `pkg/middleware/logging.go:24` `RequestLogger` | Gắn structured logging cho HTTP request, giữ traceable fields thay vì log string rời. |
-| Rate limit | `pkg/middleware/rate_limit.go:53` `NewRedisBackedRateLimiter` | Rate limit dùng Redis làm shared state, phù hợp cho gateway/public route. |
-| Request ID | `pkg/observability/context.go:20` `RequestIDMiddleware` | Mỗi request có correlation key để theo dõi xuyên service. |
-| Tracing HTTP | `pkg/observability/tracing.go:25` `SetupTracing`, `:66` `EchoMiddleware` | Bật OpenTelemetry cho HTTP path, giúp nhìn call graph thực tế. |
-| Tracing gRPC | `pkg/observability/grpc.go:22` `GRPCUnaryServerInterceptor` | Giữ trace continuity ở internal RPC. |
-| HTTP response | `pkg/response/response.go` | Chuẩn hoá envelope response để handler không tự phát minh format. |
+| User, auth, profile, address | `user-service` | Source of truth cho identity và profile |
+| Product, stock, review, storefront | `product-service` | Source of truth cho catalog |
+| Cart | `cart-service` | Stored trên Redis, nhưng không sở hữu product truth |
+| Order, coupon, return | `order-service` | Source of truth cho order lifecycle |
+| Payment, refund, webhook state | `payment-service` | Source of truth cho payment lifecycle |
+| Notification delivery state | `notification-service` | Không sở hữu domain order/payment; chỉ sở hữu delivery/inbox history |
 
-## API Gateway
+---
 
-### Vai trò
+## 2. Nền Backend Dùng Chung
 
-- `api-gateway/cmd/main.go:24` là HTTP entrypoint của toàn bộ stack.
-- Gateway chỉ làm proxy, auth middleware, rate limit, tracing, logging, health.
-- Business rule của user, product, order, payment không được đặt ở đây.
+### 2.1. `api-gateway`
 
-### Hàm quan trọng
+`api-gateway` là HTTP ingress của toàn hệ thống. Nó không giữ business data và không nên chứa domain rule.
 
-| File hoặc hàm | Ý nghĩa |
+#### File và function quan trọng
+
+| File / Function | Vai trò |
 | --- | --- |
-| `api-gateway/cmd/main.go:24` `main` | Load config, dựng Redis/rate limit, tạo service proxy, đăng ký route mirror cho từng backend. |
-| `api-gateway/internal/proxy/service_proxy.go:44` `NewServiceProxy` | Tạo HTTP proxy client với timeout, retry, circuit breaker cho một backend service. |
-| `api-gateway/internal/proxy/service_proxy_request.go:33` `Do` | Entry point forward request từ gateway xuống backend. |
-| `api-gateway/internal/proxy/service_proxy_request.go:72` `newBackendRequest` | Clone method, path, query, body, header và gắn `X-Forwarded-*` cho backend request. |
-| `api-gateway/internal/proxy/service_proxy_request.go:141` `executeWithResilience` | Chạy request qua retry/circuit breaker, là lớp bảo vệ I/O chứ không phải logic domain. |
-| `api-gateway/internal/proxy/service_proxy_request.go:185` `cloneRetryableRequest` | Tạo request body có thể replay cho retry-safe request. |
-| `api-gateway/internal/proxy/service_proxy_request.go:216` `forwardedProto` | Xác định scheme gốc để backend biết request đi từ HTTP hay HTTPS. |
-| `api-gateway/internal/handler/*_handler.go` `RegisterRoutes` | Mirror route contract của từng service, giữ gateway mỏng và dễ rà boundary. |
+| `api-gateway/cmd/main.go` `main` | Boot gateway, load config, tạo proxy cho từng service, mount middleware và route mirror |
+| `api-gateway/internal/proxy/service_proxy.go` `NewServiceProxy` | Tạo reverse proxy client có timeout, HTTP tracing, retry, circuit breaker |
+| `api-gateway/internal/proxy/service_proxy_request.go` `Do` | Entry point forward request xuống backend service |
+| `service_proxy_request.go` `newBackendRequest` | Clone path, raw query, body, headers và thêm `X-Forwarded-*` |
+| `service_proxy_request.go` `executeWithResilience` | Chạy request qua retry + circuit breaker |
+| `service_proxy_request.go` `shouldRetry` | Chỉ retry cho `GET`, `HEAD`, `OPTIONS` để tránh replay side effect |
 
-### Điều nên học
+#### Gateway đang làm gì
 
-- Đây là Proxy Pattern thực dụng: gateway chỉ chuyển tiếp, không “ăn” business logic.
-- `ServiceProxy` cho thấy cách thêm resilience vào HTTP inter-service call mà không đụng domain layer.
-- Hotspot đáng lưu ý: `newBackendRequest` hiện forward header khá rộng, cần cẩn trọng trust boundary nếu sau này thêm internal header nhạy cảm.
+- expose cùng `/api/v1/...` contract như backend service
+- áp middleware CORS, secure headers, tracing, rate limit, logging
+- forward request nguyên nghĩa transport xuống backend
+- giữ redirect intact cho OAuth flow bằng `CheckRedirect: http.ErrUseLastResponse`
 
-## User Service
+#### Gateway không làm gì
 
-### Service ownership
+- không parse business DTO của downstream service
+- không quyết định order có được cancel hay không
+- không kiểm stock, không tính giá, không verify coupon
 
-- Boot: `services/user-service/cmd/main.go:41`
-- Source of truth: user, profile, role, password hash, email verification, phone verification, address, wishlist, notification preference.
-- External integration: email sender, Telegram OTP sender, Google OAuth.
+#### Walkthrough gateway thật sự hoạt động ra sao
 
-### HTTP handler map
+1. `api-gateway/cmd/main.go`
+   - `config.Load("api-gateway")`
+   - `logger.New("api-gateway")`
+   - `SetupTracing`
+   - dựng `ServiceProxy` cho `user`, `product`, `cart`, `order`, `payment`, `notification`
+   - mount Echo middleware theo thứ tự:
+     - `Recover`
+     - `FrontendCORS`
+     - `Secure`
+     - `EchoMiddleware`
+     - `NewRedisBackedRateLimiter`
+     - `RequestLogger`
+     - Prometheus middleware
+   - mount health + metrics
+   - register route mirror cho từng service
+2. `api-gateway/internal/handler/*_handler.go`
+   - Mỗi handler không chứa domain logic.
+   - Nó chỉ mirror đúng route contract của downstream service và gọi chung một helper `forwardWithProxy`.
+   - Ý nghĩa: gateway route surface được explicit hóa bằng code, không phải wildcard proxy mù.
+3. `api-gateway/internal/handler/proxy_handler.go` `forwardWithProxy`
+   - gọi `p.Do(ctx, req)`
+   - sau đó `p.ForwardResponse(...)`
+   - nếu downstream lỗi, trả lỗi gateway-level đơn giản
+4. `service_proxy_request.go` `newBackendRequest`
+   - clone method, path, raw query, body, headers
+   - preserve `Authorization`, `Content-Type`, `X-Request-ID`, trace headers
+   - thêm `X-Forwarded-Host`, `X-Forwarded-Proto`
+5. `service_proxy_request.go` `executeWithResilience`
+   - retry tối đa `maxRetries + 1`
+   - chỉ retry cho `GET`, `HEAD`, `OPTIONS`
+   - retry dùng request clone để không reuse body sai cách
+   - circuit breaker bọc quanh HTTP client call
+6. `service_proxy_response.go` `ForwardResponse`
+   - copy toàn bộ header values
+   - write status code
+   - stream body qua `io.Copy`
+   - không buffer full response vào memory
 
-| File hoặc hàm | Ý nghĩa |
+#### Điều dễ bị bỏ qua ở gateway
+
+- route mirror trong `api-gateway/internal/handler/*` là source of truth cho public ingress surface của repo
+- gateway preserve redirect thay vì auto-follow, điều này cực quan trọng cho OAuth
+- gateway đang trust khá rộng inbound header set; nếu sau này có privileged internal header thì trust boundary phải siết lại
+- `RequestLogger` ở gateway log được cả `request_id`, `trace_id`, `span_id`, `user_id` nếu có claims
+
+### 2.2. `pkg/config`
+
+`pkg/config/config.go` là config contract dùng chung.
+
+#### Ý nghĩa
+
+- gom config cho server, DB, Redis, RabbitMQ, JWT, gRPC, SMTP, OAuth, tracing, search, object storage, Telegram, email verification
+- dùng defaults phù hợp cho local/dev
+- đọc env/file qua Viper
+- trả các helper như `DatabaseConfig.DSN()`, `RedisConfig.Addr()`, `RabbitMQConfig.URL()`
+
+#### Tác động thực tế
+
+- mọi `cmd/main.go` đều đi qua `config.Load(serviceName)`
+- cấu hình cross-service dependency đều được điền ở `ServicesConfig`
+- production-critical settings như `JWT.Secret`, `PaymentGateway.WebhookSecret`, OAuth client secret, SMTP credentials đều đi qua đây
+
+#### Walkthrough `config.Load`
+
+1. set default cho gần như toàn bộ runtime:
+   - `server.*`
+   - `database.*`
+   - `redis.*`
+   - `rabbitmq.*`
+   - `jwt.*`
+   - `grpc.port`
+   - `smtp.*`
+   - `oauth.google.*`
+   - `services.*`
+   - `frontend.base_url`
+   - `notification.*`
+   - `payment_gateway.*`
+   - `object_storage.*`
+   - `tracing.*`
+   - `search.*`
+   - `telegram.*`
+   - `email_verification.*`
+2. load file config từ các path local/dev phổ biến
+3. bật `AutomaticEnv` và replacer để env var map sang key dạng nested
+4. unmarshal toàn bộ sang `Config`
+
+#### Helper nhỏ nhưng rất quan trọng
+
+| Helper | Ý nghĩa |
 | --- | --- |
-| `internal/handler/user_handler.go:60` `RegisterRoutes` | Đăng ký toàn bộ route auth, profile, OTP signup, verification, OAuth, admin user management. |
-| `user_handler.go:111` `Register` | Parse register request, gọi `UserService.Register`, trả token pair và profile. |
-| `user_handler.go:148` `Login` | Apply login protection, gọi `UserService.Login`, map sai mật khẩu/throttle sang response phù hợp. |
-| `user_handler.go:193` `RefreshToken` | Nhận refresh token và gọi `UserService.RefreshToken` để cấp token pair mới. |
-| `user_handler.go:217` `VerifyEmail` | Xác nhận email bằng verification token cũ kiểu link-based. |
-| `user_handler.go:236` `ForgotPassword` | Khởi động password reset flow, không leak user existence. |
-| `user_handler.go:252` `ResetPassword` | Dùng reset token để đặt mật khẩu mới. |
-| `user_handler.go:272` `GetProfile` | Đọc profile theo user ID trong JWT. |
-| `user_handler.go:290` `UpdateProfile` | Bind patch profile và chuyển business rule sang service. |
-| `user_handler.go:333` `UploadAvatar` | Validate multipart/avatar input rồi gọi upload logic ở service. |
-| `user_handler.go:369` `GetPhoneVerificationStatus` | Trả trạng thái challenge OTP điện thoại đang active. |
-| `user_handler.go:382` `StartEmailSignup` | Bắt đầu email OTP signup challenge. |
-| `user_handler.go:399` `VerifyEmailSignupOTP` | Xác minh OTP email signup và tạo user thật sau khi challenge hợp lệ. |
-| `user_handler.go:416` `ResendEmailSignupOTP` | Gửi lại OTP signup email với cooldown/attempt guard. |
-| `user_handler.go:433` `StartPhoneSignup` | Bắt đầu phone signup challenge. |
-| `user_handler.go:450` `VerifyPhoneSignupOTP` | Xác minh OTP signup qua phone và phát hành token pair. |
-| `user_handler.go:467` `ResendPhoneSignupOTP` | Gửi lại OTP signup phone. |
-| `user_handler.go:484` `GetEmailVerificationStatus` | Xem trạng thái email verification đang active cho user hiện tại. |
-| `user_handler.go:498` `SendEmailVerificationOTP` | Tạo email verification OTP cho user đã đăng nhập. |
-| `user_handler.go:512` `VerifyEmailOTP` | Hoàn tất xác minh email bằng OTP. |
-| `user_handler.go:534` `ResendEmailVerificationOTP` | Gửi lại OTP verify email. |
-| `user_handler.go:556` `SendPhoneOTP` | Gửi OTP verify phone cho profile hiện tại. |
-| `user_handler.go:578` `VerifyPhoneOTP` | Xác minh OTP phone và cập nhật verified challenge state. |
-| `user_handler.go:600` `ResendPhoneOTP` | Gửi lại OTP phone verification. |
-| `user_handler.go:622-691` `handle*Error` | Gom mapping domain error của OTP/signup thành HTTP response nhất quán. |
-| `user_handler.go:737` `ChangePassword` | Người dùng đổi mật khẩu sau khi đã đăng nhập. |
-| `user_handler.go:765` `ResendVerificationEmail` | Gửi lại email verify kiểu token-link cũ. |
-| `user_handler.go:781` `ListUsers` | Admin đọc danh sách user. |
-| `user_handler.go:790` `UpdateUserRole` | Admin sửa role của user. |
-| `user_handler.go:813` `StartGoogleOAuth` | Redirect người dùng sang Google OAuth start URL. |
-| `user_handler.go:817` `GoogleOAuthCallback` | Nhận callback từ Google rồi đổi sang login ticket nội bộ. |
-| `user_handler.go:821` `ExchangeOAuthTicket` | Đổi ticket nội bộ thành token pair cuối cùng cho frontend. |
-| `user_handler.go:845` `toUploadAvatarInput` | Convert file header thành DTO upload avatar đã kiểm tra content-type/size. |
-| `user_handler.go:885` `startOAuth` | HTTP helper cho bước start OAuth. |
-| `user_handler.go:912` `handleOAuthCallback` | HTTP helper cho callback OAuth, set/clear nonce cookie và redirect chuẩn. |
-| `user_handler.go:952-1024` `clearOAuthNonceCookie`, `extractFrontendRequestOrigin`, `oauthErrorCode`, `oauthErrorMessage`, `describeOAuthProviderError` | Bộ helper transport để handler không lẫn lộn với business logic OAuth. |
+| `DatabaseConfig.DSN()` | Chuẩn hóa PostgreSQL connection string |
+| `RedisConfig.Addr()` | Chuẩn hóa Redis address |
+| `RabbitMQConfig.URL()` | Chuẩn hóa AMQP URL |
+| `SMTPConfig.Addr()` | Chuẩn hóa host:port cho mail sender |
 
-### Address, wishlist, notification preference handlers
+#### Điều dễ bị bỏ qua
 
-| File hoặc hàm | Ý nghĩa |
+- `serviceName` hiện không thực sự prefix env vars; nó chủ yếu được reuse cho default `database.dbname`
+- defaults của `pkg/config` rất tiện cho local nhưng không được xem là production-safe
+- `Config` hiện là contract runtime của gần như toàn backend; đổi field ở đây có tác động xuyên repo
+
+### 2.3. `pkg/database`
+
+| Function | Vai trò |
 | --- | --- |
-| `internal/handler/address_handler.go:34` `RegisterRoutes` | Route CRUD address và set-default. |
-| `address_handler.go:44` `Create` | Tạo địa chỉ mới cho user. |
-| `address_handler.go:72` `List` | Liệt kê address book của user. |
-| `address_handler.go:89` `Update` | Sửa một address thuộc user hiện tại. |
-| `address_handler.go:118` `Delete` | Xoá địa chỉ khỏi sổ địa chỉ. |
-| `address_handler.go:136` `SetDefault` | Đặt một địa chỉ thành default shipping/billing. |
-| `internal/handler/wishlist_handler.go:25` `RegisterRoutes` | Route CRUD wishlist và alert listing. |
-| `wishlist_handler.go:40` `List` | Lấy wishlist hiện tại kèm snapshot sản phẩm. |
-| `wishlist_handler.go:57` `ListAlerts` | Liệt kê wishlist alert cho user. |
-| `wishlist_handler.go:74` `ListDispatchableAlerts` | Cấp feed alert cho notification-service pull định kỳ. |
-| `wishlist_handler.go:87` `Add` | Thêm một product vào wishlist. |
-| `wishlist_handler.go:109` `Sync` | Đồng bộ nhiều product ID vào wishlist. |
-| `wishlist_handler.go:134` `Remove` | Xoá item khỏi wishlist. |
-| `internal/handler/notification_preference_handler.go:27` `RegisterRoutes` | Route đọc/sửa notification preference. |
-| `notification_preference_handler.go:34` `List` | Đọc effective preference map của user. |
-| `notification_preference_handler.go:51` `Update` | Upsert preference được client chọn. |
-| `internal/handler/login_protection.go:32` `NewLoginAttemptProtector` | Tạo guard chống brute-force cho login endpoint. |
-| `login_protection.go:52`, `:71`, `:102` `Check`, `RecordFailure`, `RecordSuccess` | Quản lý lock window và reset trạng thái sau login thành công. |
-| `login_protection.go:111-186` helper family | Tạo key theo email/phone/IP và loại bỏ duplicate key để lock hợp lý. |
+| `NewPostgresDB` | Mở PostgreSQL connection dùng chung |
+| `RunPostgresMigrations` | Chạy migration lúc startup service |
 
-### gRPC server
+Pattern của repo là: service nào dùng PostgreSQL thì migration được chạy ngay trong `cmd/main.go`, không có migration runner riêng tách rời.
 
-| File hoặc hàm | Ý nghĩa |
+#### Walkthrough database helper
+
+1. `NewPostgresDB`
+   - `sql.Open("postgres", cfg.DSN())`
+   - set pool:
+     - `MaxOpenConns = 25`
+     - `MaxIdleConns = 5`
+     - `ConnMaxLifetime = 5m`
+   - `Ping()` để fail fast nếu DB không lên
+2. `RunPostgresMigrations`
+   - create postgres migrate driver
+   - create `iofs` source từ embedded migration FS
+   - `migrator.Up()`
+   - bỏ qua `migrate.ErrNoChange`
+
+#### Ý nghĩa thực tế
+
+- repo ưu tiên `database/sql` + raw SQL thay vì ORM
+- mỗi service tự sở hữu migration của mình và tự chạy lúc boot
+- startup của service fail sớm nếu DB/migration không ổn, không chạy nửa sống nửa chết
+
+### 2.4. `pkg/middleware`
+
+| File / Function | Vai trò |
 | --- | --- |
-| `internal/grpc/user_grpc.go:22` `NewUserGRPCServer` | Dựng adapter gRPC cho UserService. |
-| `user_grpc.go:32` `Register` | gRPC wrapper cho register. |
-| `user_grpc.go:70` `Login` | gRPC wrapper cho login. |
-| `user_grpc.go:106` `GetProfile` | gRPC wrapper cho profile read. |
-| `user_grpc.go:142` `UpdateProfile` | gRPC wrapper cho profile patch. |
-| `user_grpc.go:181` `optionalStringPointer` | Giữ semantic “field có thể nil” khi map proto -> Go. |
-| `user_grpc.go:192` `GetUserByID` | Internal lookup user profile theo ID. |
+| `auth.go` `JWTAuth`, `RequireRole` | Parse JWT và guard role |
+| `rate_limit.go` `NewRedisBackedRateLimiter` | Shared rate limiter có Redis-backed mode và fallback in-memory |
+| `logging.go` `RequestLogger` | Structured request logging |
+| `cors.go` `FrontendCORS` | CORS policy cho frontend |
 
-### Service layer map
+Điểm đáng chú ý ở `NewRedisBackedRateLimiter`:
 
-#### `user_auth.go`
+- nếu Redis down lúc startup, middleware degrade về in-memory limiter
+- nếu Redis fail ở request path, request vẫn được xử lý qua fallback limiter
+- availability được ưu tiên hơn strict global consistency
 
-| Hàm | Ý nghĩa |
+#### Walkthrough middleware quan trọng
+
+1. `auth.go` `JWTAuth`
+   - đọc `Authorization: Bearer <token>`
+   - parse JWT vào `JWTClaims`
+   - verify signing method HMAC
+   - attach claims vào Echo context qua key `user`
+2. `auth.go` `RequireRole`
+   - lấy claims từ context
+   - so role theo lowercase set
+   - reject `403` nếu role không nằm trong allowed set
+3. `rate_limit.go` `NewRedisBackedRateLimiter`
+   - cố ping Redis ngay lúc startup
+   - nếu không ping được, log warning và fallback in-memory
+   - ở request path, identifier ưu tiên `claims.UserID`, nếu không có thì dùng `RealIP`
+   - token bucket thật nằm trong Lua script Redis
+   - nếu Redis lỗi giữa chừng thì fallback sang in-memory handler
+4. `logging.go` `RequestLogger`
+   - đo latency
+   - resolve route thực (`c.Path()`) thay vì chỉ raw path khi có thể
+   - log `request_id`, `user_id`, `trace_id`, `span_id` nếu có
+   - chọn `Info`/`Warn`/`Error` theo status code
+5. `cors.go` `FrontendCORS`
+   - allow list rõ cho các local frontend origin đang hỗ trợ
+   - không phải permissive wildcard CORS
+
+#### Helper dễ bị bỏ qua nhưng đáng đọc
+
+- `extractRateLimitIdentifier`: cho thấy repo ưu tiên rate limit theo authenticated user trước, rồi mới fallback IP
+- `limiterTTL`: giữ state Redis đủ lâu cho refill window
+- `toInt64`: adapter nhỏ để parse return values từ Lua script
+
+### 2.5. `pkg/observability`
+
+| File / Function | Vai trò |
 | --- | --- |
-| `Register` `:35` | Validate register request, hash password, tạo user, gửi verification mail best-effort, build auth response. |
-| `Login` `:117` | Tìm user theo email/phone, so khớp password hash, trả token pair. |
-| `ChangePassword` `:159` | Xác minh mật khẩu cũ rồi cập nhật hash mới. |
-| `buildAuthResponse` `:198` | Gom token pair, profile, avatar thành response hoàn chỉnh. |
-| `findUserByIdentifier` `:235` | Chuẩn hoá việc login bằng email hoặc phone. |
+| `tracing.go` `SetupTracing` | Bật OpenTelemetry exporter và tracer provider |
+| `tracing.go` `EchoMiddleware` | HTTP tracing cho Echo |
+| `tracing.go` `WrapHTTPTransport` | Tự động truyền trace context và request id qua outbound HTTP |
+| `grpc.go` `GRPCUnaryServerInterceptor` | gRPC tracing interceptor |
+| `context.go` | Request ID propagation giữa middleware, logger và downstream call |
 
-#### `user_tokens.go`
+Kết quả là:
 
-| Hàm | Ý nghĩa |
+- trace đi được từ gateway sang service nếu downstream call dùng wrapped transport
+- request id được forward ở cả HTTP lẫn một phần event payload/outbox
+- metric và tracing được code hóa vào service thay vì gắn ngoài bằng sidecar magic
+
+#### Walkthrough observability path
+
+1. `tracing.go` `SetupTracing`
+   - set global propagator `TraceContext + Baggage`
+   - nếu tracing disabled thì trả shutdown noop
+   - nếu enabled thì tạo OTLP exporter HTTP
+   - set tracer provider với `ParentBased(TraceIDRatioBased(sampleRatio))`
+   - attach `service.name`
+2. `tracing.go` `EchoMiddleware`
+   - extract trace context từ inbound header
+   - nhặt request id nếu có
+   - mở server span với name `METHOD route`
+   - attach attrs như `http.method`, `http.route`, `http.target`, `http.client_ip`
+   - set span status theo HTTP status cuối
+3. `tracing.go` `WrapHTTPTransport`
+   - bọc outbound transport bằng `otelhttp.NewTransport`
+   - nếu context có request id mà header chưa có, tự set `X-Request-ID`
+4. `grpc.go`
+   - unary server interceptor extract trace/request id từ metadata
+   - unary client interceptor inject trace/request id vào outgoing metadata
+5. `context.go`
+   - `RequestIDMiddleware` có thể tạo request id mới nếu chưa có
+   - `LoggerWithContext` auto attach `request_id`, `trace_id`, `span_id` vào zap logger
+
+#### Ý nghĩa thực tế
+
+- observability của repo không phải chỉ “bật tracing”, mà là propagation thật qua HTTP, gRPC và một phần async payload
+- code service nào dùng `appobs.LoggerWithContext` thì log tự mang đủ correlation fields
+
+### 2.6. `pkg/response` và `pkg/validation`
+
+- `pkg/response` giữ response envelope nhất quán cho toàn bộ HTTP service
+- `pkg/validation` gắn Echo validator với DTO struct tag validation
+
+Nhờ đó handler ở các service giữ được shape tương đối đồng nhất:
+
+1. `Bind`
+2. `Validate`
+3. gọi service
+4. map domain error sang HTTP response
+
+#### Walkthrough response/validation/logger
+
+1. `pkg/response/response.go`
+   - `Success`, `SuccessWithMeta`, `Error` giữ envelope HTTP nhất quán
+   - `Meta` hỗ trợ cả `page/limit/total` lẫn `next_cursor/has_next`
+2. `pkg/validation/validator.go`
+   - adapter `go-playground/validator` sang Echo
+   - ưu tiên tên field theo JSON tag thay vì tên struct field Go
+   - `Message(err)` extract thông điệp validation thân thiện cho client
+3. `pkg/logger/logger.go`
+   - dev dùng console encoder, production dùng JSON encoder
+   - `service` field được attach vào mọi log entry
+   - stacktrace chỉ ở level error trở lên
+
+#### Điều dễ bị bỏ qua
+
+- `pkg/response` là lý do client side có thể parse response khá nhất quán giữa mọi service
+- `pkg/validation` giúp error message nói theo tên field API, không theo tên Go struct
+- `pkg/logger` không thần kỳ, nhưng là contract quan trọng để log format không drift giữa các service
+
+### 2.7. Client Và Helper Pattern Dùng Chung
+
+Các service không chỉ giao tiếp qua DB/broker; rất nhiều invariant thực tế đi qua các client nhỏ ở `internal/client` và `internal/grpc_client`.
+
+#### HTTP client pattern
+
+| File / Function | Vai trò |
 | --- | --- |
-| `RefreshToken` `:38` | Parse refresh token, re-load user, phát hành token pair mới. |
-| `generateTokenPair` `:76` | Tạo access/refresh JWT từ user aggregate. |
+| `payment-service/internal/client/order_client.go` `GetOrder` | Payment lookup order truth bằng auth header gốc |
+| `order-service/internal/client/payment_client.go` `ListPaymentHistory` | Order-service đọc payment history của chính user |
+| `order-service/internal/client/payment_client.go` `RefundPayment` | Order-service yêu cầu payment-service tạo refund |
+| `notification-service/internal/client/user_client.go` `PreferenceMap` | Notification đọc preference của user cụ thể |
+| `notification-service/internal/client/user_client.go` `ListDispatchableWishlistAlerts` | Notification poll wishlist alerts từ user-service |
+| `user-service/internal/client/product_client.go` `ListProductsByIDs` | User-service batch hydrate product snapshot cho wishlist |
 
-#### `user_profile.go`
+#### gRPC client pattern
 
-| Hàm hoặc nhóm hàm | Ý nghĩa |
+| File / Function | Vai trò |
 | --- | --- |
-| `GetProfile` `:30` | Đọc user và avatar/profile data để trả profile DTO. |
-| `UpdateProfile` `:60` | Entry point patch profile; xử lý name, phone, address, verification dependency. |
-| `updateProfileWithDependencies` `:114` | Điều phối cập nhật profile khi có phụ thuộc verified phone/address service. |
-| `applyVerifiedPhoneChange` `:228` | Chỉ cho phép gắn số điện thoại mới khi challenge đã được verify đúng purpose. |
-| `loadUserByID` `:298` | Helper load user với error message rõ ngữ cảnh. |
-| `resolveOptionalHumanNameUpdate`, `resolveOptionalHumanName` `:329`, `:417` | Normalize first/last name patch, tránh ghi đè rỗng vô nghĩa. |
-| `resolveOptionalPhone` `:365` | Chuẩn hoá phone patch trước khi áp dụng nghiệp vụ verify. |
-| `deriveProfileAddressRecipientName` `:378` | Suy ra tên người nhận mặc định cho address từ profile. |
-| `resolveOptionalTrimmedText` `:448` | Tránh lưu text chỉ chứa space. |
-| `hasMeaningfulProfileAddressPatch`, `mergeProfileAddressInput`, `normalizeProfileAddressInput` `:478-567` | Nhóm helper để phân biệt “user thật sự muốn sửa địa chỉ” với patch rỗng. |
-| `isValidProfileAddressInput`, `normalizeAddressField`, `resolveOptionalAddressField`, `isValidRequiredAddressField` `:592-624` | Guard dữ liệu địa chỉ trước khi chạm repository/address service. |
+| `cart-service/internal/grpc_client/product_client.go` `GetProduct` | Cart lookup product truth |
+| `order-service/internal/grpc_client/product_client.go` `GetProduct` | Order quote item |
+| `order-service/internal/grpc_client/product_client.go` `DecreaseStock`, `RestoreStock` | Inventory reservation/compensation |
 
-#### `user_avatar.go`
+#### Điều đáng học ở các client này
 
-| Hàm | Ý nghĩa |
-| --- | --- |
-| `UploadAvatar` `:17` | Nhận avatar upload, encode/store metadata và cập nhật avatar record cho user. |
+1. hầu hết HTTP client đều dùng `appobs.WrapHTTPTransport(http.DefaultTransport)`
+2. mỗi client đều có envelope struct riêng để decode response từ downstream service
+3. `normalizeBaseURL` xuất hiện lặp lại có chủ đích để client chịu được env config thiếu scheme
+4. `attachServiceAuthorization` và `UserClient.signToken`
+   - cho thấy repo dùng internal JWT ngắn hạn để gọi protected admin/staff route giữa các service
+   - thực dụng, dễ vận hành local, nhưng cần quản lý secret chặt
+5. gRPC client đều gắn `GRPCUnaryClientInterceptor` để trace/request-id đi xuyên service boundary
 
-#### `address_service.go`
+### 2.8. Helper Family Và Repository Pattern Dễ Bị Bỏ Qua
 
-| Hàm | Ý nghĩa |
-| --- | --- |
-| `NewAddressService` `:28` | Constructor cho address domain service. |
-| `CreateAddress` `:34` | Tạo address mới; nếu request là default thì clear default cũ trước khi create. |
-| `GetAddresses` `:79` | Lấy toàn bộ address của user. |
-| `GetDefaultAddress` `:83` | Chọn default address từ danh sách hiện có. |
-| `UpsertDefaultAddress` `:99` | Tạo hoặc cập nhật default address dựa trên patch profile. |
-| `UpdateAddress` `:134` | Sửa address và xử lý semantics default-address. |
-| `DeleteAddress` `:180` | Xoá address của user. |
-| `SetDefault` `:192` | Clear default cũ rồi set address mới thành mặc định. |
+Đây là nhóm function nhỏ nhưng cực kỳ quan trọng khi muốn hiểu repo sâu.
 
-#### `email_signup.go`, `phone_signup.go`
+#### Helper family đáng đọc
 
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `StartEmailSignup` `:21`, `StartPhoneSignup` `:22` | Tạo OTP challenge cho signup, validate password confirmation, cooldown và duplicate identity. |
-| `VerifyEmailSignupOTP` `:130`, `VerifyPhoneSignupOTP` `:142` | Tiêu thụ challenge đã verify để tạo user thật và trả token pair. |
-| `ResendEmailSignupOTP` `:218`, `ResendPhoneSignupOTP` `:233` | Phát hành OTP mới cho challenge còn hiệu lực. |
-| `buildEmailSignupStatusResponse` `:272`, `buildPhoneSignupStatusResponse` `:295` | Trả trạng thái cooldown/attempt còn lại cho frontend. |
-| `sendEmailSignupOTP` `:297`, `resolvePhoneSignupTelegramChatID` `:320` | Tách riêng channel delivery để logic signup không dính transport. |
-
-#### `email_verification.go`, `phone_verification.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `StartEmailVerificationOTP` `:41`, `StartPhoneVerification` `:44` | Tạo OTP challenge cho user đã đăng nhập muốn verify contact info. |
-| `VerifyEmailOTP` `:142`, `VerifyPhoneOTP` `:156` | Kiểm tra mã OTP, đánh dấu challenge verified/consumed. |
-| `ResendPhoneOTP` `:214`, `GetPhoneVerificationStatus` `:277`, `buildPhoneVerificationStatusResponse` `:306` | Quản lý lifecycle challenge và UI feedback. |
-| `hashOTPCode`, `generateOTPCode`, `resolveTelegramChatID`, `secondsUntil`, `maskPhone` `:331-378` | Helper bảo mật và UX cho OTP flow. |
-
-#### `oauth_service.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `BeginOAuth` `:70` | Tạo signed state, chọn callback URL và trả authorization URL cho frontend. |
-| `CompleteOAuthCallback` `:118` | Kiểm tra state/nonce, đổi auth code lấy profile Google, resolve hoặc tạo user, phát hành login ticket nội bộ. |
-| `ExchangeOAuthTicket` `:172` | Đổi login ticket nội bộ thành auth response chính thức. |
-| `BuildOAuthStartErrorRedirect`, `BuildOAuthErrorRedirect` `:195`, `:203` | Chuẩn hoá redirect khi OAuth fail. |
-| `resolveOAuthUser` `:220` | Quyết định user nào sẽ gắn với identity OAuth: user cũ theo provider ID, user cũ theo email, hay user mới. |
-| `newOAuthAccountLink`, `applyOAuthIdentity`, `syncOAuthAccount` `:328-377` | Quản lý mapping provider account -> user nội bộ. |
-| `newSocialUser`, `syncOAuthUserNameFromProfile`, `generatePlaceholderPasswordHash`, `splitOAuthName` `:388-450` | Tạo user social và đồng bộ tên hiển thị từ provider. |
-| `signOAuthState`, `signOAuthLoginTicket`, `parseOAuthState` `:474-484` | Security boundary của OAuth flow. |
-| `resolveOAuthCallbackURL`, `resolveFrontendOrigin`, `buildOAuthCallbackURL` `:499-549` | Giữ logic callback/redirect rõ ràng khi có nhiều origin local/dev/prod. |
-| `normalizeOAuthProvider`, `normalizeInternalRedirectPath`, `extractOrigin`, `joinHostPort`, `isLocalHostname` `:571-609` | Helper vệ sinh URL/origin để tránh redirect lỏng lẻo. |
-
-#### `auth_recovery.go`
-
-| Hàm | Ý nghĩa |
-| --- | --- |
-| `VerifyEmail` `:21` | Verify email qua token link cũ. |
-| `ResendVerificationEmail` `:38` | Phát hành verification token mới rồi gửi email. |
-| `ForgotPassword` `:69` | Tạo password reset token và gửi email best-effort. |
-| `ResetPassword` `:96` | Đổi mật khẩu dựa trên reset token hash. |
-| `ListUsers` `:118` | Đọc danh sách user cho admin. |
-| `UpdateUserRole` `:122` | Chuyển role user sau khi validate role support. |
-| `sendVerificationEmail`, `sendPasswordResetEmail` `:146`, `:169` | Tách transport mail khỏi recovery logic. |
-| `buildFrontendLink`, `issueTimeBoundToken`, `hashToken`, `isSupportedRole` `:192-218` | Helper tạo token time-bound và validate role enum. |
-
-#### `wishlist_service.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `NewWishlistService` `:31` và các `WithWishlist*` `:39-53` | Wiring catalog client, preference reader, user reader theo kiểu lightweight DI. |
-| `ListWishlist` `:59` | Đọc wishlist và enrich bằng product baseline mới nhất. |
-| `AddToWishlist` `:63` | Upsert item, sync snapshot sản phẩm tại thời điểm thêm. |
-| `SyncWishlist` `:81` | Đồng bộ nhiều product ID vào wishlist chỉ với một lần save batch. |
-| `RemoveFromWishlist` `:103` | Xoá item theo user và product. |
-| `ListAlerts` `:107` | So snapshot đã lưu với product state mới để tạo alert như restock/price drop. |
-| `ListDispatchableAlerts` `:178` | Kết hợp alert với notification preference để notification-service chỉ kéo những alert nên gửi. |
-| `normalizeWishlistProductIDs`, `wishlistProductIDs`, `applyProductBaseline`, `applyProductBaselines`, `listProductSnapshots`, `wishlistAlertTopic` `:231-313` | Helper giúp wishlist vừa là persistence feature vừa là alert-source cho downstream service. |
-
-#### `notification_preference_service.go`
-
-| Hàm | Ý nghĩa |
-| --- | --- |
-| `ListPreferences` `:27` | Đọc preference đã lưu rồi merge với default map. |
-| `UpdatePreferences` `:34` | Upsert các topic được hỗ trợ. |
-| `PreferenceMap` `:76` | Trả map `topic -> enabled` tiện cho service khác dùng. |
-| `listEffectivePreferences`, `defaultNotificationPreferences`, `supportedNotificationTopics`, `isSupportedNotificationTopic`, `flattenNotificationPreferences` `:92-150` | Bộ helper để tránh null-state và giữ enum topic nhất quán. |
-
-#### `user_service.go`, `user_otp_limiter.go`, `dev_account_bootstrapper.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `WithEmailSender` đến `WithEmailVerificationConfig` `:100-323` | Functional options cho các dependency optional hoặc config nhóm OTP/OAuth/avatar/address. |
-| `NewUserService` `:349` | Constructor trung tâm, gom repo, JWT, sender, OAuth client, address service và challenge repos. |
-| `telegramOTPConfigTTL` đến `allowOTPEvent` `user_otp_limiter.go:22-136` | Rate-control cho OTP qua Redis/in-memory counters, ngăn spam resend. |
-| `NewDevAccountBootstrapper`, `Ensure`, `upsertAccount`, `passwordForRole`, `firstNonEmpty` `dev_account_bootstrapper.go:57-158` | Tạo tài khoản dev/staff/admin mẫu cho local environment. |
-
-### Repository, client và persistence map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/repository/user_repository.go:50` `Create` | Insert user mới, map unique violation cho email/phone. |
-| `user_repository.go:93`, `:118`, `:146` `GetByID`, `GetByEmail`, `GetByPhone` | Read path cơ bản của user aggregate. |
-| `user_repository.go:169`, `:193` `GetByEmailVerificationTokenHash`, `GetByPasswordResetTokenHash` | Lookup token hash cho verify/reset flow. |
-| `user_repository.go:217` `List`, `:252` `Update` | Admin read và update user aggregate. |
-| `user_repository.go:302`, `:318`, `:368` helper family | Map unique violation, scan row và chuẩn hoá nullable DB args. |
-| `internal/repository/address_repository.go:35-132` | CRUD address, `ClearDefault`, `CountByUserID`; giữ persistence primitive cho address invariant. |
-| `internal/repository/wishlist_repository.go:29`, `:63`, `:95`, `:109`, `:145` | Read wishlist, batch upsert, delete item. |
-| `internal/repository/notification_preference_repository.go:26`, `:61` | List và upsert notification preferences. |
-| `internal/repository/profile_tx_manager.go:23`, `:27` | Transaction coordinator để profile/address flow có thể được gói vào một transaction rõ ràng. |
-| `internal/repository/email_signup_repository.go:31-164` | Persistence cho email signup challenge. `DeleteExpired` phục vụ cleanup job tương lai. |
-| `internal/repository/email_verification_repository.go:31-160` | Persistence cho email verification challenge. |
-| `internal/repository/phone_signup_repository.go:31-167` | Persistence cho phone signup challenge. |
-| `internal/repository/phone_verification_repository.go:31-163` | Persistence cho phone verification challenge. |
-| `internal/repository/oauth_account_repository.go:31`, `:77`, `:119`, `:150`, `:185` | Lưu mapping user <-> provider account, token refresh và profile snapshot. |
-| `internal/repository/user_avatar_repository.go:30`, `:59` | Read/upsert avatar metadata. |
-| `internal/client/product_client.go:36`, `:51`, `:107`, `:118` | HTTP client nội bộ để enrich wishlist bằng product snapshot, kèm normalize URL và dedupe ID batch. |
-
-### Điểm mạnh đáng học
-
-- `oauth_service.go` là một flow social login gọn, tách rõ state signing, callback handling và ticket exchange.
-- `user_profile.go` cho thấy cách xử lý profile patch phức tạp mà vẫn giữ logic theo intent.
-- `wishlist_service.go` biến một feature tưởng nhỏ thành ví dụ đẹp về orchestration, enrichment và downstream notification signal.
-
-### Hotspot
-
-- `address_service.go:34`, `:134`, `:192` đang giữ invariant default-address bằng nhiều bước write liên tiếp; đây là chỗ tốt để siết transaction mạnh hơn.
-
-## Product Service
-
-### Service ownership
-
-- Boot: `services/product-service/cmd/main.go:38`
-- Source of truth: product, price, stock, category/storefront metadata, review, search analytics.
-- Optional integrations: Elasticsearch, MinIO/object storage.
-
-### HTTP và gRPC entrypoint
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `cmd/main.go:38` `main` | Boot DB, search index, media store, review cache, review observer, low-stock monitor, gRPC server và HTTP server. |
-| `cmd/main.go:237` `ensureSearchReady` | Probe search index khi boot để service degrade gracefully nếu search backend chưa sẵn sàng. |
-| `internal/handler/product_handler.go:50` `RegisterRoutes` | Đăng ký CRUD product, list/search, analytics, upload, review routes. |
-| `product_handler.go:84` `Create` | Admin/staff tạo product. |
-| `product_handler.go:103` `GetByID` | Đọc một product. |
-| `product_handler.go:115` `ListByIDs` | Batch lookup product theo danh sách ID. |
-| `product_handler.go:135` `Update` | Patch product và có thể kích hoạt reindex. |
-| `product_handler.go:158` `Delete` | Soft/hard delete product tùy model hiện tại. |
-| `product_handler.go:174` `List` | List catalog, hỗ trợ cursor, filter, sort, search. |
-| `product_handler.go:224` `SearchAssist` | Trả suggestions/facets cho search UI. |
-| `product_handler.go:253` `GetSearchAnalytics` | Admin xem thống kê query/filter/click. |
-| `product_handler.go:278` `RecordSearchEvent` | Ghi event click/filter/search từ client. |
-| `product_handler.go:311` `parseRequestedProductIDs` | Giới hạn batch size và normalize list. |
-| `internal/handler/product_upload_handler.go:23` `UploadImages` | Upload ảnh product qua media store. |
-| `product_upload_handler.go:60` `toUploadableImage` | Convert multipart file thành abstraction uploadable image. |
-| `internal/handler/product_review_handler.go:17-127` | CRUD review của user cho product. |
-| `internal/handler/storefront_handler.go:26` `RegisterRoutes` | Route storefront public như home, categories, category page. |
-| `storefront_handler.go:33`, `:53`, `:65` | Entry point cho home/categories/category page. |
-| `storefront_handler.go:84` `parseStorefrontHomeLimit` | Guard query param để storefront home không bị limit vô lý. |
-| `internal/grpc/product_grpc.go:24` `NewProductGRPCServer` | Adapter gRPC cho product truth. |
-| `product_grpc.go:35` `GetProductByID` | Internal product lookup cho cart/order. |
-| `product_grpc.go:58` `UpdateProduct` | Internal update path, đặc biệt hỗ trợ stock delta. |
-| `product_grpc.go:131`, `:139`, `:212` | Detect request stock-only, áp stock delta và map model -> proto. |
-
-### Service layer map
-
-#### `product_service.go`, `product_crud.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `WithMediaStore`, `WithSearchIndex`, `WithLogger`, `WithSearchAnalytics` `:64-114` | Functional options cho integration optional. |
-| `NewProductService` `:137` | Constructor trung tâm cho product domain. |
-| `Create` `product_crud.go:32` | Chuẩn hoá input, tạo model product, persist rồi index best-effort. |
-| `GetByID` `:64` | Load product theo ID, trả not-found domain error chuẩn. |
-| `ListByIDs` `:93` | Batch lookup với normalize/dedupe thứ tự ID. |
-| `Update` `:127` | Patch product fields, reindex khi cần. |
-| `Delete` `:166` | Xoá product và xoá search index best-effort. |
-| `newProductFromCreateRequest`, `applyProductUpdate`, `applyProductImagePatch` `:198-303` | Nhóm helper chuẩn hoá write model, tránh business rule rơi vào handler. |
-
-#### `product_queries.go`, `product_search_assist.go`, `product_helpers.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `List` `product_queries.go:49` | Entry point list catalog; quyết định dùng repository trực tiếp hay search backend. |
-| `SyncSearchIndex` `:103` | Reindex toàn bộ product lên search backend. |
-| `CheckStock`, `ListLowStock`, `RestoreStock`, `DecreaseStock` `:136-228` | Stock truth API của product-service cho các service khác. |
-| `reindexStockChangeBestEffort` `:247` | Reindex stock delta nếu search index tồn tại. |
-| `normalizeListProductsQuery`, `toDTO`, `toRepositoryParams`, `shouldUseSearchBackend` `:277-410` | Nhóm helper chuyển boundary query -> normalized query -> repository/search params. |
-| `indexProductBestEffort`, `deleteProductIndexBestEffort` `:434`, `:462` | Search là integration phụ, lỗi sẽ bị log chứ không làm hỏng write chính. |
-| `GetSearchAssist` `product_search_assist.go:26` | Build suggestion/facet response cho ô search. |
-| `expandSearchAssistTerms` `:54` | Tách query thành exact text, tokens, variants để tìm suggestion tốt hơn. |
-| `normalizeAssistStatus` `:93` | Chuẩn hoá status filter cho search assist. |
-| `recordSearchAnalyticsBestEffort` `:102`, `RecordSearchEvent` `:132` | Ghi analytics mà không chặn UX chính nếu analytics lỗi. |
-| `normalizeTags`, `normalizeVariants`, `resolveStock`, `normalizeStatus`, `normalizeProductIDs`, `normalizeImageURLs`, `resolvePrimaryImage`, `normalizeSort`, `trimText` `product_helpers.go:27-303` | Bộ helper giữ write/read path sạch và nhất quán. |
-
-#### `media_upload.go`, `storefront_service.go`
-
-| Hàm | Ý nghĩa |
-| --- | --- |
-| `EnsureMediaStore` `media_upload.go:26` | Probe bucket/object store khi boot. |
-| `UploadImages` `:34` | Upload nhiều ảnh sản phẩm và trả URL/object key. |
-| `buildProductImageObjectKey` `:58` | Đặt key ổn định cho object storage. |
-| `NewStorefrontService` `storefront_service.go:26` | Service riêng cho storefront public. |
-| `ListCategories` `:32` | Liệt kê category public. |
-| `GetHome` `:46` | Build home page gồm category/editorial/featured products. |
-| `GetCategoryPage` `:111`, `buildCategoryPage` `:128` | Build category page đầy đủ từ nhiều batch query. |
-| `sanitizeStorefrontHomeLimit`, `isStorefrontHomeCategory` `:153`, `:164` | Giữ contract storefront ổn định và tránh over-fetch. |
-
-#### Review subsystem
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `NewProductReviewFactory`, `New`, `Update` `product_review_factory.go:19-46` | Factory tạo/patch review model, chuẩn hoá comment và author label. |
-| `cloneProductReview`, `normalizeProductReviewComment`, `maskAuthorLabel` `:54-67` | Helper tránh mutate ngoài ý muốn và bảo vệ danh tính reviewer ở mức hiển thị. |
-| `NewProductReviewObserverChain` `product_review_observer.go:19`, `Handle` `:35` | Chain nhiều observer sau khi review create/update/delete. |
-| `NewProductReviewMetricsObserver` `:48`, `NewProductReviewCacheInvalidationObserver` `:61` | Observer chuyên biệt cho metrics và cache invalidation. |
-| `WithProductReviewTxManager`, `WithProductReviewCache`, `WithProductReviewObserver`, `WithProductReviewLogger`, `WithProductReviewFactory` `product_review_service.go:88-112` | Constructor options để review service mở rộng mà không bị cứng vào infra. |
-| `NewProductReviewService` `:118` | Dựng review aggregate service. |
-| `ListReviews` `:138` | Đọc review summary + first page, ưu tiên cache rồi fallback DB. |
-| `GetReviewByProductAndUser` `:189` | Lấy review riêng của current user. |
-| `CreateReview`, `UpdateReview`, `DeleteReview` `:215-307` | Write path có tx manager, summary delta, observer và cache invalidation. |
-| `createReviewWithRepository`, `loadReviewForMutation`, `runInTx` `:343-368` | Tách rõ orchestration khỏi primitive repository. |
-| `loadReviewSummary`, `loadFirstReviewPage`, `loadReviewsFromStore` `:378-454` | Cache-aware read path. |
-| `notifyBestEffort`, `warnCacheFailure`, `observeOperation`, `normalizeProductReviewListQuery` `:471-504` | Reliability + observability helpers cho review hot path. |
-
-### Repository map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/repository/product_repository.go:72-577` | CRUD product, list bằng cursor, stock update/restore, search-index feed, scan helpers, cursor encode/decode, sort clause builder. Đây là repo quan trọng nhất của product-service. |
-| `product_search_assist_repository.go:14-325` | Query suggestions, facet values, pattern builder cho search assist. |
-| `search_analytics_repository.go:48-351` | Ghi query/event và đọc summary analytics cho admin. |
-| `storefront_repository.go:39-366` | Batch read category/editorial/featured product và normalize JSON blobs storefront. |
-| `product_review_repository.go:37-312` | CRUD review, lock row for update, review summary, delta apply, row scan, average rating. |
-| `product_review_tx_manager.go:21`, `:25` | Transaction runner cho review aggregate. |
-| `product_review_cache.go:19-121` | Redis cache cho summary và first page review. Key design rõ theo `productID` và `limit`. |
-
-### Điểm mạnh đáng học
-
-- `product_review_service.go` là mẫu rất sạch cho aggregate phức tạp có cache, observer, metrics, tx manager.
-- `product_queries.go` cho thấy cách chọn search backend hay DB backend một cách thực dụng.
-- `storefront_service.go` là ví dụ tách public read-model khỏi CRUD core.
-
-### Hotspot
-
-- Review listing vẫn là `page/limit/offset`, chưa lên cursor-first.
-
-## Cart Service
-
-### Service ownership
-
-- Boot: `services/cart-service/cmd/main.go:30`
-- Source of truth: cart state trong Redis.
-- Product truth vẫn thuộc `product-service`.
-
-### Handler map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/handler/cart_handler.go:25` `RegisterRoutes` | Route get/merge/add/update/remove/clear cart. |
-| `cart_handler.go:36` `GetCart` | Lấy cart hiện tại theo user trong JWT. |
-| `cart_handler.go:49` `MergeCart` | Merge guest cart vào server-side cart. |
-| `cart_handler.go:80` `AddItem` | Thêm một item, re-check product truth. |
-| `cart_handler.go:106` `UpdateItem` | Đổi quantity của item đã có. |
-| `cart_handler.go:127` `RemoveItem` | Xoá item khỏi cart. |
-| `cart_handler.go:144` `ClearCart` | Xoá toàn bộ cart của user. |
-
-### Service và helper map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/service/cart_service.go:48` `NewCartService` | Constructor nhận cart repo và product catalog client. |
-| `cart_service.go:70` `GetCart` | Load cart hoặc khởi tạo cart trống nếu chưa có state. |
-| `cart_service.go:92` `ClearCart` | Xoá cart trong Redis. |
-| `cart_mutations.go:13` `MergeCart` | Merge guest items theo product truth và chỉ save một lần. |
-| `cart_mutations.go:69` `AddItem` | Load product mới nhất rồi merge vào cart. |
-| `cart_mutations.go:121` `UpdateItem` | Chỉnh quantity và subtotal trên snapshot hiện có. |
-| `cart_mutations.go:161` `RemoveItem` | Gỡ item và trừ tổng tiền tương ứng. |
-| `cart_mutations.go:204` `mergeCartItem` | Gom logic “item đã tồn tại thì cộng quantity, chưa có thì append”. |
-| `cart_mutations.go:236` `newCartItem` | Tạo snapshot item từ product truth. |
-| `cart_mutations.go:268` `ensureProductStock` | Guard quantity không vượt stock. |
-| `cart_helpers.go:38` `loadCart`, `:69` `saveCart` | Bao lớp load/save Redis để mutation code sạch hơn. |
-| `cart_helpers.go:96` `getProductForCart` | Tách call gRPC product ra khỏi mutation logic. |
-| `cart_helpers.go:138` `findCartItemIndex` | Lookup item trong cart slice. |
-| `cart_helpers.go:163` `itemSubtotal` | Tính subtotal một item theo snapshot. |
-
-### Repository và client map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/repository/cart_repository.go:38` `NewCartRepository` | Redis-backed cart repository. |
-| `cart_repository.go:45` `cartKey` | Chuẩn hoá key Redis theo user ID. |
-| `cart_repository.go:51`, `:77`, `:90` `Get`, `Save`, `Delete` | Primitive persistence cho cart. |
-| `internal/grpc_client/product_client.go:18`, `:34`, `:38` | gRPC client tới product-service, dùng để lấy product truth khi add/merge cart. |
-
-### Điểm mạnh và hotspot
-
-- Điểm mạnh: cart logic mỏng, repo Redis mỏng, product truth không bị duplicate sang cart.
-- Hotspot: `UpdateItem` chưa re-check giá và stock mới nhất.
-
-## Order Service
-
-### Service ownership
-
-- Boot: `services/order-service/cmd/main.go:33`
-- Source of truth: order, order item snapshot, coupon usage, return, return events, return evidence, refund queue, outbox, inbox.
-- External calls: product-service gRPC cho stock/product truth, payment-service HTTP cho payment history/refund.
-
-### Handler map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/handler/order_handler.go:29` `RegisterRoutes` | Route user/admin cho order, coupon, returns, reports. |
-| `order_handler.go:89` `CreateOrder` | Nhận `Idempotency-Key`, gọi `OrderService.CreateOrder`. |
-| `order_handler.go:118` `PreviewOrder` | Trả quote trước khi tạo order thật. |
-| `order_handler.go:135` `GetOrder` | Lấy order của current user. |
-| `order_handler.go:149` `GetReturnEligibility` | Cho frontend biết item nào còn đủ điều kiện hoàn. |
-| `order_handler.go:174` `CreateReturn` | Người dùng tạo return request. |
-| `order_handler.go:192` `ListOrderReturns` | Liệt kê returns của một order. |
-| `order_handler.go:205` `GetReturn` | Đọc chi tiết một return. |
-| `order_handler.go:219` `ListUserReturns` | Liệt kê return theo user. |
-| `order_handler.go:244` `GetUserOrders` | Liệt kê order của current user. |
-| `order_handler.go:256` `GetUserOrderSummary` | Ghép orders với payment history cho màn hình user. |
-| `order_handler.go:281` `CancelOrder` | User hủy đơn hợp lệ của chính mình. |
-| `order_handler.go:299` `GetOrderTimeline` | Đọc order events/timeline. |
-| `order_handler.go:314` `ListAdminOrders` | Admin list orders bằng offset hoặc cursor tùy query param. |
-| `order_handler.go:369` `GetAdminOrder` | Admin đọc một order bất kỳ. |
-| `order_handler.go:380` `GetAdminOrderTimeline` | Admin xem timeline order. |
-| `order_handler.go:395` `UpdateOrderStatus` | Admin/operator đổi trạng thái order. |
-| `order_handler.go:430` `UpdateReturnStatus` | Admin/operator đổi trạng thái return. |
-| `order_handler.go:460` `RequestReturnRefund` | Queue refund cho return đủ điều kiện. |
-| `order_handler.go:488` `ListAdminReturns` | Admin list return queue. |
-| `order_handler.go:516` `GetReturnQueueHealth` | Dashboard/health cho refund worker queue. |
-| `order_handler.go:530` `CreateCoupon`, `:549` `ListCoupons` | Admin coupon management. |
-| `order_handler.go:557` `CancelOrderAsAdmin` | Admin/operator hủy order với audit message. |
-| `order_handler.go:591` `GetAdminReport`, `:602` `ListPopularProducts` | Report/dashboard endpoint. |
-| `order_handler.go:612`, `:630`, `:661`, `:698` helper family | Parse pagination/time và map pricing/return domain error sang HTTP response. |
-| `internal/handler/order_return_evidence_handler.go:23` `UploadReturnEvidence` | Upload hình ảnh/bằng chứng cho return request. |
-| `order_return_evidence_handler.go:64`, `:99` | Convert multipart file thành upload struct và whitelist content-type. |
-
-### Core service map
-
-#### `order_service.go`, `order_pricing.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `pricedOrderQuote.ToPreview` `order_service.go:147` | Chuyển quote nội bộ sang DTO preview public. |
-| `NewOrderService` `:186` | Constructor gom repo, product client, payment client, RabbitMQ publisher, logger, config. |
-| `SetReturnMediaStore` `:202` | Inject object store cho return evidence. |
-| `PreviewOrder` `order_pricing.go:48` | Entry point quote order từ request client. |
-| `quoteOrder` `:78` | Quote toàn order, bao gồm product lookup, shipping, coupon, rounding. |
-| `validateOrderRequest` `:138` | Boundary validation cho create/preview order request. |
-| `quoteOrderItem` `:181` | Tạo priced item từ product truth. |
-| `newProductQuoteCache`, `getOrLoad` `:227`, `:256` | Cache per-request để không gọi product-service lặp lại cho cùng một product trong một quote. |
-| `normalizeShippingMethod`, `normalizeShippingAddress`, `normalizeShippingText` `:291-343` | Chuẩn hoá shipping input. |
-| `calculateShippingFee`, `buildShippingOptions`, `resolveShippingPromise` `:366-415` | Contract shipping hiện được backend nắm chủ động. |
-| `roundCurrency` `:446` | Gom logic làm tròn tiền về một điểm. |
-| `validateCoupon`, `normalizeCouponCode`, `calculateDiscount`, `applyCouponToQuote`, `discountBaseForCoupon` `:469-567` | Subsystem pricing/coupon độc lập, giúp create order không thành God method. |
-
-#### `order_lifecycle.go`, `order_idempotency.go`, `order_reservations.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `CreateOrder` `order_lifecycle.go:42` | Luồng create order hoàn chỉnh: idempotency, quote, reserve stock, persist order/outbox/idempotency record, rollback stock khi persist fail. |
-| `UpdateStatus` `:183` | Đổi trạng thái order từ admin/operator path. |
-| `CancelOrder`, `CancelOrderAsAdmin` `:241`, `:277` | Hai entrypoint hủy đơn với rule phân quyền khác nhau. |
-| `cancelOrderWithActor` `:318` | Shared flow cho mọi path hủy đơn. |
-| `newOrderFromQuote` `:386`, `buildOrderItems` `:424` | Tạo order aggregate và order item snapshot từ quote. |
-| `persistCreatedOrder` `:460` | Bọc save order + outbox + idempotency record vào một persistence boundary. |
-| `logCreateOrderPersistenceError` `:500` | Structured logging helper cho failure nặng ở checkout. |
-| `markOrderCancelled`, `restoreCancelledOrderStock`, `reserveCreatedOrderStock`, `restoreOrderItemsStock` `:535-590` | Nhóm helper để state transition và stock compensation rõ ràng. |
-| `mapCreateOrderStockError`, `isValidOrderStatus` `:613`, `:642` | Map internal error sang domain error và validate enum status. |
-| `normalizeOrderIdempotencyKey`, `hashCreateOrderRequest`, `findIdempotentOrder`, `isOrderUniqueViolation` `order_idempotency.go:20-91` | Bảo vệ checkout khỏi client retry/double submit. |
-| `buildOrderReservationExpiry`, `isPendingReservationExpired`, `finalizeOrderReservationState` `order_reservations.go:14-36` | Quản lý pending reservation timeout và stock restoration. |
-
-#### `order_queries.go`, `order_coupon.go`
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `GetOrder`, `GetOrderForAdmin` `order_queries.go:35`, `:64` | Read path cho user và admin với authz khác nhau. |
-| `GetUserOrders`, `GetUserOrderSummary` `:86`, `:129` | Read orders của user, ghép thêm payment history từ payment-service. |
-| `ListAdminOrders`, `ListAdminOrdersByCursor` `:187`, `:191` | Hai nhánh admin list: offset legacy và cursor-first. |
-| `GetOrderTimeline` `:215` | Lấy audit/timeline event của order. |
-| `GetAdminReport`, `ListPopularProducts` `:245`, `:275` | Dashboard/report queries cho backoffice. |
-| `loadOrderByID`, `buildOrderIDSet`, `groupPaymentHistoryByOrder`, `isOperatorRole` `:297-378` | Helper read model cho summary và authz. |
-| `CreateCoupon`, `ListCoupons` `order_coupon.go:35`, `:85` | CRUD coupon ở mức service. |
-| `isCouponError`, `isUniqueViolation` `:106`, `:131` | Map lỗi SQL/constraint sang coupon domain error. |
-
-#### Returns và refund worker
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `GetReturnEligibility` `order_return_eligibility.go:10` | Tính snapshot đủ điều kiện return cho từng item. |
-| `buildReturnEligibilitySnapshot`, `resolveReturnWindowStart` `:34`, `:105` | Xác định window tính từ delivered/fulfilled event. |
-| `CreateReturn` `order_returns.go:16` | Tạo return request từ order đã giao, có validate quantity và trạng thái. |
-| `GetReturn`, `ListReturnsByOrder`, `ListUserReturns`, `ListAdminReturns`, `GetReturnQueueHealth` `:80-138` | Read path cho return domain. |
-| `UpdateReturnStatus` `:147` | Transition return state và sinh outbox/audit khi cần. |
-| `RequestReturnRefund` `:181` | Queue refund khi return đã tới trạng thái phù hợp. |
-| `buildReturnItems`, `loadReturnByID`, `isReturnableOrderStatus`, `isValidReturnStatus`, `canTransitionReturnStatus`, `canQueueReturnRefund` `:221-318` | Guard business rule của return domain. |
-| `aggregateReturnedQuantities`, `isIgnoredReturnStatus`, `calculateReturnRefundAmount`, `prepareReturnRefund`, `buildReturnRefundIdempotencyKey`, `findRefundableChargePayment` `:324-430` | Tính số lượng đã hoàn, số tiền refund và chọn charge payment để refund. |
-| `UploadReturnEvidence` `order_return_evidence.go:15` | Upload bằng chứng cho return đang mở. |
-| `buildReturnEvidenceObjectKey`, `isClosedReturnForEvidence` `:72`, `:89` | Tạo object key ổn định và chặn upload vào return đã đóng. |
-| `StartReturnRefundWorker` `order_return_refund_worker.go:24` | Background worker polling refund queue. |
-| `flushPendingReturnRefunds`, `processPendingReturnRefund` `:46`, `:88` | Claim lease, gọi payment-service refund, complete hoặc reschedule. |
-| `nextReturnRefundRetryAt`, `truncateReturnRefundError` `:156`, `:169` | Backoff và error compaction cho queue persistence. |
-| `StartReturnRefundQueueMonitor`, `refreshReturnRefundQueueMetrics`, `observeReturnRefundAttempt`, `recordReturnRefundQueueHealth` `order_return_refund_metrics.go:75-106` | Metrics loop cho operability của refund queue. |
-
-#### Eventing
-
-| Hàm hoặc nhóm hàm | Ý nghĩa |
-| --- | --- |
-| `buildCreatedOrderOutbox`, `buildCancelledOrderOutbox`, `buildReturnOutboxMessage`, `buildOrderOutboxMessage` `order_events.go:46-112` | Tạo payload outbox cho order/return event. |
-| `publishOrderEvent`, `publishCancelEvent` `:146`, `:161` | Synchronous publish helper chỉ dùng khi flow cần best-effort publish ngay. |
-| `StartOutboxRelay`, `flushOutboxBatch`, `publishOutboxMessage` `:182-239` | Worker relay outbox -> RabbitMQ. |
-| `SetupExchange` `:302` | Khai báo RabbitMQ exchange/binding cho order events. |
-| `recordAuditEntry`, `messageIDFromDelivery`, `minInt` `:339-363` | Audit helper và utility cho relay/consumer. |
-| `StartPaymentEventConsumer`, `handlePaymentEventMessage`, `paymentEventMessage` `payment_events.go:32-183` | Consumer payment lifecycle event để cập nhật order bằng inbox pattern. |
-
-### Repository, client và transport map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/repository/order_repository.go:91` `CreateWithIdempotency` | Persistence quan trọng nhất của checkout: save order, order items, outbox, idempotency record trong một transaction. |
-| `order_repository.go:185`, `:223`, `:253` | Read order theo ID/user và lookup idempotency record. |
-| `order_repository.go:271-456` | Persistence cho create/get/list return và queue health. |
-| `order_repository.go:587` `AddReturnEvidence` | Gắn URL evidence vào return timeline. |
-| `order_repository.go:651`, `:712` `ListAll`, `ListAllByCursor` | Hai mode admin order listing; offset branch là hotspot scalability. |
-| `order_repository.go:788`, `:834`, `:893` | Timeline events, update status và expire pending reservation. |
-| `order_repository.go:958-1212` | Update return status, schedule/claim/complete/mark-failed refund queue items. |
-| `order_repository.go:1231-1427` | Coupon CRUD, admin report, popular products, audit entry. |
-| `order_repository.go:1459-2213` helper family | `scan*`, `encode/decode cursor`, `lockAndConsumeCoupon`, outbox/inbox persistence, nullable helper; đây là lớp SQL primitive giữ invariant dữ liệu. |
-| `internal/grpc_client/product_client.go:22`, `:49`, `:64`, `:95` | Product truth client cho order-service: get product, decrease stock, restore stock. |
-| `internal/client/payment_client.go:54`, `:70`, `:137`, `:171` | HTTP client tới payment-service để lấy payment history, payments theo order và phát refund. |
-| `payment_client.go:238`, `:261` | Gắn service authorization và normalize base URL. |
-
-### Điểm mạnh đáng học
-
-- `CreateOrder` là luồng orchestration mạnh nhất của repo.
-- `order_repository.go` là ví dụ rõ cho transactional outbox + idempotency record + inbox transition.
-- Refund worker cho thấy cách làm background job có lease, retry schedule và metrics mà không cần framework nặng.
-
-### Hotspot
-
-- Nếu UI vẫn gọi `page/limit` thay vì cursor, `ListAdminOrders` vẫn rơi về `COUNT(*) + OFFSET/LIMIT`.
-
-## Payment Service
-
-### Service ownership
-
-- Boot: `services/payment-service/cmd/main.go:31`
-- Source of truth: payment, refund, payment idempotency, payment outbox, webhook inbox/audit.
-- External dependency: order-service để lấy order truth; MoMo webhook/gateway semantics.
-
-### Handler map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/handler/payment_handler.go:26` `RegisterRoutes` | Route process/get/list/refund payment và webhook. |
-| `payment_handler.go:50` `ProcessPayment` | Nhận payment request + idempotency key. |
-| `payment_handler.go:95` `GetPayment` | User đọc payment theo ID. |
-| `payment_handler.go:108` `GetPaymentByOrder` | User đọc payment chính theo order. |
-| `payment_handler.go:121` `ListPaymentsByOrder` | User đọc toàn bộ payment history theo order. |
-| `payment_handler.go:133` `ListPaymentHistory` | User đọc tất cả payment của mình. |
-| `payment_handler.go:145` `RefundPayment` | Admin/operator thực hiện refund thủ công. |
-| `payment_handler.go:188` `ListPaymentsByOrderAdmin` | Admin đọc payments của một order. |
-| `payment_handler.go:200` `ListPaymentsByOrderIDsAdmin` | Admin batch read payments cho nhiều order. |
-| `payment_handler.go:222` `HandleMomoWebhook` | Entry point webhook MoMo. |
-| `payment_handler.go:245` `parseOrderIDs` | Normalize batch query param cho admin. |
-
-### Service map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/service/payment_service.go:71` `NewPaymentService` | Constructor gom repo, order client, publisher, logger, config. |
-| `payment_processing.go:43` `ProcessPayment` | Entry point process payment với idempotency. |
-| `payment_processing.go:62` `processPaymentCore` | Tải order truth, tính outstanding amount, chọn gateway/provider, tạo payment record/outbox. |
-| `payment_queries.go:31`, `:63`, `:95`, `:123`, `:134`, `:180` | Read path cho payment theo user/admin và batch grouping theo order IDs. |
-| `payment_queries.go:209`, `:218`, `:227` | Enrich payment bằng summary và normalize danh sách order IDs. |
-| `payment_refunds.go:41` `RefundPayment` | Refund idempotent, kiểm tra refundable amount, tạo outbox tương ứng. |
-| `payment_refunds.go:230` `HandleMomoWebhook` | Verify signature, đối chiếu payment pending, apply webhook result idempotently. |
-| `payment_refunds.go:372` `findWebhookPayment` | Lookup payment bằng gateway order ID hoặc hint từ payload webhook. |
-| `payment_refunds.go:403` `recordAuditEntry` | Audit payment/refund action. |
-| `payment_enrichment.go:33-210` | Tính summary theo order: net paid, total refunded, refundable amount per charge. |
-| `payment_idempotency.go:16-53` | Normalize key, hash request body và replay/refuse conflicting retries. |
-| `payment_helpers.go:36-273` | Normalize method, resolve gateway provider, build MoMo IDs/URL, verify webhook HMAC, money formatting/rounding, replace payment in slice, generate webhook message ID. |
-| `payment_events.go:45` `buildPaymentOutboxMessage` | Tạo event payload cho payment completed/failed/refunded. |
-| `payment_events.go:88` `publishPaymentEvent` | Publish helper cho payment event. |
-| `payment_events.go:109`, `:131`, `:166` | Outbox relay loop cho payment-service. |
-| `payment_events.go:229`, `:239` | Tính routing key và utility nhỏ cho batch relay. |
-
-### Repository và client map
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/repository/payment_repository.go:44`, `:60` | Create payment bình thường hoặc create kèm idempotency record/outbox trong transaction. |
-| `payment_repository.go:85-254` | Read payment theo ID/order/user và batch order IDs. |
-| `payment_repository.go:271` `Update` | Update payment state và outbox atomically khi cần. |
-| `payment_repository.go:305` `CreateAuditEntry` | Ghi audit trail cho refund/webhook/admin action. |
-| `payment_repository.go:333` `ApplyWebhookResult` | Inbox-safe update cho webhook replay, vừa ghi inbox message vừa update payment/outbox. |
-| `payment_repository.go:394`, `:456`, `:470` | Claim/mark outbox relay state. |
-| `payment_repository.go:484-752` helper family | Insert payment/idempotency/outbox/inbox trong transaction, scan rows, build args, nullable/required string helpers. |
-| `internal/client/order_client.go:38`, `:53`, `:130` | HTTP client để lấy order truth từ order-service trước khi process payment. |
-
-### Điểm mạnh đáng học
-
-- Payment không tin amount từ client; luôn re-check order truth.
-- Webhook path được xử lý như at-least-once delivery, không phải “POST bình thường”.
-- Refund idempotency dùng cùng tư duy với create payment, rất đáng học.
-
-## Notification Service
-
-### Service ownership
-
-- Boot: `services/notification-service/cmd/main.go:34`
-- Vai trò: consume order/payment/return events, gửi email, lưu inbox/history audit, xử lý retry/DLQ, chạy wishlist alert worker.
-- Redis là reliability layer cho dedupe/inbox/history, không phải nguồn business chính.
-
-### Event consumer và inbox HTTP
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `cmd/main.go:34` `main` | Boot RabbitMQ channels, Redis stores, email sender, user client, event handler, queue monitor, wishlist worker. |
-| `cmd/main.go:69`, `:72`, `:76` | Chọn Redis deduper thật hay noop deduper tuỳ Redis availability. |
-| `cmd/main.go:154` | Dựng wishlist alert worker với user client + deduper + sender. |
-| `cmd/main.go:223` `startWorker` | Worker loop với per-message timeout rõ ràng. |
-| `internal/handler/event_handler.go:43` `NewEventHandler` | Constructor gom inbox store, history store, retry publisher, preference reader, email sender, logger. |
-| `event_handler.go:127` `HandleMessage` | Entry point consume một RabbitMQ delivery, claim inbox, decode metadata, route event, ack/nack/retry. |
-| `event_handler.go:250` `processMessage` | Phân luồng payload theo routing key/event type. |
-| `event_handler.go:305`, `:342`, `:379`, `:416`, `:453`, `:489` | Xử lý email content cho `order.created`, `payment.completed`, `payment.failed`, `payment.refunded`, `order.cancelled`, `return.*`. |
-| `event_handler.go:524` `shouldDeliverTopic` | Kiểm tra notification preference trước khi gửi mail. |
-| `event_handler.go:560` `returnEmailContent` | Tạo subject/body cho return event. |
-| `event_handler.go:621` `buildHistoryItem`, `:654` `buildRetryAuditItem` | Tạo audit/history model để người dùng/admin truy vết. |
-| `event_handler.go:679` `deliveryStatus`, `:686` `buildReturnNarrative` | Chuẩn hoá message hiển thị trong inbox history. |
-| `event_handler.go:697` `appendHistoryBestEffort` | Ghi history mà không phá consumer chính nếu Redis lỗi. |
-| `event_handler.go:706` `sendEmail` | Tách transport mail khỏi routing event. |
-| `event_handler.go:737-759` delivery error helpers | Phân loại permanent vs transient delivery failure cho retry/DLQ decision. |
-| `internal/handler/inbox_handler.go:27` `NewNotificationInboxHandler` | HTTP adapter cho inbox/history store. |
-| `inbox_handler.go:31`, `:57`, `:84` | List inbox theo user, mark-all-read, xem audit recent. |
-
-### Wishlist alert subsystem
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/service/wishlist_alert_worker.go:32` `NewWishlistAlertWorker` | Constructor worker polling user-service. |
-| `wishlist_alert_worker.go:63` `Start` | Vòng lặp poll theo interval và context lifetime rõ ràng. |
-| `wishlist_alert_worker.go:84` `runCycle` | Lấy batch alert dispatchable từ user-service rồi gửi từng cái. |
-| `wishlist_alert_worker.go:105` `deliver` | Claim dedupe key, gửi email, log failure nhưng tiếp tục batch. |
-| `wishlist_alert_worker.go:133` `wishlistAlertEmail` | Tạo subject/body cho alert như price drop hoặc back in stock. |
-| `internal/service/wishlist_alert_deduper.go:23` `NewRedisWishlistAlertDeduper` | Dedupe theo Redis khi có infra; fallback noop khi Redis lỗi. |
-| `wishlist_alert_deduper.go:38` `Claim` | Đảm bảo một alert không bị gửi lặp nhiều lần trong cửa sổ TTL. |
-| `wishlist_alert_deduper.go:55`, `:78` `key`, `ttl` | Xây dedupe key và TTL theo loại alert. |
-| `wishlist_alert_deduper.go:89` `noop Claim` | Graceful degradation khi không có Redis. |
-
-### Inbox/history store, messaging, user client
-
-| File hoặc hàm | Ý nghĩa |
-| --- | --- |
-| `internal/inbox/redis_store.go:32`, `:39`, `:58`, `:70` | Claim/mark-processed/release một message ID để consumer có inbox dedupe state. |
-| `redis_store.go:78`, `:82` | Key design cho processed và processing state. |
-| `internal/inbox/history_store.go:46`, `:53`, `:99`, `:123`, `:141`, `:175` | Lưu và đọc inbox history/audit items, hỗ trợ mark-all-read. |
-| `history_store.go:234`, `:238`, `:242` | Key namespace cho user history và audit feed. |
-| `internal/messaging/retry_publisher.go:22`, `:37`, `:77`, `:95` | Requeue message với exponential-like delay, clone headers để giữ retry metadata. |
-| `internal/messaging/delivery_metadata.go:19-80` | Parse retry count, first seen time, message ID từ RabbitMQ delivery headers. |
-| `internal/messaging/queue_monitor.go:24`, `:32`, `:51`, `:70` | Monitor queue depth/health và declare queue topology. |
-| `internal/client/user_client.go:64` `NewUserClient` | HTTP client tới user-service cho notification preferences và wishlist alerts. |
-| `user_client.go:83` `PreferenceMap` | Đọc preference của một user trước khi gửi email. |
-| `user_client.go:144` `ListDispatchableWishlistAlerts` | Poll batch wishlist alert đã được user-service lọc sẵn. |
-| `user_client.go:200`, `:226` | Sign service token và normalize base URL cho internal HTTP call. |
-
-### Điểm mạnh và hotspot
-
-- `event_handler.go` là một consumer at-least-once hoàn chỉnh: claim, dedupe, classify error, retry, audit, append history.
-- Hotspot: khi Redis chết, dedupe/history/inbox degrade; service vẫn chạy nhưng duplicate protection giảm.
-
-## Cụm source nên đọc đầu tiên nếu muốn “hiểu sâu”
-
-1. `services/order-service/internal/service/order_lifecycle.go`
-2. `services/payment-service/internal/service/payment_processing.go`
-3. `services/payment-service/internal/service/payment_refunds.go`
-4. `services/notification-service/internal/handler/event_handler.go`
-5. `services/product-service/internal/service/product_review_service.go`
-6. `services/user-service/internal/service/oauth_service.go`
-7. `services/user-service/internal/service/user_profile.go`
-8. `services/user-service/internal/service/wishlist_service.go`
-
-## Tóm tắt pattern xuất hiện rõ nhất trong backend
-
-| Pattern | Nơi thấy rõ | Lợi ích |
+| Family | Ví dụ | Ý nghĩa |
 | --- | --- | --- |
-| Thin Handler | Mọi `internal/handler/*.go` | Handler chỉ parse/validate/map response, tránh chôn business rule ở transport layer. |
-| Repository Pattern thực dụng | `services/*/internal/repository/*.go` | Tách SQL và transaction primitive khỏi service, nhưng không lạm dụng interface vô nghĩa. |
-| Functional Options | `user_service.go`, `product_service.go`, `product_review_service.go` | Constructor dài nhưng vẫn dễ đọc, đặc biệt khi có dependency optional. |
-| Transaction Coordinator | `profile_tx_manager.go`, `product_review_tx_manager.go` | Gom nhiều repo call dưới một invariant. |
-| Transactional Outbox | `order_repository.go`, `payment_repository.go` + `order_events.go`, `payment_events.go` | Event publish không mất đồng bộ với DB transaction. |
-| Inbox / Idempotent Consumer | `order_repository.go:2022`, `payment_repository.go:333`, `notification-service/internal/inbox/*.go` | Replay-safe cho webhook và RabbitMQ consumer. |
-| Observer | `product_review_observer.go` | Thêm metrics/cache invalidation mà không làm phình service chính. |
-| Worker with Lease | `order_return_refund_worker.go` | Background retry an toàn, tránh double processing. |
-| Graceful Degradation | `product-service` search/media boot, `notification-service` Redis fallback | Service chính vẫn sống khi dependency phụ chết. |
+| `normalize*` | `normalizeBaseURL`, `normalizePaymentMethod`, `normalizeShippingMethod`, `normalizeListProductsQuery` | Chuẩn hóa input trước khi vào invariant |
+| `resolve*` | `resolveOAuthCallbackURL`, `resolveOptionalPhone`, `resolvePrimaryImage` | Quyết định semantics từ input mơ hồ |
+| `build*` | `buildCreatedOrderOutbox`, `buildPaymentOutboxMessage`, `buildHistoryItem` | Materialize event/read model payload |
+| `scan*` | `scanOrder`, `scanPayment`, `scanProductReviewRow` | Giữ repository code bớt lặp và rõ scan contract |
+| `encode/decode*Cursor` | product/order list cursor helpers | Giữ pagination state ổn định, không phơi SQL internals ra API |
+
+#### Repository pattern đáng học
+
+1. transaction core thường nằm ở repo:
+   - `createOrderTx`
+   - payment `CreateWithIdempotency`
+   - `ApplyWebhookResult`
+   - `ProfileTxManager.RunInTx`
+2. queue/lease pattern dùng SQL thật:
+   - `ClaimPendingOutbox`
+   - `ClaimPendingReturnRefunds`
+3. DB-as-durable-queue pattern xuất hiện ở outbox/refund queue
+4. repository không biết HTTP status code; handler/service mới map domain error sang transport error
+
+---
+
+## 3. cart-service
+
+### 3.1. Vai trò runtime
+
+`cart-service` giữ cart state của user trên Redis. Service này không sở hữu product truth; nó chỉ lưu snapshot `name`, `price`, `quantity` để phục vụ UX.
+
+### 3.2. Startup wiring
+
+Trình tự trong `services/cart-service/cmd/main.go`:
+
+1. `config.Load("cart-service")`
+2. init logger + tracing
+3. kết nối Redis
+4. tạo gRPC client tới `product-service`
+5. tạo `CartRepository -> CartService -> CartHandler`
+6. mount middleware và route
+
+### 3.3. Public contract
+
+| Route | Method | Handler | Ý nghĩa |
+| --- | --- | --- | --- |
+| `/api/v1/cart` | `GET` | `GetCart` | Lấy cart hiện tại |
+| `/api/v1/cart/merge` | `POST` | `MergeCart` | Merge guest cart vào user cart |
+| `/api/v1/cart/items` | `POST` | `AddItem` | Thêm item hoặc tăng quantity |
+| `/api/v1/cart/items/:productId` | `PUT` | `UpdateItem` | Ghi đè quantity |
+| `/api/v1/cart/items/:productId` | `DELETE` | `RemoveItem` | Xóa item |
+| `/api/v1/cart` | `DELETE` | `ClearCart` | Xóa toàn bộ cart |
+
+Tất cả route đều yêu cầu JWT.
+
+### 3.4. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| Redis | Lưu JSON blob tại key `cart:{userID}` với TTL 7 ngày |
+| gRPC `product-service` | Lấy product truth để validate stock và cập nhật price/name mới nhất |
+
+### 3.5. Function map theo tầng
+
+#### Handler layer
+
+| Function | Vai trò |
+| --- | --- |
+| `RegisterRoutes` | Khai báo toàn bộ contract HTTP của cart |
+| `GetCart` | Read-only cart fetch |
+| `MergeCart` | Parse `MergeCartRequest`, validate, map product/stock error |
+| `AddItem` | Parse `AddToCartRequest`, validate và trả cart mới |
+| `UpdateItem` | Update quantity cho item cụ thể |
+| `RemoveItem` | Remove item khỏi cart |
+| `ClearCart` | Xóa cart sau checkout hoặc theo user action |
+
+#### Service layer
+
+| Function | Vai trò |
+| --- | --- |
+| `GetCart` | Trả cart aggregate hiện tại |
+| `MergeCart` | Merge nhiều item guest vào cart server-side trong một write |
+| `AddItem` | Thêm hoặc tăng quantity một item |
+| `UpdateItem` | Ghi đè quantity một item đã có |
+| `RemoveItem` | Xóa một item |
+| `ClearCart` | Delete cart key khỏi Redis |
+| `loadCart` | Normalize nil cart thành cart rỗng |
+| `saveCart` | Save cart và normalize `nil` slice |
+| `getProductForCart` | Gọi gRPC product client và map lỗi |
+| `mergeCartItem` | Update item bằng quantity delta và refresh price/name |
+| `newCartItem` | Tạo cart line mới từ product snapshot |
+| `ensureProductStock` | Guard stock constraint |
+
+#### Repository layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Get` | Read và unmarshal cart từ Redis |
+| `Save` | Marshal cart sang JSON và set TTL |
+| `Delete` | Xóa cart key |
+
+### 3.6. Điều đáng lưu ý khi đọc code
+
+- `AddItem` và `MergeCart` luôn reload product truth
+- `UpdateItem` hiện chưa reload product truth
+- cart persistence là whole-cart overwrite chứ không phải per-item mutation
+
+### 3.7. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/cart/cart_handler.go`
+
+1. `RegisterRoutes`
+   - Toàn bộ cart route đều bắt buộc JWT.
+   - Điều này nói rõ cart là state gắn với user đã xác thực.
+2. `GetCart`
+   - Handler rất mỏng: lấy `claims.UserID`, gọi service, trả response.
+   - Đây là shape chuẩn cho read endpoint.
+3. `MergeCart` và `AddItem`
+   - Cùng pattern `Bind` -> `Validate` -> gọi service -> map domain error.
+   - `ErrProductNotFound` map sang `404`, `ErrProductUnavailable` sang `400`, `ErrInsufficientStock` sang `409`.
+4. `UpdateItem`
+   - Chỉ map `ErrItemNotFound`.
+   - Tín hiệu này rất quan trọng: write path này không reload product truth như `AddItem`.
+5. `ClearCart`
+   - Wrapper rất thẳng cho use case hậu checkout hoặc user tự xóa giỏ.
+
+#### `internal/service/cart/cart_mutations.go`
+
+1. `MergeCart`
+   - Load cart hiện tại.
+   - Loop qua từng guest item.
+   - Với mỗi item, gọi `getProductForCart` để lấy snapshot authoritative.
+   - Nếu item đã tồn tại thì `mergeCartItem`.
+   - Nếu item chưa có thì `newCartItem`.
+   - Kết thúc mới `saveCart` đúng một lần.
+2. `AddItem`
+   - Flow giống `MergeCart` nhưng cho một item.
+   - `findCartItemIndex` quyết định update line cũ hay append line mới.
+   - `cart.Total` được update theo delta, không cần rescan toàn bộ cart.
+3. `UpdateItem`
+   - Load cart, tìm item, nếu quantity không đổi thì return sớm.
+   - Nếu đổi thì chỉ sửa quantity và subtotal delta rồi save.
+   - Hàm này không gọi `getProductForCart`, nên không refresh giá/tồn kho mới nhất.
+4. `RemoveItem`
+   - Remove bằng `copy` + slice truncate.
+   - `cart.Total` giảm theo item bị xóa.
+5. `mergeCartItem`
+   - Cộng `quantityDelta`, check stock với product snapshot mới, overwrite `Name` và `Price`.
+   - Đây là lý do `AddItem`/`MergeCart` giúp sửa stale price ở write path.
+6. `newCartItem`
+   - Chuyển product snapshot thành `CartItem`.
+   - Quantity vẫn được check lại ở service.
+
+#### `internal/service/cart/cart_helpers.go`
+
+1. `loadCart`
+   - Wrap repo `Get`.
+   - Normalize nil cart thành cart rỗng.
+   - Normalize `nil` items thành slice rỗng để caller không phải check nil.
+2. `saveCart`
+   - Normalize `nil` items trước khi persist.
+3. `getProductForCart`
+   - Gọi gRPC `product-service`.
+   - Map `codes.NotFound` thành `ErrProductNotFound`.
+   - Map `codes.InvalidArgument` thành `ErrProductUnavailable`.
+   - Các lỗi khác được wrap cùng `productID`.
+4. `findCartItemIndex` và `itemSubtotal`
+   - Helper nhỏ nhưng làm mutation flow dễ đọc hơn rất nhiều.
+
+#### `internal/repository/cart/cart/cart_repository.go`
+
+1. `Get`
+   - Đọc key `cart:{userID}`.
+   - Nếu `redis.Nil`, trả empty cart thay vì not-found.
+   - Unmarshal JSON.
+   - Refresh TTL sau mỗi lần read thành công bằng `Expire`.
+2. `Save`
+   - Marshal whole cart sang JSON.
+   - `SET` với TTL 7 ngày.
+3. `Delete`
+   - `DEL` key Redis.
+4. Trade-off của implementation
+   - Rất dễ debug và vận hành.
+   - Nhưng concurrent write có risk lost update vì là whole-cart overwrite, chưa có version check/WATCH.
+
+---
+
+## 4. notification-service
+
+### 4.1. Vai trò runtime
+
+`notification-service` là async consumer, không phải CRUD service thông thường. Nó consume event RabbitMQ, gửi email, dedupe delivery, lưu inbox history và chạy worker poll wishlist alert.
+
+### 4.2. Startup wiring
+
+Trình tự trong `services/notification-service/cmd/main.go`:
+
+1. load config + tracing
+2. kết nối Redis cho inbox/history/deduper
+3. kết nối RabbitMQ, declare queue
+4. tạo `UserClient`, `RetryPublisher`, `EventHandler`
+5. start `QueueMonitor`
+6. start `WishlistAlertWorker`
+7. spawn N consumer worker cho message queue
+8. expose HTTP API cho inbox/audit/health
+
+### 4.3. Public contract
+
+| Route | Method | Handler | Ý nghĩa |
+| --- | --- | --- | --- |
+| `/api/v1/notifications/inbox` | `GET` | `NotificationInboxHandler.List` | User lấy inbox history |
+| `/api/v1/notifications/inbox/read` | `PUT` | `MarkRead` | Mark all inbox item as read |
+| `/api/v1/notifications/audit` | `GET` | `Audit` | Admin/staff lấy audit feed |
+
+### 4.4. Messaging contract
+
+Consumer chính xử lý các routing key:
+
+- `order.created`
+- `order.cancelled`
+- `payment.completed`
+- `payment.failed`
+- `payment.refunded`
+- `return.requested`
+- `return.approved`
+- `return.rejected`
+- `return.refund_pending`
+- `return.refunded`
+
+### 4.5. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| Redis inbox store | Dedupe delivery qua key `processed` và `processing` |
+| Redis history store | User inbox feed và audit feed |
+| RabbitMQ | Consume main queue, publish retry queue, observe DLQ |
+| SMTP | Gửi email notification |
+| `user-service` HTTP client | Load notification preference và wishlist alerts dispatchable |
+
+### 4.6. Function map theo tầng
+
+#### HTTP handler
+
+| Function | Vai trò |
+| --- | --- |
+| `NotificationInboxHandler.List` | Trả inbox history cho user |
+| `MarkRead` | Mark all read |
+| `Audit` | Trả audit feed cho admin/staff |
+
+#### Consumer / worker layer
+
+| Function | Vai trò |
+| --- | --- |
+| `startWorker` | Worker loop đọc từ RabbitMQ |
+| `EventHandler.HandleMessage` | Entry point xử lý một delivery |
+| `processMessage` | Dispatch theo routing key |
+| `handleOrderCreated` | Tạo notification cho order mới |
+| `handlePaymentCompleted` | Tạo notification cho payment thành công |
+| `handlePaymentFailed` | Tạo notification cho payment thất bại |
+| `handlePaymentRefunded` | Tạo notification cho refund |
+| `handleOrderCancelled` | Tạo notification cho cancel |
+| `handleReturnEvent` | Tạo notification cho return lifecycle |
+| `shouldDeliverTopic` | Kiểm tra user preference |
+| `appendHistoryBestEffort` | Ghi inbox history nhưng không fail luồng chính |
+
+#### Reliability layer
+
+| Function | Vai trò |
+| --- | --- |
+| `inbox.Store.Claim` | Chống duplicate giữa nhiều replica |
+| `MarkProcessed` | Mark message processed |
+| `Release` | Thả claim khi xử lý lỗi |
+| `RetryPublisher.Publish` | Requeue message với delay/backoff |
+| `QueueMonitor.Start` | Poll queue metrics |
+
+#### Wishlist worker
+
+| Function | Vai trò |
+| --- | --- |
+| `WishlistAlertWorker.Start` | Background ticker |
+| `runCycle` | Poll batch alerts từ `user-service` |
+| `deliver` | Deduplicate rồi gửi email |
+| `wishlistAlertEmail` | Build subject/body cho wishlist alert |
+
+### 4.7. Điều đáng lưu ý khi đọc code
+
+- reliability của service này nằm ở Redis + RabbitMQ semantics, không nằm ở HTTP API
+- Redis down không giết service, nhưng dedupe/history degrade mạnh
+- retry logic được bounded và poison message có đường ra DLQ
+
+### 4.8. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/event_handler.go`
+
+1. `HandleMessage`
+   - Build delivery metadata trước khi làm gì khác.
+   - Nếu có `inboxStore`, service cố `Claim` message trước khi xử lý.
+   - Có ba nhánh rõ:
+     - `AlreadyProcessed`: ack và bỏ qua duplicate.
+     - `AlreadyClaimed`: nack requeue vì replica khác đang giữ claim.
+     - `Claimed`: tiếp tục xử lý thật.
+2. Nhánh lỗi trong `HandleMessage`
+   - Release claim trước.
+   - Permanent error -> append audit item -> reject DLQ.
+   - Retry exhausted -> append audit item -> reject DLQ.
+   - Transient error còn quota -> `retryPublisher.Publish` -> append audit item `retry_scheduled` -> ack message cũ.
+3. Nhánh thành công
+   - `appendHistoryBestEffort`.
+   - `MarkProcessed`.
+   - Ack RabbitMQ delivery.
+4. `processMessage`
+   - Dispatch theo routing key.
+   - `return.*` được gom vào một branch chung.
+   - Unsupported routing key bị coi là permanent failure.
+5. `shouldDeliverTopic`
+   - Không có preference reader thì default deliver.
+   - Load preference lỗi thì coi là transient error.
+   - Topic disabled thì skip send nhưng vẫn có thể ghi history.
+
+#### `internal/inbox/redis_store.go`
+
+1. `Claim`
+   - Chạy Lua script trên hai key `processed` và `processing`.
+   - Nếu processed đã tồn tại -> duplicate thật.
+   - Nếu set được processing lock bằng `NX PX` -> current worker giữ claim.
+   - Nếu không set được -> worker khác đang xử lý.
+2. `MarkProcessed`
+   - Set processed marker có TTL.
+   - Xóa processing key.
+3. `Release`
+   - Xóa processing key khi xử lý fail sớm.
+4. Ý nghĩa
+   - Đây là dedupe thực dụng cho at-least-once delivery, không phải exactly-once thần kỳ.
+
+#### `internal/inbox/history_store.go`
+
+1. `Append`
+   - Marshal `HistoryItem`.
+   - Nếu visible cho user thì thêm vào sorted set theo user.
+   - Luôn thêm vào audit feed chung.
+   - Ghi payload item theo key riêng.
+   - Tất cả qua Redis pipeline.
+2. `ListByUser`
+   - Lấy ID bằng `ZRevRange`.
+   - Sau đó `listByIDs` để load payload.
+3. `ListRecent`
+   - Đọc audit feed với cùng pattern.
+4. `MarkAllRead`
+   - Load IDs của user.
+   - Rewrite những item chưa có `ReadAt`.
+   - Giữ lại TTL cũ nếu đọc được.
+
+#### `internal/messaging/retry_publisher.go`
+
+1. `Publish`
+   - Clone headers gốc.
+   - Set `retry_count`, `first_seen`, `next_retry_at`.
+   - Tính delay bằng `delayForRetry`.
+   - Publish sang retry queue với TTL bằng đúng delay.
+2. `delayForRetry`
+   - Exponential backoff bounded bởi `maxDelay`.
+3. Ý nghĩa
+   - Retry state nằm ngay trên message headers, không cần DB state riêng.
+
+#### `internal/service/wishlist_alert_worker.go`
+
+1. `Start`
+   - Nếu thiếu `source` hoặc `sender`, worker không chạy.
+   - Chạy `runCycle` ngay một lần trước khi vào ticker loop.
+2. `runCycle`
+   - Poll batch alerts từ `user-service` với timeout 30 giây.
+   - Loop từng delivery và gọi `deliver`.
+3. `deliver`
+   - Claim qua deduper trước.
+   - Validate email.
+   - Build subject/body bằng `wishlistAlertEmail`.
+   - Gửi email.
+4. Điều cần nhớ
+   - Notification service có hai async path: queue-driven consumer và polling-driven wishlist worker.
+
+#### `internal/handler/inbox_handler.go`
+
+1. `List`
+   - Lấy `claims.UserID`, parse `limit`, gọi `HistoryStore.ListByUser`.
+2. `MarkRead`
+   - Chỉ chấp nhận `mark_all = true`, rồi gọi `MarkAllRead`.
+3. `Audit`
+   - Dùng cùng history store nhưng đọc audit feed chung.
+4. Ý nghĩa
+   - REST API của service rất mỏng.
+   - Giá trị thật của service nằm ở reliability layer, không nằm ở CRUD surface.
+
+---
+
+## 5. order-service
+
+### 5.1. Vai trò runtime
+
+`order-service` sở hữu order aggregate, coupon, return, return refund queue, outbox và inbox transition cho payment event. Đây là service giữ nhiều invariant nhất trong repo.
+
+### 5.2. Startup wiring
+
+Trong `services/order-service/cmd/main.go`:
+
+1. load config + tracing
+2. mở PostgreSQL và chạy migration
+3. mở RabbitMQ channel cho outbox relay và consumer
+4. mở gRPC client tới `product-service`
+5. tạo HTTP client tới `payment-service`
+6. tạo `OrderRepository -> OrderService -> OrderHandler`
+7. optional: attach object storage cho return evidence
+8. start `StartOutboxRelay`
+9. start `StartReturnRefundWorker`
+10. start `StartReturnRefundQueueMonitor`
+11. start payment event consumer
+
+### 5.3. Public contract
+
+#### User-facing routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/orders/preview` | `POST` | Quote order trước khi create |
+| `/api/v1/orders` | `POST` | Tạo order |
+| `/api/v1/orders/summary` | `GET` | Trả order + payment summary |
+| `/api/v1/orders` | `GET` | List order của user |
+| `/api/v1/orders/:id` | `GET` | Lấy chi tiết order |
+| `/api/v1/orders/:id/events` | `GET` | Timeline của order |
+| `/api/v1/orders/:id/cancel` | `PUT` | Hủy order |
+| `/api/v1/orders/:id/return-eligibility` | `GET` | Snapshot item nào còn return được |
+| `/api/v1/orders/:id/returns` | `POST` | Tạo return |
+| `/api/v1/orders/:id/returns` | `GET` | List returns của order |
+| `/api/v1/returns` | `GET` | List returns của user |
+| `/api/v1/returns/:id` | `GET` | Lấy chi tiết return |
+| `/api/v1/returns/:id/evidence` | `POST` | Upload return evidence |
+
+#### Admin/staff routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/admin/orders` | `GET` | List admin orders, hỗ trợ cursor hoặc page/limit |
+| `/api/v1/admin/orders/:id` | `GET` | Order detail |
+| `/api/v1/admin/orders/:id/events` | `GET` | Order timeline |
+| `/api/v1/admin/orders/:id/status` | `PUT` | Update order status |
+| `/api/v1/admin/orders/:id/cancel` | `PUT` | Cancel order as admin |
+| `/api/v1/admin/orders/report` | `GET` | Admin report |
+| `/api/v1/admin/returns` | `GET` | List admin returns |
+| `/api/v1/admin/returns/:id/status` | `PUT` | Update return status |
+| `/api/v1/admin/returns/:id/refund` | `POST` | Queue refund cho return |
+| `/api/v1/admin/returns/health` | `GET` | Refund queue health |
+| `/api/v1/admin/coupons` | `POST`, `GET` | Create và list coupon |
+
+### 5.4. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| PostgreSQL | `orders`, `order_items`, `returns`, `return_items`, `return_evidence`, `order_events`, `coupons`, `outbox`, `inbox`, idempotency keys |
+| gRPC `product-service` | Quote product, decrease stock, restore stock |
+| HTTP `payment-service` | Payment summary, refund API |
+| RabbitMQ | Publish order/return event, consume payment event |
+| Object storage | Upload return evidence |
+
+### 5.5. Function map theo tầng
+
+#### Handler layer
+
+| Function | Vai trò |
+| --- | --- |
+| `CreateOrder` | Bind + validate + read idempotency key + create order |
+| `PreviewOrder` | Quote order |
+| `GetOrder`, `GetUserOrders`, `GetUserOrderSummary` | User read model |
+| `CancelOrder` | User cancel |
+| `GetReturnEligibility` | Return eligibility snapshot |
+| `CreateReturn`, `ListOrderReturns`, `GetReturn`, `ListUserReturns` | Return user flow |
+| `UploadReturnEvidence` | Upload file evidence |
+| `ListAdminOrders`, `GetAdminOrder`, `UpdateOrderStatus`, `CancelOrderAsAdmin` | Admin order flow |
+| `ListAdminReturns`, `UpdateReturnStatus`, `RequestReturnRefund`, `GetReturnQueueHealth` | Admin return/refund flow |
+| `CreateCoupon`, `ListCoupons`, `GetAdminReport`, `ListPopularProducts` | Admin/report helper flow |
+
+#### Service layer
+
+| Function | Vai trò |
+| --- | --- |
+| `PreviewOrder` | Quote nhưng chưa persist |
+| `quoteOrder` | Canonical pricing logic |
+| `quoteOrderItem` | Lấy product truth và validate stock |
+| `CreateOrder` | Idempotent order create flow |
+| `reserveCreatedOrderStock` | Reserve stock ở `product-service` |
+| `persistCreatedOrder` | Persist order + outbox + idempotency record |
+| `CancelOrder`, `CancelOrderAsAdmin`, `cancelOrderWithActor` | Cancel flows |
+| `GetReturnEligibility` | Snapshot returnable quantity |
+| `CreateReturn` | Tạo return request |
+| `UpdateReturnStatus` | Chuyển trạng thái return |
+| `RequestReturnRefund` | Queue refund bất đồng bộ |
+| `StartReturnRefundWorker` | Worker xử lý refund_pending |
+| `StartReturnRefundQueueMonitor` | Metric health cho queue |
+| `buildCreatedOrderOutbox`, `buildCancelledOrderOutbox`, `buildReturnOutboxMessage` | Materialize outbox payload |
+| `StartOutboxRelay` | Drain outbox lên RabbitMQ |
+
+#### Repository layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Create`, `CreateWithIdempotency`, `createOrderTx` | Persist order transactionally |
+| `GetByID`, `GetByUserID` | Read order aggregate |
+| `GetIdempotencyKey` | Lookup idempotency record |
+| `CreateReturn`, `GetReturnByID`, `ListReturnsByOrderID`, `ListReturns` | Return persistence |
+| `AddReturnEvidence` | Persist return evidence + event |
+| `ListAll`, `ListAllByCursor` | Admin order listing |
+| `UpdateStatus`, `UpdateReturnStatus`, `ScheduleReturnRefund`, `CompleteReturnRefund` | Order/return state transition persistence |
+| `ClaimPendingReturnRefunds`, `MarkReturnRefundAttemptFailed` | Refund worker lease + retry |
+| `ClaimPendingOutbox`, `MarkOutboxPublished`, `MarkOutboxFailed` | Outbox relay state |
+| `ApplyInboxStatusTransition` | Payment event dedupe + order status transition |
+
+### 5.6. Điều đáng lưu ý khi đọc code
+
+- pricing logic dùng chung cho preview và create
+- stock reservation nằm ngoài DB transaction nên compensation rất quan trọng
+- admin list hiện có cả path offset và path cursor
+- outbox và inbox đều có thật, không phải chỉ là ý tưởng kiến trúc
+
+### 5.7. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/order/order_handler.go`
+
+Khi mở file này, nên đọc theo đúng thứ tự sau:
+
+1. `RegisterRoutes`
+   - Đây là nơi service khai báo toàn bộ public boundary.
+   - Nhìn vào đây sẽ thấy rõ repo đang tách `user routes`, `returns routes`, `admin orders`, `admin returns`, `admin coupons`.
+   - Đây cũng là nơi cho thấy authz thực sự nằm ở middleware JWT + role, không nằm trong service.
+2. `CreateOrder`
+   - Block đầu chỉ làm đúng ba việc: lấy claims, `Bind`, `Validate`.
+   - Block tiếp theo chuyển thẳng `Idempotency-Key` header xuống service. Chi tiết này rất quan trọng vì idempotency của order không tự sinh trong service; nó phụ thuộc vào caller gửi key hay không.
+   - Block cuối map domain error như `ErrInvalidIdempotencyKey`, `ErrIdempotencyKeyConflict`, còn các lỗi pricing/product/coupon được gom vào `writePricingError`.
+3. `PreviewOrder`
+   - Hàm này chứng minh preview và create dùng chung validation boundary.
+   - Handler không tính tiền; handler chỉ chuyển raw request xuống `PreviewOrder`.
+4. `CreateReturn` và `RequestReturnRefund`
+   - Hai hàm này thể hiện rõ khác biệt giữa synchronous write và async side effect.
+   - `CreateReturn` trả `201` vì local transaction đã hoàn thành.
+   - `RequestReturnRefund` trả `202 Accepted` vì chỉ mới queue `refund_pending`, refund thật diễn ra ở worker.
+
+#### `internal/service/order/order_pricing.go`
+
+Đây là file nên đọc đầu tiên nếu muốn hiểu order aggregate được tính ra như thế nào.
+
+1. `PreviewOrder`
+   - Chỉ là wrapper mỏng gọi `quoteOrder`.
+   - Ý nghĩa kiến trúc là mọi tính toán canonical phải dồn về một chỗ, không được copy sang preview và create.
+2. `quoteOrder`
+   - Block `validateOrderRequest` loại bỏ request rỗng, normalize shipping method, và bắt buộc shipping address nếu không phải pickup.
+   - Block khởi tạo `pricedOrderQuote` dựng quote ở dạng trung gian chứ chưa vội dựng `model.Order`. Cách này giữ rõ ranh giới giữa “đang tính giá” và “chuẩn bị persist”.
+   - Vòng lặp qua `req.Items` gọi `quoteOrderItem` cho từng item nhưng tái sử dụng `productQuoteCache`, nghĩa là duplicate product ID trong cùng request không cần gọi catalog nhiều lần.
+   - Block coupon chỉ chạy nếu `CouponCode` không rỗng; subtotal, shipping fee, total ban đầu luôn được tính trước khi apply coupon.
+3. `validateOrderRequest`
+   - Đây là chốt invariant đầu tiên của create order.
+   - Hàm này cố tình fail sớm trước mọi remote call.
+4. `quoteOrderItem`
+   - Đây là chốt “source of truth là product-service”.
+   - Hàm không tin giá hoặc tên từ frontend; nó gọi gRPC để lấy `pb.Product`.
+   - Mỗi gRPC status code được map lại thành domain error của order như `ErrProductNotFound`, `ErrProductUnavailable`, `ErrInsufficientStock`.
+5. `newProductQuoteCache` và `getOrLoad`
+   - Hai helper nhỏ này đáng đọc vì cho thấy repo không tối ưu bằng cache toàn cục, mà chỉ dùng request-scoped cache đơn giản, an toàn, dễ hiểu.
+
+#### `internal/service/order/order_lifecycle.go`
+
+Đây là file orchestration quan trọng nhất của service.
+
+1. Phần đầu `CreateOrder`
+   - Bắt đầu bằng observability wrapper: lấy `startedAt`, `outcome`, `requestLog`, rồi `defer` metric latency.
+   - Điều này cho thấy service layer mới là nơi ghi metric nghiệp vụ, không phải handler.
+2. Block idempotency
+   - `normalizeOrderIdempotencyKey` đảm bảo key ổn định trước khi dùng.
+   - `hashCreateOrderRequest` dựng request hash để phân biệt “same key, same payload” và “same key, different payload”.
+   - `findIdempotentOrder` cho phép request replay an toàn nếu record cũ còn hợp lệ.
+3. Block pricing
+   - `CreateOrder` không tự tính tổng tiền, mà lại gọi `quoteOrder`.
+   - Đây là điểm giữ cho preview và create không drift.
+4. Block build aggregate
+   - `newOrderFromQuote` materialize `model.Order`.
+   - `buildCreatedOrderOutbox` build message trước khi persist để DB transaction có đủ dữ liệu outbox ngay từ đầu.
+   - Idempotency record chỉ được tạo khi caller có key và order có `ReservationExpiresAt`.
+5. Block reserve stock
+   - `reserveCreatedOrderStock` chạy trước local persistence.
+   - Đây là chỗ trade-off rõ nhất: consistency cross-service đổi lấy compensation complexity.
+6. Block persist + compensation
+   - `persistCreatedOrder` ghi order, items, order event, outbox, idempotency record trong một transaction.
+   - Nếu fail sau khi reserve stock, `restoreOrderItemsStock` được gọi để hoàn tác bên product-service.
+   - Nếu lỗi là unique violation trên idempotency, service cố replay lại order cũ thay vì trả lỗi thô.
+7. Block log thành công
+   - Chỉ khi toàn bộ flow hoàn tất mới log `order created`.
+   - Structured fields gồm `order_id`, `item_count`, `subtotal_price`, `total_price`, `shipping_method`.
+
+#### `internal/service/order/order_returns.go`
+
+File này cho thấy return là một state machine riêng sống trong order-service.
+
+1. `CreateReturn`
+   - Đầu tiên load order và check ownership.
+   - Chỉ `delivered` mới return được, nên order status là invariant lớn nhất ở entry point.
+   - `ListReturnsByOrderID` được gọi để biết số lượng item nào đã từng được return trước đó.
+   - `buildReturnItems` là lõi của rule “không thể return quá số lượng đã mua”.
+   - Sau đó mới build `ReturnRequest`, `ReturnEvent`, `ReturnOutbox`, rồi persist transactionally.
+2. `ListUserReturns` và `ListAdminReturns`
+   - Hai hàm này đáng đọc cạnh nhau vì chúng chỉ khác ở scoping và limit cap.
+   - Đây là pattern tốt: reuse repository query nhưng enforce policy ở service.
+3. `UpdateReturnStatus`
+   - Validate status hợp lệ.
+   - Load return hiện tại.
+   - Dùng `canTransitionReturnStatus` để kiểm soát graph chuyển trạng thái.
+   - Build outbox từ trạng thái mới rồi mới persist.
+4. `RequestReturnRefund`
+   - Hàm này không refund ngay.
+   - Nó load return hiện tại, check xem đã `refunded`, đang `refund_pending`, hay chưa đủ điều kiện.
+   - `prepareReturnRefund` tìm charge có thể refund và tính `RefundAmount`.
+   - Sau đó repo chỉ đổi trạng thái sang `refund_pending` và ghi outbox/event.
+5. `buildReturnItems`
+   - Đây là helper nên đọc chậm.
+   - Nó dựng map `orderItemsByID`, aggregate các quantity đã trả từ các return cũ, reject duplicate item trong cùng request, rồi kiểm tra `availableQuantity`.
+   - Rule nghiệp vụ quan trọng nhất của return nằm ở đây, không nằm ở handler.
+
+#### `internal/service/order/order_events.go`
+
+File này là phần reliability backbone của service.
+
+1. `buildCreatedOrderOutbox`, `buildCancelledOrderOutbox`, `buildReturnOutboxMessage`
+   - Các hàm này materialize payload sự kiện dưới dạng row DB chứ chưa publish ngay.
+   - `RequestID` từ context được copy vào payload và AMQP headers để trace xuyên service.
+2. `StartOutboxRelay`
+   - Đây là worker nền polling outbox.
+   - Nếu `amqpCh` nil, service degrade bằng cách disable relay và log warning.
+3. `flushOutboxBatch`
+   - Claim một batch, publish từng message với timeout ngắn.
+   - Nếu publish lỗi thì `MarkOutboxFailed` và đẩy `available_at` ra tương lai bằng backoff.
+   - Nếu publish thành công thì `MarkOutboxPublished`.
+4. `publishOutboxMessage`
+   - Hàm này map outbox row sang AMQP publishing.
+   - Delivery mode là persistent, có `MessageId`, `x-event-id`, `x-request-id`.
+   - Đây là chốt để event publish có thể được dedupe hoặc trace downstream.
+
+#### `internal/repository/order_repository.go`
+
+File này dài nhưng có thể chia thành vài vùng logic rõ ràng:
+
+1. `createOrderTx`
+   - Mở transaction.
+   - Nếu có coupon thì `lockAndConsumeCoupon`.
+   - Insert `orders`.
+   - Insert `order_items`.
+   - Insert `order_events`.
+   - Insert `outbox_events`.
+   - Insert `order_idempotency_keys`.
+   - Commit.
+   - Đây là transaction giữ invariant “order persisted thì event và idempotency record cũng phải cùng tồn tại”.
+2. `ListAll` và `ListAllByCursor`
+   - Hai hàm này nên đọc cạnh nhau để thấy repo đang ở giai đoạn chuyển tiếp.
+   - `ListAll` dùng `COUNT(*) + OFFSET/LIMIT`, phù hợp dashboard nhỏ nhưng sẽ đau khi dữ liệu lớn.
+   - `ListAllByCursor` dùng `(created_at, id)` để tạo cursor ổn định hơn cho list lớn.
+3. `ClaimPendingReturnRefunds`
+   - Dùng `FOR UPDATE SKIP LOCKED` để claim job refund_pending.
+   - Đây là pattern lease-based worker tốt cho multi-replica.
+4. `CompleteReturnRefund` và `MarkReturnRefundAttemptFailed`
+   - Một hàm finalize thành `refunded`, hàm kia reset `refund_processing_started_at` và đặt `next_retry_at`.
+   - Cặp hàm này chính là transaction boundary giữa worker loop và retry semantics.
+5. `ClaimPendingOutbox`, `MarkOutboxPublished`, `MarkOutboxFailed`
+   - Đây là bộ ba helper tạo nên outbox relay.
+   - `ClaimPendingOutbox` không cần in-memory queue; DB đã là durable queue.
+6. `ApplyInboxStatusTransition`
+   - Đây là phần inbox khi order-service consume payment event.
+   - Flow là: insert inbox row -> lock order row -> kiểm tra status hiện tại -> nếu hợp lệ thì update order status + event -> commit.
+   - Nhờ đó webhook/payment event replay không làm state transition chạy lặp.
+
+---
+
+## 6. payment-service
+
+### 6.1. Vai trò runtime
+
+`payment-service` sở hữu payment lifecycle: charge, refund, webhook state, outbox event và enriched payment history theo order.
+
+### 6.2. Startup wiring
+
+Trong `services/payment-service/cmd/main.go`:
+
+1. load config + tracing
+2. mở PostgreSQL + migration
+3. optional: mở RabbitMQ
+4. tạo order HTTP client
+5. tạo `PaymentRepository -> PaymentService -> PaymentHandler`
+6. start `StartOutboxRelay`
+
+### 6.3. Public contract
+
+#### User routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/payments` | `POST` | Tạo charge/payment |
+| `/api/v1/payments/history` | `GET` | List payment history của user |
+| `/api/v1/payments/:id` | `GET` | Lấy payment detail |
+| `/api/v1/payments/order/:orderId` | `GET` | Lấy payment gần nhất theo order |
+| `/api/v1/payments/order/:orderId/history` | `GET` | List toàn bộ payment theo order |
+
+#### Admin routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/admin/payments/history` | `GET` | Batch list payments theo nhiều order |
+| `/api/v1/admin/payments/order/:orderId/history` | `GET` | List payments của order bất kỳ |
+| `/api/v1/admin/payments/:id/refunds` | `POST` | Tạo refund |
+
+#### Webhook route
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/payments/webhooks/momo` | `POST` | Apply webhook MoMo |
+
+### 6.4. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| PostgreSQL | `payments`, idempotency keys, audit entries, outbox, inbox |
+| HTTP `order-service` | Lookup authoritative order state |
+| RabbitMQ | Publish `payment.completed`, `payment.failed`, `payment.refunded` |
+
+### 6.5. Function map theo tầng
+
+#### Handler layer
+
+| Function | Vai trò |
+| --- | --- |
+| `ProcessPayment` | Charge request |
+| `GetPayment`, `GetPaymentByOrder`, `ListPaymentsByOrder`, `ListPaymentHistory` | User read model |
+| `RefundPayment` | Admin refund |
+| `ListPaymentsByOrderAdmin`, `ListPaymentsByOrderIDsAdmin` | Admin read model |
+| `HandleMomoWebhook` | Gateway webhook |
+
+#### Service layer
+
+| Function | Vai trò |
+| --- | --- |
+| `ProcessPayment` | Normalize idempotency rồi delegate core flow |
+| `processPaymentCore` | Lookup order, validate outstanding, persist charge |
+| `RefundPayment` | Persist refund against charge |
+| `HandleMomoWebhook` | Verify signature, replay-safe apply webhook |
+| `GetPayment`, `GetPaymentByOrder`, `ListPaymentsByOrder`, `ListPaymentHistory` | Payment read API |
+| `enrichPayments`, `enrichPayment` | Tính derived fields theo order |
+| `buildPaymentOutboxMessage` | Materialize payment event payload |
+| `StartOutboxRelay` | Drain payment outbox |
+
+#### Repository layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Create`, `CreateWithIdempotency` | Persist charge/refund và outbox |
+| `GetByID`, `GetByOrderID`, `GetByGatewayOrderID` | Read payment state |
+| `GetIdempotencyKey` | Lookup idempotency record |
+| `ListByOrderID`, `ListByOrderIDs`, `ListByUserID` | Query payment history |
+| `Update` | Update payment state |
+| `ApplyWebhookResult` | Apply webhook transactionally cùng inbox/outbox |
+| `ClaimPendingOutbox`, `MarkOutboxPublished`, `MarkOutboxFailed` | Outbox relay |
+
+### 6.6. Điều đáng lưu ý khi đọc code
+
+- `payment-service` không tin frontend về order total
+- webhook path đã có signature verification và replay-safe behavior
+- read path luôn enrich raw payment row thành business snapshot dễ dùng hơn
+
+### 6.7. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/payment/payment_handler.go`
+
+1. `RegisterRoutes`
+   - Tách rõ user routes, admin routes và webhook route.
+   - Webhook không đi qua JWT, đây là boundary đặc biệt.
+2. `ProcessPayment`
+   - Lấy `claims.UserID`, `claims.Email`, `Authorization`, `Idempotency-Key`.
+   - Forward xuống service.
+   - Map rất rõ các business error như `ErrOrderNotPayable`, `ErrPaymentAlreadySettled`, `ErrInvalidPaymentAmount`, `ErrIdempotencyKeyConflict`.
+3. `RefundPayment`
+   - Chỉ admin/staff gọi được.
+   - Không dùng email của actor làm customer recipient.
+4. `HandleMomoWebhook`
+   - Chỉ bind request rồi giao toàn bộ verification/signature/state cho service.
+
+#### `internal/service/payment/payment_processing.go`
+
+1. `ProcessPayment`
+   - Normalize idempotency key.
+   - Hash request payload.
+   - `findIdempotentPayment` trước khi vào core flow.
+2. `processPaymentCore`
+   - Bắt đầu bằng observability wrapper và contextual logger.
+   - Gọi `orderClient.GetOrder` với auth header gốc để lấy authoritative order.
+   - Reject nếu order không thuộc user.
+   - Reject nếu order status không payable.
+   - Load payment history của order để tính `netPaid` và `outstanding`.
+   - Nếu amount <= 0 thì default sang outstanding.
+   - Normalize payment method.
+   - Materialize `model.Payment`.
+   - Nếu gateway là MoMo thì set `pending`, `GatewayOrderID`, `CheckoutURL`.
+   - Nếu completed ngay thì build outbox event.
+   - Persist bằng `CreateWithIdempotency` hoặc `Create`.
+   - Nếu unique violation trên idempotency thì thử replay payment cũ.
+3. Điểm đáng học
+   - Service không tin client về order total hay outstanding balance.
+   - Payment state được suy ra từ order truth + sibling payments local.
+
+#### `internal/service/payment/payment_refunds.go`
+
+1. `RefundPayment`
+   - Normalize key và hash refund request.
+   - Load target payment.
+   - Chỉ completed charge mới refund được.
+   - Load sibling payments để tính `refundableAmountForCharge`.
+   - Amount <= 0 thì default full refundable balance.
+   - Materialize refund row.
+   - Build outbox `payment.refunded`.
+   - Persist transactionally, kèm idempotency record nếu có.
+   - Best-effort ghi audit entry.
+2. `HandleMomoWebhook`
+   - Resolve payment theo `payment_id` hoặc `gateway_order_id`.
+   - Verify provider thực sự là `momo`.
+   - Verify signature.
+   - Nếu payment không còn pending thì coi là replay an toàn.
+   - Nếu còn pending thì verify amount, đổi state thành `completed` hoặc `failed`.
+   - Build outbox từ state mới.
+   - Gọi repo `ApplyWebhookResult` để commit inbox + payment update + outbox trong cùng transaction.
+
+#### `internal/service/payment/payment_enrichment.go`
+
+1. `enrichPayments`
+   - Precompute summary theo từng order.
+   - Clone từng payment rồi attach `NetPaidAmount`, `OutstandingAmount`.
+2. `enrichPayment`
+   - Phiên bản one-off cho một payment với sibling history.
+3. `refundableAmountForCharge`
+   - Trừ các refund thành công reference vào charge đó.
+4. Ý nghĩa
+   - API trả read model thân thiện hơn raw row persistence.
+
+#### `internal/service/payment/payment_events.go`
+
+1. `buildPaymentOutboxMessage`
+   - Materialize durable event payload từ payment enriched state.
+2. `StartOutboxRelay`
+   - Pattern giống order-service: ticker -> flush batch -> mark published/failed.
+3. `publishOutboxMessage`
+   - Gắn `x-event-id`, `x-request-id`, persistent delivery mode.
+4. Ý nghĩa
+   - Request path không publish trực tiếp; DB outbox mới là source cho async event.
+
+#### `internal/repository/payment/payment_repository.go`
+
+1. `Create`
+   - Transaction gồm `insertPaymentTx` + `insertOutboxMessageTx`.
+2. `CreateWithIdempotency`
+   - Thêm `insertIdempotencyRecordTx` vào cùng transaction.
+3. `ApplyWebhookResult`
+   - Insert inbox row trước để dedupe webhook.
+   - Update payment chỉ khi current status còn `pending`.
+   - Insert outbox.
+   - Commit.
+   - Nếu inbox row đã tồn tại thì coi là duplicate.
+4. `ClaimPendingOutbox`
+   - Dùng `FOR UPDATE SKIP LOCKED`, replica-safe như order-service.
+
+---
+
+## 7. product-service
+
+### 7.1. Vai trò runtime
+
+`product-service` là source of truth cho catalog, stock, review và storefront content. Đây là service có cả HTTP lẫn gRPC contract.
+
+### 7.2. Startup wiring
+
+Trong `services/product-service/cmd/main.go`:
+
+1. load config + tracing
+2. mở PostgreSQL + migration
+3. tạo product repo + search analytics repo
+4. optional: object storage
+5. optional: Elasticsearch
+6. tạo `ProductService`
+7. tạo storefront repo/service
+8. tạo review repo/service với optional Redis cache và observer chain
+9. optional: sync search index on startup
+10. start low stock monitor
+11. mount HTTP routes và gRPC server
+
+### 7.3. Public contract
+
+#### Public HTTP routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/products` | `GET` | List products với cursor/filter/sort |
+| `/api/v1/products/batch` | `GET` | Batch list by IDs |
+| `/api/v1/products/search/assist` | `GET` | Search assist |
+| `/api/v1/products/:id` | `GET` | Product detail |
+| `/api/v1/products/:id/reviews` | `GET` | Product review list |
+| `/api/v1/storefront/home` | `GET` | Storefront home data |
+| `/api/v1/storefront/categories` | `GET` | List storefront categories |
+| `/api/v1/storefront/categories/:identifier` | `GET` | Category page |
+
+#### Protected HTTP routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/products` | `POST` | Create product |
+| `/api/v1/products/uploads` | `POST` | Upload product images |
+| `/api/v1/products/:id` | `PUT`, `DELETE` | Update / delete product |
+| `/api/v1/products/analytics/search` | `GET` | Search analytics |
+| `/api/v1/products/analytics/search/events` | `POST` | Record search event |
+| `/api/v1/products/:id/reviews/me` | `GET`, `PUT`, `DELETE` | User review riêng |
+| `/api/v1/products/:id/reviews` | `POST` | Create review |
+
+#### gRPC routes
+
+| RPC | Ý nghĩa |
+| --- | --- |
+| `GetProductByID` | Internal product lookup |
+| `UpdateProduct` | Internal stock update / product update path |
+
+### 7.4. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| PostgreSQL | Product, variants, categories, storefront, reviews, analytics |
+| Elasticsearch | Optional search index |
+| Redis | Optional review cache |
+| Object storage | Product image upload |
+
+### 7.5. Function map theo tầng
+
+#### Handler layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Create`, `GetByID`, `ListByIDs`, `Update`, `Delete`, `List` | Catalog CRUD/list |
+| `SearchAssist`, `GetSearchAnalytics`, `RecordSearchEvent` | Search UX + analytics |
+| `CreateReview`, `GetMyReview`, `UpdateMyReview`, `DeleteMyReview`, `ListReviews` | Review API |
+| `StorefrontHandler.GetHome`, `ListCategories`, `GetCategoryPage` | Storefront data API |
+
+#### Service layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Create`, `Update`, `Delete`, `GetByID`, `ListByIDs` | Core catalog CRUD |
+| `List` | Search-aware catalog listing |
+| `CheckStock`, `ListLowStock`, `RestoreStock`, `DecreaseStock` | Inventory API |
+| `SyncSearchIndex` | Rebuild optional search index |
+| `GetSearchAssist`, `RecordSearchEvent`, `recordSearchAnalyticsBestEffort` | Search assist + analytics |
+| `StorefrontService.ListCategories`, `GetHome`, `GetCategoryPage` | Storefront read orchestration |
+| `ProductReviewService.ListReviews`, `CreateReview`, `UpdateReview`, `DeleteReview` | Review domain |
+| `notifyBestEffort` | Observer chain cho metrics/cache invalidation |
+| `EnsureMediaStore`, `UploadImages` | Media upload flow |
+
+#### Repository layer
+
+| Function | Vai trò |
+| --- | --- |
+| Product repository | CRUD product, list by cursor, search assist, stock mutation |
+| Storefront repository | Read category/editorial/featured product |
+| Product review repository | Review persistence + summary delta |
+| Search analytics repository | Query + event analytics |
+| Product review cache | Redis cache cho summary và first page |
+
+### 7.6. Điều đáng lưu ý khi đọc code
+
+- PostgreSQL vẫn là source of truth, search/cache chỉ là optional accelerator
+- review flow là ví dụ hay của tx manager + observer + cache invalidation
+- storefront service tránh N+1 bằng batch repository methods
+
+### 7.7. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/product/product_handler.go`
+
+1. `RegisterRoutes`
+   - Chia boundary thành public catalog/search/review list, admin catalog CRUD/upload/analytics, và authenticated user review routes.
+   - Đây là bản đồ route tốt nhất của service.
+2. `List`
+   - Parse filter, cursor, sort, price range.
+   - Delegate sang `ProductService.List`.
+   - Chỉ map `ErrInvalidCursor`, còn search/fallback hoàn toàn ở service.
+3. `Create` và `Update`
+   - Admin-only write path.
+   - Handler chỉ validate rồi giao việc cho service.
+4. `SearchAssist`, `GetSearchAnalytics`, `RecordSearchEvent`
+   - Cho thấy product-service còn sở hữu search UX support chứ không chỉ CRUD.
+
+#### `internal/handler/product/storefront_handler.go`
+
+1. `GetHome`
+   - Parse `limit`.
+   - Gọi `StorefrontService.GetHome`.
+   - Normalize nil slices trước khi trả response.
+2. `ListCategories`
+   - Public read path rất mỏng.
+3. `GetCategoryPage`
+   - `ErrStorefrontCategoryNotFound` được map riêng sang `404`.
+
+#### `internal/handler/product/product_review_handler.go`
+
+1. `ListReviews`
+   - Offset/page/limit style cổ điển.
+   - Trả meta pagination cho UI.
+2. `CreateReview`, `UpdateMyReview`, `DeleteMyReview`
+   - Lấy user claims từ JWT rồi delegate sang review service.
+   - `ErrProductReviewAlreadyExists` map sang `409`.
+
+#### `internal/service/product_queries.go`
+
+1. `List`
+   - Normalize query một lần.
+   - Nếu có search backend và query phù hợp, service thử search trước.
+   - Search trả IDs thì service `ListByIDs` từ PostgreSQL để hydrate full row.
+   - Search fail thì log warning rồi fallback PostgreSQL cursor listing.
+   - Dù đi path nào thì analytics vẫn record best-effort.
+2. `DecreaseStock`
+   - Validate quantity > 0.
+   - Load product trước để phân biệt not-found với insufficient stock.
+   - Gọi repo atomic decrement.
+   - Reindex stock change best-effort.
+3. `RestoreStock`
+   - Pattern ngược của `DecreaseStock`, rồi reindex best-effort.
+
+#### `internal/service/product_crud.go`
+
+1. `Create`
+   - `newProductFromCreateRequest` normalize status, variants, image URLs, tags, stock.
+   - Persist product.
+   - Index search backend best-effort.
+2. `Update`
+   - Load current product.
+   - `applyProductUpdate` mutate patch in-place.
+   - Persist rồi best-effort reindex.
+3. `Delete`
+   - Delete ở PostgreSQL trước.
+   - Search index delete chạy best-effort sau.
+4. Ý nghĩa
+   - PostgreSQL luôn là source of truth.
+   - Search/index chỉ là accelerator phụ trợ.
+
+#### `internal/service/storefront_service.go`
+
+1. `ListCategories`
+   - Wrapper mỏng nhưng normalize nil slice.
+2. `GetHome`
+   - Load categories.
+   - Apply `sanitizeStorefrontHomeLimit`.
+   - Batch `ListEditorialSectionsByCategorySlugs`.
+   - Batch `ListFeaturedProductsByCategorySlugs`.
+   - Compose `StorefrontCategoryPage`.
+   - Filter category không có storefront content hữu ích.
+3. `GetCategoryPage`
+   - Resolve category theo identifier.
+   - Load sections + featured products cho đúng category.
+4. Điểm đáng học
+   - Service chủ động tránh category + N query waterfall.
+
+#### `internal/service/product_review_service.go`
+
+1. `CreateReview`
+   - Verify product tồn tại trước.
+   - Dùng factory tạo review aggregate.
+   - `runInTx` để `CreateReview` và `ApplyReviewSummaryDelta` cùng commit.
+   - Sau commit mới `notifyBestEffort`.
+2. `UpdateReview`
+   - Load review cũ trong transaction.
+   - Clone previous review để tính delta.
+   - Update row và apply summary delta.
+   - Notify observer sau commit.
+3. `DeleteReview`
+   - Delete review row trong transaction.
+   - Apply negative summary delta.
+   - Notify observer sau commit.
+4. Điểm đáng học
+   - Observer chain tách cache invalidation/metrics khỏi transaction core.
+
+#### `internal/repository/product/*`
+
+1. `product_repository.go`
+   - `List` là cursor pagination thật.
+   - `ListByIDs` hydrate đúng thứ tự requested IDs.
+   - `UpdateStock` là atomic decrement `WHERE stock >= $1`.
+   - `RestoreStock` là atomic increment.
+2. `storefront_repository.go`
+   - `ListEditorialSectionsByCategorySlugs` và `ListFeaturedProductsByCategorySlugs` là backbone của batching storefront.
+3. `product_review_repository.go`
+   - `CreateReview` map unique violation sang `ErrProductReviewAlreadyExists`.
+   - `DeleteReviewByProductAndUser` dùng `DELETE ... RETURNING`.
+   - `ApplyReviewSummaryDelta` update summary table bằng delta, không recount toàn bảng.
+
+---
+
+## 8. user-service
+
+### 8.1. Vai trò runtime
+
+`user-service` sở hữu auth, profile, avatar, address, OTP, OAuth, wishlist và notification preference. Đây là service có bề mặt chức năng rộng nhất repo.
+
+### 8.2. Startup wiring
+
+Trong `services/user-service/cmd/main.go`:
+
+1. load config + tracing
+2. mở PostgreSQL + migration
+3. optional: bootstrap dev account
+4. tạo repository cho user, OAuth account, OTP challenge, avatar, address, wishlist, notification preference
+5. tạo product client cho wishlist baseline
+6. tạo `AddressService`, `NotificationPreferenceService`, `WishlistService`, `UserService`
+7. mount HTTP handler cho auth/profile/address/wishlist/preference
+8. mount gRPC server
+
+### 8.3. Public contract
+
+#### Auth routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/auth/register` | `POST` | Register email/password |
+| `/api/v1/auth/register/email/send-otp` | `POST` | Start email signup OTP |
+| `/api/v1/auth/register/email/verify-otp` | `POST` | Verify email signup OTP |
+| `/api/v1/auth/register/email/resend-otp` | `POST` | Resend email signup OTP |
+| `/api/v1/auth/register/phone/send-otp` | `POST` | Start phone signup OTP |
+| `/api/v1/auth/register/phone/verify-otp` | `POST` | Verify phone signup OTP |
+| `/api/v1/auth/register/phone/resend-otp` | `POST` | Resend phone signup OTP |
+| `/api/v1/auth/login` | `POST` | Login |
+| `/api/v1/auth/refresh` | `POST` | Refresh token |
+| `/api/v1/auth/verify-email` | `POST` | Verify email bằng token-link cũ |
+| `/api/v1/auth/forgot-password` | `POST` | Start password recovery |
+| `/api/v1/auth/reset-password` | `POST` | Reset password |
+| `/api/v1/auth/oauth/google/start` | `GET` | Start Google OAuth |
+| `/api/v1/auth/oauth/google/callback` | `GET` | OAuth callback |
+| `/api/v1/auth/oauth/exchange` | `POST` | Exchange OAuth ticket |
+
+#### User profile routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/users/profile` | `GET`, `PUT` | Get/update profile |
+| `/api/v1/users/avatar` | `POST` | Upload avatar |
+| `/api/v1/users/password` | `PUT` | Change password |
+| `/api/v1/users/verify-email/resend` | `POST` | Resend verification email kiểu cũ |
+
+#### OTP verify routes cho user đã đăng nhập
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/users/profile/phone-verification` | `GET` | Phone verification status |
+| `/api/v1/users/profile/phone-verification/send-otp` | `POST` | Send phone OTP |
+| `/api/v1/users/profile/phone-verification/verify-otp` | `POST` | Verify phone OTP |
+| `/api/v1/users/profile/phone-verification/resend-otp` | `POST` | Resend phone OTP |
+| `/api/v1/users/verify-email/status` | `GET` | Email verification status |
+| `/api/v1/users/verify-email/send-otp` | `POST` | Send email OTP |
+| `/api/v1/users/verify-email/verify-otp` | `POST` | Verify email OTP |
+| `/api/v1/users/verify-email/resend-otp` | `POST` | Resend email OTP |
+
+#### Address, wishlist, preference routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/users/addresses` | `POST`, `GET` | Create/list addresses |
+| `/api/v1/users/addresses/:id` | `PUT`, `DELETE` | Update/delete address |
+| `/api/v1/users/addresses/:id/default` | `PUT` | Set default address |
+| `/api/v1/users/wishlist` | `GET`, `POST` | List/add wishlist item |
+| `/api/v1/users/wishlist/sync` | `POST` | Sync wishlist batch |
+| `/api/v1/users/wishlist/:productId` | `DELETE` | Remove wishlist item |
+| `/api/v1/users/wishlist/alerts` | `GET` | Wishlist alerts |
+| `/api/v1/users/notification-preferences` | `GET`, `PUT` | Notification preference |
+| `/api/v1/admin/wishlist-alerts` | `GET` | Dispatchable alert feed cho worker |
+
+#### Admin routes
+
+| Route | Method | Ý nghĩa |
+| --- | --- | --- |
+| `/api/v1/admin/users` | `GET` | List users |
+| `/api/v1/admin/users/:id/role` | `PUT` | Update user role |
+
+#### gRPC routes
+
+| RPC | Ý nghĩa |
+| --- | --- |
+| `Register`, `Login` | Internal auth path |
+| `GetProfile`, `UpdateProfile` | Internal profile path |
+| `GetUserByID` | Internal user lookup |
+
+### 8.4. Storage và integration
+
+| Thành phần | Cách dùng |
+| --- | --- |
+| PostgreSQL | users, oauth_accounts, avatar, address, OTP/signup challenge, wishlist, notification preference |
+| SMTP | Email verification, password reset, OTP email |
+| Telegram | Phone OTP |
+| HTTP `product-service` | Wishlist baseline/snapshot |
+| gRPC | Internal user APIs |
+
+### 8.5. Function map theo tầng
+
+#### Handler layer
+
+| Function | Vai trò |
+| --- | --- |
+| `Register`, `Login`, `RefreshToken` | Auth contract |
+| `VerifyEmail`, `ForgotPassword`, `ResetPassword`, `ChangePassword` | Recovery/password flow |
+| `GetProfile`, `UpdateProfile`, `UploadAvatar` | Profile API |
+| `StartEmailSignup`, `VerifyEmailSignupOTP`, `ResendEmailSignupOTP` | Email signup OTP |
+| `StartPhoneSignup`, `VerifyPhoneSignupOTP`, `ResendPhoneSignupOTP` | Phone signup OTP |
+| `GetEmailVerificationStatus`, `SendEmailVerificationOTP`, `VerifyEmailOTP`, `ResendEmailVerificationOTP` | Logged-in email verify flow |
+| `GetPhoneVerificationStatus`, `SendPhoneOTP`, `VerifyPhoneOTP`, `ResendPhoneOTP` | Logged-in phone verify flow |
+| `StartGoogleOAuth`, `GoogleOAuthCallback`, `ExchangeOAuthTicket` | OAuth flow |
+| `ListUsers`, `UpdateUserRole` | Admin user management |
+| `AddressHandler.*` | Address CRUD |
+| `WishlistHandler.*` | Wishlist CRUD + alert feed |
+| `NotificationPreferenceHandler.*` | Notification preference read/update |
+
+#### Service layer: account domain
+
+| Function | Vai trò |
+| --- | --- |
+| `Register`, `Login`, `ChangePassword` | Core auth |
+| `RefreshToken`, `generateTokenPair` | JWT lifecycle |
+| `VerifyEmail`, `ResendVerificationEmail`, `ForgotPassword`, `ResetPassword` | Recovery flow |
+| `GetProfile`, `UpdateProfile` | Profile lifecycle |
+| `applyVerifiedPhoneChange` | Guard verified phone invariant |
+| `UploadAvatar`, `attachAvatarURL` | Avatar persistence + profile enrichment |
+| `StartEmailSignup`, `VerifyEmailSignupOTP`, `ResendEmailSignupOTP` | Email signup challenge |
+| `StartPhoneSignup`, `VerifyPhoneSignupOTP`, `ResendPhoneSignupOTP` | Phone signup challenge |
+| `StartEmailVerificationOTP`, `VerifyEmailOTP`, `ResendEmailVerificationOTP` | Email verify challenge |
+| `StartPhoneVerification`, `VerifyPhoneOTP`, `ResendPhoneOTP` | Phone verify challenge |
+| `BeginOAuth`, `CompleteOAuthCallback`, `ExchangeOAuthTicket` | OAuth lifecycle |
+
+#### Service layer: engagement domain
+
+| Function | Vai trò |
+| --- | --- |
+| `AddressService.CreateAddress`, `UpdateAddress`, `DeleteAddress`, `SetDefault` | Address book logic |
+| `NotificationPreferenceService.ListPreferences`, `UpdatePreferences`, `PreferenceMap` | Preference logic |
+| `WishlistService.ListWishlist`, `AddToWishlist`, `SyncWishlist`, `RemoveFromWishlist` | Wishlist CRUD |
+| `WishlistService.ListAlerts` | Detect price drop / back in stock |
+| `WishlistService.ListDispatchableAlerts` | Feed cho notification worker |
+
+#### Repository layer
+
+| Function | Vai trò |
+| --- | --- |
+| `UserRepository.Create`, `GetByEmail`, `GetByPhone`, `Update`, `List` | Core user persistence |
+| `OAuthAccountRepository.*` | OAuth account link persistence |
+| `AddressRepository.*` | Address persistence |
+| OTP challenge repositories | Signup/verify challenge persistence |
+| `WishlistRepository.*` | Wishlist persistence |
+| `NotificationPreferenceRepository.*` | Preference persistence |
+| `ProfileTxManager.RunInTx` | Transaction manager cho user + address + phone verification |
+
+### 8.6. Điều đáng lưu ý khi đọc code
+
+- `user-service` thực chất là nhiều subdomain sống chung: auth, profile, OTP, OAuth, engagement
+- profile update đã có tx manager cho multi-repo invariant
+- login brute-force protection hiện ở handler level qua `LoginAttemptProtector`
+- wishlist alert generation phụ thuộc snapshot product hiện tại từ `product-service`
+
+### 8.7. Walkthrough Theo File Và Theo Block Code
+
+#### `internal/handler/user/auth_handlers.go`
+
+Đây là file boundary quan trọng nhất của auth.
+
+1. `Register`
+   - Block đầu là `Bind` + `Validate`, hoàn toàn không có business logic.
+   - `h.userService.Register` trả `AuthResponse` nếu tạo user thành công.
+   - Sau khi register xong, handler kiểm tra `result.User` và nếu email chưa verify thì best-effort gọi `StartEmailVerificationOTP`.
+   - Điểm này rất đáng học: registration thành công không bị rollback chỉ vì email dispatch lỗi.
+2. `Login`
+   - Trước khi vào service, handler tự kiểm tra identifier và áp `LoginAttemptProtector`.
+   - `attemptKeys` được tạo từ identifier + IP, nghĩa là lock scope không chỉ theo email mà còn theo nguồn request.
+   - Nếu service trả `ErrInvalidCredentials`, handler mới `RecordFailure`; nếu thành công thì `RecordSuccess`.
+   - Như vậy password verification vẫn ở service, nhưng lock policy nằm ở boundary.
+3. `RefreshToken`, `ForgotPassword`, `ResetPassword`, `ChangePassword`
+   - Nhóm hàm này đáng đọc để thấy error mapping khá ổn định: invalid token -> `401`, not found -> `404`, còn internal giữ ở `500`.
+
+#### `internal/handler/user/profile_handlers.go`
+
+1. `GetProfile`
+   - Chỉ lấy user claims rồi gọi service.
+   - Điều này giữ handler mỏng và không buộc handler biết avatar storage hay address semantics.
+2. `UpdateProfile`
+   - Đây là entry point tốt để học mapping domain error phong phú.
+   - Handler phân biệt rõ `ErrInvalidPhoneNumber`, `ErrInvalidProfileName`, `ErrInvalidProfileAddress`, `ErrPhoneVerificationRequired`, `ErrPhoneVerificationAlreadyUsed`.
+   - Vì service trả domain error sạch nên handler map được rất rõ sang status/message.
+3. `UploadAvatar`
+   - Có validation file size, MIME detection và fallback `http.DetectContentType`.
+   - Đây là ví dụ tốt của validation boundary cho upload.
+
+#### `internal/service/account/user_auth.go`
+
+1. `Register`
+   - Normalize email, phone, tên.
+   - Nếu người dùng không nhập tên, service tự generate display name tạm.
+   - Lookup uniqueness theo email trước, phone sau.
+   - Hash password bằng bcrypt cost `12`.
+   - Tạo `model.User`, đồng thời phát sinh email verification token hash và expiry.
+   - Persist user rồi build auth response.
+2. `Login`
+   - `normalizeIdentifier` chọn `Identifier` mới hoặc fallback field `Email` cũ.
+   - `findUserByIdentifier` tách lookup email và phone thành helper riêng.
+   - `bcrypt.CompareHashAndPassword` là chốt xác thực duy nhất; handler không đụng vào hash.
+3. `buildAuthResponse`
+   - Trước khi ký token, service enrich user bằng avatar URL.
+   - Sau đó mới `generateTokenPair`.
+   - Đây là lý do response auth đã ở dạng “frontend dùng được ngay”, không cần call profile lần nữa.
+
+#### `internal/service/account/user_profile.go`
+
+Đây là file nên đọc chậm vì nó giữ nhiều invariant tinh vi.
+
+1. `UpdateProfile`
+   - Nếu `profileTxManager` nil thì chạy flow trực tiếp.
+   - Nếu có `profileTxManager`, service wrap toàn bộ logic trong transaction và thay dependency bằng repo dùng `tx`.
+   - Cách viết này giúp cùng một business flow chạy được cả transactional mode lẫn unit test mode.
+2. `updateProfileWithDependencies`
+   - Load user hiện tại.
+   - Resolve từng field optional như first name, last name.
+   - Resolve phone patch và xác định `phoneChanged`.
+   - Nếu đổi phone thì gọi `applyVerifiedPhoneChange`; không có verified challenge thì fail.
+   - Với default address, service chỉ fetch address khi patch thực sự có ý nghĩa, tránh query thừa.
+   - Nếu không có thay đổi gì thì return sớm.
+   - Nếu có address patch thì `UpsertDefaultAddress`.
+   - Nếu có user patch thì `userRepo.Update`.
+   - Cuối cùng mới consume verified phone challenge.
+3. `applyVerifiedPhoneChange`
+   - Validate format số điện thoại.
+   - Check uniqueness phone.
+   - Load verification challenge theo ID.
+   - Đảm bảo challenge thuộc đúng user, chưa consumed, đúng số phone yêu cầu, đã verified.
+   - Chỉ sau khi mọi điều kiện đúng mới mutate `user.Phone` trong memory.
+   - Challenge chưa bị consume ngay ở đây; việc consume chỉ diễn ra sau khi profile update commit xong.
+
+#### `internal/service/account/email_verification.go`
+
+File này là ví dụ OTP flow khá production-oriented.
+
+1. `StartEmailVerificationOTP`
+   - Check repository đã được config chưa.
+   - Load user và short-circuit nếu đã `EmailVerified`.
+   - Cleanup expired challenge theo kiểu opportunistic.
+   - Lấy active challenge gần nhất để quyết định reuse hay expire cái cũ.
+   - Generate OTP code, hash OTP kèm normalized email.
+   - Rate limit theo ba chiều: user, email, IP.
+   - Tạo challenge mới hoặc refresh challenge cũ.
+   - Dispatch email ở cuối.
+2. `VerifyEmailOTP`
+   - Load challenge theo `VerificationID`.
+   - Reject nếu sai chủ sở hữu, consumed, locked, expired.
+   - Compare hash bằng `subtle.ConstantTimeCompare`.
+   - Sai OTP thì tăng `AttemptCount`, có thể chuyển sang `Locked`.
+   - Đúng OTP thì update challenge sang `Verified`, sau đó update `user.EmailVerified = true`.
+3. `ResendEmailVerificationOTP`
+   - Re-check ownership, locked state, cooldown, daily/hourly limit.
+   - Generate OTP mới và reset challenge state.
+   - Đây là chỗ cho thấy resend không phải chỉ “gửi lại cùng mã cũ”, mà có thể rotate code mới.
+
+#### `internal/service/account/oauth_service.go`
+
+Đây là file đáng đọc nhất nếu muốn hiểu vì sao OAuth flow của repo chặt chẽ hơn demo thông thường.
+
+1. `BeginOAuth`
+   - Normalize provider.
+   - Resolve callback URL theo origin.
+   - Issue raw nonce + nonce hash + expiry.
+   - Sign `oauth_state` chứa provider, nonce hash, next path, frontend origin, redirect URL.
+   - Dùng state đã ký để build provider authorization URL.
+2. `CompleteOAuthCallback`
+   - Parse signed state.
+   - Verify provider khớp và `hashToken(cookieNonce) == stateClaims.NonceHash`.
+   - Exchange authorization code với provider.
+   - `resolveOAuthUser` sẽ link hoặc create user local.
+   - Ký short-lived `oauth login ticket`.
+   - Build redirect URL về frontend với ticket thay vì JWT hệ thống.
+3. `ExchangeOAuthTicket`
+   - Parse JWT ticket với purpose-specific claims.
+   - Reload user từ DB.
+   - Trả `AuthResponse` chuẩn của hệ thống.
+4. `resolveOAuthUser`
+   - Nếu đã có `oauth_account` theo `provider_user_id`, sync account và lấy user hiện có.
+   - Nếu chưa có account, thử match theo email.
+   - Nếu email verified từ provider hợp lệ thì link hoặc create local user rồi persist OAuth account.
+   - Đây là nơi quyết định conflict handling và auto-link semantics.
+
+#### `internal/handler/user/login_protection.go`
+
+File này nhỏ nhưng nói lên policy chống brute-force của repo.
+
+1. `Check`
+   - Đọc trạng thái hiện có theo từng key và trả `retryAfter` dài nhất.
+2. `RecordFailure`
+   - Tăng `failures`, set `lockedUntil` khi vượt ngưỡng.
+3. `RecordSuccess`
+   - Xóa toàn bộ state theo các key liên quan.
+4. `loginAttemptKeys`
+   - Gộp key theo identifier và IP.
+   - Điều này giúp chặn vừa theo account vừa theo nguồn request.
+5. Điểm cần nhớ
+   - Đây là in-memory state với `sync.Mutex`, nên đúng cho single instance hoặc local dev, nhưng chưa phải distributed rate limiter.
+
+#### `internal/repository/profile_tx_manager.go`
+
+1. `RunInTx`
+   - Mở transaction PostgreSQL.
+   - Dựng `ProfileTxRepositories` với executor là `tx`, không phải `db`.
+   - Chạy callback business function.
+   - Nếu callback lỗi thì rollback.
+   - Nếu thành công thì commit.
+2. Ý nghĩa thiết kế
+   - Service không phải tự biết chi tiết SQL transaction.
+   - Các repo con vẫn tái sử dụng cùng implementation, chỉ thay executor.
+   - Đây là pattern thực dụng hơn nhiều so với tạo abstraction transaction quá lớn.
+
+---
+
+## 9. Nên Mở File Nào Trước Nếu Muốn Hiểu Nhanh
+
+1. `api-gateway/cmd/main.go`
+2. `pkg/config/config.go`
+3. `pkg/middleware/rate_limit.go`
+4. `pkg/observability/tracing.go`
+5. `services/user-service/cmd/main.go`
+6. `services/product-service/cmd/main.go`
+7. `services/cart-service/internal/service/cart/cart_mutations.go`
+8. `services/order-service/internal/service/order/order_lifecycle.go`
+9. `services/payment-service/internal/service/payment/payment_processing.go`
+10. `services/notification-service/internal/handler/event_handler.go`
+
+Đó là đường đọc ngắn nhất để thấy:
+
+- request ingress
+- shared infrastructure
+- user/auth domain
+- catalog/stock domain
+- cart mutation
+- order/payment orchestration
+- async notification reliability
+
+---
+
+## 10. Audit-Level Repository Và Query Hot Path
+
+Phần này không lặp lại “service làm gì”, mà chỉ ra chính xác các file đang giữ invariant production của backend. Khi audit một bug dữ liệu, race condition, duplicate side effect hoặc slow query, đây là nơi nên mở trước.
+
+### 10.1. `order-service`: nơi giữ nhiều invariant nhất
+
+#### File: `services/order-service/internal/repository/order_repository.go`
+
+##### Hot path 1: `createOrderTx`
+
+Function này là điểm neo dữ liệu của luồng tạo đơn.
+
+1. Transaction bắt đầu bằng `BeginTx`.
+2. Nếu có coupon thì gọi `lockAndConsumeCoupon`.
+3. Insert `orders`.
+4. Insert toàn bộ `order_items`.
+5. Insert `order_events` đầu tiên với type `created`.
+6. Insert `outbox_events`.
+7. Insert `order_idempotency_keys`.
+8. Chỉ commit khi tất cả bước trên thành công.
+
+Invariant thật mà function đang giữ:
+
+- Một order mới không tồn tại mà thiếu `order_items`.
+- Event `order created` không được commit nếu `orders` hoặc `order_items` fail.
+- Outbox chỉ xuất hiện khi order đã được persist.
+- Idempotency record không được tách khỏi order thật.
+
+Điểm quan trọng cần nhớ:
+
+- Coupon bị consume trong cùng transaction DB của order, nên không có trạng thái “coupon đã trừ nhưng order chưa có”.
+- Stock không bị giữ trong DB này; reservation inventory đang là invariant xuyên service, không phải invariant nội bộ repo này.
+- Nếu process crash trước `Commit`, cả order, outbox và idempotency record cùng rollback.
+
+##### Hot path 2: `lockAndConsumeCoupon`
+
+Đây là block SQL nhỏ nhưng rất quan trọng:
+
+1. `SELECT ... FROM coupons WHERE code = $1 FOR UPDATE`
+2. Validate `active`, `expires_at`, `min_order_amount`, `usage_limit`
+3. `UPDATE coupons SET used_count = used_count + 1`
+
+Lock pattern:
+
+- Dùng row lock chuẩn PostgreSQL qua `FOR UPDATE`.
+- Hai request cùng dùng một coupon giới hạn số lượt sẽ bị serialize theo row lock.
+- `used_count` được tăng sau khi validate trên bản ghi đã lock, tránh lost update.
+
+Invariant:
+
+- `usage_limit` được enforce bằng dữ liệu mới nhất trong transaction.
+- Hai checkout đồng thời không thể cùng đọc một `used_count` cũ rồi cùng increment sai.
+
+##### Hot path 3: `ListAll` và `ListAllByCursor`
+
+Hai hàm này cho thấy repo đang sống ở trạng thái chuyển tiếp giữa admin list cũ và list có khả năng scale tốt hơn.
+
+`ListAll`:
+
+- Build filter động trên `user_id`, `status`, `from`, `to`.
+- Chạy `SELECT COUNT(*)`.
+- Chạy query `ORDER BY created_at DESC LIMIT/OFFSET`.
+
+Ý nghĩa audit:
+
+- Đây là đường admin/backoffice thân thiện với UI page number.
+- Chi phí tăng theo độ sâu `OFFSET`.
+- `COUNT(*)` là cost cố định thêm vào mọi request.
+
+`ListAllByCursor`:
+
+- Decode cursor bằng `decodeOrderListCursor`.
+- Cursor là `base64(timestamp|orderID)`.
+- Query dùng predicate `(created_at < cursorTime OR (created_at = cursorTime AND id < cursorID))`.
+- `ORDER BY created_at DESC, id DESC`.
+- Fetch `limit + 1` để xác định `hasNext`.
+
+Cursor pattern:
+
+- `created_at` một mình không đủ ổn định khi nhiều order cùng timestamp.
+- Repo dùng thêm `id` làm tiebreaker để giữ ordering deterministic.
+- Cursor không chứa filter; caller phải giữ nguyên filter giữa các trang.
+
+Điểm nên nhớ khi audit bug pagination:
+
+- Nếu user đổi filter mà vẫn reuse cursor cũ, behavior có thể lệch.
+- Nếu index không phủ `created_at DESC, id DESC`, pagination sẽ đúng logic nhưng có thể chậm.
+
+##### Hot path 4: `ExpirePendingReservation`
+
+Đây là nơi order tự hủy vì quá hạn giữ chỗ.
+
+Query chính:
+
+- `UPDATE orders ... WHERE id = $2 AND status = 'pending' AND reservation_allocated_at IS NULL AND reservation_expires_at <= NOW()`
+
+Invariant:
+
+- Chỉ order còn `pending` mới bị expire.
+- Nếu stock đã được allocate (`reservation_allocated_at IS NOT NULL`), worker expire không được phép can thiệp.
+- Update status, clear reservation fields, insert event, insert outbox trong cùng transaction.
+
+Ý nghĩa production:
+
+- Đây là compare-and-set bằng SQL condition, không cần `SELECT ... FOR UPDATE` riêng.
+- Nếu một flow khác đã đổi status trước, `rowsAffected = 0` và function commit no-op.
+
+##### Hot path 5: `ClaimPendingReturnRefunds`
+
+Đây là worker lease pattern rõ nhất repo.
+
+Pattern SQL:
+
+1. `WITH candidates AS (...)`
+2. Filter:
+   - `status = 'refund_pending'`
+   - chưa có `refund_payment_id`
+   - `refund_next_retry_at` đã đến hoặc null
+   - `refund_processing_started_at` null hoặc đã quá lease cũ
+3. `ORDER BY COALESCE(refund_next_retry_at, created_at), created_at`
+4. `LIMIT $1`
+5. `FOR UPDATE SKIP LOCKED`
+6. `UPDATE ... SET refund_attempt_count = refund_attempt_count + 1, refund_processing_started_at = NOW()`
+
+Lock pattern:
+
+- Nhiều worker có thể poll cùng lúc.
+- `FOR UPDATE SKIP LOCKED` bảo đảm mỗi row chỉ bị một worker claim trong một thời điểm.
+- Lease timeout cho phép reclaim row khi worker cũ chết giữa chừng.
+
+Retry pattern:
+
+- `MarkReturnRefundAttemptFailed` ghi `refund_last_error`, `refund_next_retry_at`, clear `refund_processing_started_at`.
+- `CompleteReturnRefund` clear retry fields và set `refund_payment_id`.
+- Retry state được giữ trong cùng table domain `returns`, không cần scheduler state ngoài DB.
+
+##### Hot path 6: `ClaimPendingOutbox`, `MarkOutboxPublished`, `MarkOutboxFailed`
+
+Đây là outbox relay chuẩn của repo.
+
+Pattern:
+
+- Claim dùng `FOR UPDATE SKIP LOCKED`.
+- Khi claim, `attempts` tăng ngay và `available_at` được đẩy về tương lai như một lease.
+- Publisher thành công thì set `published_at`.
+- Publisher fail thì ghi `last_error` và `available_at` mới.
+
+Ý nghĩa:
+
+- Crash sau khi claim nhưng trước publish sẽ không mất message; row sẽ quay lại khi lease hết hạn.
+- Crash sau publish nhưng trước `MarkOutboxPublished` vẫn có nguy cơ publish lặp, nên downstream phải idempotent.
+- Vì vậy notification và payment webhook đều có inbox/dedupe để đỡ re-delivery.
+
+##### Hot path 7: `ApplyInboxStatusTransition`
+
+Đây là replay-safe consumer pattern của `order-service`.
+
+Flow:
+
+1. Insert `inbox_messages` bằng `ON CONFLICT DO NOTHING`.
+2. Nếu duplicate thì trả `Duplicate: true`.
+3. `SELECT status FROM orders WHERE id = $1 FOR UPDATE`.
+4. Nếu current status đã bằng `nextStatus`, commit no-op.
+5. Nếu `expectedCurrent` không khớp, commit no-op.
+6. Nếu hợp lệ thì update order, append `order_events`, commit.
+
+Invariant:
+
+- Cùng một message không được apply hai lần.
+- Out-of-order event bị chặn bởi `expectedCurrent`.
+- State transition luôn đi kèm event log.
+
+Đây là chỗ cần mở đầu tiên khi debug:
+
+- payment webhook đến lặp
+- event đến muộn
+- order bị stuck ở status cũ
+
+### 10.2. `payment-service`: idempotency và webhook safety
+
+#### File: `services/payment-service/internal/repository/payment/payment_repository.go`
+
+##### Hot path 1: `CreateWithIdempotency`
+
+Function này commit cùng lúc ba thứ:
+
+1. `payments`
+2. `outbox_events`
+3. `payment_idempotency_keys`
+
+Invariant:
+
+- Một payment mới không được tạo mà thiếu outbox.
+- Một idempotency key không được trỏ tới payment chưa tồn tại.
+- Nếu transaction fail, client retry có thể chạy lại an toàn.
+
+##### Hot path 2: `ApplyWebhookResult`
+
+Đây là function quan trọng nhất của webhook path.
+
+Pattern:
+
+1. Begin transaction.
+2. Insert `inbox_messages` với unique key `(consumer, message_id)`.
+3. Nếu duplicate inbox, trả ngay `true`.
+4. `UPDATE payments ... WHERE id = $14 AND status = 'pending'`.
+5. Nếu `rowsAffected = 0`, commit no-op.
+6. Nếu update được thì insert outbox và commit.
+
+Điểm rất đáng học:
+
+- Không cần lock riêng trước update.
+- Status gate `WHERE status = 'pending'` biến update thành một compare-and-set.
+- Webhook replay sau khi payment đã `success` hoặc `failed` sẽ không mutate lại row.
+
+Retry semantics:
+
+- Webhook provider có thể retry vô hạn.
+- Repo chấp nhận điều đó bằng inbox dedupe + guarded update.
+- Sau khi publish event, downstream vẫn phải chịu được duplicate.
+
+##### Hot path 3: `ClaimPendingOutbox`
+
+Pattern giống `order-service`:
+
+- `published_at IS NULL`
+- `available_at <= NOW()`
+- `FOR UPDATE SKIP LOCKED`
+- tăng `attempts`
+- lease bằng `available_at`
+
+Điểm audit:
+
+- Nếu payment publish lag, mở đây trước chứ không nhìn handler.
+- Nếu `attempts` tăng mà `published_at` không được set, bug ở relay/publisher hoặc broker.
+
+##### Hot path 4: read model helpers
+
+Các hàm `GetByOrderID`, `GetByGatewayOrderID`, `ListByOrderIDs`, `ListByUserID` đều có một điểm chung:
+
+- Chúng không join sang order table.
+- Repo giữ read model của payment độc lập.
+- `ListByOrderIDs` dùng `ANY($1::varchar[])` để batch enrich order list.
+
+Ý nghĩa:
+
+- Read path admin/user không phải N lần HTTP call sang `payment-service`.
+- Enrichment làm ở service layer nhưng batch SQL đã được chuẩn bị sẵn trong repo.
+
+### 10.3. `product-service`: catalog cursor, stock CAS và review summary delta
+
+#### File: `services/product-service/internal/repository/product/product_repository.go`
+
+##### Hot path 1: `List`
+
+Đây là public catalog query builder quan trọng nhất.
+
+Query pattern:
+
+- Base query `FROM products WHERE 1=1`.
+- Filter động cho `category`, `brand`, `tag`, `status`, `search`, `price`, `size`, `color`.
+- `tag` dùng `tags @> $n::jsonb`.
+- `size` và `color` dùng `EXISTS` với `jsonb_array_elements(variants)`.
+- Sort được normalize bởi `normalizeListSort`.
+
+Cursor pattern:
+
+- `decodeProductListCursor` đọc payload JSON từ base64.
+- Cursor chứa `sort`, `id`, `created_at`, và thêm field tùy sort như `price`, `stock`, `merchandising_rank`.
+- Nếu `cursor.Sort` không khớp sort hiện tại, repo reject bằng `ErrInvalidCursor`.
+
+Điểm mạnh:
+
+- Cursor gắn với sort order thật, tránh bug “dùng cursor old sort cho sort mới”.
+- `appendCursorClause` dùng predicate khác nhau theo từng sort.
+- `limit + 1` vẫn được áp dụng chuẩn.
+
+Ý nghĩa audit:
+
+- Nếu catalog bị duplicate/missing item giữa trang 1 và 2, mở `appendCursorClause`.
+- Nếu catalog chậm khi lọc `size/color`, nhìn vào JSONB lateral/existence path và index strategy.
+
+##### Hot path 2: `UpdateStock` và `RestoreStock`
+
+`UpdateStock` là compare-and-set của inventory local:
+
+- `UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1`
+- Nếu `rowsAffected = 0` trả `ErrInsufficientStock`
+
+Điều này quan trọng vì:
+
+- Không cần read-before-write để check stock.
+- Hai request giảm stock đồng thời vẫn an toàn ở cấp row.
+- Invariant “stock không âm” nằm ngay trong SQL condition.
+
+`RestoreStock`:
+
+- tăng stock bằng atomic update
+- check `rowsAffected` để phát hiện product không tồn tại
+
+##### Hot path 3: `ListByIDs`
+
+Function này không giữ order ở phía SQL mà làm theo hai bước:
+
+1. Query `WHERE id = ANY($1)`
+2. Build `map[id]*Product`
+3. Reconstruct slice theo thứ tự input ban đầu
+
+Ý nghĩa:
+
+- Caller không bị mất ordering semantic của request.
+- Batch read cho cart/order enrichment tránh N query.
+
+##### Hot path 4: `SearchAssist`
+
+File `product_search_assist_repository.go` là nơi query analytics/search assist được giữ bằng SQL thay vì engine ngoài.
+
+Pattern:
+
+- `countSearchAssistResults`
+- `listSearchSuggestions`
+- `listSearchFacets`
+- `queryVariantFacet` dùng `JOIN LATERAL jsonb_array_elements`
+
+Điểm đáng chú ý:
+
+- Search assist đang compute nhiều facet trực tiếp từ PostgreSQL.
+- Đây là pattern tốt khi muốn graceful degradation không phụ thuộc Elasticsearch.
+- Giá phải trả là query có thể nặng khi product table lớn và variant JSON phình to.
+
+#### File: `services/product-service/internal/repository/product/product_review_repository.go`
+
+##### Hot path 5: review write path
+
+`CreateReview`:
+
+- insert trực tiếp
+- map `pq.Error{Code:23505}` sang `ErrProductReviewAlreadyExists`
+
+`GetReviewByProductAndUserForUpdate`:
+
+- thêm `FOR UPDATE`
+- dùng khi service cần mutate summary trong transaction an toàn
+
+`DeleteReviewByProductAndUser`:
+
+- `DELETE ... RETURNING`
+- lấy lại bản ghi cũ để tính delta summary mà không cần query lại
+
+`ApplyReviewSummaryDelta`:
+
+- nếu delta tăng review count thì `INSERT ... ON CONFLICT DO UPDATE`
+- nếu delta âm thì `UPDATE` summary row hiện có
+
+Invariant:
+
+- Summary aggregate được cập nhật bằng delta, không phải recount toàn bảng mỗi lần.
+- Khi write path nằm trong transaction manager, review row và summary row cùng commit.
+
+#### File: `services/product-service/internal/repository/product/product_review_tx_manager.go`
+
+`RunInTx` cho review là mẫu transaction manager rất sạch:
+
+- service truyền callback business logic
+- repo được dựng lại trên executor là `tx`
+- commit/rollback tập trung ở một chỗ
+
+#### File: `services/product-service/internal/repository/product/storefront_repository.go`
+
+Storefront read path chọn batching rõ ràng:
+
+- `ListEditorialSectionsByCategorySlugs`
+- `ListFeaturedProductsByCategorySlugs`
+
+Query pattern:
+
+- normalize slug trước
+- `WHERE category_slug = ANY($1)`
+- hydrate map `slug -> items`
+
+Ý nghĩa:
+
+- Homepage/category page không bị N query theo từng section/category.
+- Đây là read optimization thực dụng hơn nhiều so với thêm cache phức tạp quá sớm.
+
+### 10.4. `user-service`: uniqueness, bulk upsert và transaction ghép profile
+
+#### File: `services/user-service/internal/repository/userrepo/user_repository.go`
+
+##### Hot path 1: `Create` và `Update`
+
+Hai hàm này giữ invariant uniqueness ở tầng DB, không tin vào pre-check ở service.
+
+Pattern:
+
+- Insert/update raw columns.
+- Nếu DB trả `23505`, helper `isUniqueViolation` map lỗi sang:
+  - `ErrUserEmailAlreadyExists`
+  - `ErrUserPhoneAlreadyExists`
+
+Ý nghĩa:
+
+- Pre-check ở service chỉ để UX tốt hơn.
+- Source of truth cho uniqueness vẫn là unique index và SQL error.
+- Đây là pattern đúng cho race condition giữa hai request đăng ký song song.
+
+##### Hot path 2: scan helper family
+
+`scanUser` dùng `sql.NullTime` và `COALESCE(..., '')` cho các field optional.
+
+Audit significance:
+
+- Repo chủ động chuẩn hóa boundary model thay vì đẩy null handling lên service.
+- Khi đọc bug “field nil/string rỗng”, mở scan helper trước chứ không nhìn handler.
+
+#### File: `services/user-service/internal/repository/profile_tx_manager.go`
+
+`RunInTx` ghép nhiều repo con:
+
+- `Users`
+- `Addresses`
+- `PhoneVerifications`
+
+Ý nghĩa:
+
+- Profile update có thể mutate user row, default address và phone verification consume trong cùng transaction.
+- Service không cần tự quản lý `*sql.Tx`.
+- Đây là nơi giữ invariant “profile commit xong mới consume verified challenge”.
+
+#### File: `services/user-service/internal/repository/addressrepo/repository.go`
+
+##### Hot path 3: default address
+
+Repo có:
+
+- `ClearDefault(userID)`
+- `Create`
+- `Update`
+- `CountByUserID`
+
+Điều quan trọng:
+
+- `ClearDefault` chỉ là một update SQL, chưa tự khóa toàn bộ invariant “mỗi user chỉ có một default”.
+- Invariant thật chỉ an toàn khi caller bao bọc `ClearDefault` và `Create/Update` trong cùng transaction.
+
+Đây là điểm audit cần nhớ:
+
+- Nếu endpoint nào thao tác default address mà không đi qua transaction manager, invariant có thể lệch dưới concurrent requests.
+
+#### File: `services/user-service/internal/repository/notificationpreferencerepo/repository.go`
+
+`UpsertMany` dùng pattern bulk write:
+
+- nhận mảng topic + enabled
+- `unnest($2::text[], $3::boolean[])`
+- `ON CONFLICT (user_id, topic) DO UPDATE`
+
+Ý nghĩa:
+
+- Viết nhiều preference trong một round-trip.
+- Dễ idempotent hơn loop từng row.
+
+#### File: `services/user-service/internal/repository/wishlistrepo/repository.go`
+
+Hot path chính:
+
+- `ListByUserID`
+- `ListUserIDs`
+- `Upsert`
+- `UpsertMany`
+
+Pattern:
+
+- `UpsertMany` cũng dùng `unnest(...) + ON CONFLICT`
+- `ListUserIDs` group theo `user_id` rồi `ORDER BY MAX(updated_at) DESC`
+
+Điểm đáng chú ý:
+
+- Dispatch source cho wishlist alert hiện dựa trên sweep user có wishlist thay đổi gần đây.
+- Đây là pattern polling hợp lý, nhưng query `GROUP BY + MAX(updated_at)` sẽ cần index tốt khi bảng wishlist lớn.
+
+#### File: `services/user-service/internal/repository/authrepo/email_verification_repository.go`
+
+Hot path OTP:
+
+- `GetLatestActiveByUserID` lấy challenge mới nhất có status `pending` hoặc `verified`
+- `Update` mutate attempt count, resend window, verified/consumed state
+- `DeleteExpired` cleanup opportunistic
+
+Invariant:
+
+- Challenge lifecycle được materialize thành row state machine, không giữ state tạm trong memory.
+- Rate limit semantic ở service, còn status persistence ở repo.
+
+#### File: `services/user-service/internal/repository/oauthrepo/repository.go`
+
+Pattern đáng học:
+
+- `Create` map duplicate provider identity sang `ErrOAuthAccountAlreadyExists`
+- `Update` check `rowsAffected`
+- `GetByProviderUserID` và `GetByUserIDAndProvider` tách rõ 2 loại lookup
+
+Ý nghĩa:
+
+- OAuth link semantics được bảo vệ bởi unique constraint thật trong DB.
+- Service có thể race-safe khi nhiều callback/provider event đến gần nhau.
+
+### 10.5. `notification-service`: dedupe và retry dựa trên Redis/RabbitMQ
+
+#### File: `services/notification-service/internal/inbox/redis_store.go`
+
+Đây là inbox khác với order/payment:
+
+- Không dùng Postgres table.
+- Dùng Redis Lua script để điều phối consumer nhiều replica.
+
+`Claim`:
+
+1. Check `processed` key.
+2. Nếu chưa processed thì `SET processing NX PX`.
+3. Trả về `Claimed`, `AlreadyProcessed` hoặc `AlreadyClaimed`.
+
+`MarkProcessed`:
+
+- set `processed` key có TTL
+- xóa `processing` key
+
+`Release`:
+
+- xóa `processing` key khi fail để worker khác có thể claim lại
+
+Ý nghĩa:
+
+- Đây là lease-based dedupe ngoài DB.
+- Rẻ hơn inbox table khi traffic event lớn.
+- Đổi lại, Redis là dependency bắt buộc cho reliability path này.
+
+#### File: `services/notification-service/internal/inbox/history_store.go`
+
+History store dùng 3 lớp key:
+
+- `prefix:user:{userID}` là sorted set cho feed người dùng
+- `prefix:audit` là sorted set cho audit feed tổng
+- `prefix:item:{id}` là payload JSON
+
+Pattern:
+
+- `Append` dùng pipeline để ghi index + payload + TTL
+- `ListByUser` và `ListRecent` load ID trước, rồi batch `GET` payload
+- `MarkAllRead` đọc toàn bộ item user, rewrite payload nào chưa có `ReadAt`
+
+Audit significance:
+
+- Đây là read model eventual consistency, không phải source of truth chính.
+- `MarkAllRead` là rewrite payload hàng loạt; đơn giản nhưng chi phí tăng theo số item.
+
+#### File: `services/notification-service/internal/messaging/retry_publisher.go`
+
+Retry queue pattern:
+
+- clone headers
+- tăng `HeaderRetryCount`
+- giữ `HeaderFirstSeen`
+- set `HeaderNextRetryAt`
+- publish sang retry queue với `Expiration = delay`
+
+`delayForRetry`:
+
+- exponential backoff
+- cap ở `maxDelay`
+
+Điểm cần nhớ:
+
+- Retry state nằm trong AMQP header, không cần DB.
+- Nếu broker restart và queue chính sách thay đổi, logic retry có thể bị ảnh hưởng mạnh hơn outbox DB-based.
+
+### 10.6. `cart-service`: Redis JSON blob, TTL và lost update trade-off
+
+#### File: `services/cart-service/internal/repository/cart/cart_repository.go`
+
+Hot path cực đơn giản nhưng phải hiểu đúng trade-off:
+
+`Get`:
+
+- `GET cart:{userID}`
+- nếu `redis.Nil` thì trả cart rỗng
+- unmarshal JSON
+- refresh TTL bằng `Expire`
+
+`Save`:
+
+- marshal cả cart thành JSON
+- `SET` nguyên blob với TTL 7 ngày
+
+`Delete`:
+
+- `DEL cart:{userID}`
+
+Invariant thật:
+
+- Cart là transient state, không cần ACID mạnh như order/payment.
+- TTL refresh khi đọc/ghi giúp cart sống theo mức độ hoạt động.
+
+Rủi ro thật:
+
+- Concurrent write dễ last-write-wins vì không có versioning/CAS.
+- Whole-document rewrite khiến mutation nhỏ vẫn ghi lại toàn blob.
+
+### 10.7. Những pattern nên xem như chuẩn audit của repo
+
+Khi mở source, có thể gom các hot path backend này vào 7 pattern cốt lõi:
+
+1. Transaction bundle:
+   - `createOrderTx`
+   - `CreateWithIdempotency`
+   - `ProfileTxManager.RunInTx`
+2. SQL compare-and-set:
+   - `UpdateStock`
+   - `ExpirePendingReservation`
+   - `ApplyWebhookResult`
+3. Row lock:
+   - `lockAndConsumeCoupon`
+   - `GetReviewByProductAndUserForUpdate`
+   - `SELECT status ... FOR UPDATE` trong `ApplyInboxStatusTransition`
+4. Cursor pagination:
+   - `ListAllByCursor`
+   - `List`
+   - `encode/decode*Cursor`
+5. Lease claim:
+   - `ClaimPendingOutbox`
+   - `ClaimPendingReturnRefunds`
+   - `redisStore.Claim`
+6. Bulk upsert:
+   - `UpsertMany` ở wishlist/preferences
+   - `ApplyReviewSummaryDelta`
+7. Retry-safe async:
+   - `MarkOutboxFailed`
+   - `RetryPublisher.Publish`
+   - inbox dedupe ở order/payment/notification
+
+Nếu muốn audit backend này ở mức production thật, thay vì đọc từng service từ trên xuống, hãy bắt đầu từ đúng các function trên. Chúng là nơi hệ thống quyết định “một side effect có được commit không”, “một message có được xử lý lặp không”, và “một query có còn đứng vững khi dữ liệu lớn lên không”.

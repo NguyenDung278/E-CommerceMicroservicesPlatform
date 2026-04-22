@@ -29,7 +29,10 @@ import (
 	userclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/grpc"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler"
+	addresshandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/address"
+	notificationpreferencehandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/notificationpreference"
+	userhandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/user"
+	wishlisthandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/wishlist"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
 	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
@@ -150,10 +153,10 @@ func main() {
 		service.WithOAuthProviderClient(oauthClient),
 		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
 	)
-	userHandler := handler.NewUserHandler(userService)
-	addressHandler := handler.NewAddressHandler(addressService)
-	wishlistHandler := handler.NewWishlistHandler(wishlistService)
-	notificationPreferenceHandler := handler.NewNotificationPreferenceHandler(notificationPreferenceService)
+	userHandler := userhandler.NewUserHandler(userService)
+	addressHandler := addresshandler.NewAddressHandler(addressService)
+	wishlistHandler := wishlisthandler.NewWishlistHandler(wishlistService)
+	notificationPreferenceHandler := notificationpreferencehandler.NewNotificationPreferenceHandler(notificationPreferenceService)
 
 	// 7. Set up Echo and register routes.
 	e := echo.New()
