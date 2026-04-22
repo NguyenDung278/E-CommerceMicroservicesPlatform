@@ -199,7 +199,7 @@ export function ProductCard({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-              {product.brand || "Commerce Platform"}
+              {product.brand || "ND Shop"}
             </p>
             <Link
               href={`/products/${product.id}`}

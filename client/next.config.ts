@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 import { nextImageRemotePatterns } from "./src/lib/images/host-policy";
@@ -8,6 +9,9 @@ const gatewayOrigin =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  turbopack: {
+    root: path.join(__dirname, ".."),
+  },
   images: {
     remotePatterns: nextImageRemotePatterns,
   },

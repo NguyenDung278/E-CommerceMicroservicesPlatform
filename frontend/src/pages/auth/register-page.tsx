@@ -496,7 +496,7 @@ export function RegisterPage() {
       <header className="auth-register-topbar">
         <div className="auth-register-topbar-inner">
           <Link className="auth-register-brand" to="/">
-            ND Shop
+            ND Admin
           </Link>
           <button className="auth-register-help" type="button">
             ?
@@ -509,16 +509,16 @@ export function RegisterPage() {
           <div className="auth-register-visual-image" />
           <div className="auth-register-visual-copy">
             <p>
-              Join the <span>Atelier</span> of Curated Essentials.
+              Truy cập <span>ND Admin</span> để điều phối catalog và vận hành.
             </p>
-            <small>Experience a sanctuary of quality, crafted for the modern aesthetic.</small>
+            <small>Không gian dành cho staff/admin theo dõi sản phẩm, payments, returns và analytics.</small>
           </div>
         </section>
 
         <section className="auth-register-form-panel">
           <div className="auth-register-form-card">
             <header className="auth-register-head auth-register-head-compact">
-              <h1>{stage === "verify_email" ? "Verify Email OTP" : "Create Account"}</h1>
+              <h1>{stage === "verify_email" ? "Xác minh OTP email" : "Tạo tài khoản ND Admin"}</h1>
             </header>
 
             {stage === "form" ? (
@@ -532,7 +532,7 @@ export function RegisterPage() {
                     }
                     error={visibleErrors.identifier}
                     htmlFor="register-identifier"
-                    label="Email Or Phone Number"
+                    label="Email hoặc số điện thoại"
                     required
                   >
                     <input
@@ -554,7 +554,7 @@ export function RegisterPage() {
                   <FormField
                     error={visibleErrors.password}
                     htmlFor="register-password"
-                    label="Password"
+                    label="Mật khẩu"
                     required
                   >
                     <input
@@ -573,7 +573,7 @@ export function RegisterPage() {
                   <FormField
                     error={visibleErrors.confirmPassword}
                     htmlFor="register-confirm-password"
-                    label="Confirm Password"
+                    label="Xác nhận mật khẩu"
                     required
                   >
                     <input
@@ -624,7 +624,7 @@ export function RegisterPage() {
                         type="button"
                         onClick={() => void handleSendPhoneOtp()}
                       >
-                        {phoneBusy ? "Đang gửi..." : "Send Telegram OTP"}
+                        {phoneBusy ? "Đang gửi..." : "Gửi Telegram OTP"}
                       </button>
                       <button
                         className="auth-social-button auth-register-inline-button"
@@ -632,7 +632,7 @@ export function RegisterPage() {
                         type="button"
                         onClick={() => void handleVerifyPhoneOtp()}
                       >
-                        Verify OTP
+                        Xác minh OTP
                       </button>
                       {phoneVerification ? (
                         <button
@@ -642,8 +642,8 @@ export function RegisterPage() {
                           onClick={() => void handleResendPhoneOtp()}
                         >
                           {phoneOtpResendIn > 0
-                            ? `Resend in ${phoneOtpResendIn}s`
-                            : "Resend OTP"}
+                            ? `Gửi lại sau ${phoneOtpResendIn}s`
+                            : "Gửi lại OTP"}
                         </button>
                       ) : null}
                     </div>
@@ -668,14 +668,14 @@ export function RegisterPage() {
                   {identifierKind === "phone"
                     ? phoneBusy
                       ? "Đang gửi Telegram OTP..."
-                      : "Send Telegram OTP"
+                      : "Gửi Telegram OTP"
                     : isBusy
                       ? "Đang tạo tài khoản..."
-                      : "Register"}
+                      : "Tạo tài khoản"}
                 </button>
 
                 <div className="auth-login-separator auth-login-separator-compact">
-                  <span>Or continue with</span>
+                  <span>Hoặc tiếp tục với</span>
                 </div>
 
                 <div className="auth-social-grid auth-social-grid-compact">
@@ -685,15 +685,15 @@ export function RegisterPage() {
                     onClick={() => handleOAuthLogin("google")}
                   >
                     <span>G</span>
-                    <span>Continue with Google</span>
+                    <span>Tiếp tục với Google</span>
                   </button>
                 </div>
 
                 <div className="auth-register-footer auth-register-footer-compact">
                   <p>
-                    Already have an account?
+                    Đã có tài khoản?
                     <Link state={location.state} to="/login">
-                      Login
+                      Đăng nhập
                     </Link>
                   </p>
                 </div>
@@ -749,7 +749,7 @@ export function RegisterPage() {
                     type="button"
                     onClick={() => void handleVerifyEmailOtp()}
                   >
-                    {emailBusy ? "Đang xác minh..." : "Verify OTP"}
+                    {emailBusy ? "Đang xác minh..." : "Xác minh OTP"}
                   </button>
                   <button
                     className="auth-social-button"
@@ -758,14 +758,14 @@ export function RegisterPage() {
                     onClick={() => void handleResendEmailOtp()}
                   >
                     {emailOtpResendIn > 0
-                      ? `Resend in ${emailOtpResendIn}s`
-                      : "Resend Email OTP"}
+                      ? `Gửi lại sau ${emailOtpResendIn}s`
+                      : "Gửi lại Email OTP"}
                   </button>
                 </div>
 
                 <div className="auth-register-footer auth-register-footer-compact">
                   <p>
-                    Need to edit your email?
+                    Cần sửa lại email?
                     <button
                       className="auth-register-inline-link"
                       type="button"
@@ -776,7 +776,7 @@ export function RegisterPage() {
                         setEmailOtpCode("");
                       }}
                     >
-                      Back to form
+                      Quay lại form
                     </button>
                   </p>
                 </div>
@@ -788,13 +788,13 @@ export function RegisterPage() {
 
       <footer className="auth-global-footer auth-global-footer-muted">
         <div className="auth-global-footer-inner">
-          <div className="auth-global-footer-brand">ND Shop</div>
+          <div className="auth-global-footer-brand">ND Admin</div>
           <div className="auth-global-footer-links">
             <a href="#">Privacy Policy</a>
             <a href="#">Terms of Service</a>
             <a href="#">Contact Support</a>
           </div>
-          <div className="auth-global-footer-copy">© 2024 ND Shop. All rights reserved.</div>
+          <div className="auth-global-footer-copy">© 2024 ND Admin. All rights reserved.</div>
         </div>
       </footer>
     </div>

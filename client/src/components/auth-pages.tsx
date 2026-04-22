@@ -78,7 +78,7 @@ function AuthShell({
           <div className="absolute inset-0 bg-gradient-to-t from-primary/86 via-primary/50 to-primary/28" />
           <div className="relative flex h-full flex-col justify-between p-12 text-surface lg:p-20">
             <Link href="/" className="font-serif text-4xl font-semibold tracking-[-0.04em]">
-              Commerce Platform
+              ND Shop
             </Link>
             <div className="max-w-xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#efd7ce]">{eyebrow}</p>
@@ -89,9 +89,10 @@ function AuthShell({
             </div>
             <div className="ml-auto hidden w-full max-w-[320px] rounded-[1.1rem] border border-white/10 bg-white/8 p-6 backdrop-blur-md xl:block">
               <span className="block text-[11px] uppercase tracking-[0.26em] text-surface/55">Phiên truy cập</span>
-              <span className="mt-3 block font-serif text-2xl font-semibold tracking-[-0.03em]">Live backend session</span>
+              <span className="mt-3 block font-serif text-2xl font-semibold tracking-[-0.03em]">ND Shop session</span>
               <p className="mt-4 text-sm leading-7 text-surface/72">
-                Refresh token, bootstrap profile và redirect sau đăng nhập đang đi theo contract auth thật của hệ thống.
+                Đăng ký, refresh token, bootstrap profile và redirect sau đăng nhập đều đi theo
+                contract auth thật của hệ thống.
               </p>
             </div>
           </div>
@@ -100,7 +101,7 @@ function AuthShell({
         <section className="flex items-center justify-center px-5 py-10 sm:px-8 lg:px-14">
           <div className="w-full max-w-xl rounded-[1.5rem] bg-surface p-6 shadow-editorial md:p-8">
             <Link href="/" className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary lg:hidden">
-              Commerce Platform
+              ND Shop
             </Link>
             {children}
             {footer ? <div className="mt-8">{footer}</div> : null}

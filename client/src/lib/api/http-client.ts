@@ -6,7 +6,7 @@ import {
   type HttpError,
   type HttpMethod,
   type RequestOptions,
-} from "../../../../shared/web-sdk/http-core";
+} from "@shared/web-sdk/http-core";
 
 const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 

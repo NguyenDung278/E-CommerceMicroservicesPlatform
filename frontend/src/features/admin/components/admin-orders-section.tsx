@@ -30,10 +30,10 @@ export function AdminOrdersSection({
     <section className="admin-console-panel" id="admin-order-ledger">
       <div className="section-heading">
         <div>
-          <h2>Recent Transaction Ledger</h2>
+          <h2>Điều hành đơn hàng</h2>
           <p className="history-subtle">
-            Review recent orders, cancel active ones when needed, and issue full refunds for
-            completed charges.
+            Theo dõi các đơn gần đây, hủy thủ công khi cần, và mở refund cho những charge đã hoàn
+            tất mà không phải rời khỏi luồng vận hành.
           </p>
         </div>
       </div>

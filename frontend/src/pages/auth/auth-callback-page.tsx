@@ -105,16 +105,16 @@ export function AuthCallbackPage() {
     <div className="page-stack">
       <section className="auth-status-shell">
         <aside className="auth-status-story">
-          <div className="auth-status-brand">ND Shop</div>
+          <div className="auth-status-brand">ND Admin</div>
 
           <div className="auth-status-copy">
-            <span className={`auth-status-pill auth-status-pill-${status}`}>
-              {status === "success"
-                ? "Social login ready"
-                : status === "error"
-                  ? "Action needed"
-                  : "Connecting"}
-            </span>
+              <span className={`auth-status-pill auth-status-pill-${status}`}>
+                {status === "success"
+                  ? "Social login ready"
+                  : status === "error"
+                    ? "Action needed"
+                    : "Connecting"}
+              </span>
             <h1>Đăng nhập mạng xã hội được hoàn tất qua backend callback an toàn.</h1>
             <p>
               Trang này chỉ nhận ticket ngắn hạn từ gateway, đổi sang token pair chuẩn của hệ thống
@@ -152,7 +152,7 @@ export function AuthCallbackPage() {
             <div className="auth-status-head">
               <span className="section-kicker">OAuth Callback</span>
               <h2>Hoàn tất đăng nhập</h2>
-              <p>Frontend đang xử lý kết quả callback và đồng bộ phiên với hệ thống ND Shop.</p>
+              <p>Frontend đang xử lý callback và đồng bộ phiên với hệ thống ND Admin.</p>
             </div>
 
             <div

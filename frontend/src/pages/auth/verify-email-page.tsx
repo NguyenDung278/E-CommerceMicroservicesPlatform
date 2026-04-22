@@ -56,7 +56,7 @@ export function VerifyEmailPage() {
     <div className="page-stack">
       <section className="auth-status-shell">
         <aside className="auth-status-story">
-          <div className="auth-status-brand">ND Shop</div>
+          <div className="auth-status-brand">ND Admin</div>
 
           <div className="auth-status-copy">
             <span className={`auth-status-pill auth-status-pill-${status}`}>{statusLabel}</span>

@@ -38,8 +38,8 @@ const defaultLoginForm: LoginFormValues = {
 };
 
 const loginVisualHighlights = [
-  "Operational visibility across catalog, orders, returns, and payments.",
-  "One runtime focused on admin, support, and workbook coordination.",
+  "Theo dõi catalog, đơn hàng, returns và payments trong cùng một nơi.",
+  "Một runtime riêng cho staff/admin, tách biệt hoàn toàn với storefront ND Shop.",
 ];
 
 export function LoginPage() {
@@ -202,10 +202,10 @@ export function LoginPage() {
             <div className="auth-login-visual-content">
               <div className="auth-login-brand">ND Admin</div>
               <div className="auth-login-copy">
-                <h1>Admin workspace for operations, catalog, and order control.</h1>
+                <h1>Không gian vận hành cho catalog, đơn hàng và doanh thu.</h1>
                 <p>
-                  Sign in to manage catalog data, order operations, returns, payments, and workbook
-                  synchronization from one place.
+                  Đăng nhập để thêm sản phẩm, theo dõi đơn đã thanh toán, xử lý returns, và xem
+                  analytics tăng trưởng từ cùng một dashboard.
                 </p>
               </div>
 
@@ -218,22 +218,22 @@ export function LoginPage() {
 
             <div className="auth-login-featured-note">
               <span>Runtime</span>
-              <strong>Admin + Workbook</strong>
+              <strong>ND Admin</strong>
             </div>
           </section>
 
           <section className="auth-login-form-panel">
             <div className="auth-login-form-card">
               <header className="auth-login-form-head">
-                <h2>Welcome Back</h2>
-                <p>Enter your details to access your atelier.</p>
+                <h2>Đăng nhập ND Admin</h2>
+                <p>Dùng tài khoản staff/admin để mở backoffice vận hành.</p>
               </header>
 
               <form className="auth-login-form" noValidate onSubmit={handleLogin}>
                 <FormField
                   error={visibleErrors.identifier}
                   htmlFor="login-identifier"
-                  label="Email Address"
+                  label="Email hoặc số điện thoại"
                   required
                 >
                   <input
@@ -242,7 +242,7 @@ export function LoginPage() {
                     className={inputClassName(Boolean(visibleErrors.identifier))}
                     id="login-identifier"
                     inputMode={loginForm.identifier.includes("@") ? "email" : "text"}
-                    placeholder="name@example.com"
+                    placeholder="admin@ndshop.vn"
                     value={loginForm.identifier}
                     onBlur={() => markTouched("identifier")}
                     onChange={(event) => updateField("identifier", event.target.value)}
@@ -329,13 +329,13 @@ export function LoginPage() {
 
       <footer className="auth-global-footer">
         <div className="auth-global-footer-inner">
-          <div className="auth-global-footer-brand">ND Shop</div>
+          <div className="auth-global-footer-brand">ND Admin</div>
           <div className="auth-global-footer-links">
             <a href="#">Privacy Policy</a>
             <a href="#">Terms of Service</a>
             <a href="#">Contact Support</a>
           </div>
-          <div className="auth-global-footer-copy">© 2024 ND Shop. All rights reserved.</div>
+          <div className="auth-global-footer-copy">© 2024 ND Admin. All rights reserved.</div>
         </div>
       </footer>
     </div>

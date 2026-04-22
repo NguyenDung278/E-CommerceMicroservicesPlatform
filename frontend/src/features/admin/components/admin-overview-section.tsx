@@ -1,7 +1,7 @@
 import type { AdminOverviewCard } from "./admin-console-types";
 
 type AdminOverviewSectionProps = {
-  feedback: string;
+  capabilities: string[];
   isDevelopmentOperator: boolean;
   isSyncingWorkbook: boolean;
   overviewCards: AdminOverviewCard[];
@@ -11,7 +11,7 @@ type AdminOverviewSectionProps = {
 };
 
 export function AdminOverviewSection({
-  feedback,
+  capabilities,
   isDevelopmentOperator,
   isSyncingWorkbook,
   overviewCards,
@@ -32,17 +32,24 @@ export function AdminOverviewSection({
 
       <section className="admin-console-hero" id="admin-overview">
         <div className="admin-console-hero-copy">
-          <span className="section-kicker">Control Room</span>
-          <h1>Operations Dashboard</h1>
+          <span className="section-kicker">ND Admin</span>
+          <h1>Backoffice điều hành sản phẩm, thanh toán và tăng trưởng.</h1>
           <p className="admin-console-hero-subtitle">
-            Monitor revenue, orders, customers, offers, and product updates from a single working
-            surface.
+            Một màn hình để thêm sản phẩm mới, theo dõi đơn đã thanh toán thành công, kiểm tra
+            refund queue, đo doanh thu, và xem analytics hành vi tìm kiếm.
           </p>
+          <div className="admin-console-capability-list">
+            {capabilities.map((item) => (
+              <span className="admin-console-capability-pill" key={item}>
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="admin-console-hero-actions">
           <button className="ghost-button" type="button" onClick={onRefreshDashboardData}>
-            Refresh data
+            Làm mới dữ liệu
           </button>
           <button
             className="ghost-button"
@@ -50,15 +57,13 @@ export function AdminOverviewSection({
             type="button"
             onClick={onSyncCollections}
           >
-            {isSyncingWorkbook ? "Updating collections..." : "Update collection pages"}
+            {isSyncingWorkbook ? "Đang đồng bộ collection..." : "Đồng bộ collection"}
           </button>
           <button className="primary-button" type="button" onClick={onStartNewProductEntry}>
-            + New product
+            + Thêm sản phẩm
           </button>
         </div>
       </section>
-
-      {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
 
       <div className="admin-console-stats">
         {overviewCards.map((card) => (

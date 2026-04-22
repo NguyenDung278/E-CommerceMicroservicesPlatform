@@ -17,6 +17,7 @@ import {
   ProductCardSkeleton,
   SectionHeading,
 } from "@/components/storefront-ui";
+import { useAuthState } from "@/hooks/useAuth";
 import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { productApi } from "@/lib/api/product";
@@ -42,6 +43,7 @@ const emptyHomeState: HomeState = {
 };
 
 export function HomePage({ initialData }: { initialData?: HomePageInitialData }) {
+  const { isAuthenticated } = useAuthState();
   const { addItem } = useCartActions();
   const { isSaved, toggleWishlist } = useWishlist();
   const [busyProductId, setBusyProductId] = useState("");
@@ -157,7 +159,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
               src={
                 heroProduct
                   ? heroProduct.image_urls[0] || heroProduct.image_url || fallbackImageForProduct(heroProduct.name)
-                  : fallbackImageForProduct("Commerce Platform")
+                  : fallbackImageForProduct("ND Shop")
               }
               fill
               priority
@@ -175,20 +177,31 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
               className="lg:col-span-7"
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#efd7ce]">
-                Bộ sưu tập mới
+                ND Shop
               </p>
               <h1 className="headline-display mt-6 max-w-4xl text-surface">
-                Không gian mua sắm giàu nhịp điệu, bám backend thật.
+                Đăng ký, chọn sản phẩm và mua sắm trên storefront thật.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-surface/84 md:text-xl">
-                Catalog, giỏ hàng, checkout, tài khoản và lịch sử đơn hàng đều đồng bộ trực tiếp với product-service, user-service, order-service và payment-service hiện có trong repo.
+                ND Shop là giao diện dành cho người mua: đăng ký tài khoản, duyệt catalog, thêm vào
+                giỏ, checkout, thanh toán và theo dõi đơn hàng trên backend microservices hiện có.
               </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link href="/products" className={buttonStyles({ size: "lg" })}>
-                  Khám phá catalog
+                  Mua sản phẩm
                   <ArrowRight className="h-4 w-4" />
                 </Link>
-                {heroProduct ? (
+                {!isAuthenticated ? (
+                  <Link
+                    href="/register"
+                    className={cn(
+                      buttonStyles({ variant: "secondary", size: "lg" }),
+                      "border-white/20 bg-white/10 text-surface hover:bg-white/16 hover:text-surface",
+                    )}
+                  >
+                    Tạo tài khoản ND Shop
+                  </Link>
+                ) : heroProduct ? (
                   <Link
                     href={`/products/${heroProduct.id}`}
                     className={cn(
@@ -214,7 +227,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
               <div className="mt-5 grid gap-5">
                 <div>
                   <p className="font-serif text-3xl italic leading-snug text-surface/88">
-                    “Inventory đồng bộ theo thời gian thực cho từng sản phẩm active.”
+                    “Catalog, giỏ hàng và checkout đang chạy trên contract backend thật.”
                   </p>
                 </div>
                 <div>
@@ -231,6 +244,56 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
                 </div>
               </div>
             </motion.aside>
+          </div>
+        </section>
+
+        <section className="shell section-spacing">
+          <SectionHeading
+            eyebrow="Hành trình mua hàng"
+            title="ND Shop tách riêng cho khách mua, từ đăng ký đến thanh toán."
+            description="Giao diện shopper được chia rõ với ND Admin. Người dùng có thể tạo tài khoản, chọn sản phẩm, thanh toán và quay lại xem lịch sử đơn hàng mà không bị lẫn với màn vận hành nội bộ."
+          />
+
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                title: "1. Tạo tài khoản",
+                description:
+                  "Đăng ký bằng email, Google hoặc số điện thoại để lưu hồ sơ, địa chỉ giao hàng và nhận thông báo.",
+                href: isAuthenticated ? "/profile" : "/register",
+                cta: isAuthenticated ? "Mở hồ sơ" : "Đăng ký ngay",
+              },
+              {
+                title: "2. Chọn sản phẩm",
+                description:
+                  "Duyệt catalog, xem tồn kho, lưu wishlist, rồi thêm sản phẩm vào giỏ hàng trước khi checkout.",
+                href: "/products",
+                cta: "Xem catalog",
+              },
+              {
+                title: "3. Thanh toán và theo dõi",
+                description:
+                  "Checkout qua payment flow hiện có, sau đó xem đơn hàng, thanh toán, hoàn trả và trạng thái xử lý.",
+                href: isAuthenticated ? "/myorders" : "/login?redirect=%2Fmyorders",
+                cta: "Theo dõi đơn hàng",
+              },
+            ].map((item) => (
+              <article
+                key={item.title}
+                className="rounded-[1.75rem] border border-outline-variant/25 bg-surface p-6 shadow-editorial"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-tertiary">
+                  ND Shop
+                </p>
+                <h3 className="mt-4 font-serif text-[2rem] font-semibold tracking-[-0.03em] text-primary">
+                  {item.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-on-surface-variant">{item.description}</p>
+                <Link href={item.href} className={cn(buttonStyles({ variant: "secondary" }), "mt-6")}>
+                  {item.cta}
+                </Link>
+              </article>
+            ))}
           </div>
         </section>
 

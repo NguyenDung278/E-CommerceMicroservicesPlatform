@@ -6,10 +6,11 @@ export function SiteFooter() {
       <div className="shell grid gap-10 py-12 md:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,1fr))]">
         <div>
           <p className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-            Commerce Platform
+            ND Shop
           </p>
           <p className="mt-4 max-w-md text-sm leading-7 text-on-surface-variant">
-            Storefront thương mại điện tử được nối trực tiếp với product-service, user-service, order-service và payment-service của repo hiện tại.
+            Storefront thương mại điện tử dành cho người mua, kết nối trực tiếp với product-service,
+            user-service, order-service và payment-service của repo hiện tại.
           </p>
         </div>
 

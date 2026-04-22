@@ -220,7 +220,7 @@ export function CartPage() {
                             <Link href={`/products/${item.product_id}`} className="mt-2 block font-serif text-[2rem] font-semibold tracking-[-0.03em] text-primary">
                               {item.name}
                             </Link>
-                            <p className="mt-3 text-sm text-on-surface-variant">{product?.brand || "Commerce Platform"}</p>
+                            <p className="mt-3 text-sm text-on-surface-variant">{product?.brand || "ND Shop"}</p>
                           </div>
                           <strong className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                             {formatCurrency(item.price * item.quantity)}

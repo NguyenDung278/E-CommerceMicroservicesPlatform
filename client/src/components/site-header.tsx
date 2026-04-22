@@ -32,7 +32,7 @@ export function SiteHeader() {
         <div className="shell flex h-18 items-center justify-between gap-6 py-3">
           <div className="flex items-center gap-8">
             <Link href="/" className="font-serif text-[1.85rem] font-semibold tracking-[-0.04em] text-primary">
-              Commerce Platform
+              ND Shop
             </Link>
 
             <nav className="hidden items-center gap-7 xl:flex" aria-label="Main navigation">
@@ -62,7 +62,7 @@ export function SiteHeader() {
               aria-label="Tìm sản phẩm"
             >
               <Search className="h-4 w-4 text-outline" />
-              <span>Tìm sản phẩm...</span>
+              <span>Tìm sản phẩm tại ND Shop...</span>
             </Link>
 
             <Link
@@ -100,13 +100,28 @@ export function SiteHeader() {
               {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
 
-            <Link
-              href={isAuthenticated ? "/profile" : "/login"}
-              className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "hidden rounded-full px-4 md:inline-flex")}
-            >
-              <UserRound className="h-4 w-4" />
-              <span>{isAuthenticated ? "Tài khoản" : "Đăng nhập"}</span>
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/profile"
+                className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "hidden rounded-full px-4 md:inline-flex")}
+              >
+                <UserRound className="h-4 w-4" />
+                <span>Tài khoản</span>
+              </Link>
+            ) : (
+              <div className="hidden items-center gap-2 md:flex">
+                <Link
+                  href="/login"
+                  className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "rounded-full px-4")}
+                >
+                  <UserRound className="h-4 w-4" />
+                  <span>Đăng nhập</span>
+                </Link>
+                <Link href="/register" className={cn(buttonStyles({ size: "sm" }), "rounded-full px-4")}>
+                  Đăng ký
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -131,13 +146,32 @@ export function SiteHeader() {
                   {item.label}
                 </Link>
               ))}
-              <Link
-                href={isAuthenticated ? "/profile" : "/login"}
-                className="rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold uppercase tracking-[0.24em] text-on-primary"
-                onClick={() => setMenuOpen(false)}
-              >
-                {isAuthenticated ? "Vào tài khoản" : "Đăng nhập"}
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  href="/profile"
+                  className="rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold uppercase tracking-[0.24em] text-on-primary"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Vào tài khoản
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="rounded-2xl bg-surface-container-low px-4 py-4 text-center text-sm font-semibold uppercase tracking-[0.24em] text-primary"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Đăng nhập
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="rounded-2xl bg-primary px-4 py-4 text-center text-sm font-semibold uppercase tracking-[0.24em] text-on-primary"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Đăng ký
+                  </Link>
+                </>
+              )}
             </nav>
           </motion.div>
         ) : null}

@@ -61,7 +61,7 @@ export function preloadRouteByPath(href: string) {
     return preloadRouteModule("authCallback");
   }
 
-  if (pathname === "/admin") {
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return preloadRouteModule("admin");
   }
 

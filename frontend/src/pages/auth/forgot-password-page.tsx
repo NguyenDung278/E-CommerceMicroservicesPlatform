@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
       <header className="auth-minimal-topbar">
         <div className="auth-minimal-topbar-inner">
           <Link className="auth-minimal-brand" to="/">
-            ND Shop
+            ND Admin
           </Link>
         </div>
       </header>
@@ -51,21 +51,21 @@ export function ForgotPasswordPage() {
       <main className="auth-focus-main">
         <section className="auth-recovery-card">
           <div className="auth-recovery-head">
-            <h1>Recover Password</h1>
-            <p>Enter your email to receive a verification code</p>
+            <h1>Khôi phục mật khẩu</h1>
+            <p>Nhập email để nhận liên kết đặt lại mật khẩu cho tài khoản admin/staff.</p>
           </div>
 
           {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
           {error ? <div className="feedback feedback-error">{error}</div> : null}
 
           <form className="auth-recovery-form" noValidate onSubmit={handleSubmit}>
-            <FormField htmlFor="forgot-password-email" label="Email Address" required>
+            <FormField htmlFor="forgot-password-email" label="Email" required>
               <input
                 id="forgot-password-email"
                 autoComplete="email"
                 className="auth-underline-input"
                 inputMode="email"
-                placeholder="your@email.com"
+                placeholder="admin@ndshop.vn"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -74,12 +74,12 @@ export function ForgotPasswordPage() {
 
             <div className="auth-recovery-actions">
               <button className="primary-button auth-submit-full" disabled={isBusy} type="submit">
-                {isBusy ? "Đang gửi liên kết..." : "Send Verification Code"}
+                {isBusy ? "Đang gửi liên kết..." : "Gửi liên kết đặt lại"}
               </button>
 
               <div className="auth-recovery-back">
                 <Link className="auth-text-link" to="/login">
-                  Back to Login
+                  Quay lại đăng nhập
                 </Link>
               </div>
             </div>
@@ -89,7 +89,7 @@ export function ForgotPasswordPage() {
 
       <footer className="auth-minimal-footer">
         <div className="auth-minimal-footer-inner">
-          <p>© 2024 ND Shop. All Rights Reserved.</p>
+          <p>© 2024 ND Admin. All rights reserved.</p>
           <nav>
             <a href="#">Privacy Policy</a>
             <a href="#">Terms of Service</a>

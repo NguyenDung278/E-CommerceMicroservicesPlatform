@@ -7,6 +7,7 @@ export type AdminOverviewCard = {
 export type AdminNavItem = {
   id: string;
   group: string;
+  href: string;
   label: string;
   helper: string;
 };

@@ -157,13 +157,16 @@
   gap: 4px;
   width: 100%;
   padding: 14px 16px;
+  border: 1px solid transparent;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.04);
   color: #fbf9f4;
   text-align: left;
+  text-decoration: none;
   transition:
     transform 150ms ease,
     background-color 150ms ease,
+    border-color 150ms ease,
     box-shadow 150ms ease;
 }
 
@@ -171,6 +174,12 @@
   transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.admin-console-sidebar-link-active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(217, 160, 91, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(217, 160, 91, 0.18);
 }
 
 .admin-console-sidebar-link strong {
@@ -240,6 +249,26 @@
   max-width: 58ch;
 }
 
+.admin-console-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.admin-console-capability-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(16, 62, 53, 0.08);
+  color: #103e35;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .admin-console-hero h1 {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3rem);
@@ -303,6 +332,50 @@
 
 .admin-console-panel {
   padding: 28px;
+}
+
+.admin-console-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.admin-console-route-card {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(22, 33, 29, 0.08);
+  background: rgba(255, 255, 255, 0.84);
+  color: #16211d;
+  text-decoration: none;
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.admin-console-route-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(16, 62, 53, 0.2);
+  box-shadow: 0 18px 36px rgba(27, 28, 25, 0.08);
+}
+
+.admin-console-route-card strong {
+  font-size: 1.02rem;
+}
+
+.admin-console-route-card p {
+  margin: 0;
+  color: rgba(22, 33, 29, 0.66);
+}
+
+.admin-console-route-eyebrow {
+  color: rgba(22, 33, 29, 0.56);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .admin-console-analytics-panel {

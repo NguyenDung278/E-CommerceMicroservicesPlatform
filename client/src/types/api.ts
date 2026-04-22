@@ -57,4 +57,4 @@ export type {
   UserProfile,
   WishlistAlert,
   WishlistItem,
-} from "../../../shared/types/api";
+} from "@shared/types/api";

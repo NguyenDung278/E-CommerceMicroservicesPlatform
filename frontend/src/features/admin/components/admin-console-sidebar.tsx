@@ -1,3 +1,5 @@
+import { NavLink } from "react-router-dom";
+
 import type { AdminNavItem } from "./admin-console-types";
 
 type AdminConsoleSidebarProps = {
@@ -5,7 +7,6 @@ type AdminConsoleSidebarProps = {
   currentRoleLabel: string;
   isDevelopmentOperator: boolean;
   snapshotLabel: string;
-  onNavigate: (sectionId: string) => void;
 };
 
 export function AdminConsoleSidebar({
@@ -13,7 +14,6 @@ export function AdminConsoleSidebar({
   currentRoleLabel,
   isDevelopmentOperator,
   snapshotLabel,
-  onNavigate,
 }: AdminConsoleSidebarProps) {
   const groupNames = Array.from(new Set(adminNavItems.map((item) => item.group)));
 
@@ -21,6 +21,7 @@ export function AdminConsoleSidebar({
     <aside className="admin-console-sidebar">
       <div className="admin-console-sidebar-brand">
         <span className="admin-console-sidebar-mark">ND Admin</span>
+        <p>Catalog, orders, payments, returns và analytics cho toàn bộ nền tảng.</p>
       </div>
 
       <div className="admin-console-sidebar-groups">
@@ -31,15 +32,19 @@ export function AdminConsoleSidebar({
               {adminNavItems
                 .filter((item) => item.group === groupName)
                 .map((item) => (
-                  <button
-                    className="admin-console-sidebar-link"
+                  <NavLink
+                    className={({ isActive }) =>
+                      isActive
+                        ? "admin-console-sidebar-link admin-console-sidebar-link-active"
+                        : "admin-console-sidebar-link"
+                    }
+                    end={item.href === "/admin"}
                     key={item.id}
-                    type="button"
-                    onClick={() => onNavigate(item.id)}
+                    to={item.href}
                   >
                     <strong>{item.label}</strong>
                     <span>{item.helper}</span>
-                  </button>
+                  </NavLink>
                 ))}
             </div>
           </div>
@@ -53,7 +58,7 @@ export function AdminConsoleSidebar({
           <span className="admin-console-health-fill" />
         </div>
         <p>
-          Current access: <strong>{currentRoleLabel}</strong>
+          Quyền hiện tại: <strong>{currentRoleLabel}</strong>
           {isDevelopmentOperator ? " • Preview workspace" : ""}
         </p>
       </div>

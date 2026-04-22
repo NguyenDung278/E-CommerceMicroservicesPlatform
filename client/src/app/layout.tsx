@@ -6,11 +6,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Commerce Platform",
-    template: "%s | Commerce Platform",
+    default: "ND Shop",
+    template: "%s | ND Shop",
   },
   description:
-    "Storefront thương mại điện tử kết nối trực tiếp với backend Go microservices hiện có trong repo.",
+    "ND Shop là storefront thương mại điện tử để người dùng đăng ký, mua sản phẩm, thanh toán và theo dõi đơn hàng trên backend microservices hiện tại.",
 };
 
 export default function RootLayout({

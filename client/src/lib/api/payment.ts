@@ -3,7 +3,7 @@ import { normalizePayment, normalizePaymentList } from "@/lib/api/normalizers";
 import {
   createPaymentApi,
   type SharedProcessPaymentData,
-} from "../../../../shared/web-sdk/api/payment";
+} from "@shared/web-sdk/api/payment";
 
 export type ProcessPaymentData = SharedProcessPaymentData<
   "manual" | "momo"

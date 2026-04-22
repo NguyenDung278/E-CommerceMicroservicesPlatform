@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import {
   AdminCatalogSection,
@@ -6,6 +7,7 @@ import {
   AdminCouponsSection,
   AdminOrdersSection,
   AdminOverviewSection,
+  AdminPaymentsSection,
   AdminReportSection,
   AdminReturnsSection,
   AdminUsersSection,
@@ -57,7 +59,35 @@ const adminReturnPageSize = 6;
 const adminOrderPageSize = 8;
 const returnQueueRefreshIntervalMs = 20_000;
 
+type AdminView =
+  | "overview"
+  | "revenue"
+  | "orders"
+  | "payments"
+  | "returns"
+  | "products"
+  | "coupons"
+  | "users";
+
+const adminViewByPath: Record<string, AdminView> = {
+  "/admin": "overview",
+  "/admin/revenue": "revenue",
+  "/admin/orders": "orders",
+  "/admin/payments": "payments",
+  "/admin/returns": "returns",
+  "/admin/products": "products",
+  "/admin/coupons": "coupons",
+  "/admin/users": "users",
+};
+
+function normalizeAdminPathname(pathname: string) {
+  const normalizedPathname = pathname.replace(/\/+$/, "");
+  return normalizedPathname || pathname;
+}
+
 export function AdminPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { token, isAdmin, user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -866,17 +896,6 @@ export function AdminPage() {
     }));
   }
 
-  function scrollToAdminSection(sectionId: string) {
-    if (typeof document === "undefined") {
-      return;
-    }
-
-    document.getElementById(sectionId)?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }
-
   function refreshDashboardData() {
     void loadReport(reportDays);
     void loadAdminOrders();
@@ -891,109 +910,175 @@ export function AdminPage() {
 
   function startNewProductEntry() {
     resetForm();
-    scrollToAdminSection("admin-product-workbench");
+    navigate("/admin/products");
   }
 
   const operationalOrderCount = orders.filter(
     (order) => order.status === "pending" || order.status === "paid"
   ).length;
+  const paidOrderCount = orders.filter((order) => order.status === "paid").length;
+  const completedChargeCount = Object.values(paymentsByOrder)
+    .flat()
+    .filter(
+      (payment) => payment.transaction_type === "charge" && payment.status === "completed"
+    ).length;
   const activeReturnCount = returns.filter((item) =>
     ["requested", "approved", "received", "refund_pending"].includes(item.status)
   ).length;
   const managedCustomerCount = isAdmin
     ? users.length
     : new Set(orders.map((order) => order.user_id)).size;
+  const overviewCapabilities = [
+    "Thêm sản phẩm và biến thể",
+    "Theo dõi đơn đã thanh toán",
+    "Xem doanh thu và AOV",
+    "Kiểm tra search analytics",
+  ];
   const overviewCards = [
     {
-      label: "Total Sales",
+      label: "Doanh thu",
       value: report ? formatCurrency(report.total_revenue) : "--",
       caption: report
         ? `${report.order_count} đơn trong ${report.window_days} ngày gần nhất`
-        : "Dang tai tong quan doanh thu",
+        : "Đang tải doanh thu tổng quan",
     },
     {
-      label: "Active Orders",
-      value: String(operationalOrderCount),
+      label: "Đơn đã thanh toán",
+      value: String(paidOrderCount),
       caption:
-        operationalOrderCount > 0 || activeReturnCount > 0
-          ? `${operationalOrderCount} đơn và ${activeReturnCount} return đang cần theo dõi`
-          : "Không có đơn cần can thiệp thủ công",
+        completedChargeCount > 0
+          ? `${completedChargeCount} giao dịch charge completed đã được ghi nhận`
+          : "Chưa có giao dịch completed trong batch hiện tại",
     },
     {
-      label: "Catalog Items",
+      label: "Catalog sản phẩm",
       value: String(products.length),
       caption: editingProductId
         ? "Biểu mẫu đang ở chế độ chỉnh sửa"
-        : "Catalog sẵn sàng nhận sản phẩm mới",
+        : "Sẵn sàng thêm SKU, ảnh và biến thể mới",
     },
     {
-      label: isAdmin ? "Managed Users" : "Visible Customers",
-      value: String(managedCustomerCount),
-      caption: isAdmin ? "San sang cap nhat quyen truy cap" : "Tong hop tu don hang hien co",
+      label:
+        operationalOrderCount > 0 || activeReturnCount > 0 ? "Vận hành cần theo dõi" : "Khách hàng",
+      value:
+        operationalOrderCount > 0 || activeReturnCount > 0
+          ? String(operationalOrderCount + activeReturnCount)
+          : String(managedCustomerCount),
+      caption:
+        operationalOrderCount > 0 || activeReturnCount > 0
+          ? `${operationalOrderCount} đơn và ${activeReturnCount} yêu cầu return đang mở`
+          : isAdmin
+            ? "Sẵn sàng cập nhật quyền truy cập"
+            : "Tổng hợp từ đơn hàng hiện có",
     },
   ];
+  const adminPathname = normalizeAdminPathname(location.pathname);
+  const activeAdminView = adminViewByPath[adminPathname];
   const adminNavItems = [
     {
-      id: "admin-overview",
-      group: "Core Analytics",
-      label: "Overview",
-      helper: "Doanh thu, nhịp vận hành, và trạng thái tổng thể",
+      id: "overview",
+      href: "/admin",
+      group: "Điều hành",
+      label: "Tổng quan",
+      helper: "Snapshot điều hành, KPI tổng quan và lối tắt sang từng bàn vận hành",
     },
     {
-      id: "admin-order-ledger",
-      group: "Core Analytics",
-      label: "Orders",
-      helper: "Theo dõi đơn hàng và giao dịch gần đây",
+      id: "revenue",
+      href: "/admin/revenue",
+      group: "Điều hành",
+      label: "Doanh thu",
+      helper: "Báo cáo kinh doanh, top sản phẩm, search analytics và delivery audit",
     },
     {
-      id: "admin-return-timeline",
-      group: "Core Analytics",
-      label: "Returns",
+      id: "orders",
+      href: "/admin/orders",
+      group: "Điều hành",
+      label: "Đơn hàng",
+      helper: "Theo dõi vòng đời đơn hàng, thao tác hủy và xem payment theo từng order",
+    },
+    {
+      id: "payments",
+      href: "/admin/payments",
+      group: "Điều hành",
+      label: "Payments",
+      helper: "Charge completed, refund, lỗi gateway và ledger giao dịch riêng",
+    },
+    {
+      id: "returns",
+      href: "/admin/returns",
+      group: "Điều hành",
+      label: "Trả hàng",
       helper: "Trả hàng, refund queue, và lịch sử xử lý",
     },
     {
-      id: "admin-user-governance",
-      group: "Management",
-      label: "Users",
+      id: "users",
+      href: "/admin/users",
+      group: "Quản trị",
+      label: "Người dùng",
       helper: "Phân quyền và xác minh tài khoản",
     },
     {
-      id: "admin-coupon-workbench",
-      group: "Management",
-      label: "Coupons",
+      id: "coupons",
+      href: "/admin/coupons",
+      group: "Quản trị",
+      label: "Coupon",
       helper: "Ưu đãi, điều kiện áp dụng, và thời hạn",
     },
     {
-      id: "admin-product-workbench",
-      group: "Management",
-      label: "Catalog",
+      id: "products",
+      href: "/admin/products",
+      group: "Quản trị",
+      label: "Sản phẩm",
       helper: "Sản phẩm, hình ảnh, và biến thể",
     },
-  ].filter((item) => item.id !== "admin-user-governance" || isAdmin);
-  const snapshotLabel = report ? `Snapshot ${report.window_days}d` : "Loading snapshot";
+  ].filter((item) => item.id !== "users" || isAdmin);
+  const adminQuickLinks = adminNavItems.filter((item) => item.id !== "overview");
+  const snapshotLabel = report ? `ND Admin • ${report.window_days} ngày` : "Đang tải snapshot";
 
-  return (
-    <div className="admin-console-page">
-      <div className="admin-console-shell">
-        <AdminConsoleSidebar
-          adminNavItems={adminNavItems}
-          currentRoleLabel={currentRoleLabel}
-          isDevelopmentOperator={isDevelopmentOperator}
-          snapshotLabel={snapshotLabel}
-          onNavigate={scrollToAdminSection}
-        />
+  if (!activeAdminView || (activeAdminView === "users" && !isAdmin)) {
+    return <Navigate replace to="/admin" />;
+  }
 
-        <div className="admin-console-main">
-          <AdminOverviewSection
-            feedback={feedback}
-            isDevelopmentOperator={isDevelopmentOperator}
-            isSyncingWorkbook={isSyncingWorkbook}
-            overviewCards={overviewCards}
-            onRefreshDashboardData={refreshDashboardData}
-            onStartNewProductEntry={startNewProductEntry}
-            onSyncCollections={() => void handleSyncAllProductsToWorkbook()}
-          />
+  function renderActiveAdminView() {
+    switch (activeAdminView) {
+      case "overview":
+        return (
+          <>
+            <AdminOverviewSection
+              capabilities={overviewCapabilities}
+              isDevelopmentOperator={isDevelopmentOperator}
+              isSyncingWorkbook={isSyncingWorkbook}
+              overviewCards={overviewCards}
+              onRefreshDashboardData={refreshDashboardData}
+              onStartNewProductEntry={startNewProductEntry}
+              onSyncCollections={() => void handleSyncAllProductsToWorkbook()}
+            />
 
+            <section className="admin-console-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Đi thẳng tới khu vực nghiệp vụ</h2>
+                  <p className="history-subtle">
+                    Chọn đúng màn hình theo công việc: quản lý sản phẩm, doanh thu, payments, đơn
+                    hàng hoặc returns.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-console-route-grid">
+                {adminQuickLinks.map((item) => (
+                  <Link className="admin-console-route-card" key={item.id} to={item.href}>
+                    <span className="admin-console-route-eyebrow">{item.group}</span>
+                    <strong>{item.label}</strong>
+                    <p>{item.helper}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </>
+        );
+      case "revenue":
+        return (
           <AdminReportSection
             isLoadingReport={isLoadingReport}
             report={report}
@@ -1003,7 +1088,9 @@ export function AdminPage() {
             reportWindowOptions={reportWindowOptions}
             onSelectWindow={setReportDays}
           />
-
+        );
+      case "orders":
+        return (
           <AdminOrdersSection
             busyOrderId={busyOrderId}
             busyRefundId={busyRefundId}
@@ -1021,7 +1108,27 @@ export function AdminPage() {
             onCancelOrder={(order) => void handleManualCancel(order)}
             onRefund={(payment) => void handleRefund(payment)}
           />
-
+        );
+      case "payments":
+        return (
+          <AdminPaymentsSection
+            busyRefundId={busyRefundId}
+            hasMoreOrders={Boolean(adminOrderMeta.has_next)}
+            isLoadingOrders={isLoadingOrders}
+            isLoadingMoreOrders={isLoadingMoreOrders}
+            orders={orders}
+            paymentsByOrder={paymentsByOrder}
+            onLoadMoreOrders={() =>
+              void loadAdminOrders({
+                append: true,
+                cursor: adminOrderMeta.next_cursor,
+              })
+            }
+            onRefund={(payment) => void handleRefund(payment)}
+          />
+        );
+      case "returns":
+        return (
           <AdminReturnsSection
             busyReturnAction={busyReturnAction}
             busyReturnId={busyReturnId}
@@ -1045,24 +1152,9 @@ export function AdminPage() {
               void handleReturnStatusUpdate(returnRequest, status)
             }
           />
-
-          {isAdmin ? (
-            <AdminUsersSection
-              busyUserId={busyUserId}
-              isLoadingUsers={isLoadingUsers}
-              users={users}
-              onRoleChange={(userId, role) => void handleRoleChange(userId, role)}
-            />
-          ) : null}
-
-          <AdminCouponsSection
-            couponForm={couponForm}
-            coupons={coupons}
-            isCreatingCoupon={isCreatingCoupon}
-            setCouponForm={setCouponForm}
-            onSubmit={handleCreateCoupon}
-          />
-
+        );
+      case "products":
+        return (
           <AdminCatalogSection
             busyProductId={busyProductId}
             editingProductId={editingProductId}
@@ -1090,6 +1182,42 @@ export function AdminPage() {
             onUpdateVariantRow={updateVariantRow}
             onUploadImages={() => void handleUploadImages()}
           />
+        );
+      case "coupons":
+        return (
+          <AdminCouponsSection
+            couponForm={couponForm}
+            coupons={coupons}
+            isCreatingCoupon={isCreatingCoupon}
+            setCouponForm={setCouponForm}
+            onSubmit={handleCreateCoupon}
+          />
+        );
+      case "users":
+        return isAdmin ? (
+          <AdminUsersSection
+            busyUserId={busyUserId}
+            isLoadingUsers={isLoadingUsers}
+            users={users}
+            onRoleChange={(userId, role) => void handleRoleChange(userId, role)}
+          />
+        ) : null;
+    }
+  }
+
+  return (
+    <div className="admin-console-page">
+      <div className="admin-console-shell">
+        <AdminConsoleSidebar
+          adminNavItems={adminNavItems}
+          currentRoleLabel={currentRoleLabel}
+          isDevelopmentOperator={isDevelopmentOperator}
+          snapshotLabel={snapshotLabel}
+        />
+
+        <div className="admin-console-main">
+          {feedback ? <div className="feedback feedback-info">{feedback}</div> : null}
+          {renderActiveAdminView()}
         </div>
       </div>
     </div>

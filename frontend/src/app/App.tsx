@@ -75,10 +75,10 @@ function AccessDeniedPage() {
   return (
     <main className="page-stack">
       <section className="page-state">
-        <h1>Access denied</h1>
+        <h1>Không đủ quyền truy cập ND Admin</h1>
         <p>
           Tài khoản hiện tại có role <strong>{roleLabel}</strong> và không được phép truy cập khu
-          vực admin/workbook của `frontend`.
+          vực backoffice ND Admin.
         </p>
         <div className="button-row">
           <button className="primary-button" type="button" onClick={logout}>
@@ -106,7 +106,7 @@ export default function App() {
           <Route element={<AccessDeniedPage />} path="/forbidden" />
           <Route
             element={<ProtectedRoute allowStaff>{withSuspense(<AdminPage />)}</ProtectedRoute>}
-            path="/admin"
+            path="/admin/*"
           />
           <Route element={<Navigate replace to="/" />} path="*" />
         </Routes>

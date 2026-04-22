@@ -30,7 +30,8 @@ export function AdminReportSection({
         <div>
           <h2>Báo cáo kinh doanh</h2>
           <p className="history-subtle">
-            Track revenue, order volume, and standout products across the selected time window.
+            Doanh thu, đơn đã thanh toán, top sản phẩm và tín hiệu analytics trong khoảng thời gian
+            bạn chọn.
           </p>
         </div>
         <div className="category-filter-row">
@@ -86,9 +87,9 @@ export function AdminReportSection({
               {searchAnalytics?.top_queries.map((item) => (
                 <div className="history-item-preview" key={`${item.source}-${item.query}`}>
                   <strong>{item.query}</strong>
-                  <span>Source: {item.source}</span>
-                  <span>Requests: {item.request_count}</span>
-                  <span>Avg results: {item.average_result_count.toFixed(1)}</span>
+                  <span>Nguồn: {item.source}</span>
+                  <span>Lượt tìm: {item.request_count}</span>
+                  <span>Kết quả TB: {item.average_result_count.toFixed(1)}</span>
                 </div>
               ))}
               {(searchAnalytics?.top_queries.length ?? 0) === 0 ? (
@@ -103,9 +104,9 @@ export function AdminReportSection({
               {searchAnalytics?.zero_result_queries.map((item) => (
                 <div className="history-item-preview" key={`${item.source}-${item.query}-zero`}>
                   <strong>{item.query}</strong>
-                  <span>Source: {item.source}</span>
-                  <span>Zero-result hits: {item.zero_result_count}</span>
-                  <span>Last seen: {item.last_seen_at || "n/a"}</span>
+                  <span>Nguồn: {item.source}</span>
+                  <span>Số lần không có kết quả: {item.zero_result_count}</span>
+                  <span>Lần cuối: {item.last_seen_at || "n/a"}</span>
                 </div>
               ))}
               {(searchAnalytics?.zero_result_queries.length ?? 0) === 0 ? (
@@ -120,9 +121,9 @@ export function AdminReportSection({
               {searchAnalytics?.top_clicked_queries.map((item) => (
                 <div className="history-item-preview" key={`${item.source}-${item.query}-click`}>
                   <strong>{item.query}</strong>
-                  <span>Source: {item.source}</span>
-                  <span>Clicks: {item.click_count}</span>
-                  <span>Last seen: {item.last_seen_at || "n/a"}</span>
+                  <span>Nguồn: {item.source}</span>
+                  <span>Lượt click: {item.click_count}</span>
+                  <span>Lần cuối: {item.last_seen_at || "n/a"}</span>
                 </div>
               ))}
               {(searchAnalytics?.top_clicked_queries.length ?? 0) === 0 ? (
@@ -142,9 +143,9 @@ export function AdminReportSection({
                   <strong>
                     {item.filter_key}: {item.filter_value}
                   </strong>
-                  <span>Source: {item.source}</span>
-                  <span>Applies: {item.apply_count}</span>
-                  <span>Context: {item.category || "all categories"}</span>
+                  <span>Nguồn: {item.source}</span>
+                  <span>Lượt áp dụng: {item.apply_count}</span>
+                  <span>Bối cảnh: {item.category || "toàn bộ category"}</span>
                 </div>
               ))}
               {(searchAnalytics?.top_filters.length ?? 0) === 0 ? (
@@ -159,8 +160,8 @@ export function AdminReportSection({
               {notificationAudit.map((item) => (
                 <div className="history-item-preview" key={item.id}>
                   <strong>{item.title}</strong>
-                  <span>Status: {item.delivery_status}</span>
-                  <span>Attempts: {item.attempt_count ?? 0}</span>
+                  <span>Trạng thái: {item.delivery_status}</span>
+                  <span>Số lần thử: {item.attempt_count ?? 0}</span>
                   <span>{item.next_retry_at ? `Next retry: ${item.next_retry_at}` : item.last_error || item.message}</span>
                 </div>
               ))}

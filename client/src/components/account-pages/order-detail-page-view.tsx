@@ -306,7 +306,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-primary">{item.name}</p>
                           <p className="mt-2 text-sm text-on-surface-variant">
-                            {product?.brand || "Commerce Platform"}
+                            {product?.brand || "ND Shop"}
                           </p>
                           <p className="mt-2 text-sm text-on-surface-variant">Số lượng: {item.quantity}</p>
                         </div>
