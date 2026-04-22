@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/userrepo"
 )
 
 // normalizeIdentifier resolves the login identifier using the modern identifier
@@ -239,9 +239,9 @@ func normalizeTelegramChatID(value string) string {
 //   - O(1).
 func mapUserRepositoryError(err error) error {
 	switch {
-	case errors.Is(err, repository.ErrUserEmailAlreadyExists):
+	case errors.Is(err, userrepo.ErrUserEmailAlreadyExists):
 		return ErrEmailAlreadyExists
-	case errors.Is(err, repository.ErrUserPhoneAlreadyExists):
+	case errors.Is(err, userrepo.ErrUserPhoneAlreadyExists):
 		return ErrPhoneAlreadyExists
 	default:
 		return err

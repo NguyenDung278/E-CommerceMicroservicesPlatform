@@ -1,17 +1,9 @@
-package repository
+package account
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/addressrepo"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/authrepo"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/common"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/notificationpreferencerepo"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/oauthrepo"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/userrepo"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/wishlistrepo"
 )
 
 type AddressRepository interface {
@@ -38,11 +30,6 @@ type EmailVerificationRepository interface {
 	GetLatestActiveByUserID(ctx context.Context, userID, purpose string) (*model.EmailVerificationChallenge, error)
 	Update(ctx context.Context, challenge *model.EmailVerificationChallenge) error
 	DeleteExpired(ctx context.Context) error
-}
-
-type NotificationPreferenceRepository interface {
-	ListByUserID(ctx context.Context, userID string) ([]*model.NotificationPreference, error)
-	UpsertMany(ctx context.Context, userID string, preferences []*model.NotificationPreference) error
 }
 
 type OAuthAccountRepository interface {
@@ -84,60 +71,12 @@ type UserRepository interface {
 	Update(ctx context.Context, user *model.User) error
 }
 
-type WishlistRepository interface {
-	ListByUserID(ctx context.Context, userID string) ([]*model.WishlistItem, error)
-	ListUserIDs(ctx context.Context, limit int) ([]string, error)
-	Upsert(ctx context.Context, item *model.WishlistItem) error
-	UpsertMany(ctx context.Context, items []*model.WishlistItem) error
-	Delete(ctx context.Context, userID, productID string) error
+type ProfileTxRepositories struct {
+	Users              UserRepository
+	Addresses          AddressRepository
+	PhoneVerifications PhoneVerificationRepository
 }
 
-var (
-	ErrOAuthAccountAlreadyExists = oauthrepo.ErrOAuthAccountAlreadyExists
-	ErrUserEmailAlreadyExists    = userrepo.ErrUserEmailAlreadyExists
-	ErrUserPhoneAlreadyExists    = userrepo.ErrUserPhoneAlreadyExists
-)
-
-func NewAddressRepository(db *sql.DB) AddressRepository {
-	return addressrepo.New(db)
-}
-
-func NewEmailSignupRepository(db *sql.DB) EmailSignupRepository {
-	return authrepo.NewEmailSignup(db)
-}
-
-func NewEmailVerificationRepository(db *sql.DB) EmailVerificationRepository {
-	return authrepo.NewEmailVerification(db)
-}
-
-func NewNotificationPreferenceRepository(db *sql.DB) NotificationPreferenceRepository {
-	return notificationpreferencerepo.New(db)
-}
-
-func NewOAuthAccountRepository(db *sql.DB) OAuthAccountRepository {
-	return oauthrepo.New(db)
-}
-
-func NewPhoneSignupRepository(db *sql.DB) PhoneSignupRepository {
-	return authrepo.NewPhoneSignup(db)
-}
-
-func NewPhoneVerificationRepository(db *sql.DB) PhoneVerificationRepository {
-	return authrepo.NewPhoneVerification(db)
-}
-
-func NewUserAvatarRepository(db *sql.DB) UserAvatarRepository {
-	return userrepo.NewAvatar(db)
-}
-
-func NewUserRepository(db *sql.DB) UserRepository {
-	return userrepo.New(db)
-}
-
-func NewWishlistRepository(db *sql.DB) WishlistRepository {
-	return wishlistrepo.New(db)
-}
-
-func IsUndefinedTableError(err error) bool {
-	return common.IsUndefinedTableError(err)
+type ProfileTxManager interface {
+	RunInTx(ctx context.Context, fn func(ProfileTxRepositories) error) error
 }

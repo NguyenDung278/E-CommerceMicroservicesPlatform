@@ -7,14 +7,14 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/engagement"
 )
 
 type WishlistHandler struct {
-	wishlistService *service.WishlistService
+	wishlistService *engagement.WishlistService
 }
 
-func NewWishlistHandler(wishlistService *service.WishlistService) *WishlistHandler {
+func NewWishlistHandler(wishlistService *engagement.WishlistService) *WishlistHandler {
 	return &WishlistHandler{wishlistService: wishlistService}
 }
 

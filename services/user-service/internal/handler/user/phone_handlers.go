@@ -11,7 +11,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func (h *UserHandler) GetPhoneVerificationStatus(c echo.Context) error {
@@ -146,7 +146,7 @@ func (h *UserHandler) ResendPhoneOTP(c echo.Context) error {
 }
 
 func handlePhoneSignupError(c echo.Context, err error) error {
-	if errors.Is(err, service.ErrPasswordConfirmationMismatch) {
+	if errors.Is(err, account.ErrPasswordConfirmationMismatch) {
 		return response.Error(c, http.StatusBadRequest, "validation failed", "password confirmation does not match")
 	}
 
@@ -154,40 +154,40 @@ func handlePhoneSignupError(c echo.Context, err error) error {
 }
 
 func handlePhoneOTPError(c echo.Context, err error) error {
-	var phoneVerificationErr *service.PhoneVerificationError
+	var phoneVerificationErr *account.PhoneVerificationError
 	hasPhoneVerificationError := errors.As(err, &phoneVerificationErr)
 
 	switch {
-	case errors.Is(err, service.ErrUserNotFound):
+	case errors.Is(err, account.ErrUserNotFound):
 		return response.Error(c, http.StatusNotFound, "not found", "user not found")
-	case errors.Is(err, service.ErrInvalidPhoneNumber):
+	case errors.Is(err, account.ErrInvalidPhoneNumber):
 		return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
-	case errors.Is(err, service.ErrTelegramChatNotLinked):
+	case errors.Is(err, account.ErrTelegramChatNotLinked):
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", "telegram chat not linked, open the bot and send /start before requesting otp")
-	case errors.Is(err, service.ErrPhoneAlreadyExists):
+	case errors.Is(err, account.ErrPhoneAlreadyExists):
 		return response.Error(c, http.StatusConflict, "phone verification failed", "phone already exists")
-	case errors.Is(err, service.ErrPhoneVerificationNotFound):
+	case errors.Is(err, account.ErrPhoneVerificationNotFound):
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", "phone verification not found")
-	case errors.Is(err, service.ErrPhoneVerificationExpired):
+	case errors.Is(err, account.ErrPhoneVerificationExpired):
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", "otp has expired")
-	case errors.Is(err, service.ErrPhoneVerificationInvalidOTP):
+	case errors.Is(err, account.ErrPhoneVerificationInvalidOTP):
 		detail := "invalid otp code"
 		if hasPhoneVerificationError && phoneVerificationErr.RemainingAttempts > 0 {
 			detail = fmt.Sprintf("invalid otp code, %d attempts remaining", phoneVerificationErr.RemainingAttempts)
 		}
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", detail)
-	case errors.Is(err, service.ErrPhoneVerificationLocked):
+	case errors.Is(err, account.ErrPhoneVerificationLocked):
 		return response.Error(c, http.StatusTooManyRequests, "phone verification locked", "too many invalid otp attempts, challenge has been locked")
-	case errors.Is(err, service.ErrPhoneVerificationResendTooSoon):
+	case errors.Is(err, account.ErrPhoneVerificationResendTooSoon):
 		detail := "please wait before resending otp"
 		if hasPhoneVerificationError && phoneVerificationErr.ResendInSeconds > 0 {
 			c.Response().Header().Set(echo.HeaderRetryAfter, strconv.FormatInt(phoneVerificationErr.ResendInSeconds, 10))
 			detail = fmt.Sprintf("please wait %d seconds before resending otp", phoneVerificationErr.ResendInSeconds)
 		}
 		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", detail)
-	case errors.Is(err, service.ErrPhoneVerificationRateLimited):
+	case errors.Is(err, account.ErrPhoneVerificationRateLimited):
 		return response.Error(c, http.StatusTooManyRequests, "phone verification failed", "otp rate limit exceeded")
-	case errors.Is(err, service.ErrPhoneVerificationAlreadyUsed):
+	case errors.Is(err, account.ErrPhoneVerificationAlreadyUsed):
 		return response.Error(c, http.StatusBadRequest, "phone verification failed", "phone verification already used")
 	default:
 		return response.Error(c, http.StatusInternalServerError, "phone verification failed", "internal server error")

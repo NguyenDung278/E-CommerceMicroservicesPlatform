@@ -7,14 +7,14 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 type AddressHandler struct {
-	addressService *service.AddressService
+	addressService *account.AddressService
 }
 
-func NewAddressHandler(addressService *service.AddressService) *AddressHandler {
+func NewAddressHandler(addressService *account.AddressService) *AddressHandler {
 	return &AddressHandler{addressService: addressService}
 }
 

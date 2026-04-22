@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 const (
@@ -48,14 +47,14 @@ type developmentAccountSpec struct {
 // enabled in development-like environments. The bootstrapper is idempotent: it
 // creates missing users and reconciles the managed accounts on every startup.
 type DevAccountBootstrapper struct {
-	repo          repository.UserRepository
+	repo          UserRepository
 	log           *zap.Logger
 	adminPassword string
 	staffPassword string
 }
 
 func NewDevAccountBootstrapper(
-	repo repository.UserRepository,
+	repo UserRepository,
 	log *zap.Logger,
 	adminPassword string,
 	staffPassword string,

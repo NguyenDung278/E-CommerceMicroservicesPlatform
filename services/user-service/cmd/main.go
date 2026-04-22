@@ -33,8 +33,15 @@ import (
 	notificationpreferencehandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/notificationpreference"
 	userhandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/user"
 	wishlisthandler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/handler/wishlist"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/addressrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/authrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/notificationpreferencerepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/oauthrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/profiletxrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/userrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/wishlistrepo"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/engagement"
 	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/migrations"
 	"github.com/labstack/echo-contrib/echoprometheus"
@@ -95,9 +102,9 @@ func main() {
 	log.Info("database migrations completed")
 
 	// 5. Bootstrap development-only test accounts if explicitly enabled.
-	userRepo := repository.NewUserRepository(db)
+	userRepo := userrepo.New(db)
 	if cfg.Bootstrap.DevAccounts.Enabled {
-		devAccountBootstrapper := service.NewDevAccountBootstrapper(
+		devAccountBootstrapper := account.NewDevAccountBootstrapper(
 			userRepo,
 			log,
 			cfg.Bootstrap.DevAccounts.AdminPassword,
@@ -114,44 +121,44 @@ func main() {
 	// 6. Dependency injection: repo → service → handler.
 	emailSender := email.NewSender(cfg.SMTP, log)
 	telegramSender := telegramsender.NewSender(cfg.Telegram, log)
-	oauthRepo := repository.NewOAuthAccountRepository(db)
-	phoneVerificationRepo := repository.NewPhoneVerificationRepository(db)
-	phoneSignupRepo := repository.NewPhoneSignupRepository(db)
-	emailSignupRepo := repository.NewEmailSignupRepository(db)
-	emailVerificationRepo := repository.NewEmailVerificationRepository(db)
-	avatarRepo := repository.NewUserAvatarRepository(db)
-	addressRepo := repository.NewAddressRepository(db)
-	wishlistRepo := repository.NewWishlistRepository(db)
-	notificationPreferenceRepo := repository.NewNotificationPreferenceRepository(db)
-	profileTxManager := repository.NewProfileTxManager(db)
+	oauthRepo := oauthrepo.New(db)
+	phoneVerificationRepo := authrepo.NewPhoneVerification(db)
+	phoneSignupRepo := authrepo.NewPhoneSignup(db)
+	emailSignupRepo := authrepo.NewEmailSignup(db)
+	emailVerificationRepo := authrepo.NewEmailVerification(db)
+	avatarRepo := userrepo.NewAvatar(db)
+	addressRepo := addressrepo.New(db)
+	wishlistRepo := wishlistrepo.New(db)
+	notificationPreferenceRepo := notificationpreferencerepo.New(db)
+	profileTxManager := profiletxrepo.New(db)
 	productClient := userclient.NewProductClient(cfg.Services.ProductService, log)
-	addressService := service.NewAddressService(addressRepo)
-	notificationPreferenceService := service.NewNotificationPreferenceService(notificationPreferenceRepo)
-	wishlistService := service.NewWishlistService(
+	addressService := account.NewAddressService(addressRepo)
+	notificationPreferenceService := engagement.NewNotificationPreferenceService(notificationPreferenceRepo)
+	wishlistService := engagement.NewWishlistService(
 		wishlistRepo,
-		service.WithWishlistProductCatalog(productClient),
-		service.WithWishlistNotificationPreferences(notificationPreferenceService),
-		service.WithWishlistUserReader(userRepo),
+		engagement.WithWishlistProductCatalog(productClient),
+		engagement.WithWishlistNotificationPreferences(notificationPreferenceService),
+		engagement.WithWishlistUserReader(userRepo),
 	)
-	oauthClient := service.NewOAuthProviderClient(cfg.OAuth)
-	userService := service.NewUserService(
+	oauthClient := account.NewOAuthProviderClient(cfg.OAuth)
+	userService := account.NewUserService(
 		userRepo,
 		cfg.JWT.Secret,
 		cfg.JWT.Expiration,
-		service.WithEmailSender(emailSender),
-		service.WithOAuthAccountRepository(oauthRepo),
-		service.WithPhoneVerificationRepository(phoneVerificationRepo),
-		service.WithPhoneSignupRepository(phoneSignupRepo),
-		service.WithEmailSignupRepository(emailSignupRepo),
-		service.WithEmailVerificationRepository(emailVerificationRepo),
-		service.WithUserAvatarRepository(avatarRepo),
-		service.WithProfileTxManager(profileTxManager),
-		service.WithAddressService(addressService),
-		service.WithTelegramSender(telegramSender),
-		service.WithTelegramConfig(cfg.Telegram),
-		service.WithEmailVerificationConfig(cfg.EmailVerification),
-		service.WithOAuthProviderClient(oauthClient),
-		service.WithFrontendBaseURL(cfg.Frontend.BaseURL),
+		account.WithEmailSender(emailSender),
+		account.WithOAuthAccountRepository(oauthRepo),
+		account.WithPhoneVerificationRepository(phoneVerificationRepo),
+		account.WithPhoneSignupRepository(phoneSignupRepo),
+		account.WithEmailSignupRepository(emailSignupRepo),
+		account.WithEmailVerificationRepository(emailVerificationRepo),
+		account.WithUserAvatarRepository(avatarRepo),
+		account.WithProfileTxManager(profileTxManager),
+		account.WithAddressService(addressService),
+		account.WithTelegramSender(telegramSender),
+		account.WithTelegramConfig(cfg.Telegram),
+		account.WithEmailVerificationConfig(cfg.EmailVerification),
+		account.WithOAuthProviderClient(oauthClient),
+		account.WithFrontendBaseURL(cfg.Frontend.BaseURL),
 	)
 	userHandler := userhandler.NewUserHandler(userService)
 	addressHandler := addresshandler.NewAddressHandler(addressService)

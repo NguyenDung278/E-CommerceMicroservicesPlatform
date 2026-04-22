@@ -1,4 +1,4 @@
-package engagementservice
+package engagement
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	userclient "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/client"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 type wishlistProductCatalog interface {
@@ -22,13 +21,13 @@ type wishlistUserReader interface {
 type WishlistServiceOption func(*WishlistService)
 
 type WishlistService struct {
-	repo                    repository.WishlistRepository
+	repo                    WishlistRepository
 	productCatalog          wishlistProductCatalog
 	notificationPreferences *NotificationPreferenceService
 	userReader              wishlistUserReader
 }
 
-func NewWishlistService(repo repository.WishlistRepository, options ...WishlistServiceOption) *WishlistService {
+func NewWishlistService(repo WishlistRepository, options ...WishlistServiceOption) *WishlistService {
 	service := &WishlistService{repo: repo}
 	for _, option := range options {
 		option(service)

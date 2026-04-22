@@ -13,7 +13,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func (h *UserHandler) GetProfile(c echo.Context) error {
@@ -24,7 +24,7 @@ func (h *UserHandler) GetProfile(c echo.Context) error {
 
 	user, err := h.userService.GetProfile(c.Request().Context(), claims.UserID)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, account.ErrUserNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
@@ -50,20 +50,20 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 	user, err := h.userService.UpdateProfile(c.Request().Context(), claims.UserID, req)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrUserNotFound):
+		case errors.Is(err, account.ErrUserNotFound):
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
-		case errors.Is(err, service.ErrInvalidPhoneNumber):
+		case errors.Is(err, account.ErrInvalidPhoneNumber):
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid phone number")
-		case errors.Is(err, service.ErrInvalidProfileName):
+		case errors.Is(err, account.ErrInvalidProfileName):
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid first name or last name")
-		case errors.Is(err, service.ErrInvalidProfileAddress):
+		case errors.Is(err, account.ErrInvalidProfileAddress):
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid default address")
-		case errors.Is(err, service.ErrPhoneAlreadyExists):
+		case errors.Is(err, account.ErrPhoneAlreadyExists):
 			return response.Error(c, http.StatusConflict, "profile update failed", "phone already exists")
-		case errors.Is(err, service.ErrPhoneVerificationRequired):
+		case errors.Is(err, account.ErrPhoneVerificationRequired):
 			return response.Error(c, http.StatusBadRequest, "profile update failed", "phone verification required")
-		case errors.Is(err, service.ErrPhoneVerificationNotFound),
-			errors.Is(err, service.ErrPhoneVerificationAlreadyUsed):
+		case errors.Is(err, account.ErrPhoneVerificationNotFound),
+			errors.Is(err, account.ErrPhoneVerificationAlreadyUsed):
 			return response.Error(c, http.StatusBadRequest, "profile update failed", "phone verification is invalid or already used")
 		default:
 			return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
@@ -95,11 +95,11 @@ func (h *UserHandler) UploadAvatar(c echo.Context) error {
 	result, err := h.userService.UploadAvatar(c.Request().Context(), claims.UserID, input)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrUserNotFound):
+		case errors.Is(err, account.ErrUserNotFound):
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
-		case errors.Is(err, service.ErrInvalidAvatarFile):
+		case errors.Is(err, account.ErrInvalidAvatarFile):
 			return response.Error(c, http.StatusBadRequest, "validation failed", "only image files are supported")
-		case errors.Is(err, service.ErrAvatarTooLarge):
+		case errors.Is(err, account.ErrAvatarTooLarge):
 			return response.Error(c, http.StatusBadRequest, "validation failed", "avatar image size exceeds 5MB limit")
 		default:
 			return response.Error(c, http.StatusInternalServerError, "avatar upload failed", "internal server error")

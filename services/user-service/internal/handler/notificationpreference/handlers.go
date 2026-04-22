@@ -10,7 +10,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/engagement"
 )
 
 func (h *NotificationPreferenceHandler) List(c echo.Context) error {
@@ -46,7 +46,7 @@ func (h *NotificationPreferenceHandler) Update(c echo.Context) error {
 
 	preferences, err := h.preferenceService.UpdatePreferences(c.Request().Context(), claims.UserID, req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidNotificationPreferenceTopic) {
+		if errors.Is(err, engagement.ErrInvalidNotificationPreferenceTopic) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "notification preference topic is invalid")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to update notification preferences")

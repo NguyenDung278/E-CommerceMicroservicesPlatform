@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 var (
@@ -22,10 +21,10 @@ const maxAddressesPerUser = 10
 
 // AddressService contains business logic for address operations.
 type AddressService struct {
-	repo repository.AddressRepository
+	repo AddressRepository
 }
 
-func NewAddressService(repo repository.AddressRepository) *AddressService {
+func NewAddressService(repo AddressRepository) *AddressService {
 	return &AddressService{repo: repo}
 }
 

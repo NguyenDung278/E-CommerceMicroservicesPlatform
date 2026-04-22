@@ -13,7 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 type handlerFakeOAuthProviderClient struct {
@@ -21,20 +21,20 @@ type handlerFakeOAuthProviderClient struct {
 }
 
 func (c *handlerFakeOAuthProviderClient) AuthorizationURL(provider, state, _ string) (string, error) {
-	if provider != service.OAuthProviderGoogle {
-		return "", service.ErrInvalidOAuthProvider
+	if provider != account.OAuthProviderGoogle {
+		return "", account.ErrInvalidOAuthProvider
 	}
 
 	return c.redirectURL + "?state=" + url.QueryEscape(state), nil
 }
 
-func (c *handlerFakeOAuthProviderClient) ExchangeCode(_ context.Context, _ string, _ string, _ string) (*service.OAuthIdentity, error) {
-	return nil, service.ErrOAuthProviderNotConfigured
+func (c *handlerFakeOAuthProviderClient) ExchangeCode(_ context.Context, _ string, _ string, _ string) (*account.OAuthIdentity, error) {
+	return nil, account.ErrOAuthProviderNotConfigured
 }
 
 func (c *handlerFakeOAuthProviderClient) DefaultRedirectURL(provider string) (string, error) {
-	if provider != service.OAuthProviderGoogle {
-		return "", service.ErrInvalidOAuthProvider
+	if provider != account.OAuthProviderGoogle {
+		return "", account.ErrInvalidOAuthProvider
 	}
 
 	return c.redirectURL, nil
@@ -42,14 +42,14 @@ func (c *handlerFakeOAuthProviderClient) DefaultRedirectURL(provider string) (st
 
 func TestOAuthStartEndpointRedirectsAndSetsNonceCookie(t *testing.T) {
 	repo := newIntegrationUserRepo()
-	userService := service.NewUserService(
+	userService := account.NewUserService(
 		repo,
 		"super-secret-test-key-1234567890",
 		24,
-		service.WithOAuthProviderClient(&handlerFakeOAuthProviderClient{
+		account.WithOAuthProviderClient(&handlerFakeOAuthProviderClient{
 			redirectURL: "http://localhost:8080/api/v1/auth/oauth/google/callback",
 		}),
-		service.WithFrontendBaseURL("http://localhost:5174"),
+		account.WithFrontendBaseURL("http://localhost:5174"),
 	)
 	handler := NewUserHandler(userService)
 
@@ -69,14 +69,14 @@ func TestOAuthStartEndpointRedirectsAndSetsNonceCookie(t *testing.T) {
 	if location := rec.Header().Get("Location"); !strings.Contains(location, "state=") {
 		t.Fatalf("expected provider redirect with state, got %q", location)
 	}
-	if cookie := rec.Header().Get("Set-Cookie"); !strings.Contains(cookie, service.OAuthNonceCookieName) {
+	if cookie := rec.Header().Get("Set-Cookie"); !strings.Contains(cookie, account.OAuthNonceCookieName) {
 		t.Fatalf("expected oauth nonce cookie, got %q", cookie)
 	}
 }
 
 func TestOAuthExchangeEndpointRejectsInvalidTicket(t *testing.T) {
 	repo := newIntegrationUserRepo()
-	userService := service.NewUserService(repo, "super-secret-test-key-1234567890", 24)
+	userService := account.NewUserService(repo, "super-secret-test-key-1234567890", 24)
 	handler := NewUserHandler(userService)
 
 	e := echo.New()

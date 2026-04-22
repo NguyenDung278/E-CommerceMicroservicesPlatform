@@ -10,7 +10,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func (h *AddressHandler) Create(c echo.Context) error {
@@ -29,10 +29,10 @@ func (h *AddressHandler) Create(c echo.Context) error {
 
 	addr, err := h.addressService.CreateAddress(c.Request().Context(), claims.UserID, req)
 	if err != nil {
-		if errors.Is(err, service.ErrTooManyAddresses) {
+		if errors.Is(err, account.ErrTooManyAddresses) {
 			return response.Error(c, http.StatusBadRequest, "limit reached", "maximum 10 addresses allowed")
 		}
-		if errors.Is(err, service.ErrInvalidAddress) {
+		if errors.Is(err, account.ErrInvalidAddress) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid address")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to create address")
@@ -75,10 +75,10 @@ func (h *AddressHandler) Update(c echo.Context) error {
 
 	addr, err := h.addressService.UpdateAddress(c.Request().Context(), claims.UserID, id, req)
 	if err != nil {
-		if errors.Is(err, service.ErrAddressNotFound) {
+		if errors.Is(err, account.ErrAddressNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "address not found")
 		}
-		if errors.Is(err, service.ErrInvalidAddress) {
+		if errors.Is(err, account.ErrInvalidAddress) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "invalid address")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to update address")
@@ -95,7 +95,7 @@ func (h *AddressHandler) Delete(c echo.Context) error {
 
 	err = h.addressService.DeleteAddress(c.Request().Context(), claims.UserID, c.Param("id"))
 	if err != nil {
-		if errors.Is(err, service.ErrAddressNotFound) {
+		if errors.Is(err, account.ErrAddressNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "address not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to delete address")
@@ -112,7 +112,7 @@ func (h *AddressHandler) SetDefault(c echo.Context) error {
 
 	addr, err := h.addressService.SetDefault(c.Request().Context(), claims.UserID, c.Param("id"))
 	if err != nil {
-		if errors.Is(err, service.ErrAddressNotFound) {
+		if errors.Is(err, account.ErrAddressNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "address not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to set default address")

@@ -1,4 +1,4 @@
-package engagementservice
+package engagement
 
 import (
 	"context"
@@ -9,17 +9,16 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 var ErrInvalidNotificationPreferenceTopic = errors.New("invalid notification preference topic")
 
 type NotificationPreferenceService struct {
-	repo repository.NotificationPreferenceRepository
+	repo NotificationPreferenceRepository
 }
 
 func NewNotificationPreferenceService(
-	repo repository.NotificationPreferenceRepository,
+	repo NotificationPreferenceRepository,
 ) *NotificationPreferenceService {
 	return &NotificationPreferenceService{repo: repo}
 }

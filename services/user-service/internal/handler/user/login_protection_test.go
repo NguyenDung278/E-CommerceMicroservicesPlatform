@@ -13,14 +13,14 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func TestLoginEndpointLocksAfterFiveFailures(t *testing.T) {
 	const jwtSecret = "super-secret-test-key-1234567890"
 
 	repo := newIntegrationUserRepo()
-	userService := service.NewUserService(repo, jwtSecret, 24)
+	userService := account.NewUserService(repo, jwtSecret, 24)
 	if _, err := userService.Register(context.Background(), dto.RegisterRequest{
 		Email:     "alice@example.com",
 		Phone:     "0901234567",

@@ -9,17 +9,17 @@ import (
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 // UserGRPCServer implements the UserService gRPC interface
 type UserGRPCServer struct {
 	pb.UnimplementedUserServiceServer
-	userService *service.UserService
+	userService *account.UserService
 }
 
 // NewUserGRPCServer creates a new gRPC server for user service
-func NewUserGRPCServer(userService *service.UserService) *UserGRPCServer {
+func NewUserGRPCServer(userService *account.UserService) *UserGRPCServer {
 	return &UserGRPCServer{
 		userService: userService,
 	}
@@ -43,7 +43,7 @@ func (s *UserGRPCServer) Register(ctx context.Context, req *pb.RegisterRequest) 
 	if err != nil {
 		// Map service errors to gRPC status codes
 		switch err {
-		case service.ErrEmailAlreadyExists:
+		case account.ErrEmailAlreadyExists:
 			return nil, status.Error(codes.AlreadyExists, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())
@@ -79,7 +79,7 @@ func (s *UserGRPCServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.L
 	if err != nil {
 		// Map service errors to gRPC status codes
 		switch err {
-		case service.ErrUserNotFound, service.ErrInvalidCredentials:
+		case account.ErrUserNotFound, account.ErrInvalidCredentials:
 			return nil, status.Error(codes.Unauthenticated, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())
@@ -117,7 +117,7 @@ func (s *UserGRPCServer) GetProfile(ctx context.Context, req *pb.GetProfileReque
 	user, err := s.userService.GetProfile(ctx, userID)
 	if err != nil {
 		switch err {
-		case service.ErrUserNotFound:
+		case account.ErrUserNotFound:
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())
@@ -157,7 +157,7 @@ func (s *UserGRPCServer) UpdateProfile(ctx context.Context, req *pb.UpdateProfil
 	user, err := s.userService.UpdateProfile(ctx, userID, updateReq)
 	if err != nil {
 		switch err {
-		case service.ErrUserNotFound:
+		case account.ErrUserNotFound:
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())
@@ -199,7 +199,7 @@ func (s *UserGRPCServer) GetUserByID(ctx context.Context, req *pb.GetUserByIDReq
 	user, err := s.userService.GetProfile(ctx, userID)
 	if err != nil {
 		switch err {
-		case service.ErrUserNotFound:
+		case account.ErrUserNotFound:
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, err.Error())

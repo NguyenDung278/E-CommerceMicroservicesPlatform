@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository/oauthrepo"
 )
 
 type fakeUserRepo struct {
@@ -147,12 +147,12 @@ func (r *fakeUserRepo) Update(_ context.Context, user *model.User) error {
 func (r *fakeOAuthAccountRepo) Create(_ context.Context, account *model.OAuthAccount) error {
 	providerKey := account.Provider + ":" + account.ProviderUserID
 	if _, exists := r.accountsByProvider[providerKey]; exists {
-		return repository.ErrOAuthAccountAlreadyExists
+		return oauthrepo.ErrOAuthAccountAlreadyExists
 	}
 
 	userKey := account.UserID + ":" + account.Provider
 	if _, exists := r.accountsByUser[userKey]; exists {
-		return repository.ErrOAuthAccountAlreadyExists
+		return oauthrepo.ErrOAuthAccountAlreadyExists
 	}
 
 	r.accountsByProvider[providerKey] = account

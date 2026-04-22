@@ -8,17 +8,17 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 const maxAvatarUploadSize = 5 << 20
 
 type UserHandler struct {
-	userService    *service.UserService
+	userService    *account.UserService
 	loginProtector *LoginAttemptProtector
 }
 
-func NewUserHandler(userService *service.UserService) *UserHandler {
+func NewUserHandler(userService *account.UserService) *UserHandler {
 	return NewUserHandlerWithLoginProtector(
 		userService,
 		NewLoginAttemptProtector(defaultMaxLoginFailures, defaultLoginLockDuration, defaultLoginAttemptTTL),
@@ -26,7 +26,7 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 }
 
 func NewUserHandlerWithLoginProtector(
-	userService *service.UserService,
+	userService *account.UserService,
 	loginProtector *LoginAttemptProtector,
 ) *UserHandler {
 	if loginProtector == nil {
@@ -95,7 +95,7 @@ func requireUserClaims(c echo.Context) (*middleware.JWTClaims, error) {
 
 func oauthNonceCookie(c echo.Context, value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
-		Name:     service.OAuthNonceCookieName,
+		Name:     account.OAuthNonceCookieName,
 		Value:    value,
 		Path:     "/api/v1/auth/oauth",
 		HttpOnly: true,

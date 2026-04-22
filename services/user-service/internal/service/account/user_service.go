@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"errors"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/email"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 	telegramsender "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/telegram"
 )
 
@@ -56,14 +55,14 @@ var vnPhoneRegex = regexp.MustCompile(`^0\d{9,10}$`)
 // UserService coordinates user account, profile, and token workflows across the
 // repositories and optional integration clients configured for this service.
 type UserService struct {
-	repo                  repository.UserRepository
-	oauthRepo             repository.OAuthAccountRepository
-	phoneVerificationRepo repository.PhoneVerificationRepository
-	phoneSignupRepo       repository.PhoneSignupRepository
-	emailSignupRepo       repository.EmailSignupRepository
-	emailVerificationRepo repository.EmailVerificationRepository
-	avatarRepo            repository.UserAvatarRepository
-	profileTxManager      repository.ProfileTxManager
+	repo                  UserRepository
+	oauthRepo             OAuthAccountRepository
+	phoneVerificationRepo PhoneVerificationRepository
+	phoneSignupRepo       PhoneSignupRepository
+	emailSignupRepo       EmailSignupRepository
+	emailVerificationRepo EmailVerificationRepository
+	avatarRepo            UserAvatarRepository
+	profileTxManager      ProfileTxManager
 	addressService        *AddressService
 	jwtSecret             string
 	jwtExpiry             int
@@ -119,7 +118,7 @@ func WithEmailSender(sender email.Sender) UserServiceOption {
 //
 // Performance:
 //   - O(1).
-func WithOAuthAccountRepository(repo repository.OAuthAccountRepository) UserServiceOption {
+func WithOAuthAccountRepository(repo OAuthAccountRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.oauthRepo = repo
 	}
@@ -188,7 +187,7 @@ func WithFrontendBaseURL(baseURL string) UserServiceOption {
 //
 // Performance:
 //   - O(1).
-func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository) UserServiceOption {
+func WithPhoneVerificationRepository(repo PhoneVerificationRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneVerificationRepo = repo
 	}
@@ -196,7 +195,7 @@ func WithPhoneVerificationRepository(repo repository.PhoneVerificationRepository
 
 // WithPhoneSignupRepository injects the repository used by public phone signup
 // OTP flows before a user row exists.
-func WithPhoneSignupRepository(repo repository.PhoneSignupRepository) UserServiceOption {
+func WithPhoneSignupRepository(repo PhoneSignupRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.phoneSignupRepo = repo
 	}
@@ -204,7 +203,7 @@ func WithPhoneSignupRepository(repo repository.PhoneSignupRepository) UserServic
 
 // WithEmailSignupRepository injects the repository used by public email signup
 // OTP flows before a user row exists.
-func WithEmailSignupRepository(repo repository.EmailSignupRepository) UserServiceOption {
+func WithEmailSignupRepository(repo EmailSignupRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.emailSignupRepo = repo
 	}
@@ -212,7 +211,7 @@ func WithEmailSignupRepository(repo repository.EmailSignupRepository) UserServic
 
 // WithEmailVerificationRepository injects the repository used by email OTP
 // verification flows.
-func WithEmailVerificationRepository(repo repository.EmailVerificationRepository) UserServiceOption {
+func WithEmailVerificationRepository(repo EmailVerificationRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.emailVerificationRepo = repo
 	}
@@ -220,7 +219,7 @@ func WithEmailVerificationRepository(repo repository.EmailVerificationRepository
 
 // WithUserAvatarRepository injects avatar persistence used by profile reads and
 // avatar upload flows.
-func WithUserAvatarRepository(repo repository.UserAvatarRepository) UserServiceOption {
+func WithUserAvatarRepository(repo UserAvatarRepository) UserServiceOption {
 	return func(s *UserService) {
 		s.avatarRepo = repo
 	}
@@ -244,7 +243,7 @@ func WithUserAvatarRepository(repo repository.UserAvatarRepository) UserServiceO
 //
 // Performance:
 //   - O(1).
-func WithProfileTxManager(txManager repository.ProfileTxManager) UserServiceOption {
+func WithProfileTxManager(txManager ProfileTxManager) UserServiceOption {
 	return func(s *UserService) {
 		s.profileTxManager = txManager
 	}
@@ -346,7 +345,7 @@ func WithEmailVerificationConfig(cfg config.EmailVerificationConfig) UserService
 //
 // Performance:
 //   - O(k) over the number of options, with O(1) work per option.
-func NewUserService(repo repository.UserRepository, jwtSecret string, jwtExpiry int, options ...UserServiceOption) *UserService {
+func NewUserService(repo UserRepository, jwtSecret string, jwtExpiry int, options ...UserServiceOption) *UserService {
 	service := &UserService{
 		repo:            repo,
 		jwtSecret:       jwtSecret,

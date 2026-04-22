@@ -14,7 +14,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func (h *UserHandler) Register(c echo.Context) error {
@@ -28,10 +28,10 @@ func (h *UserHandler) Register(c echo.Context) error {
 
 	result, err := h.userService.Register(c.Request().Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrEmailAlreadyExists) {
+		if errors.Is(err, account.ErrEmailAlreadyExists) {
 			return response.Error(c, http.StatusConflict, "registration failed", "email already exists")
 		}
-		if errors.Is(err, service.ErrPhoneAlreadyExists) {
+		if errors.Is(err, account.ErrPhoneAlreadyExists) {
 			return response.Error(c, http.StatusConflict, "registration failed", "phone already exists")
 		}
 		return response.Error(c, http.StatusInternalServerError, "registration failed", "internal server error")
@@ -73,7 +73,7 @@ func (h *UserHandler) Login(c echo.Context) error {
 
 	result, err := h.userService.Login(c.Request().Context(), req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
+		if errors.Is(err, account.ErrInvalidCredentials) {
 			if retryAfter, blocked := h.loginProtector.RecordFailure(attemptKeys...); blocked {
 				appobs.IncEvent("user-service", "login_protection", appobs.OutcomeBusinessError)
 				retryAfterSeconds := int(retryAfter.Seconds())
@@ -105,10 +105,10 @@ func (h *UserHandler) RefreshToken(c echo.Context) error {
 
 	result, err := h.userService.RefreshToken(c.Request().Context(), req.RefreshToken)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidToken) {
+		if errors.Is(err, account.ErrInvalidToken) {
 			return response.Error(c, http.StatusUnauthorized, "refresh failed", "invalid or expired refresh token")
 		}
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, account.ErrUserNotFound) {
 			return response.Error(c, http.StatusUnauthorized, "refresh failed", "user no longer exists")
 		}
 		c.Logger().Errorf("refresh token failed: %v", err)
@@ -128,7 +128,7 @@ func (h *UserHandler) VerifyEmail(c echo.Context) error {
 	}
 
 	if err := h.userService.VerifyEmail(c.Request().Context(), req.Token); err != nil {
-		if errors.Is(err, service.ErrInvalidToken) {
+		if errors.Is(err, account.ErrInvalidToken) {
 			return response.Error(c, http.StatusUnauthorized, "verification failed", "invalid or expired verification token")
 		}
 		return response.Error(c, http.StatusInternalServerError, "verification failed", "internal server error")
@@ -163,7 +163,7 @@ func (h *UserHandler) ResetPassword(c echo.Context) error {
 	}
 
 	if err := h.userService.ResetPassword(c.Request().Context(), req.Token, req.NewPassword); err != nil {
-		if errors.Is(err, service.ErrInvalidToken) {
+		if errors.Is(err, account.ErrInvalidToken) {
 			return response.Error(c, http.StatusUnauthorized, "reset failed", "invalid or expired reset token")
 		}
 		return response.Error(c, http.StatusInternalServerError, "reset failed", "internal server error")
@@ -188,10 +188,10 @@ func (h *UserHandler) ChangePassword(c echo.Context) error {
 
 	err = h.userService.ChangePassword(c.Request().Context(), claims.UserID, req)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
+		if errors.Is(err, account.ErrInvalidCredentials) {
 			return response.Error(c, http.StatusUnauthorized, "change password failed", "current password is incorrect")
 		}
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, account.ErrUserNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")
@@ -207,7 +207,7 @@ func (h *UserHandler) ResendVerificationEmail(c echo.Context) error {
 	}
 
 	if err := h.userService.ResendVerificationEmail(c.Request().Context(), claims.UserID); err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, account.ErrUserNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
 		}
 		return response.Error(c, http.StatusInternalServerError, "resend verification failed", "internal server error")
@@ -236,10 +236,10 @@ func (h *UserHandler) UpdateUserRole(c echo.Context) error {
 
 	user, err := h.userService.UpdateUserRole(c.Request().Context(), c.Param("id"), req.Role)
 	if err != nil {
-		if errors.Is(err, service.ErrUserNotFound) {
+		if errors.Is(err, account.ErrUserNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "user not found")
 		}
-		if errors.Is(err, service.ErrInvalidRole) {
+		if errors.Is(err, account.ErrInvalidRole) {
 			return response.Error(c, http.StatusBadRequest, "validation failed", "role must be user, staff or admin")
 		}
 		return response.Error(c, http.StatusInternalServerError, "error", "internal server error")

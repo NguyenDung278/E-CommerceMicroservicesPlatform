@@ -17,7 +17,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 type integrationUserRepo struct {
@@ -111,7 +111,7 @@ func (r *integrationUserAvatarRepo) Upsert(_ context.Context, avatar *model.User
 
 func TestRegisterEndpointCreatesUserAndReturnsToken(t *testing.T) {
 	repo := newIntegrationUserRepo()
-	userService := service.NewUserService(repo, "super-secret-test-key-1234567890", 24)
+	userService := account.NewUserService(repo, "super-secret-test-key-1234567890", 24)
 	handler := NewUserHandler(userService)
 
 	e := echo.New()
@@ -148,11 +148,11 @@ func TestRegisterEndpointCreatesUserAndReturnsToken(t *testing.T) {
 func TestUploadAvatarEndpointStoresAvatarAndReturnsProfile(t *testing.T) {
 	repo := newIntegrationUserRepo()
 	avatarRepo := newIntegrationUserAvatarRepo()
-	userService := service.NewUserService(
+	userService := account.NewUserService(
 		repo,
 		"super-secret-test-key-1234567890",
 		24,
-		service.WithUserAvatarRepository(avatarRepo),
+		account.WithUserAvatarRepository(avatarRepo),
 	)
 	handler := NewUserHandler(userService)
 

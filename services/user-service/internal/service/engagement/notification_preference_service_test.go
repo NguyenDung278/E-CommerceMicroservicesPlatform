@@ -1,4 +1,4 @@
-package engagementservice
+package engagement
 
 import (
 	"context"

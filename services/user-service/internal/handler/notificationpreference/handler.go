@@ -7,15 +7,15 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/middleware"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/engagement"
 )
 
 type NotificationPreferenceHandler struct {
-	preferenceService *service.NotificationPreferenceService
+	preferenceService *engagement.NotificationPreferenceService
 }
 
 func NewNotificationPreferenceHandler(
-	preferenceService *service.NotificationPreferenceService,
+	preferenceService *engagement.NotificationPreferenceService,
 ) *NotificationPreferenceHandler {
 	return &NotificationPreferenceHandler{preferenceService: preferenceService}
 }

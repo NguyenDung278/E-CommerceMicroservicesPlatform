@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import "time"
 

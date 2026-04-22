@@ -1,4 +1,4 @@
-package repository
+package userrepo
 
 import (
 	"context"
@@ -82,7 +82,7 @@ func TestPostgresUserRepositoryIntegration(t *testing.T) {
 		t.Fatalf("failed to create users table: %v", err)
 	}
 
-	repo := NewUserRepository(db)
+	repo := New(db)
 	now := time.Now()
 	user := &model.User{
 		ID:            "user-1",

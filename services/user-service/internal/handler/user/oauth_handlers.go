@@ -11,15 +11,15 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/response"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/validation"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/service/account"
 )
 
 func (h *UserHandler) StartGoogleOAuth(c echo.Context) error {
-	return h.startOAuth(c, service.OAuthProviderGoogle)
+	return h.startOAuth(c, account.OAuthProviderGoogle)
 }
 
 func (h *UserHandler) GoogleOAuthCallback(c echo.Context) error {
-	return h.handleOAuthCallback(c, service.OAuthProviderGoogle)
+	return h.handleOAuthCallback(c, account.OAuthProviderGoogle)
 }
 
 func (h *UserHandler) ExchangeOAuthTicket(c echo.Context) error {
@@ -34,9 +34,9 @@ func (h *UserHandler) ExchangeOAuthTicket(c echo.Context) error {
 	result, err := h.userService.ExchangeOAuthTicket(c.Request().Context(), req.Ticket)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrInvalidOAuthTicket):
+		case errors.Is(err, account.ErrInvalidOAuthTicket):
 			return response.Error(c, http.StatusUnauthorized, "oauth exchange failed", "invalid or expired oauth login ticket")
-		case errors.Is(err, service.ErrUserNotFound):
+		case errors.Is(err, account.ErrUserNotFound):
 			return response.Error(c, http.StatusUnauthorized, "oauth exchange failed", "user no longer exists")
 		default:
 			c.Logger().Errorf("oauth ticket exchange failed: %v", err)
@@ -77,7 +77,7 @@ func (h *UserHandler) handleOAuthCallback(c echo.Context, provider string) error
 		))
 	}
 
-	nonceCookie, err := c.Cookie(service.OAuthNonceCookieName)
+	nonceCookie, err := c.Cookie(account.OAuthNonceCookieName)
 	if err != nil || strings.TrimSpace(nonceCookie.Value) == "" {
 		return c.Redirect(http.StatusFound, h.userService.BuildOAuthErrorRedirect(
 			rawState,
@@ -133,17 +133,17 @@ func extractFrontendRequestOrigin(request *http.Request) string {
 
 func oauthErrorCode(err error) string {
 	switch {
-	case errors.Is(err, service.ErrInvalidOAuthProvider):
+	case errors.Is(err, account.ErrInvalidOAuthProvider):
 		return "oauth_provider_invalid"
-	case errors.Is(err, service.ErrOAuthProviderNotConfigured):
+	case errors.Is(err, account.ErrOAuthProviderNotConfigured):
 		return "oauth_provider_unavailable"
-	case errors.Is(err, service.ErrInvalidOAuthState):
+	case errors.Is(err, account.ErrInvalidOAuthState):
 		return "oauth_state_invalid"
-	case errors.Is(err, service.ErrOAuthEmailRequired):
+	case errors.Is(err, account.ErrOAuthEmailRequired):
 		return "oauth_email_required"
-	case errors.Is(err, service.ErrInvalidOAuthTicket):
+	case errors.Is(err, account.ErrInvalidOAuthTicket):
 		return "oauth_ticket_invalid"
-	case errors.Is(err, service.ErrOAuthAccountConflict):
+	case errors.Is(err, account.ErrOAuthAccountConflict):
 		return "oauth_account_conflict"
 	default:
 		return "oauth_failed"
@@ -152,17 +152,17 @@ func oauthErrorCode(err error) string {
 
 func oauthErrorMessage(err error) string {
 	switch {
-	case errors.Is(err, service.ErrInvalidOAuthProvider):
+	case errors.Is(err, account.ErrInvalidOAuthProvider):
 		return "Nhà cung cấp đăng nhập không hợp lệ."
-	case errors.Is(err, service.ErrOAuthProviderNotConfigured):
+	case errors.Is(err, account.ErrOAuthProviderNotConfigured):
 		return "Đăng nhập mạng xã hội chưa được cấu hình trên môi trường hiện tại."
-	case errors.Is(err, service.ErrInvalidOAuthState):
+	case errors.Is(err, account.ErrInvalidOAuthState):
 		return "Phiên đăng nhập mạng xã hội không hợp lệ hoặc đã hết hạn."
-	case errors.Is(err, service.ErrOAuthEmailRequired):
+	case errors.Is(err, account.ErrOAuthEmailRequired):
 		return "Tài khoản mạng xã hội chưa cung cấp email. Hãy chọn tài khoản khác hoặc dùng email/password."
-	case errors.Is(err, service.ErrInvalidOAuthTicket):
+	case errors.Is(err, account.ErrInvalidOAuthTicket):
 		return "Phiên đăng nhập mạng xã hội đã hết hạn. Vui lòng thử lại."
-	case errors.Is(err, service.ErrOAuthAccountConflict):
+	case errors.Is(err, account.ErrOAuthAccountConflict):
 		return "Không thể liên kết tài khoản mạng xã hội vì dữ liệu đang xung đột. Hãy đăng nhập bằng email/password trước."
 	default:
 		return "Không thể hoàn tất đăng nhập mạng xã hội. Vui lòng thử lại sau."

@@ -1,4 +1,4 @@
-package accountservice
+package account
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/dto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/model"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/user-service/internal/repository"
 )
 
 // GetProfile returns the current user profile by id.
@@ -68,7 +67,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req dto.
 	}
 
 	var updatedUser *model.User
-	err := s.profileTxManager.RunInTx(ctx, func(repos repository.ProfileTxRepositories) error {
+	err := s.profileTxManager.RunInTx(ctx, func(repos ProfileTxRepositories) error {
 		addressService := s.addressService
 		if repos.Addresses != nil {
 			addressService = NewAddressService(repos.Addresses)
@@ -115,8 +114,8 @@ func (s *UserService) updateProfileWithDependencies(
 	ctx context.Context,
 	userID string,
 	req dto.UpdateProfileRequest,
-	userRepo repository.UserRepository,
-	phoneRepo repository.PhoneVerificationRepository,
+	userRepo UserRepository,
+	phoneRepo PhoneVerificationRepository,
 	addressService *AddressService,
 ) (*model.User, error) {
 	user, err := s.loadUserByID(ctx, userRepo, userID)
@@ -231,8 +230,8 @@ func (s *UserService) applyVerifiedPhoneChange(
 	requestedPhone string,
 	verificationID string,
 	user *model.User,
-	userRepo repository.UserRepository,
-	phoneRepo repository.PhoneVerificationRepository,
+	userRepo UserRepository,
+	phoneRepo PhoneVerificationRepository,
 ) (*model.PhoneVerificationChallenge, error) {
 	if !isValidVNPhone(requestedPhone) {
 		return nil, ErrInvalidPhoneNumber
@@ -295,7 +294,7 @@ func (s *UserService) applyVerifiedPhoneChange(
 //
 // Performance:
 //   - one repository lookup.
-func (s *UserService) loadUserByID(ctx context.Context, userRepo repository.UserRepository, userID string) (*model.User, error) {
+func (s *UserService) loadUserByID(ctx context.Context, userRepo UserRepository, userID string) (*model.User, error) {
 	user, err := userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
