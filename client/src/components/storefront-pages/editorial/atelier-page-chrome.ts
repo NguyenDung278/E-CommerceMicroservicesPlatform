@@ -1,9 +1,9 @@
 import type { AtelierFooterLink } from "@/components/storefront-pages/editorial/atelier-page-types";
 
 export const atelierFooterLinks: AtelierFooterLink[] = [
-  { label: "Journal", href: "/journal" },
-  { label: "Sustainability", href: "/sustainability" },
-  { label: "Shipping", href: "/shipping" },
-  { label: "Returns", href: "/returns" },
-  { label: "Privacy", href: "/privacy" },
+  { label: "All Archive", href: "/products" },
+  { label: "Yêu thích", href: "/wishlist" },
+  { label: "Thanh toán", href: "/checkout" },
+  { label: "Đơn hàng", href: "/myorders" },
+  { label: "Tài khoản", href: "/profile" },
 ];

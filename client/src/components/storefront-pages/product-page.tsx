@@ -86,10 +86,10 @@ export function ProductPage({
         <section className="shell section-spacing">
           <EmptyState
             title="Không tìm thấy sản phẩm"
-            description="ID sản phẩm có thể không tồn tại hoặc không còn khả dụng trong catalog active."
+            description="Sản phẩm này hiện không còn hiển thị hoặc đã được thay thế bằng lựa chọn khác."
             action={
               <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
-                Quay lại catalog
+                Quay lại All Archive
               </Link>
             }
           />
@@ -104,16 +104,16 @@ export function ProductPage({
   const galleryImages = (images.length ? images : [fallbackImageForProduct(product.name)]).slice(0, 4);
   const activeGalleryImage = activeImage || galleryImages[0];
   const reviewCount = reviewList.summary.review_count;
-  const averageRating = reviewCount > 0 ? reviewList.summary.average_rating.toFixed(1) : "New";
+  const averageRating = reviewCount > 0 ? reviewList.summary.average_rating.toFixed(1) : "Mới";
   const deliveryPromise =
     selectedVariant?.lead_time ||
-    "Giao theo nhịp chuẩn của storefront, kèm theo trạng thái order thật sau checkout.";
+    "Giao theo khung thời gian tiêu chuẩn để bạn dễ sắp xếp nhận hàng.";
   const editorialSignal =
     selectedVariant?.color ||
     selectedVariant?.size ||
     product.brand ||
     product.category ||
-    "Collection view";
+    "Tuyến sưu tập";
 
   return (
     <main>
@@ -124,7 +124,7 @@ export function ProductPage({
       <section className="shell section-spacing detail-editorial-shell space-y-10">
         <section className="grid gap-6 rounded-[2rem] border border-[#d9d2c9] bg-white/72 px-6 py-7 shadow-editorial backdrop-blur md:px-8 xl:grid-cols-[minmax(0,1fr)_280px]">
           <div>
-            <p className="eyebrow">{product.category || "Product dossier"}</p>
+            <p className="eyebrow">{product.category || "Hồ sơ sản phẩm"}</p>
             <h1 className="mt-4 max-w-4xl font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.25rem]">
               {product.name}
             </h1>
@@ -162,7 +162,7 @@ export function ProductPage({
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Review signal
+                Tín hiệu đánh giá
               </p>
               <p className="mt-2 text-sm font-medium text-primary">
                 {averageRating}
@@ -182,7 +182,7 @@ export function ProductPage({
             deliveryPromise={deliveryPromise}
             images={galleryImages}
             productName={product.name}
-            reviewLabel={reviewCount > 0 ? `${averageRating} / 5 from ${reviewCount}` : "New arrival"}
+            reviewLabel={reviewCount > 0 ? `${averageRating} / 5 từ ${reviewCount} lượt` : "Vừa mở bán"}
             onSelectImage={setActiveImage}
           />
 
@@ -207,40 +207,38 @@ export function ProductPage({
         <section className="detail-assurance-grid grid gap-5 xl:grid-cols-3">
           <SurfaceCard className="detail-assurance-card p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-              Atelier note
+              Ghi chú giao diện
             </p>
             <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-              Editorial product detail
+              Trang chi tiết đã được phục hồi
             </h2>
             <p className="mt-4 text-sm leading-7 text-on-surface-variant">
-              Màn chi tiết này đã được kéo gần lại bố cục storefront cũ, nhưng vẫn dùng live data từ
-              `product-service`, `cart-service`, wishlist và product review backend hiện tại.
+              Bố cục được giữ thoáng và rõ để bạn tập trung vào hình ảnh, lựa chọn biến thể và quyết định mua nhanh hơn.
             </p>
           </SurfaceCard>
 
           <SurfaceCard className="detail-assurance-card p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-              Delivery promise
+              Cam kết giao hàng
             </p>
             <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
               {deliveryPromise}
             </h2>
             <p className="mt-4 text-sm leading-7 text-on-surface-variant">
               Variant đang chọn: <span className="font-medium text-primary">{editorialSignal}</span>.
-              Sau khi checkout, order timeline và payment state sẽ xuất hiện trực tiếp trong khu vực tài khoản.
+              Sau khi đặt hàng, bạn có thể quay lại tài khoản để theo dõi tình trạng đơn và thanh toán.
             </p>
           </SurfaceCard>
 
           <SurfaceCard className="detail-assurance-card p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-              Care & returns
+              Bảo quản & đổi trả
             </p>
             <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-              Returns center ready
+              Trung tâm đổi trả đã sẵn sàng
             </h2>
             <p className="mt-4 text-sm leading-7 text-on-surface-variant">
-              Khi đơn đã được tạo, yêu cầu trả hàng, upload evidence và hoàn tiền đều tiếp tục ở
-              returns center phục hồi trong `client/`.
+              Nếu sản phẩm chưa phù hợp, bạn vẫn có thể gửi yêu cầu đổi trả và theo dõi hoàn tiền trong khu vực tài khoản.
             </p>
           </SurfaceCard>
         </section>

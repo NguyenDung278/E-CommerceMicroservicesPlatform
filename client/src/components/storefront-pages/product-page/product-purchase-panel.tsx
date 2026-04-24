@@ -53,19 +53,19 @@ export function ProductPurchasePanel({
   return (
     <div className="detail-copy-editorial space-y-6 lg:sticky lg:top-28">
       <div className="rounded-[1.5rem] bg-surface-container-low px-6 py-8 md:px-8">
-        <p className="eyebrow">Purchase panel</p>
+        <p className="eyebrow">Bảng chọn mua</p>
         <div className="detail-badge-row mt-4">
-          <span className="cart-editorial-badge">{product.category || "Catalog"}</span>
+          <span className="cart-editorial-badge">{product.category || "Sản phẩm"}</span>
           <span className="cart-editorial-badge">{product.brand || "ND Shop"}</span>
           <span className={cn("cart-editorial-badge", effectiveStock <= 0 && "bg-[#fde4e1] text-[#8c2619]")}>
-            {effectiveStock <= 0 ? "Sold out" : `${effectiveStock} ready`}
+            {effectiveStock <= 0 ? "Hết hàng" : `${effectiveStock} sẵn sàng`}
           </span>
         </div>
         <h2 className="mt-5 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
-          Select your preferred variant.
+          Chọn biến thể phù hợp với bạn.
         </h2>
         <p className="detail-description-editorial mt-5 text-base leading-8 text-on-surface-variant">
-          Product detail này đang giữ live state từ product-service, nhưng rail mua hàng đã được kéo lại nhịp editorial cũ hơn để tách phần chọn variant, quantity và checkout action rõ ràng hơn.
+          Chọn màu, kích cỡ và số lượng ngay tại đây trước khi thêm vào giỏ hoặc mua ngay.
         </p>
 
         <div className="detail-utility-row mt-7 flex items-center justify-between gap-4">
@@ -164,7 +164,7 @@ export function ProductPurchasePanel({
           </div>
 
           <p className="detail-utility-note">
-            Buy now sẽ chuyển thẳng sang checkout với product hiện tại, còn add to cart sẽ giữ lại state để bạn tiếp tục đi qua archive.
+            Mua ngay sẽ chuyển thẳng sang checkout với sản phẩm hiện tại, còn thêm vào giỏ sẽ giữ lại trạng thái để bạn tiếp tục đi qua archive.
           </p>
         </div>
       </SurfaceCard>
@@ -175,35 +175,35 @@ export function ProductPurchasePanel({
           <strong>{selectedVariant?.sku || product.sku || "N/A"}</strong>
         </div>
         <div className="detail-assurance-card">
-          <span>Brand</span>
+          <span>Thương hiệu</span>
           <strong>{product.brand || "ND Shop"}</strong>
         </div>
         <div className="detail-assurance-card">
-          <span>Updated</span>
+          <span>Cập nhật</span>
           <strong>{formatLongDate(product.updated_at)}</strong>
         </div>
       </div>
 
       <div className="detail-system-grid">
         <div className="detail-system-card detail-system-card-active">
-          <strong>Cart + Wishlist</strong>
-          <p>State hoạt động trực tiếp trên client recovered.</p>
+          <strong>Giỏ hàng + Yêu thích</strong>
+          <p>Lưu nhanh món thích và quay lại so sánh bất cứ lúc nào.</p>
         </div>
         <div className="detail-system-card">
-          <strong>Checkout lane</strong>
-          <p>Order sẽ được tạo rồi bàn giao cho payment-service.</p>
+          <strong>Thanh toán thuận tiện</strong>
+          <p>Đi tiếp sang bước thanh toán ngay khi bạn đã sẵn sàng chốt đơn.</p>
         </div>
         <div className="detail-system-card">
-          <strong>Returns ready</strong>
-          <p>Đơn đã mua quay lại luồng returns center đã phục hồi.</p>
+          <strong>Đổi trả sẵn sàng</strong>
+          <p>Đơn đã mua vẫn có thể được theo dõi và gửi yêu cầu đổi trả dễ dàng.</p>
         </div>
       </div>
 
       <div className="detail-mobile-buy-bar">
         <div className="detail-mobile-buy-copy">
-          <span className="detail-mobile-buy-kicker">{product.category || "Product"}</span>
+          <span className="detail-mobile-buy-kicker">{product.category || "Sản phẩm"}</span>
           <strong>{formatCurrency(effectivePrice)}</strong>
-          <span>{effectiveStock <= 0 ? "Out of stock" : `${quantity} item selected`}</span>
+          <span>{effectiveStock <= 0 ? "Tạm hết hàng" : `${quantity} sản phẩm đã chọn`}</span>
         </div>
         <div className="detail-mobile-buy-actions">
           <button
@@ -213,7 +213,7 @@ export function ProductPurchasePanel({
             onClick={onAddToCart}
           >
             {busy === "cart" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
-            <span>{busy === "cart" ? "Đang thêm..." : "Add"}</span>
+            <span>{busy === "cart" ? "Đang thêm..." : "Thêm"}</span>
           </button>
           <button
             type="button"
@@ -221,7 +221,7 @@ export function ProductPurchasePanel({
             disabled={effectiveStock <= 0}
             onClick={onBuyNow}
           >
-            Buy now
+            Mua ngay
           </button>
         </div>
       </div>

@@ -28,8 +28,8 @@ export function ProductImageGallery({
     <div className="detail-media-editorial space-y-4">
       <div className="detail-main-frame overflow-hidden rounded-[1.25rem] bg-surface-container-low p-3">
         <div className="detail-gallery-nav">
-          <span className="detail-gallery-nav-button">Visual dossier</span>
-          <span className="detail-gallery-nav-button">{images.length} frames</span>
+          <span className="detail-gallery-nav-button">Hồ sơ hình ảnh</span>
+          <span className="detail-gallery-nav-button">{images.length} khung hình</span>
         </div>
         <div className="relative aspect-[4/5] overflow-hidden rounded-[1rem] bg-surface">
           <StorefrontImage
@@ -44,8 +44,8 @@ export function ProductImageGallery({
       </div>
       <div className="detail-gallery-caption">
         <div>
-          <span>Collection frame</span>
-          <strong>{category || brand || "Product archive"}</strong>
+          <span>Khung sưu tập</span>
+          <strong>{category || brand || "Lưu trữ sản phẩm"}</strong>
         </div>
         <small>{productName}</small>
       </div>
@@ -74,15 +74,15 @@ export function ProductImageGallery({
       </div>
       <div className="detail-gallery-insight-grid">
         <div className="detail-gallery-insight-card">
-          <span>Review signal</span>
+          <span>Tín hiệu đánh giá</span>
           <strong>{reviewLabel}</strong>
         </div>
         <div className="detail-gallery-insight-card">
-          <span>Brand lane</span>
-          <strong>{brand || "ND Shop editorial"}</strong>
+          <span>Dòng thương hiệu</span>
+          <strong>{brand || "ND Shop tuyển chọn"}</strong>
         </div>
         <div className="detail-gallery-insight-card">
-          <span>Delivery promise</span>
+          <span>Cam kết giao hàng</span>
           <strong>{deliveryPromise}</strong>
         </div>
       </div>

@@ -171,18 +171,18 @@ export function CartPage() {
         <section className="cart-editorial-header grid gap-6 rounded-[2rem] bg-white/60 p-6 shadow-editorial backdrop-blur md:p-8 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-6">
             <div>
-              <p className="eyebrow">Shopping bag</p>
+              <p className="eyebrow">Giỏ hàng</p>
               <h1 className="mt-4 max-w-4xl font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.5rem]">
                 Giỏ hàng của bạn
               </h1>
               <div className="cart-editorial-subtitle mt-5">
-                <span>Cart archive</span>
-                <span className="cart-editorial-badge">cart-service</span>
-                <span className="cart-editorial-badge">coupon preview</span>
-                <span className="cart-editorial-badge">payment ready</span>
+                <span>Kho giỏ hàng</span>
+                <span className="cart-editorial-badge">món đã chọn</span>
+                <span className="cart-editorial-badge">ưu đãi</span>
+                <span className="cart-editorial-badge">sẵn sàng thanh toán</span>
               </div>
               <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
-                Cart đồng bộ với `cart-service`, coupon preview đi qua `order-service`, còn checkout sẽ tạo order thật và chuyển sang `payment-service`.
+                Tại đây bạn có thể rà lại sản phẩm, điều chỉnh số lượng, thêm mã giảm giá và đi tiếp sang bước thanh toán.
               </p>
             </div>
 
@@ -217,19 +217,19 @@ export function CartPage() {
           <SurfaceCard className="grid content-start gap-4 p-5 md:p-6">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Collection note
+                Ghi chú lưu trữ
               </p>
               <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.04em] text-primary">
-                Order Summary
+                Tóm tắt đơn hàng
               </p>
             </div>
             <p className="text-sm leading-7 text-on-surface-variant">
-              Giỏ hàng đang mang lại editorial layout cũ hơn: sản phẩm ở một cột, summary ở rail riêng và voucher preview được giữ ngay trước checkout.
+              Mọi sản phẩm được gom rõ ràng ở một cột, còn phần tóm tắt đơn hàng nằm gọn ở bên cạnh để bạn kiểm tra nhanh hơn.
             </p>
             <div className="rounded-[1.25rem] bg-surface px-4 py-4 text-sm leading-7 text-on-surface-variant">
               {cart.items.length > 0
-                ? `${totalUnits} món đã sẵn sàng. Bạn có thể tiếp tục checkout ngay hoặc lưu lại để quay lại sau.`
-                : "Bag empty. Hãy quay lại archive để chọn thêm sản phẩm."}
+                ? `${totalUnits} món đã sẵn sàng. Bạn có thể thanh toán ngay hoặc để lại đây rồi quay lại sau.`
+                : "Giỏ hàng đang trống. Hãy quay lại All Archive để chọn thêm sản phẩm."}
             </div>
           </SurfaceCard>
         </section>
@@ -237,17 +237,17 @@ export function CartPage() {
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         {!isAuthenticated && cart.items.length > 0 ? (
           <InlineAlert tone="info">
-            Đây là giỏ tạm trên thiết bị hiện tại. Khi bạn đăng nhập, hệ thống sẽ merge từng item vào cart-service của tài khoản.
+            Đây là giỏ hàng tạm trên thiết bị hiện tại. Khi bạn đăng nhập, các món đã chọn vẫn sẽ sẵn sàng để tiếp tục mua sắm.
           </InlineAlert>
         ) : null}
 
         {cart.items.length === 0 ? (
           <EmptyState
             title="Giỏ hàng đang trống"
-            description="Hãy thêm sản phẩm từ catalog hoặc kéo thả trực tiếp từ màn listing vào dock giỏ hàng."
+            description="Hãy thêm sản phẩm từ danh mục để bắt đầu đơn hàng mới."
             action={
               <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
-                Đi tới catalog
+                Đi tới All Archive
               </Link>
             }
           />
@@ -280,7 +280,7 @@ export function CartPage() {
                         <div className="cart-editorial-item-head flex items-start justify-between gap-4">
                           <div>
                             <p className="cart-editorial-kicker text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                              {product?.category || "Catalog"}
+                              {product?.category || "Sản phẩm"}
                             </p>
                             <Link
                               href={`/products/${item.product_id}`}
@@ -298,15 +298,15 @@ export function CartPage() {
                         <div className="cart-editorial-item-meta grid gap-3 md:grid-cols-2">
                           <div className="cart-editorial-meta-block rounded-[1rem] bg-surface px-4 py-4">
                             <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                              Collection
+                              Danh mục
                             </span>
                             <p className="mt-2 text-sm font-medium text-primary">
-                              {product?.category || "General archive"}
+                              {product?.category || "Lưu trữ chung"}
                             </p>
                           </div>
                           <div className="cart-editorial-meta-block rounded-[1rem] bg-surface px-4 py-4">
                             <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                              Unit price
+                              Giá đơn vị
                             </span>
                             <p className="mt-2 text-sm font-medium text-primary">
                               {formatCurrency(item.price)}
@@ -405,7 +405,7 @@ export function CartPage() {
                   {couponFeedback ? <InlineAlert tone="info">{couponFeedback}</InlineAlert> : null}
                   {couponPreview?.coupon_description ? (
                     <div className="rounded-[1.25rem] bg-surface px-4 py-4 text-sm leading-7 text-on-surface-variant">
-                      <p className="font-medium text-primary">{couponPreview.coupon_code || "Voucher applied"}</p>
+                      <p className="font-medium text-primary">{couponPreview.coupon_code || "Mã đã áp dụng"}</p>
                       <p className="mt-2">{couponPreview.coupon_description}</p>
                     </div>
                   ) : null}
@@ -413,19 +413,19 @@ export function CartPage() {
 
                 <div className="mt-6 space-y-4">
                   <div className="flex items-center justify-between border-t border-outline-variant/20 pt-4">
-                    <span className="text-sm text-on-surface-variant">Total</span>
+                    <span className="text-sm text-on-surface-variant">Tổng cộng</span>
                     <strong className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                       {formatCurrency(totalDue)}
                     </strong>
                   </div>
                   <p className="text-sm leading-7 text-on-surface-variant">
-                    Proceed to checkout để tạo order thật. Nếu chưa đăng nhập, guest cart sẽ vẫn được giữ trên thiết bị hiện tại.
+                    Tiếp tục sang thanh toán để hoàn tất đơn hàng. Nếu chưa đăng nhập, giỏ hàng vẫn được giữ lại trên thiết bị này.
                   </p>
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3">
                   <Link href="/checkout" className={cn(buttonStyles({ size: "lg" }), "cart-editorial-cta")}>
-                    Tiếp tục checkout
+                    Tiếp tục thanh toán
                   </Link>
                   <button
                     type="button"
@@ -437,19 +437,19 @@ export function CartPage() {
                 </div>
 
                 <div className="cart-editorial-assurance">
-                  <div>Inventory sẽ được xác thực lại khi tạo order thật.</div>
-                  <div>Voucher chỉ là preview cho tới lúc order-service chốt đơn.</div>
-                  <div>Guest cart vẫn được giữ trên trình duyệt nếu bạn chưa đăng nhập.</div>
+                  <div>Số lượng sản phẩm sẽ được kiểm tra lại khi bạn xác nhận đơn.</div>
+                  <div>Mã giảm giá được áp vào tổng tiền trước khi thanh toán.</div>
+                  <div>Giỏ hàng vẫn được giữ lại nếu bạn chưa đăng nhập.</div>
                 </div>
               </div>
 
               {savedProducts.length > 0 ? (
                 <SurfaceCard className="cart-editorial-promo p-6">
-                  <span>Saved edits</span>
+                  <span>Món đã lưu</span>
                   <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
                     Đã lưu để xem sau
                   </h3>
-                  <p>Đẩy nhanh những món đã lưu quay lại giỏ mà không cần rời rail hiện tại.</p>
+                  <p>Đưa nhanh những món đã lưu quay lại giỏ mà không cần rời khỏi trang này.</p>
                   <div className="mt-5 grid gap-4">
                     {savedProducts.map((product) => (
                       <ProductCard
@@ -487,14 +487,14 @@ export function CartPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="cart-mobile-checkout-copy">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                {totalUnits === 1 ? "1 piece ready" : `${totalUnits} pieces ready`}
+                {totalUnits === 1 ? "1 món đã sẵn sàng" : `${totalUnits} món đã sẵn sàng`}
               </p>
               <p className="mt-2 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
                 {formatCurrency(totalDue)}
               </p>
             </div>
             <Link href="/checkout" className={cn(buttonStyles(), "cart-mobile-checkout-button")}>
-              Checkout
+              Thanh toán
             </Link>
           </div>
         </div>

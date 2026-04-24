@@ -325,8 +325,8 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
                 Đăng ký, chọn sản phẩm và mua sắm trên storefront thật.
               </h1>
               <p className="mt-6 max-w-2xl text-base leading-8 text-surface/84 md:text-xl">
-                ND Shop là giao diện dành cho người mua: đăng ký tài khoản, duyệt catalog, thêm vào
-                giỏ, checkout, thanh toán và theo dõi đơn hàng trên backend microservices hiện có.
+                ND Shop là nơi để bạn khám phá sản phẩm mới, lưu món yêu thích, thanh toán gọn và
+                quay lại theo dõi đơn hàng trong cùng một trải nghiệm mua sắm.
               </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link href="/products" className={buttonStyles({ size: "lg" })}>
@@ -364,25 +364,25 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
               className="hidden border-l border-white/20 pb-2 pl-8 text-surface lg:col-span-4 lg:col-start-9 lg:block"
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-surface/56">
-                Lớp thông tin hệ thống
+                Điểm nhấn hôm nay
               </p>
               <div className="mt-5 grid gap-5">
                 <div>
                   <p className="font-serif text-3xl italic leading-snug text-surface/88">
-                    “Catalog, giỏ hàng và checkout đang chạy trên contract backend thật.”
+                    “Mua sắm gọn hơn khi mọi thứ đều ở đúng chỗ: sản phẩm, yêu thích và thanh toán.”
                   </p>
                 </div>
                 <div>
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">{state.products.length}</span>
-                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Sản phẩm active</span>
+                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Sản phẩm đang bán</span>
                     </div>
                     <div>
                       <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">
                         {atelierDestinations.length + 1}
                       </span>
-                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Entry points</span>
+                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Lối mua sắm</span>
                     </div>
                   </div>
                 </div>
@@ -404,21 +404,21 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
               {
                 title: "1. Tạo tài khoản",
                 description:
-                  "Đăng ký bằng email, Google hoặc số điện thoại để lưu hồ sơ, địa chỉ giao hàng và nhận thông báo.",
+                  "Đăng ký nhanh để lưu địa chỉ, món yêu thích và quay lại mua sắm thuận tiện hơn.",
                 href: isAuthenticated ? "/profile" : "/register",
                 cta: isAuthenticated ? "Mở hồ sơ" : "Đăng ký ngay",
               },
               {
                 title: "2. Chọn sản phẩm",
                 description:
-                  "Duyệt catalog, xem tồn kho, lưu wishlist, rồi thêm sản phẩm vào giỏ hàng trước khi checkout.",
+                  "Xem danh mục, so sánh giá, lưu món yêu thích rồi thêm vào giỏ khi đã sẵn sàng.",
                 href: "/products",
-                cta: "Xem catalog",
+                cta: "Xem sản phẩm",
               },
               {
                 title: "3. Thanh toán và theo dõi",
                 description:
-                  "Checkout qua payment flow hiện có, sau đó xem đơn hàng, thanh toán, hoàn trả và trạng thái xử lý.",
+                  "Chốt đơn nhanh, xem lại lịch sử mua sắm và theo dõi tình trạng giao hàng dễ dàng.",
                 href: isAuthenticated ? "/myorders" : "/login?redirect=%2Fmyorders",
                 cta: "Theo dõi đơn hàng",
               },
@@ -446,47 +446,46 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
           {state.error ? <InlineAlert tone="error">{state.error}</InlineAlert> : null}
 
           <SectionHeading
-            eyebrow="Archive Atlas"
+            eyebrow="Danh mục nổi bật"
             title="All Archive, Men, Women, Footwear, Accessories."
-            description="Tôi đã kéo lại entry surface quan trọng nhất từ home UI cũ: một gateway cho toàn bộ archive và bốn cửa vào category/editorial riêng cho Men, Women, Footwear, Accessories."
+            description="Chọn nhanh lối mua sắm phù hợp với bạn, từ toàn bộ sản phẩm đến từng nhóm chính được ghé nhiều nhất."
           />
 
           <div className="home-archive-gateway mt-10">
             <article className="home-archive-gateway-surface">
               <div className="home-archive-gateway-copy">
                 <p className="home-archive-kicker">All Archive</p>
-                <h3 className="home-archive-title">The Curated Archive</h3>
+                <h3 className="home-archive-title">Toàn bộ sản phẩm nổi bật</h3>
                 <p className="home-archive-description">
-                  Mọi sản phẩm active đi qua một cửa vào duy nhất trước khi tách ra thành Men,
-                  Women, Footwear, Accessories. Đây là layer “All Archive” bị mất trong lần xóa
-                  lớn trước và giờ đã được kéo lại trên home.
+                  Bắt đầu từ All Archive để xem toàn bộ sản phẩm đang có, rồi đi tiếp sang Men,
+                  Women, Footwear hoặc Accessories khi bạn muốn mua sắm sâu hơn theo từng nhóm.
                 </p>
               </div>
 
               <div className="home-archive-gateway-stats">
                 <div>
                   <span>{state.products.length}</span>
-                  <small>Active products</small>
+                  <small>Sản phẩm đang bán</small>
                 </div>
                 <div>
                   <span>{atelierDestinations.length}</span>
-                  <small>Atelier entries</small>
+                  <small>Danh mục chính</small>
                 </div>
                 <div>
                   <span>{state.popularity.length || 0}</span>
-                  <small>Trending signals</small>
+                  <small>Gợi ý nổi bật</small>
                 </div>
               </div>
 
               <div className="home-archive-gateway-actions">
                 <Link href="/products" className={buttonStyles({ size: "lg" })}>
-                  Open all archive
+                  Mở All Archive
                 </Link>
                 <Link
                   href="/editorial/Shop%20Men"
                   className={buttonStyles({ variant: "secondary", size: "lg" })}
                 >
-                  Open editorial lane
+                  Xem Men
                 </Link>
               </div>
             </article>
@@ -526,10 +525,10 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
 
                       <div className="home-atelier-card-actions">
                         <Link href={entry.archiveHref} className="home-atelier-link">
-                          Category
+                          Xem sản phẩm
                         </Link>
                         <Link href={entry.editorialHref} className="home-atelier-link">
-                          Editorial
+                          Xem nổi bật
                         </Link>
                       </div>
                     </div>
@@ -539,8 +538,8 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
             ) : (
               <div className="mt-8">
                 <EmptyState
-                  title="Editorial categories đang đồng bộ"
-                  description="Khi storefront categories có dữ liệu, home page sẽ hiển thị cả All Archive lẫn bốn atelier entry đúng như UI cũ."
+                  title="Danh mục đang được cập nhật"
+                  description="Khi dữ liệu sản phẩm đầy đủ hơn, khu vực này sẽ tự hiện thêm các lối vào mua sắm tương ứng."
                 />
               </div>
             )}
@@ -551,23 +550,25 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
           <div className="shell">
             <div className="grid items-center gap-12 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1fr)] md:gap-20">
               <div>
-                <p className="eyebrow">Tín hiệu nền tảng</p>
+                <p className="eyebrow">Mua sắm dễ hơn</p>
                 <h2 className="headline-section mt-4 text-primary">
-                  Chính xác ở backend, ấm và thoáng ở trải nghiệm.
+                  Chọn nhanh, lưu gọn, quay lại vẫn tiện.
                 </h2>
                 <p className="mt-6 max-w-xl text-lg leading-8 text-on-surface-variant">
-                  Dữ liệu kho, giá và thanh toán chạy qua microservices thật, còn storefront giữ nhịp biên tập gọn gàng để catalog, checkout và khu vực tài khoản luôn bám vào flow commerce chính.
+                  Từ lần ghé đầu tiên đến khi quay lại mua tiếp, mọi khu vực chính đều được giữ nhịp rõ ràng để bạn xem hàng, thanh toán và theo dõi đơn thuận tiện hơn.
                 </p>
                 <div className="mt-10 grid grid-cols-2 gap-8">
                   <div>
-                    <span className="block font-serif text-3xl font-semibold tracking-[-0.03em] text-tertiary">0 mock</span>
-                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Dữ liệu chính</span>
+                    <span className="block font-serif text-3xl font-semibold tracking-[-0.03em] text-tertiary">
+                      {atelierDestinations.length + 1}
+                    </span>
+                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Lối mua sắm</span>
                   </div>
                   <div>
                     <span className="block font-serif text-3xl font-semibold tracking-[-0.03em] text-tertiary">
                       {heroProduct ? formatCurrency(heroProduct.price) : "N/A"}
                     </span>
-                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Hero live price</span>
+                    <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-outline">Giá nổi bật</span>
                   </div>
                 </div>
               </div>
@@ -632,16 +633,16 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
 
         <section className="shell section-spacing">
           <SectionHeading
-            eyebrow="Toàn bộ flow"
-            title="Từ tìm kiếm đến thanh toán, mọi màn chính giờ đã bám cùng một design system và một nguồn dữ liệu."
-            description="Những route dưới đây khớp với kiến trúc frontend cũ của repo nhưng được dựng lại bằng Next.js App Router."
+            eyebrow="Lối vào mua sắm"
+            title="Mọi điểm chạm chính đã được gom lại gọn hơn."
+            description="Đi thẳng tới những nơi bạn dùng nhiều nhất trong trải nghiệm mua sắm hằng ngày."
           />
 
           <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <PageLinkCard href="/products" title="Catalog" copy="Tìm kiếm, lọc, sắp xếp, kéo thả vào giỏ hoặc yêu thích." badge="Search + DnD" />
-            <PageLinkCard href="/checkout" title="Checkout" copy="Chọn địa chỉ, phương thức giao hàng và xử lý thanh toán thực với payment-service." badge="Orders + Payments" />
+            <PageLinkCard href="/products" title="Sản phẩm" copy="Tìm kiếm, lọc, sắp xếp và lưu nhanh những món muốn mua." badge="Danh mục" />
+            <PageLinkCard href="/checkout" title="Thanh toán" copy="Chọn địa chỉ, phương thức giao hàng và hoàn tất đơn hàng trong vài bước." badge="Đơn hàng" />
             <PageLinkCard href="/profile" title="Tài khoản" copy="Hồ sơ, địa chỉ, lịch sử đơn hàng, thanh toán, bảo mật và thông báo." badge="Trung tâm tài khoản" />
-            <PageLinkCard href="/login" title="Xác thực" copy="Đăng nhập, đăng ký, quên mật khẩu, xác minh email và xử lý OAuth." badge="Luồng xác thực" />
+            <PageLinkCard href="/login" title="Đăng nhập" copy="Vào lại tài khoản để tiếp tục mua sắm, xem đơn hàng và danh sách đã lưu." badge="Tài khoản" />
           </div>
         </section>
         <section className="shell pb-12">

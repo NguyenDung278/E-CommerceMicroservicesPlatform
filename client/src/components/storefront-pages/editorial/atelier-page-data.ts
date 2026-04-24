@@ -168,9 +168,9 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     catalogHref: "/products?category=Shop%20Men",
     hero: {
       variant: "dark-immersive",
-      badge: "DEV ONLY",
-      titleLines: [{ text: "Men’s Atelier" }],
-      description: "An architectural study in silhouette and structure. Crafted for the modern artisan.",
+      badge: "Nổi bật",
+      titleLines: [{ text: "Men" }],
+      description: "Những lựa chọn gọn gàng, sắc nét và dễ mặc mỗi ngày cho tủ đồ nam hiện đại.",
       imageUrl:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuACWMir-mH0L8UXbUXQWypp-pFR6ldBwMeB_P57xJ4h6lF91JgCYYyEJ27pPIbRuST3wzOd8tibscQ-NbIurAXAyGOUWfZstI5mdT9d5_jh6VLXet-x-y-OPWmMV69qNvZALg2WhY1PVY_SFZnR1pxtNpFxR9lsyyLR7XmqRbJ_dhy0WQE2rK_YiUzI2TXstgAkQ537sWLyCCgyHe5Z2QW16TODc2jAY392leqTD0jFdmPyw689W_PhHTFoOURRakfD2ODeVuxVtb-u",
       imageAlt:
@@ -179,7 +179,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     filters: [
       {
         kind: "list",
-        title: "Category",
+        title: "Danh mục",
         options: [
           { label: "Shirts", active: true },
           { label: "Outerwear" },
@@ -189,7 +189,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "sizes",
-        title: "Size",
+        title: "Kích cỡ",
         columns: 2,
         options: [
           { label: "S" },
@@ -200,14 +200,14 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "price",
-        title: "Price Range",
+        title: "Mức giá",
         minLabel: "$150",
         maxLabel: "$2,500",
         valuePercent: 46,
       },
     ],
-    showingLabel: "Showing 12 results",
-    sortLabel: "Sort by: Relevance",
+    showingLabel: "12 lựa chọn đang hiển thị",
+    sortLabel: "Sắp xếp: Phù hợp nhất",
     contentGridClassName: "lg:grid-cols-[188px_minmax(0,1fr)]",
     products: [
       {
@@ -302,9 +302,9 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     catalogHref: "/products?category=Shop%20Women",
     hero: {
       variant: "light-editorial",
-      badge: "DEV ONLY",
-      titleLines: [{ text: "The Women’s" }, { text: "Atelier" }],
-      description: "A curated selection of architectural silhouettes and natural textiles, designed for the modern form.",
+      badge: "Nổi bật",
+      titleLines: [{ text: "Women" }],
+      description: "Những thiết kế mềm mại, thanh lịch và dễ phối cho nhịp sống thường ngày lẫn dịp đặc biệt.",
       imageUrl:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuCCHjHHNBD0bZoSfUrXMIUsusvSJpfmxcJRzVyGEWriuKDCynB8NOcLil0MHJfUCfgjmGv_IMPAfbmEm73hz3s6Y6ycMQrKq1qnMzNHz4QbDczvsSfdf8SaL9vw3qoSEt36Xm52OFG4ej1BLs2XxqsJW_tPT1C2xruIyndF6i4KCKATXFKExblf5UqEURDlAYRnWNDYbLXe8GGoCndX4q2IeRKAuk6Etam3vFkW85HI4vZvrHKCLYN63hA-DGdTKTpY9k-VBO3aY4le",
       imageAlt:
@@ -313,7 +313,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     filters: [
       {
         kind: "list",
-        title: "Categories",
+        title: "Danh mục",
         showCounts: true,
         options: [
           { label: "Dresses", count: "12", active: true },
@@ -324,7 +324,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "sizes",
-        title: "Size",
+        title: "Kích cỡ",
         columns: 5,
         compact: true,
         options: [
@@ -337,7 +337,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "palette",
-        title: "Palette",
+        title: "Bảng màu",
         options: [
           { label: "Forest", color: "#061b0e" },
           { label: "Cream", color: "#f5f3ee", bordered: true, active: true },
@@ -346,8 +346,8 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
         ],
       },
     ],
-    showingLabel: "Showing 63 pieces",
-    sortLabel: "Sort By",
+    showingLabel: "63 lựa chọn đang hiển thị",
+    sortLabel: "Sắp xếp",
     contentGridClassName: "lg:grid-cols-[240px_minmax(0,1fr)]",
     products: [
       {
@@ -439,14 +439,14 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
         "https://lh3.googleusercontent.com/aida-public/AB6AXuCLsY0s2ZGLvPOl_WOwZoRpU02WbZGuHEO8UYQbV-QWMzzX129rq4Z6wr0Of9_rO5ILe2ORGFxzdGgYxdkYQuGX8LuAiJFBn-AWJ_STJTV3_Qaw1EYkxhfRFuy2Smn4yO_ovskCl5pppFCtSalHvg7ma1t9y4vciyHBl-hT5g_UQz_FOFrLG2NslH8KuNQiQDfwe7niMFOYjLd2kzxg__y2CRqR6UmCP7dbDRT-sBxMV1FcW2COldHDSQ6HCHyiqNEFS1cu9JEhcRAA",
       imageAlt:
         "Wide shot of a fashion atelier with large windows, rolls of fine fabric, and a dress form with a partially constructed garment",
-      storyHeading: "The Craftsmanship",
-      storyDescription: "Every piece is hand-finished in our northern studio, prioritizing ethical labor and carbon-neutral distribution.",
-      storyCtaLabel: "Read the Story",
+      storyHeading: "Tinh thần thủ công",
+      storyDescription: "Mỗi thiết kế được hoàn thiện kỹ lưỡng để giữ cảm giác sang trọng, bền đẹp và dễ mặc trong nhiều mùa.",
+      storyCtaLabel: "Xem thêm",
       storyHref: "/sustainability",
-      panelEyebrow: "Our Mission",
-      panelTitle: "Quiet Luxury, Defined by Purpose.",
+      panelEyebrow: "Tinh thần ND Shop",
+      panelTitle: "Thanh lịch, bền bỉ và dễ quay lại mặc nhiều lần.",
       panelDescription:
-        "ND Shop stands at the intersection of traditional couture and digital efficiency. We believe in pieces that last decades, not seasons.",
+        "ND Shop ưu tiên những món đồ có phom dáng rõ ràng, chất liệu tốt và đủ linh hoạt để đi cùng bạn lâu hơn một mùa mua sắm.",
     },
   },
   footwear: {
@@ -456,10 +456,10 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     catalogHref: "/products?category=Footwear",
     hero: {
       variant: "light-editorial",
-      eyebrow: "The Digital Atelier",
-      titleLines: [{ text: "Footwear Atelier" }],
+      eyebrow: "Lựa chọn nổi bật",
+      titleLines: [{ text: "Footwear" }],
       description:
-        "A curated collection of sculptural silhouettes, handcrafted from the finest Italian hides. Where traditional craftsmanship meets modern architectural precision.",
+        "Từ sneaker tối giản đến boots cá tính, mọi đôi giày đều được chọn để dễ đi và dễ kết hợp.",
       imageUrl:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuAFXvDME4hl86EBAExrs0TPuPyrDnhtwEb8MCDCvjzu2OS-kjWnUF7XkqwYs0MGf5WGZS6B5xPKLv0OXCG5ZrDjkm-McNkALLC0DCYp5LC9beGhY0SnzFUMFF998AElRWMoxze_NVDcZ1jJ4qerfPiE1xI5Xjc0Euy-lzfbdQzjbDW9gtsemGrCxPBq4MDAxVn_PdqcdHWaZ05cl7EMLinkvr6U9D8RGxe-UFtVaee5Q6n-Ohev-vr9h8DwExyawlWEZa9kUKDqsxlQ",
       imageAlt:
@@ -468,7 +468,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     filters: [
       {
         kind: "list",
-        title: "Type",
+        title: "Kiểu dáng",
         activeStyle: "underline",
         options: [
           { label: "Boots", active: true },
@@ -479,7 +479,7 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "sizes",
-        title: "Size",
+        title: "Kích cỡ",
         columns: 3,
         compact: true,
         options: [
@@ -493,12 +493,12 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "checkboxes",
-        title: "Material",
+        title: "Chất liệu",
         options: [{ label: "Calfskin", active: true }, { label: "Suede" }, { label: "Grain Leather" }],
       },
     ],
-    showingLabel: "Showing 5 objects",
-    sortLabel: "Sort by: Atelier Picks",
+    showingLabel: "5 lựa chọn đang hiển thị",
+    sortLabel: "Sắp xếp: Gợi ý nổi bật",
     contentGridClassName: "lg:grid-cols-[240px_minmax(0,1fr)]",
     products: [
       {
@@ -559,9 +559,9 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       {
         type: "feature",
         id: "heritage-series",
-        title: "The Heritage Series",
-        description: "Each pair is lasted by hand in our Marche workshop, requiring over 120 unique steps of production.",
-        ctaLabel: "Discover Craft",
+        title: "Heritage Series",
+        description: "Những đôi giày nổi bật với chất liệu tốt, phom bền và cảm giác mang chắc chân mỗi ngày.",
+        ctaLabel: "Xem ngay",
         href: "/products?category=Footwear",
         imageUrl:
           "https://lh3.googleusercontent.com/aida-public/AB6AXuCZ-APurl8_BiFwk3y7F_FQ6yAaUu7Zw5a3SwI1fKprr5Hl-pEJ7RvuePMticspNlEb5sfivV0hr3ziS5sz0bG3RDIHQNbSSzVxf4yy3SHrI1HYxt840txIaJXkqTxhDPEGqQSpKgpzORrmx7_dH36fEu9yV1wBLd4EFXPI3P9HF88KpxwOrHRf3Eo3vbpyF_6SUQioP80y8xLrbwF-t0TcylSeDTua3_2ycuM0U1UJFevlpmB_l93PUKlm0qiZoLJ5S6tUaoLL6bvQ",
@@ -572,8 +572,8 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     ],
     bottomSection: {
       kind: "quote-band",
-      quote: "Luxury is not the absence of imperfection, but the presence of character.",
-      attribution: "Master Shoemaker, ND Atelier",
+      quote: "Một đôi giày đẹp không chỉ vừa chân, mà còn giữ được cá tính của người mang.",
+      attribution: "ND Shop",
     },
   },
   accessories: {
@@ -583,9 +583,9 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     catalogHref: "/products?category=Accessories",
     hero: {
       variant: "light-framed",
-      titleLines: [{ text: "Accessories" }, { text: "Atelier", italic: true }],
+      titleLines: [{ text: "Accessories" }],
       description:
-        "A curated collection of tactile essentials, defined by material integrity and architectural form. Crafted for the discerning individual.",
+        "Túi, khăn, thắt lưng và những điểm nhấn nhỏ giúp bộ đồ hoàn chỉnh hơn mà vẫn tinh gọn.",
       imageUrl:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuBlb713Ad1ZqSwci4xtZudIi3pLSP2LntjrYOZbjlMC3NLKbFllzQBjpelA2EcNqh24qXtAEpJDAyVB3yIDQIFXvkmKD86_5kVoAVPrMjID1bCAWG7fccKmwcS9kJ41ohvAPtYZJCMl2fOWYpy8JLZLlE7ksjMmFK7UnFdxUeGvbhsRltWVAsAFxPv7hkz1uizaDdvr0s5HWGulhxwsX6bDRakqRxoA2bYrvMeQA0Nta95LkdO9PMTmAYDvvqhCUeQTFYjDd4sXr9q0",
       imageAlt:
@@ -594,10 +594,10 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
     filters: [
       {
         kind: "list",
-        title: "Category",
+        title: "Danh mục",
         uppercase: true,
         options: [
-          { label: "All Objects", active: true },
+          { label: "Tất cả", active: true },
           { label: "Bags" },
           { label: "Belts" },
           { label: "Jewelry" },
@@ -606,18 +606,18 @@ const atelierPages: Record<AtelierCategoryId, AtelierPageConfig> = {
       },
       {
         kind: "chips",
-        title: "Material",
+        title: "Chất liệu",
         options: ["Raw Silk", "Vachetta", "Sterling Silver", "Cashmere"],
       },
       {
         kind: "quote-card",
-        quote: "True luxury is found in the hidden details of the stitch.",
-        attribution: "The Master Artisan",
+        quote: "Điểm nhấn đẹp nhất luôn nằm ở cảm giác hoàn thiện khi cầm lên và sử dụng mỗi ngày.",
+        attribution: "ND Shop",
         tone: "dark",
       },
     ],
-    showingLabel: "Showing 6 objects",
-    sortLabel: "Sort by: Curated Order",
+    showingLabel: "6 lựa chọn nổi bật",
+    sortLabel: "Sắp xếp: Gợi ý chọn lọc",
     contentGridClassName: "lg:grid-cols-[230px_minmax(0,1fr)]",
     products: [
       {

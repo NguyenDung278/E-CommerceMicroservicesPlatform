@@ -58,7 +58,7 @@ type SortMode = "latest" | "price_asc" | "price_desc" | "popular" | "merchandisi
 
 const defaultSortOptions: Array<{ label: string; value: SortMode }> = [
   { value: "latest", label: "Mới nhất" },
-  { value: "merchandising", label: "Merchandising" },
+  { value: "merchandising", label: "Gợi ý nổi bật" },
   { value: "price_asc", label: "Giá tăng dần" },
   { value: "price_desc", label: "Giá giảm dần" },
   { value: "popular", label: "Phổ biến" },
@@ -130,6 +130,17 @@ function buildOptionsFromValues(
 function buildFacetOptionLabel(value: string, counts: Record<string, number>) {
   const count = counts[normalizeCatalogText(value)];
   return typeof count === "number" && count > 0 ? `${value} (${count})` : value;
+}
+
+function formatSuggestionKind(kind: ProductSearchSuggestion["kind"]) {
+  switch (kind) {
+    case "category":
+      return "Danh mục";
+    case "brand":
+      return "Thương hiệu";
+    default:
+      return "Gợi ý";
+  }
 }
 
 function applyCatalogClientTransforms(
@@ -549,10 +560,10 @@ function CatalogPageContent({
   const archiveHeroTitle = categoryAtelierConfig
     ? readAtelierArchiveTitle(categoryAtelierConfig)
     : "All Archive";
-  const archiveHeroEyebrow = categoryAtelierConfig ? "Atelier Archive" : "All Archive";
+  const archiveHeroEyebrow = categoryAtelierConfig ? "Danh mục nổi bật" : "All Archive";
   const archiveHeroDescription = categoryAtelierConfig
     ? categoryAtelierConfig.hero.description
-    : "Tailoring, knitwear, footwear, and accessories gathered into one calm archive backed by live product-service data.";
+    : "Tất cả sản phẩm được gom lại trong một nơi để bạn dễ tìm, dễ lọc và mua sắm nhanh hơn.";
   const archiveHeroTags = categoryAtelierConfig ? readAtelierArchiveTags(categoryAtelierConfig) : [];
   const archiveHeroEditorialHref = categoryAtelierConfig
     ? `/editorial/${encodeURIComponent(initialCategory ?? categoryAtelierConfig.navLabel)}`
@@ -748,24 +759,24 @@ function CatalogPageContent({
 
                 <div className="mt-8 grid gap-4 md:grid-cols-3">
                   <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                      Archive items
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Sản phẩm hiện có
                     </p>
                     <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                       {catalogIndex.length || products.length}
                     </p>
                   </div>
                   <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                      Active filters
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Bộ lọc đang dùng
                     </p>
                     <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                       {activeFilterCount}
                     </p>
                   </div>
                   <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                      Saved pieces
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Món đã lưu
                     </p>
                     <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                       {wishlist.length}
@@ -777,7 +788,7 @@ function CatalogPageContent({
               <div className="grid content-start gap-4 rounded-[2rem] bg-primary px-6 py-7 text-surface shadow-editorial">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-surface/62">
-                    {categoryAtelierConfig ? "Atelier Lane" : "Collection Focus"}
+                    {categoryAtelierConfig ? "Danh mục đang xem" : "Điểm mua sắm"}
                   </p>
                   <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.04em] text-surface">
                     {categoryAtelierConfig ? categoryAtelierConfig.navLabel : archiveFocusLabel}
@@ -785,12 +796,12 @@ function CatalogPageContent({
                 </div>
                 <p className="text-sm leading-7 text-surface/72">
                   {searchHint ||
-                    "An editorial storefront shaped for calm browsing, discovery, and quick drag-to-cart interactions."}
+                    "Chọn bộ lọc phù hợp để thu gọn kết quả và tìm món bạn cần nhanh hơn."}
                 </p>
                 <div className="rounded-[1.4rem] border border-white/10 bg-white/8 px-4 py-4 text-sm leading-7 text-surface/72 backdrop-blur-md">
                   {isPending || isLoadingProducts
-                    ? "Archive đang đồng bộ kết quả mới."
-                    : `${products.length} kết quả hiện sẵn sàng để duyệt hoặc kéo thả vào giỏ hàng / wishlist.`}
+                    ? "Đang cập nhật danh sách sản phẩm."
+                    : `${products.length} sản phẩm đã sẵn sàng để xem, lưu hoặc thêm vào giỏ.`}
                 </div>
                 {archiveHeroEditorialHref ? (
                   <div className="flex flex-col gap-3">
@@ -798,7 +809,7 @@ function CatalogPageContent({
                       href={archiveHeroEditorialHref}
                       className={cn(buttonStyles({ size: "md" }), "justify-center")}
                     >
-                      Open {categoryAtelierConfig?.navLabel} editorial
+                      Xem {categoryAtelierConfig?.navLabel}
                     </Link>
                     <Link
                       href="/products"
@@ -807,7 +818,7 @@ function CatalogPageContent({
                         "justify-center border-white/18 bg-white/10 text-surface hover:bg-white/16 hover:text-surface",
                       )}
                     >
-                      Back to all archive
+                      Về All Archive
                     </Link>
                   </div>
                 ) : null}
@@ -844,13 +855,13 @@ function CatalogPageContent({
                     type="button"
                     className="storefront-search-suggestion rounded-full border border-outline-variant/30 bg-background px-3 py-2 text-xs font-medium text-primary transition hover:border-outline hover:bg-surface"
                     onClick={() => handleSelectSearchSuggestion(suggestion)}
-                  >
-                    {suggestion.value}
-                    <span className="ml-2 text-on-surface-variant">
-                      {suggestion.kind} {suggestion.match_count}
-                    </span>
-                  </button>
-                ))}
+                    >
+                      {suggestion.value}
+                      <span className="ml-2 text-on-surface-variant">
+                      {formatSuggestionKind(suggestion.kind)} {suggestion.match_count}
+                      </span>
+                    </button>
+                  ))}
               </div>
             ) : null}
 
@@ -934,10 +945,10 @@ function CatalogPageContent({
             <div className="storefront-results-toolbar-shell rounded-[1.5rem] bg-surface-container-low px-5 py-4 text-sm text-on-surface-variant">
               <div className="storefront-results-toolbar flex flex-wrap items-center justify-between gap-3">
                 <span className="storefront-results-count text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Archive Results
+                  Kết quả sản phẩm
                 </span>
                 <span>
-                  {isPending || isLoadingProducts ? "Đang cập nhật kết quả..." : "Kết quả đã đồng bộ"}
+                  {isPending || isLoadingProducts ? "Đang cập nhật kết quả..." : "Danh sách đã sẵn sàng"}
                 </span>
               </div>
               <div className="storefront-results-summary mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -977,7 +988,7 @@ function CatalogPageContent({
               ) : products.length === 0 ? (
                 <EmptyState
                   title="Không có sản phẩm phù hợp"
-                  description="Hãy nới bộ lọc hoặc thử từ khóa khác. Query params vẫn được giữ nguyên để bạn có thể chia sẻ trạng thái tìm kiếm này."
+                  description="Hãy nới bộ lọc hoặc thử từ khóa khác để xem thêm sản phẩm phù hợp."
                   action={
                     <button
                       type="button"
@@ -1046,13 +1057,12 @@ function CatalogPageFallback() {
             <RecoveredStorefrontHeader navigation="fallback" tone="light" />
 
             <div className="max-w-3xl">
-              <p className="eyebrow">Seasonal Archive</p>
+              <p className="eyebrow">Danh mục mua sắm</p>
               <h1 className="mt-4 font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.25rem]">
-                Đang tải catalog sản phẩm
+                Đang tải sản phẩm
               </h1>
               <p className="mt-5 text-base leading-8 text-on-surface-variant md:text-lg">
-                Storefront đang đồng bộ bộ lọc và query params trước khi hiển thị dữ liệu thật từ
-                product-service.
+                Danh sách sản phẩm sẽ xuất hiện sau ít giây nữa.
               </p>
             </div>
           </div>
@@ -1077,9 +1087,9 @@ function CatalogFilters(props: FilterPanelProps) {
     <SurfaceCard className="p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="eyebrow">Filters</p>
+          <p className="eyebrow">Bộ lọc</p>
           <h3 className="mt-3 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-            Archive filters
+            Chọn theo nhu cầu
           </h3>
         </div>
         <button
@@ -1087,13 +1097,13 @@ function CatalogFilters(props: FilterPanelProps) {
           className={buttonStyles({ variant: "tertiary" })}
           onClick={props.onReset}
         >
-          Reset
+          Xóa lọc
         </button>
       </div>
 
       <div className="mt-6 space-y-6">
         <CatalogFilterSection
-          title="CATEGORY"
+          title="DANH MỤC"
           summary={props.category || "All Archive"}
         >
           <div className="flex flex-wrap gap-2">
@@ -1114,15 +1124,15 @@ function CatalogFilters(props: FilterPanelProps) {
         </CatalogFilterSection>
 
         <CatalogFilterSection
-          title="BRAND"
-          summary={props.brand || "All brands"}
+          title="THƯƠNG HIỆU"
+          summary={props.brand || "Tất cả thương hiệu"}
         >
           <Select
             aria-label="Lọc theo thương hiệu"
             value={props.brand}
             onChange={(event) => props.onBrandChange(event.target.value)}
           >
-            <option value="">Tất cả brand</option>
+            <option value="">Tất cả thương hiệu</option>
             {props.brandOptions.map((item) => (
               <option key={item} value={item}>
                 {buildFacetOptionLabel(item, props.brandCounts)}
@@ -1132,8 +1142,8 @@ function CatalogFilters(props: FilterPanelProps) {
         </CatalogFilterSection>
 
         <CatalogFilterSection
-          title="SIZE"
-          summary={props.size || "All sizes"}
+          title="KÍCH CỠ"
+          summary={props.size || "Tất cả kích cỡ"}
         >
           <div className="grid grid-cols-2 gap-3">
             {props.sizeOptions.length > 0 ? (
@@ -1147,15 +1157,15 @@ function CatalogFilters(props: FilterPanelProps) {
               ))
             ) : (
               <p className="text-sm leading-7 text-on-surface-variant">
-                Size options will appear here as soon as variant metadata is available.
+                Kích cỡ sẽ hiện ở đây khi sản phẩm có nhiều lựa chọn hơn.
               </p>
             )}
           </div>
         </CatalogFilterSection>
 
         <CatalogFilterSection
-          title="COLOR"
-          summary={props.color || "All colors"}
+          title="MÀU SẮC"
+          summary={props.color || "Tất cả màu sắc"}
         >
           <div className="flex flex-wrap gap-2">
             {props.colorOptions.length > 0 ? (
@@ -1169,18 +1179,18 @@ function CatalogFilters(props: FilterPanelProps) {
               ))
             ) : (
               <p className="text-sm leading-7 text-on-surface-variant">
-                Color options will appear here as soon as search facets are available.
+                Màu sắc sẽ hiện ở đây khi có thêm lựa chọn phù hợp.
               </p>
             )}
           </div>
         </CatalogFilterSection>
 
         <CatalogFilterSection
-          title="PRICE RANGE"
+          title="MỨC GIÁ"
           summary={
             props.minPrice || props.maxPrice
-              ? `${props.minPrice || "0"} - ${props.maxPrice || "Any"}`
-              : "Any price"
+              ? `${props.minPrice || "0"} - ${props.maxPrice || "Không giới hạn"}`
+              : "Mọi mức giá"
           }
         >
           <div className="grid grid-cols-2 gap-3">
@@ -1214,11 +1224,10 @@ function CatalogFilters(props: FilterPanelProps) {
 
         <div className="rounded-[1.4rem] bg-[#f6f1ea] px-4 py-4">
           <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            Collection Focus
+            Gợi ý nhanh
           </span>
           <p className="mt-3 text-sm leading-7 text-primary">
-            Bộ lọc hiện đang giữ đúng tinh thần archive cũ: chọn category trước, sau đó tinh chỉnh
-            size, color và mức giá.
+            Bắt đầu từ danh mục, rồi thu gọn thêm theo thương hiệu, kích cỡ, màu sắc và mức giá.
           </p>
         </div>
       </div>

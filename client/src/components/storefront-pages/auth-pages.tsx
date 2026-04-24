@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import {
@@ -54,6 +54,14 @@ function formatDisplayName(firstName?: string, lastName?: string) {
   return [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ") || "Khách hàng mới";
 }
 
+function isActiveAuthLane(pathname: string, href: string) {
+  if (href === "/forgot-password") {
+    return pathname === "/forgot-password" || pathname === "/reset-password";
+  }
+
+  return pathname === href;
+}
+
 type AuthShellTheme = {
   panelPill: string;
   storyKicker: string;
@@ -71,139 +79,139 @@ function resolveAuthShellTheme(eyebrow: string, title: string, description: stri
 
   if (normalizedEyebrow.includes("đăng nhập")) {
     return {
-      panelPill: "Welcome Back",
-      storyKicker: "Atelier Session",
-      storyTitle: "Curated items for the modern hearth.",
+      panelPill: "Phiên quay lại",
+      storyKicker: "Lối vào tài khoản",
+      storyTitle: "Quay lại giỏ hàng, đơn hàng và danh sách đã lưu.",
       storyCopy:
-        "Luồng đăng nhập hiện tại giữ đúng redirect sau xác thực, remember-session và các bước bảo mật bổ sung của backend.",
+        "Đăng nhập để quay lại giỏ hàng, danh sách yêu thích và lịch sử mua sắm của bạn.",
       stats: [
-        { label: "Entry point", value: "Email / Phone" },
-        { label: "OAuth lane", value: "Google ready" },
-        { label: "Session", value: "Redirect-safe" },
+        { label: "Đầu vào", value: "Email / Số điện thoại" },
+        { label: "Google", value: "Sẵn sàng" },
+        { label: "Phiên", value: "Giữ redirect" },
       ],
       highlights: [
         {
-          title: "Calm sign-in flow",
-          copy: "Đăng nhập thẳng bằng định danh đã xác minh mà không làm mất route ban đầu.",
+          title: "Đăng nhập gọn và yên ổn",
+          copy: "Vào lại tài khoản nhanh để tiếp tục mua sắm đúng nơi bạn đang dở dang.",
         },
         {
-          title: "Remembered session",
-          copy: "Tùy chọn ghi nhớ vẫn bám đúng local auth flow và bootstrap profile hiện có.",
+          title: "Ghi nhớ phiên hợp lệ",
+          copy: "Nếu bạn chọn ghi nhớ, lần quay lại sau sẽ thuận tiện hơn nhiều.",
         },
       ],
-      noteLabel: "Featured Collection",
-      noteValue: "The Evergreen Series",
-      noteCopy: "A tactile storefront session recovered from the older client UI.",
+      noteLabel: "Nhịp truy cập",
+      noteValue: "Đăng nhập, quay lại mua sắm",
+      noteCopy: "Giữ trải nghiệm gọn gàng để bạn tập trung vào sản phẩm và đơn hàng của mình.",
     };
   }
 
   if (normalizedEyebrow.includes("đăng ký")) {
     return {
-      panelPill: "Create Account",
-      storyKicker: "Fast Onboarding",
-      storyTitle: "Three fields, then real verification.",
+      panelPill: "Mở tài khoản",
+      storyKicker: "Onboarding ngắn gọn",
+      storyTitle: "Tạo tài khoản mới để mua sắm thuận tiện hơn.",
       storyCopy:
-        "Đăng ký bằng email hoặc số điện thoại vẫn đi qua OTP thật của backend, rồi chuyển thẳng sang phiên đăng nhập hợp lệ.",
+        "Đăng ký bằng email hoặc số điện thoại để lưu địa chỉ, danh sách yêu thích và lịch sử đơn hàng của bạn.",
       stats: [
-        { label: "Email OTP", value: "Supported" },
-        { label: "Telegram OTP", value: "Supported" },
-        { label: "Google", value: "Fallback lane" },
+        { label: "OTP email", value: "Có hỗ trợ" },
+        { label: "OTP Telegram", value: "Có hỗ trợ" },
+        { label: "Google", value: "Lối vào phụ" },
       ],
       highlights: [
         {
-          title: "One identifier field",
-          copy: "Email và số điện thoại cùng đi qua một đầu vào để giữ flow onboarding gọn hơn.",
+          title: "Một ô định danh",
+          copy: "Bạn có thể bắt đầu bằng email hoặc số điện thoại trong cùng một biểu mẫu gọn gàng.",
         },
         {
-          title: "Verification-first",
-          copy: "Tài khoản chỉ hoàn tất khi OTP hoặc OAuth đã được backend xác nhận.",
+          title: "Xác minh trước",
+          copy: "Xác minh nhanh để tài khoản sẵn sàng cho những lần mua sắm tiếp theo.",
         },
       ],
-      noteLabel: "Registration Model",
-      noteValue: "Email or Telegram OTP",
-      noteCopy: "Recovered auth shell now mirrors the older dual-lane signup story.",
+      noteLabel: "Mô hình xác minh",
+      noteValue: "Email hoặc Telegram OTP",
+      noteCopy: "Mục tiêu là giúp bạn tạo tài khoản nhanh mà vẫn yên tâm khi quay lại mua sắm.",
     };
   }
 
   if (normalizedEyebrow.includes("oauth")) {
     return {
-      panelPill: "OAuth Callback",
-      storyKicker: "Session Exchange",
-      storyTitle: "Synchronizing your storefront session.",
+      panelPill: "Đồng bộ OAuth",
+      storyKicker: "Trao đổi phiên",
+      storyTitle: "Đồng bộ phiên storefront của bạn.",
       storyCopy: description,
       stats: [
-        { label: "Ticket", value: "Short-lived" },
-        { label: "Profile", value: "Bootstrap" },
-        { label: "Redirect", value: "Resume route" },
+        { label: "Ticket", value: "Ngắn hạn" },
+        { label: "Hồ sơ", value: "Khởi tạo" },
+        { label: "Redirect", value: "Tiếp tục route" },
       ],
       highlights: [
         {
-          title: "Provider hand-off",
-          copy: "Frontend đang đổi OAuth ticket sang token pair chuẩn và tiếp tục route trước đó.",
+          title: "Bàn giao từ nhà cung cấp",
+          copy: "Đăng nhập Google đang được hoàn tất để bạn quay lại mua sắm ngay sau đó.",
         },
         {
-          title: "Safe resume",
-          copy: "Kể cả khi cần OTP bổ sung, flow vẫn giữ được context đăng nhập vừa chọn.",
+          title: "Tiếp tục an toàn",
+          copy: "Nếu cần thêm bước xác minh, bạn vẫn sẽ được đưa về đúng nơi mình đang dở dang.",
         },
       ],
-      noteLabel: "Processing",
-      noteValue: "OAuth sync in progress",
-      noteCopy: "Do not close this page while the callback exchange is running.",
+      noteLabel: "Tiến trình",
+      noteValue: "Đang đồng bộ phiên Google",
+      noteCopy: "Đừng đóng trang này trong lúc hệ thống đang hoàn tất đăng nhập cho bạn.",
     };
   }
 
   if (normalizedEyebrow.includes("xác minh")) {
     return {
-      panelPill: "Verification",
-      storyKicker: "Secure Account",
-      storyTitle: "Finish the last trust step.",
+      panelPill: "Lớp xác minh",
+      storyKicker: "Bảo toàn tài khoản",
+      storyTitle: "Hoàn tất bước tin cậy cuối cùng.",
       storyCopy: description,
       stats: [
-        { label: "Email state", value: "Awaiting trust" },
-        { label: "Recovery", value: "Stronger" },
-        { label: "Inbox", value: "Notification-ready" },
+        { label: "Email", value: "Chờ xác minh" },
+        { label: "Phục hồi", value: "Mạnh hơn" },
+        { label: "Thông báo", value: "Sẵn sàng" },
       ],
       highlights: [
         {
-          title: "Proof of ownership",
-          copy: "Email verification strengthens recovery and future account notifications.",
+          title: "Xác nhận quyền sở hữu",
+          copy: "Xác minh email giúp tài khoản mạnh hơn ở các luồng khôi phục và thông báo sau này.",
         },
         {
-          title: "Same backend contract",
-          copy: "Verification tokens are checked directly by the active user-service flow.",
+          title: "Xác minh rõ ràng",
+          copy: "Mã xác minh sẽ giúp bạn bảo vệ tài khoản tốt hơn cho những lần đăng nhập sau.",
         },
       ],
-      noteLabel: "Trust Layer",
-      noteValue: "Identity checkpoint",
-      noteCopy: "Recovered layout keeps the old story-card feel while preserving the Next runtime.",
+      noteLabel: "Điểm kiểm tra",
+      noteValue: "Xác minh danh tính",
+      noteCopy: "Hoàn tất bước này để tài khoản sẵn sàng cho mua sắm, theo dõi đơn và thông báo.",
     };
   }
 
   return {
     panelPill: normalizedEyebrow.includes("quên") || normalizedEyebrow.includes("đặt lại")
-      ? "Recovery"
+      ? "Khôi phục"
       : eyebrow,
-    storyKicker: "Account Recovery",
+    storyKicker: "Khôi phục tài khoản",
     storyTitle: title,
     storyCopy: description,
     stats: [
-      { label: "Reset", value: "Email-driven" },
-      { label: "Tokens", value: "Validated" },
-      { label: "Access", value: "Recovered" },
+      { label: "Kênh", value: "Qua email" },
+      { label: "Token", value: "Có kiểm tra" },
+      { label: "Truy cập", value: "Khôi phục" },
     ],
     highlights: [
       {
-        title: "Low-friction recovery",
-        copy: "Recovery pages stay concise but still carry the editorial shell from the older UI.",
+        title: "Khôi phục ít ma sát",
+        copy: "Các bước khôi phục được giữ ngắn gọn để bạn sớm quay lại tài khoản của mình.",
       },
       {
-        title: "Backend authority",
-        copy: "Every reset and verification state still comes from the current auth endpoints.",
+        title: "Backend là nguồn quyết định",
+        copy: "Mật khẩu mới sẽ có hiệu lực ngay sau khi bạn hoàn tất xác nhận.",
       },
     ],
-    noteLabel: "Recovery Lane",
-    noteValue: "Password access",
-    noteCopy: "Use this screen to safely re-enter the storefront without breaking the auth flow.",
+    noteLabel: "Lối vào khôi phục",
+    noteValue: "Quyền truy cập mật khẩu",
+    noteCopy: "Dùng màn này để quay lại tài khoản an toàn rồi tiếp tục mua sắm bình thường.",
   };
 }
 
@@ -220,7 +228,13 @@ function AuthShell({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const theme = resolveAuthShellTheme(eyebrow, title, description);
+  const laneLinks = [
+    { href: "/login", label: "Đăng nhập" },
+    { href: "/register", label: "Đăng ký" },
+    { href: "/forgot-password", label: "Khôi phục" },
+  ];
 
   return (
     <div className="auth-shell min-h-screen bg-background px-4 py-4 lg:px-5 lg:py-5">
@@ -319,6 +333,20 @@ function AuthShell({
               <p className="text-sm leading-7 text-on-surface-variant">
                 {description}
               </p>
+              <nav className="auth-lane-nav" aria-label="Lối vào tài khoản">
+                {laneLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={cn(
+                      "auth-lane-link",
+                      isActiveAuthLane(pathname, link.href) && "auth-lane-link-active",
+                    )}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
             </div>
             {children}
             {footer ? <div className="mt-8">{footer}</div> : null}
@@ -854,7 +882,7 @@ function RegisterPageContent() {
     <AuthShell
       eyebrow="Đăng ký"
       title="Tạo tài khoản nhanh với OTP email hoặc Telegram."
-      description="Form đăng ký giữ đúng 3 ô nhập liệu. Nếu bạn nhập email, backend sẽ gửi OTP email để hoàn tất xác minh. Nếu bạn nhập số điện thoại, backend sẽ gửi Telegram OTP và chỉ tạo tài khoản sau khi mã hợp lệ."
+      description="Chỉ với vài bước ngắn, bạn đã có thể tạo tài khoản để lưu địa chỉ, món yêu thích và theo dõi đơn hàng dễ hơn."
       footer={
         <p className="auth-switch-copy text-sm text-on-surface-variant">
           Đã có tài khoản?{" "}
@@ -914,7 +942,7 @@ function RegisterPageContent() {
               </div>
 
               <p className="rounded-[1.1rem] bg-surface-container-low px-4 py-4 text-sm leading-7 text-on-surface-variant">
-                Nếu bạn đăng ký bằng email hoặc số điện thoại, backend sẽ tự tạo một họ tên ngẫu nhiên và bạn có thể chỉnh lại sau trong hồ sơ. Nếu bạn tiếp tục với Google, backend sẽ tự đồng bộ email và họ tên từ Google profile.
+                Bạn có thể cập nhật lại họ tên và thông tin cá nhân sau khi hoàn tất đăng ký trong phần tài khoản.
               </p>
 
               <button type="submit" className={cn(buttonStyles({ size: "lg" }), "auth-submit-full w-full")} disabled={busy || phoneBusy}>
@@ -928,7 +956,7 @@ function RegisterPageContent() {
                   Telegram OTP
                 </p>
                 <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                  Sau khi Telegram OTP hợp lệ, backend sẽ tạo tài khoản phone-only và đăng nhập cho bạn ngay.
+                  Sau khi xác minh thành công, bạn sẽ được đưa thẳng vào tài khoản để tiếp tục mua sắm.
                 </p>
 
                 {phoneFeedback ? <div className="mt-4"><InlineAlert tone={phoneFeedback.tone}>{phoneFeedback.message}</InlineAlert></div> : null}
@@ -977,7 +1005,7 @@ function RegisterPageContent() {
                 Google và số điện thoại
               </p>
               <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                Nếu tiếp tục với Google, hệ thống sẽ tự lấy tên và email từ Google profile để tạo hoặc cập nhật tài khoản. Nếu email local chưa xác minh, trang callback sẽ gửi OTP email để bạn hoàn tất ngay trong cùng flow.
+                Tiếp tục với Google để tạo tài khoản nhanh hơn và quay lại mua sắm ngay khi đăng nhập xong.
               </p>
               <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "mt-5 w-full")} onClick={() => beginOAuthLogin("google", redirectTo, false)}>
                 Tiếp tục với Google
@@ -1107,7 +1135,7 @@ export function ForgotPasswordPageView() {
   }
 
   return (
-    <AuthShell eyebrow="Quên mật khẩu" title="Khôi phục quyền truy cập tài khoản." description="Luồng này dùng đúng endpoint forgot-password của user-service và vẫn giữ thông điệp an toàn ngay cả khi email delivery tạm thời lỗi.">
+    <AuthShell eyebrow="Quên mật khẩu" title="Khôi phục quyền truy cập tài khoản." description="Nhập email để nhận hướng dẫn đặt lại mật khẩu và quay lại tài khoản của bạn.">
       <div className="mt-6 space-y-6">
         {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
         <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
@@ -1169,7 +1197,7 @@ function ResetPasswordPageContent() {
   }
 
   return (
-    <AuthShell eyebrow="Đặt lại mật khẩu" title="Tạo mật khẩu mới cho tài khoản." description="Token đặt lại được kiểm tra trực tiếp bởi user-service trước khi cấp lại quyền truy cập.">
+    <AuthShell eyebrow="Đặt lại mật khẩu" title="Tạo mật khẩu mới cho tài khoản." description="Đặt lại mật khẩu mới để tiếp tục mua sắm và theo dõi đơn hàng như bình thường.">
       <div className="mt-6 space-y-6">
         {feedback ? <InlineAlert tone="error">{feedback}</InlineAlert> : null}
         <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
@@ -1286,7 +1314,7 @@ function AuthCallbackPageContent() {
     if (!ticket) {
       return {
         tone: "error",
-        message: "Không nhận được OAuth ticket từ backend.",
+        message: "Không nhận được dữ liệu đăng nhập từ Google. Hãy thử lại.",
       };
     }
 
@@ -1491,7 +1519,7 @@ function AuthCallbackPageContent() {
   }
 
   return (
-    <AuthShell eyebrow="Xử lý OAuth" title="Đang đồng bộ phiên đăng nhập." description="Frontend đang đổi short-lived OAuth ticket sang token pair chuẩn, lấy thông tin tài khoản đã được backend đồng bộ từ Google, rồi tiếp tục theo route ban đầu.">
+    <AuthShell eyebrow="Xử lý OAuth" title="Đang đồng bộ phiên đăng nhập." description="Hệ thống đang hoàn tất đăng nhập Google và chuẩn bị đưa bạn quay lại nơi đang mua sắm.">
       <div className="mt-6 space-y-6">
         <InlineAlert tone={feedback.tone}>{feedback.message}</InlineAlert>
 
@@ -1519,7 +1547,7 @@ function AuthCallbackPageContent() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-7 text-on-surface-variant">
-              Nếu email Google trùng với tài khoản hiện có, backend sẽ link và cập nhật profile thay vì tạo trùng tài khoản mới. Bạn cũng có thể bổ sung số điện thoại trong hồ sơ để bật đăng nhập bằng số và OTP Telegram.
+              Nếu email Google đã gắn với tài khoản hiện có, hệ thống sẽ tự nhận diện và cập nhật để bạn không phải tạo lại từ đầu. Bạn cũng có thể bổ sung số điện thoại sau trong hồ sơ.
             </p>
           </div>
         ) : null}

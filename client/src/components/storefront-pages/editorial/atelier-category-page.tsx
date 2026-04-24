@@ -60,7 +60,7 @@ export function AtelierCategoryPage({
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Curated products
+                  Sản phẩm nổi bật
                 </p>
                 <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                   {curatedProductCount}
@@ -68,7 +68,7 @@ export function AtelierCategoryPage({
               </div>
               <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Editorial panels
+                  Điểm nhấn bộ sưu tập
                 </p>
                 <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                   {editorialFeatureCount}
@@ -76,7 +76,7 @@ export function AtelierCategoryPage({
               </div>
               <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Filter groups
+                  Nhóm lọc
                 </p>
                 <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                   {config.filters.length}
@@ -86,26 +86,26 @@ export function AtelierCategoryPage({
 
             <div className="rounded-[1.6rem] border border-black/6 bg-surface p-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Quick links
+                Lối vào nhanh
               </p>
               <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                 {config.navLabel}
               </h2>
               <p className="mt-4 text-sm leading-7 text-on-surface-variant">
-                Route editorial này đã được đưa vào cụm storefront pages mới, nhưng vẫn giữ config-driven rendering từ adapter hiện tại.
+                Đi thẳng tới danh mục sản phẩm hoặc quay lại tài khoản để tiếp tục mua sắm.
               </p>
               <div className="mt-6 flex flex-col gap-3">
                 <Link
                   href={config.catalogHref}
                   className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-container"
                 >
-                  Open category archive
+                  Xem sản phẩm
                 </Link>
                 <Link
                   href={isAuthenticated ? "/profile" : "/login?redirect=%2Fprofile"}
                   className="inline-flex items-center justify-center rounded-lg border border-black/10 bg-white px-5 py-3 text-sm font-medium text-primary transition hover:border-primary/25 hover:bg-[#f7f4ef]"
                 >
-                  {isAuthenticated ? "Open account center" : "Sign in to continue"}
+                  {isAuthenticated ? "Mở tài khoản" : "Đăng nhập để tiếp tục"}
                 </Link>
               </div>
             </div>
@@ -157,7 +157,7 @@ function AtelierHeader({
             </Link>
 
             <div className="flex items-center gap-2 md:hidden">
-              <HeaderActionLink href={isAuthenticated ? "/profile" : "/login"} label="Account">
+              <HeaderActionLink href={isAuthenticated ? "/profile" : "/login"} label="Tài khoản">
                 <UserRound className="h-4 w-4 stroke-[1.85]" />
               </HeaderActionLink>
               <BagActionLink itemCount={itemCount} />
@@ -165,7 +165,7 @@ function AtelierHeader({
           </div>
 
           <nav
-            aria-label="Atelier categories"
+            aria-label="Danh mục mua sắm"
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-center md:flex-nowrap md:gap-x-9"
           >
             {navItems.map((item) => {
@@ -188,7 +188,7 @@ function AtelierHeader({
           </nav>
 
           <div className="hidden items-center justify-end gap-3 md:flex">
-            <HeaderActionLink href={isAuthenticated ? "/profile" : "/login"} label="Account">
+            <HeaderActionLink href={isAuthenticated ? "/profile" : "/login"} label="Tài khoản">
               <UserRound className="h-4 w-4 stroke-[1.85]" />
             </HeaderActionLink>
             <BagActionLink itemCount={itemCount} />
@@ -223,7 +223,7 @@ function BagActionLink({ itemCount }: { itemCount: number }) {
   return (
     <Link
       href="/cart"
-      aria-label="Shopping bag"
+      aria-label="Giỏ hàng"
       className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-primary transition-colors hover:bg-black/5"
     >
       <ShoppingBag className="h-4 w-4 stroke-[1.85]" />
@@ -382,7 +382,7 @@ function HeroTitle({
 
 function FilterSidebar({ filters }: { filters: AtelierFilterGroup[] }) {
   return (
-    <aside aria-label="Product filters" className="lg:pt-3">
+    <aside aria-label="Bộ lọc sản phẩm" className="lg:pt-3">
       <div className="space-y-10 lg:sticky lg:top-24">
         {filters.map((group, index) => (
           <FilterGroup key={group.kind === "quote-card" ? `${group.kind}-${index}` : `${group.kind}-${group.title}`} group={group} />
@@ -790,7 +790,7 @@ function AtelierFooter({ footerLinks }: { footerLinks: AtelierFooterLink[] }) {
 
         <div className="mt-10 h-px w-full max-w-lg bg-black/8" />
         <p className="mt-10 text-[10px] uppercase tracking-[0.28em] text-[#7b7a73]">
-          © 2024 ND Shop. The Digital Atelier.
+          © 2024 ND Shop. Chọn đồ theo phong cách riêng.
         </p>
       </div>
     </footer>

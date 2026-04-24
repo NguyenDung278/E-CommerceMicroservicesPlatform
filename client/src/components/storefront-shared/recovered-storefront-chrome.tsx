@@ -13,6 +13,7 @@ import { getDisplayName } from "@/utils/format";
 type StorefrontNavigationItem = {
   href: string;
   label: string;
+  matchers: string[];
 };
 
 type RecoveredStorefrontHeaderProps = {
@@ -25,23 +26,36 @@ export type RecoveredEditorialFooterLink = {
   href: string;
 };
 
-const coreNavigationItems: StorefrontNavigationItem[] = [
-  { href: "/categories/Shop%20Men", label: "Men" },
-  { href: "/categories/Shop%20Women", label: "Women" },
-  { href: "/categories/Footwear", label: "Footwear" },
-  { href: "/categories/Accessories", label: "Accessories" },
-];
-
-const fallbackNavigationItems: StorefrontNavigationItem[] = [
-  { href: "/products", label: "All Archive" },
-  ...coreNavigationItems,
+const storefrontSwitcherItems: StorefrontNavigationItem[] = [
+  { href: "/", label: "ND Shop", matchers: ["/"] },
+  { href: "/products", label: "All Archive", matchers: ["/products", "/catalog"] },
+  {
+    href: "/categories/Shop%20Men",
+    label: "Men",
+    matchers: ["/categories/Shop Men", "/editorial/Shop Men"],
+  },
+  {
+    href: "/categories/Shop%20Women",
+    label: "Women",
+    matchers: ["/categories/Shop Women", "/editorial/Shop Women"],
+  },
+  {
+    href: "/categories/Footwear",
+    label: "Footwear",
+    matchers: ["/categories/Footwear", "/editorial/Footwear"],
+  },
+  {
+    href: "/categories/Accessories",
+    label: "Accessories",
+    matchers: ["/categories/Accessories", "/editorial/Accessories"],
+  },
 ];
 
 const defaultFooterLinks: RecoveredEditorialFooterLink[] = [
-  { label: "Archive", href: "/products" },
-  { label: "Wishlist", href: "/wishlist" },
-  { label: "Checkout", href: "/checkout" },
-  { label: "Account", href: "/profile" },
+  { label: "All Archive", href: "/products" },
+  { label: "Yêu thích", href: "/wishlist" },
+  { label: "Thanh toán", href: "/checkout" },
+  { label: "Tài khoản", href: "/profile" },
 ];
 
 function formatCompactCount(value: number) {
@@ -52,18 +66,21 @@ function formatCompactCount(value: number) {
   return String(value);
 }
 
-function isActiveNavigation(pathname: string, href: string) {
+function isActiveNavigation(pathname: string, item: StorefrontNavigationItem) {
   const normalizedPathname = decodeURIComponent(pathname);
-  const normalizedHref = decodeURIComponent(href);
 
-  if (href === "/") {
-    return normalizedPathname === "/";
-  }
+  return item.matchers.some((matcher) => {
+    const normalizedMatcher = decodeURIComponent(matcher);
 
-  return (
-    normalizedPathname === normalizedHref ||
-    normalizedPathname.startsWith(`${normalizedHref}/`)
-  );
+    if (normalizedMatcher === "/") {
+      return normalizedPathname === "/";
+    }
+
+    return (
+      normalizedPathname === normalizedMatcher ||
+      normalizedPathname.startsWith(`${normalizedMatcher}/`)
+    );
+  });
 }
 
 export function RecoveredStorefrontHeader({
@@ -74,12 +91,11 @@ export function RecoveredStorefrontHeader({
   const { isAuthenticated, user } = useAuthState();
   const { itemCount } = useCartState();
   const { wishlistCount } = useWishlist();
-  const navigationItems =
-    navigation === "core" ? coreNavigationItems : fallbackNavigationItems;
+  const navigationItems = storefrontSwitcherItems;
   const accountHref = isAuthenticated ? "/profile" : "/login";
   const accountLabel = isAuthenticated
     ? getDisplayName(user?.first_name, user?.last_name)
-    : "Login";
+    : "Đăng nhập";
   const toneClassName =
     tone === "light"
       ? {
@@ -92,6 +108,11 @@ export function RecoveredStorefrontHeader({
             "border border-[#d9d3ca] bg-[#fbf7f1] text-primary hover:border-primary/25 hover:bg-white",
           account:
             "border border-[#d7d0c7] bg-[#fbf7f1] text-primary hover:border-primary/25 hover:bg-white",
+          switcherShell: "border-[#d7d0c7] bg-[#f7f2eb]/92",
+          switcherLink:
+            "border border-transparent bg-transparent text-on-surface-variant hover:border-[#d7d0c7] hover:bg-white hover:text-primary",
+          switcherActive:
+            "border-[#d4cdc2] bg-white text-primary shadow-[0_18px_30px_-24px_rgba(27,28,25,0.34)]",
         }
       : {
           header:
@@ -103,6 +124,10 @@ export function RecoveredStorefrontHeader({
             "border border-white/14 bg-white/10 text-white hover:border-white/30 hover:bg-white/16",
           account:
             "border border-white/14 bg-white/10 text-white hover:border-white/30 hover:bg-white/16",
+          switcherShell: "border-white/12 bg-white/8",
+          switcherLink:
+            "border border-transparent bg-transparent text-white/72 hover:border-white/14 hover:bg-white/10 hover:text-white",
+          switcherActive: "border-white/18 bg-white text-primary shadow-[0_22px_36px_-26px_rgba(0,0,0,0.46)]",
         };
 
   return (
@@ -113,34 +138,16 @@ export function RecoveredStorefrontHeader({
         toneClassName.header,
       )}
     >
-      <div className="flex items-center gap-6">
+      <div className="storefront-overlay-brand-block flex items-center gap-6">
         <Link
           href="/"
           className="storefront-overlay-brand font-serif text-[1.7rem] font-semibold tracking-[-0.05em]"
         >
           ND Shop
         </Link>
-
-        <nav
-          className="storefront-overlay-nav hidden items-center gap-5 lg:flex"
-          aria-label="Recovered storefront navigation"
-        >
-          {navigationItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "storefront-overlay-link border-b pb-1 text-[12px] font-medium uppercase tracking-[0.24em] transition",
-                toneClassName.link,
-                isActiveNavigation(pathname, item.href)
-                  ? cn("storefront-overlay-link-active", toneClassName.linkActive)
-                  : "border-transparent",
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <p className="storefront-overlay-caption hidden text-sm leading-6 text-on-surface-variant xl:block">
+          Một thanh chuyển hướng theo nhịp storefront lớn: vào thẳng home, all archive hoặc lane danh mục chỉ với một lần chạm.
+        </p>
       </div>
 
       <div className="storefront-overlay-actions flex items-center gap-2 md:gap-3">
@@ -148,8 +155,8 @@ export function RecoveredStorefrontHeader({
           href="/wishlist"
           aria-label={
             wishlistCount > 0
-              ? `Wishlist with ${wishlistCount} saved items`
-              : "Wishlist"
+              ? `Yêu thích với ${wishlistCount} sản phẩm đã lưu`
+              : "Yêu thích"
           }
           className={cn(
             "storefront-overlay-wishlist-link relative inline-flex h-11 w-11 items-center justify-center rounded-full transition",
@@ -171,7 +178,7 @@ export function RecoveredStorefrontHeader({
 
         <Link
           href="/cart"
-          aria-label="Cart"
+          aria-label="Giỏ hàng"
           className={cn(
             "storefront-overlay-bag-link relative inline-flex h-11 w-11 items-center justify-center rounded-full transition",
             toneClassName.iconButton,
@@ -201,15 +208,44 @@ export function RecoveredStorefrontHeader({
                 {accountLabel}
               </span>
               <span className="storefront-overlay-account-role text-[10px] uppercase tracking-[0.22em] opacity-70">
-                Account
+                Tài khoản
               </span>
             </span>
           ) : (
             <span className="text-[11px] font-semibold uppercase tracking-[0.24em]">
-              Login
+              Đăng nhập
             </span>
           )}
         </Link>
+      </div>
+
+      <div className="storefront-switcher-shell col-span-full">
+        <nav
+          className={cn(
+            "storefront-switcher-nav",
+            navigation === "core" && "storefront-switcher-nav-core",
+            toneClassName.switcherShell,
+          )}
+          aria-label="Lối vào mua sắm"
+        >
+          {navigationItems.map((item) => {
+            const isActive = isActiveNavigation(pathname, item);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "storefront-switcher-link",
+                  toneClassName.switcherLink,
+                  isActive && cn("storefront-switcher-link-active", toneClassName.switcherActive),
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </header>
   );
@@ -218,8 +254,8 @@ export function RecoveredStorefrontHeader({
 export function RecoveredEditorialFooter({
   variant = "page",
   brandName = "ND Shop",
-  caption = "Crafted for the Discerning",
-  note = "An editorial storefront shaped for clear browsing, product discovery, and quick returns.",
+  caption = "Mua sắm chọn lọc",
+  note = "Khám phá sản phẩm, lưu món yêu thích và đi thẳng tới thanh toán hoặc đổi trả trong một nhịp mua sắm gọn gàng.",
   links = defaultFooterLinks,
 }: {
   variant?: "page" | "layout";
@@ -255,7 +291,7 @@ export function RecoveredEditorialFooter({
       </div>
 
       <nav
-        aria-label="Recovered storefront footer"
+        aria-label="Liên kết cuối trang"
         className="editorial-signature-footer-links flex flex-wrap items-center gap-3 md:justify-end"
       >
         {links.map((link) => {

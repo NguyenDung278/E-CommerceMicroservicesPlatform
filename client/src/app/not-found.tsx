@@ -19,9 +19,8 @@ export default function NotFound() {
             Không tìm thấy trang bạn đang mở
           </h1>
           <p className="mt-5 text-base leading-8 text-on-surface-variant">
-            Route này hiện không tồn tại hoặc đã thay đổi. Bạn có thể quay về
-            trang chủ hoặc tiếp tục khám phá catalog sản phẩm đang kết nối với
-            backend thật của hệ thống.
+            Trang này hiện không còn khả dụng. Bạn có thể quay về trang chủ
+            hoặc tiếp tục khám phá sản phẩm đang mở bán.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Link href="/" className={buttonStyles({ size: "lg" })}>
@@ -31,7 +30,7 @@ export default function NotFound() {
               href="/products"
               className={buttonStyles({ variant: "secondary", size: "lg" })}
             >
-              Mở catalog
+              Mở All Archive
             </Link>
           </div>
         </div>

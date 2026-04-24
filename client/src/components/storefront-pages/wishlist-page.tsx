@@ -143,7 +143,7 @@ export function WishlistPage() {
       await addItem({ product_id: product.id, quantity: 1 });
       setFeedback({
         tone: "success",
-        message: `${product.name} da duoc them vao gio hang.`,
+        message: `${product.name} đã được thêm vào giỏ hàng.`,
       });
     } catch (reason) {
       setFeedback({
@@ -158,7 +158,7 @@ export function WishlistPage() {
   function handleRemoveFromWishlist(product: Product) {
     setFeedback({
       tone: "info",
-      message: `${product.name} da duoc go khoi wishlist.`,
+      message: `${product.name} đã được gỡ khỏi danh sách yêu thích.`,
     });
     toggleWishlist(product.id);
   }
@@ -171,8 +171,8 @@ export function WishlistPage() {
       setFeedback({
         tone: "success",
         message: isAuthenticated
-          ? "Wishlist da duoc dong bo lai voi tai khoan hien tai."
-          : "Wishlist local da duoc tai lai tu trinh duyet hien tai.",
+          ? "Danh sách yêu thích đã được cập nhật lại cho tài khoản hiện tại."
+          : "Danh sách yêu thích đã được tải lại trên thiết bị này.",
       });
     } catch (reason) {
       setFeedback({
@@ -196,7 +196,7 @@ export function WishlistPage() {
       if (nextWishlist.length === 0) {
         setFeedback({
           tone: "success",
-          message: "Wishlist da duoc lam sach.",
+          message: "Danh sách yêu thích đã được làm trống.",
         });
         return;
       }
@@ -204,14 +204,14 @@ export function WishlistPage() {
       if (nextWishlist.length < previousCount) {
         setFeedback({
           tone: "info",
-          message: "Wishlist da duoc cap nhat, nhung van con mot so mon chua xoa duoc.",
+          message: "Danh sách yêu thích đã được cập nhật, nhưng vẫn còn vài món chưa thể xóa ngay.",
         });
         return;
       }
 
       setFeedback({
         tone: "error",
-        message: "Khong the lam sach wishlist luc nay. Hay thu lai.",
+        message: "Chưa thể làm trống danh sách yêu thích lúc này. Hãy thử lại.",
       });
     } catch (reason) {
       setFeedback({
@@ -254,22 +254,22 @@ export function WishlistPage() {
               <div className="wishlist-heading-copy">
                 <p className="eyebrow">Wishlist</p>
                 <h1 className="mt-4 max-w-4xl font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.5rem]">
-                  Luu lai nhung mon ban muon quay lai sau.
+                  Lưu lại những món bạn muốn quay lại sau.
                 </h1>
                 <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
                   {isAuthenticated
-                    ? "Wishlist dang duoc dong bo theo tai khoan, co the mo lai tren cac thiet bi khac sau khi dang nhap."
-                    : "Wishlist hien dang luu tam tren trinh duyet nay. Dang nhap de hop nhat vao tai khoan va dung tren nhieu thiet bi."}
+                    ? "Danh sách yêu thích đang đi theo tài khoản của bạn để có thể mở lại bất cứ lúc nào."
+                    : "Danh sách yêu thích hiện đang được giữ trên thiết bị này. Đăng nhập để lưu lại lâu hơn."}
                 </p>
               </div>
 
               <div className="wishlist-heading-actions flex flex-wrap gap-3">
                 <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
-                  Tiep tuc mua sam
+                  Tiếp tục mua sắm
                 </Link>
                 {!isAuthenticated ? (
                   <Link href="/login" className={buttonStyles()}>
-                    Dang nhap de dong bo
+                    Đăng nhập để lưu lại
                   </Link>
                 ) : null}
               </div>
@@ -279,13 +279,13 @@ export function WishlistPage() {
               <div className="wishlist-heading-meta">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                    Snapshot
+                    Tổng quan
                   </p>
                   <strong className="mt-2 block font-serif text-4xl font-semibold tracking-[-0.04em] text-primary">
                     {wishlistCount}
                   </strong>
                   <p className="mt-2 text-sm leading-7 text-on-surface-variant">
-                    san pham da luu
+                    sản phẩm đã lưu
                   </p>
                 </div>
                 <div className="rounded-full bg-primary/8 p-3 text-primary">
@@ -295,15 +295,15 @@ export function WishlistPage() {
 
               <div className="grid gap-3 text-sm text-on-surface-variant">
                 <div className="flex items-center justify-between gap-3">
-                  <span>Co the dat ngay</span>
+                  <span>Có thể đặt ngay</span>
                   <strong className="text-primary">{readyToBuyCount}</strong>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Tam het hang</span>
+                  <span>Tạm hết hàng</span>
                   <strong className="text-primary">{unavailableCount}</strong>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Tong gia tri tham khao</span>
+                  <span>Tổng giá trị tham khảo</span>
                   <strong className="text-primary">{formatCurrency(totalSavedValue)}</strong>
                 </div>
               </div>
@@ -316,7 +316,7 @@ export function WishlistPage() {
                   onClick={() => void handleRefreshWishlist()}
                 >
                   <RefreshCw className={cn("h-4 w-4", isRefreshingWishlist && "animate-spin")} />
-                  <span>{isRefreshingWishlist ? "Dang dong bo..." : "Dong bo lai"}</span>
+                  <span>{isRefreshingWishlist ? "Đang cập nhật..." : "Tải lại"}</span>
                 </button>
                 <button
                   type="button"
@@ -325,7 +325,7 @@ export function WishlistPage() {
                   onClick={() => void handleClearWishlist()}
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span>{isClearingWishlist ? "Dang xoa..." : "Xoa tat ca"}</span>
+                  <span>{isClearingWishlist ? "Đang xóa..." : "Xóa tất cả"}</span>
                 </button>
               </div>
             </SurfaceCard>
@@ -334,39 +334,39 @@ export function WishlistPage() {
           <section className="wishlist-insight-grid grid gap-4 md:grid-cols-3">
             <SurfaceCard className="wishlist-insight-card p-5 md:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                Trang thai dong bo
+                Trạng thái lưu
               </p>
               <strong className="mt-3 block font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                {isAuthenticated ? "Tai khoan" : "Trinh duyet"}
+                {isAuthenticated ? "Tài khoản" : "Thiết bị này"}
               </strong>
               <p className="mt-3 text-sm leading-7 text-on-surface-variant">
                 {isAuthenticated
-                  ? "Thay doi wishlist se di thang vao backend va hoi nhap voi alerts/thong bao."
-                  : "Cac mon da luu van dung duoc khi chua dang nhap va se merge sau khi login."}
+                  ? "Những món đã lưu luôn sẵn để bạn quay lại xem từ tài khoản của mình."
+                  : "Những món đã lưu vẫn được giữ lại để bạn tiếp tục mua sắm sau."}
               </p>
             </SurfaceCard>
 
             <SurfaceCard className="wishlist-insight-card p-5 md:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                San sang checkout
+                Sẵn sàng mua
               </p>
               <strong className="mt-3 block font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                 {readyToBuyCount}/{wishlistCount}
               </strong>
               <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                Nhung mon con ton kho co the day vao gio hang ngay de di tiep sang checkout.
+                Những món còn hàng có thể được đưa vào giỏ ngay để đi tiếp sang bước thanh toán.
               </p>
             </SurfaceCard>
 
             <SurfaceCard className="wishlist-insight-card p-5 md:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-                Wishlist alerts
+                Cảnh báo wishlist
               </p>
               <strong className="mt-3 block font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                Da noi backend
+                Luôn sẵn sàng
               </strong>
               <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                Gia giam va back-in-stock alerts se xuat hien trong khu Notifications cua tai khoan.
+                Theo dõi món yêu thích để quay lại ngay khi bạn muốn thêm vào giỏ hoặc đặt mua.
               </p>
             </SurfaceCard>
           </section>
@@ -375,23 +375,22 @@ export function WishlistPage() {
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
         {missingCount > 0 ? (
           <InlineAlert tone="info">
-            Co {missingCount} mon da luu khong con hydrate duoc tu catalog hien tai. Thu dong bo lai
-            hoac go cac mon khong con hop le trong tai khoan.
+            Có {missingCount} món đã lưu hiện không còn hiển thị. Hãy tải lại hoặc gỡ những món không còn phù hợp.
           </InlineAlert>
         ) : null}
 
         {visibleSavedProducts.length === 0 ? (
           <div className="wishlist-empty-state">
             <EmptyState
-              title={missingCount > 0 ? "Khong tai duoc du lieu wishlist" : "Wishlist dang trong"}
+              title={missingCount > 0 ? "Không thể hiển thị đầy đủ danh sách yêu thích" : "Danh sách yêu thích đang trống"}
               description={
                 missingCount > 0
-                  ? "Danh sach da luu van con muc tham chieu cu, nhung catalog hien tai khong tra ve du lieu tuong ung. Thu dong bo lai hoac quay lai catalog de luu san pham moi."
-                  : "Luu san pham tu catalog hoac trang chi tiet de quay lai so sanh, theo doi gia, va dat mua sau."
+                  ? "Một vài món đã lưu không còn khả dụng. Hãy tải lại hoặc quay về danh mục để chọn những sản phẩm mới."
+                  : "Lưu sản phẩm từ trang danh mục hoặc trang chi tiết để quay lại so sánh và mua sau."
               }
               action={
                 <Link href="/products" className={buttonStyles()}>
-                  Kham pha catalog
+                  Khám phá All Archive
                 </Link>
               }
             />

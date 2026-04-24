@@ -51,13 +51,13 @@ const paymentChoiceCards: Array<{
 }> = [
   {
     value: "manual",
-    label: "Instant Demo Payment",
-    description: "Đánh dấu đơn là paid ngay để test local nhanh hơn.",
+    label: "Thanh toán nhanh",
+    description: "Phù hợp khi bạn muốn chốt đơn gọn và hoàn tất ngay.",
   },
   {
     value: "momo",
-    label: "MoMo Hosted Checkout",
-    description: "Tạo pending payment rồi nhận checkout URL từ payment-service.",
+    label: "Ví MoMo",
+    description: "Thanh toán online qua trang MoMo sau khi xác nhận đơn.",
   },
 ];
 
@@ -179,7 +179,7 @@ function CheckoutPageContent() {
 
   async function handlePreview() {
     if (!token) {
-      setFeedback("Bạn cần đăng nhập để xem trước tổng tiền từ order-service.");
+      setFeedback("Bạn cần đăng nhập để xem trước tổng tiền.");
       return;
     }
 
@@ -216,7 +216,7 @@ function CheckoutPageContent() {
     }
 
     if (draftItems.length === 0) {
-      setFeedback("Không có sản phẩm nào để checkout.");
+      setFeedback("Không có sản phẩm nào để thanh toán.");
       return;
     }
 
@@ -314,20 +314,19 @@ function CheckoutPageContent() {
         <section className="shell section-spacing checkout-shell space-y-10">
           <section className="checkout-shell-heading grid gap-6 rounded-[2rem] border border-[#d9d2c9] bg-white/72 px-6 py-7 shadow-editorial backdrop-blur md:px-8 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
-              <p className="eyebrow">Checkout</p>
+              <p className="eyebrow">Thanh toán</p>
               <h1 className="mt-4 max-w-4xl font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.25rem]">
-                Complete your order details below.
+                Hoàn tất thông tin đơn hàng của bạn.
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
-                Checkout này đang port lại layout editorial cũ hơn, nhưng vẫn dùng cùng flow thật:
-                preview tổng tiền, tạo order, rồi chuyển payment-service xử lý thanh toán.
+                Chỉ còn vài bước nữa để hoàn tất đơn hàng: xác nhận người nhận, chọn cách giao và phương thức thanh toán phù hợp.
               </p>
             </div>
 
             <div className="grid content-start gap-4">
               <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Items ready
+                  Mặt hàng sẵn sàng
                 </p>
                 <p className="mt-3 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                   {draftItems.length}
@@ -335,7 +334,7 @@ function CheckoutPageContent() {
               </div>
               <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Shipping lane
+                  Phương thức giao
                 </p>
                 <p className="mt-3 text-sm font-medium leading-7 text-primary">
                   {selectedShippingChoice.label}
@@ -343,7 +342,7 @@ function CheckoutPageContent() {
               </div>
               <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Payment lane
+                  Kênh thanh toán
                 </p>
                 <p className="mt-3 text-sm font-medium leading-7 text-primary">
                   {paymentChoiceCards.find((option) => option.value === paymentMethod)?.label || paymentMethod}
@@ -355,7 +354,7 @@ function CheckoutPageContent() {
           {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
           {!isAuthenticated ? (
             <InlineAlert tone="info">
-              Checkout cần tài khoản hợp lệ vì order-service và payment-service đều yêu cầu JWT. Bạn vẫn có thể xem trước tóm tắt đơn hàng ở đây.
+              Bạn cần đăng nhập để hoàn tất đơn hàng. Trong lúc này, bạn vẫn có thể xem trước tóm tắt mua sắm của mình.
             </InlineAlert>
           ) : null}
 
@@ -369,7 +368,7 @@ function CheckoutPageContent() {
                         1
                       </span>
                       <div>
-                        <p className="eyebrow">Delivery contact</p>
+                        <p className="eyebrow">Thông tin nhận hàng</p>
                         <h2 className="mt-3 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
                           Địa chỉ giao hàng
                         </h2>
@@ -383,10 +382,10 @@ function CheckoutPageContent() {
 
                 <p className="checkout-section-note mt-5 text-sm leading-7 text-on-surface-variant">
                   {shippingMethod === "pickup"
-                    ? "Pickup order chỉ cần thông tin liên hệ để xác nhận lượt nhận tại quầy."
+                    ? "Nhận tại quầy chỉ cần thông tin liên hệ để bạn ghé lấy đơn thuận tiện."
                     : addresses.length > 0
-                      ? "Địa chỉ đã lưu có thể được chọn lại ngay tại đây để quay về luồng checkout nhanh."
-                      : "Điền đầy đủ họ tên, địa chỉ và số điện thoại để order-service ghi nhận shipping snapshot."}
+                      ? "Chọn lại một địa chỉ đã lưu để đi tiếp nhanh hơn."
+                      : "Điền đầy đủ họ tên, địa chỉ và số điện thoại để giao hàng chính xác hơn."}
                 </p>
 
                 {addresses.length > 0 ? (
@@ -452,7 +451,7 @@ function CheckoutPageContent() {
                   <div>
                     <p className="eyebrow">Shipping method</p>
                     <h2 className="mt-3 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                      Chọn nhịp giao hàng
+                      Chọn phương thức giao hàng
                     </h2>
                   </div>
                 </div>
@@ -488,7 +487,7 @@ function CheckoutPageContent() {
                         </div>
                         <div className="text-right text-sm text-on-surface-variant">
                           <p className="font-medium text-primary">
-                            {option.fee === 0 ? "Free" : formatCurrency(option.fee)}
+                            {option.fee === 0 ? "Miễn phí" : formatCurrency(option.fee)}
                           </p>
                           <p className="mt-1">{option.eta}</p>
                         </div>
@@ -506,7 +505,7 @@ function CheckoutPageContent() {
                   <div>
                     <p className="eyebrow">Payment method</p>
                     <h2 className="mt-3 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                      Chọn payment lane
+                      Chọn phương thức thanh toán
                     </h2>
                   </div>
                 </div>
@@ -541,7 +540,7 @@ function CheckoutPageContent() {
                           </div>
                         </div>
                         <span className="checkout-method-pill">
-                          {option.value === "momo" ? "Hosted" : "Instant"}
+                          {option.value === "momo" ? "Online" : "Nhanh"}
                         </span>
                       </div>
                     </label>
@@ -553,7 +552,7 @@ function CheckoutPageContent() {
             <aside className="checkout-summary-panel space-y-5">
               <SurfaceCard className="checkout-summary-card p-6">
                 <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                  Order Summary
+                  Tóm tắt đơn hàng
                 </h2>
                 <div className="checkout-summary-items mt-6 space-y-4">
                   {draftItems.map((item) => {
@@ -577,9 +576,9 @@ function CheckoutPageContent() {
                         </div>
                         <div className="checkout-summary-copy min-w-0 flex-1">
                           <h4 className="truncate text-sm font-semibold text-primary">{item.name}</h4>
-                          <p>Archive item ready for order creation.</p>
+                          <p>Sẵn sàng để đưa vào đơn hàng.</p>
                           <div className="checkout-summary-meta">
-                            <span>Qty {item.quantity}</span>
+                            <span>SL {item.quantity}</span>
                             <strong className="text-sm text-primary">
                               {formatCurrency(item.price * item.quantity)}
                             </strong>
@@ -591,7 +590,7 @@ function CheckoutPageContent() {
                 </div>
 
                 <div className="checkout-voucher-panel mt-6 space-y-3">
-                  <span className="checkout-voucher-label">Voucher preview</span>
+                  <span className="checkout-voucher-label">Mã giảm giá</span>
                   <div className="checkout-voucher-row">
                     <TextInput
                       placeholder="Nhập mã voucher"
@@ -622,7 +621,7 @@ function CheckoutPageContent() {
                   {couponPreview?.coupon_description ? (
                     <div className="rounded-[1.25rem] bg-surface px-4 py-4 text-sm leading-7 text-on-surface-variant">
                       <p className="font-medium text-primary">
-                        {couponPreview.coupon_code || "Voucher applied"}
+                        {couponPreview.coupon_code || "Mã đã áp dụng"}
                       </p>
                       <p className="mt-2">{couponPreview.coupon_description}</p>
                     </div>
@@ -631,13 +630,13 @@ function CheckoutPageContent() {
 
                 <div className="checkout-summary-totals mt-6 space-y-3 text-sm text-on-surface-variant">
                   <div className="checkout-summary-line flex items-center justify-between">
-                    <span>Method</span>
+                    <span>Giao hàng</span>
                     <strong className="text-primary">
                       {formatShippingMethodLabel(summary.shipping_method)}
                     </strong>
                   </div>
                   <div className="checkout-summary-line flex items-center justify-between">
-                    <span>ETA</span>
+                    <span>Dự kiến nhận</span>
                     <strong className="text-primary">{selectedShippingChoice.eta}</strong>
                   </div>
                   <div className="checkout-summary-line flex items-center justify-between">
@@ -683,23 +682,23 @@ function CheckoutPageContent() {
                 </div>
 
                 <p className="checkout-summary-caption">
-                  Order được tạo trước, sau đó payment-service xử lý lane tương ứng của bạn.
+                  Hãy kiểm tra lại thông tin một lần nữa trước khi xác nhận thanh toán.
                 </p>
                 <div className="checkout-summary-trust">
-                  <span>order-service</span>
-                  <span>payment-service</span>
-                  <span>returns ready</span>
+                  <span>Đổi trả linh hoạt</span>
+                  <span>Thanh toán an toàn</span>
+                  <span>Theo dõi đơn dễ dàng</span>
                 </div>
               </SurfaceCard>
 
               <SurfaceCard className="bg-[#f6f1ea] p-6">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                  Checkout note
+                  Lưu ý thanh toán
                 </p>
                 <p className="mt-4 text-sm leading-7 text-on-surface-variant">
                   {paymentMethod === "momo"
-                    ? "MoMo sẽ trả về payment record và hosted checkout URL sau khi order đã được tạo."
-                    : "Manual payment lane phù hợp cho demo local khi bạn muốn order chuyển sang trạng thái paid ngay."}
+                    ? "Bạn sẽ được chuyển sang MoMo để hoàn tất thanh toán online cho đơn hàng."
+                    : "Cách thanh toán này phù hợp khi bạn muốn xác nhận đơn nhanh ngay trên storefront."}
                 </p>
               </SurfaceCard>
             </aside>
@@ -735,7 +734,7 @@ function buildShippingChoiceCards(subtotal: number) {
     {
       value: "standard" as const,
       label: "Giao tiêu chuẩn",
-      description: "Best value cho đơn hàng thường ngày và đồng bộ đúng luồng shipping cơ bản.",
+      description: "Lựa chọn cân bằng cho phần lớn đơn hàng hằng ngày.",
       eta: "3-5 ngày",
       fee: subtotal > 120 ? 0 : 8,
     },
@@ -750,7 +749,7 @@ function buildShippingChoiceCards(subtotal: number) {
       value: "pickup" as const,
       label: "Nhận tại quầy",
       description: "Không cần địa chỉ giao hàng chi tiết, chỉ cần thông tin liên hệ.",
-      eta: "Same day",
+      eta: "Trong ngày",
       fee: 0,
     },
   ];

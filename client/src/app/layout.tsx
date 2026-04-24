@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s | ND Shop",
   },
   description:
-    "ND Shop là storefront thương mại điện tử để người dùng đăng ký, mua sản phẩm, thanh toán và theo dõi đơn hàng trên backend microservices hiện tại.",
+    "ND Shop là nơi để khám phá sản phẩm, lưu món yêu thích, thanh toán và theo dõi đơn hàng trong một trải nghiệm mua sắm gọn gàng.",
 };
 
 export default function RootLayout({
