@@ -4,7 +4,7 @@ import { Wallet } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
-import { AccountShell } from "@/components/account-shell";
+import { AccountShell } from "@/components/account-shared/account-shell";
 import {
   Badge,
   EmptyState,
@@ -12,7 +12,7 @@ import {
   LoadingScreen,
   StatusPill,
   SurfaceCard,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrderPayments } from "@/hooks/useOrderPayments";
 import { buttonStyles } from "@/lib/button-styles";
@@ -24,7 +24,10 @@ import {
   humanizeToken,
 } from "@/utils/format";
 
-import { getNetPaidAmount, getPaymentMethodIcon } from "./shared";
+import {
+  getNetPaidAmount,
+  getPaymentMethodIcon,
+} from "@/components/account-shared/account-helpers";
 
 type PaymentMethodCard = {
   key: string;
@@ -81,6 +84,17 @@ export function PaymentsPageView() {
   }, [paymentEntries]);
 
   const totalPaid = getNetPaidAmount(paymentsByOrder);
+  const pendingCount = useMemo(
+    () =>
+      paymentEntries.filter(({ payment }) => payment.status.toLowerCase().includes("pending")).length,
+    [paymentEntries],
+  );
+  const failedCount = useMemo(
+    () =>
+      paymentEntries.filter(({ payment }) => payment.status.toLowerCase().includes("fail")).length,
+    [paymentEntries],
+  );
+  const latestPayment = paymentEntries[0]?.payment;
 
   return (
     <AccountShell
@@ -98,78 +112,127 @@ export function PaymentsPageView() {
         />
       ) : (
         <div className="space-y-12">
-          <section className="space-y-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div>
-                <Badge className="bg-secondary text-on-secondary">Secure billing</Badge>
-                <div className="mt-4 space-y-2">
-                  <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                    Payment methods
-                  </h2>
-                  <p className="max-w-2xl text-sm leading-7 text-on-surface-variant">
-                    {paymentEntries.length} giao dịch trên {orders.length} đơn hàng, giá trị ròng{" "}
-                    <span className="font-semibold text-primary">{formatCurrency(totalPaid)}</span>.
-                  </p>
+          <div className="grid gap-4 md:grid-cols-3">
+            <SurfaceCard className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                Recorded transactions
+              </p>
+              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                {paymentEntries.length}
+              </p>
+            </SurfaceCard>
+            <SurfaceCard className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                Net amount
+              </p>
+              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                {formatCurrency(totalPaid)}
+              </p>
+            </SurfaceCard>
+            <SurfaceCard className="p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                Needs attention
+              </p>
+              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                {pendingCount + failedCount}
+              </p>
+            </SurfaceCard>
+          </div>
+
+          <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="space-y-8">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <Badge className="bg-secondary text-on-secondary">Secure billing</Badge>
+                  <div className="mt-4 space-y-2">
+                    <h2 className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                      Payment methods
+                    </h2>
+                    <p className="max-w-2xl text-sm leading-7 text-on-surface-variant">
+                      {paymentEntries.length} giao dịch trên {orders.length} đơn hàng, giá trị ròng{" "}
+                      <span className="font-semibold text-primary">{formatCurrency(totalPaid)}</span>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-3">
+                {paymentMethodCards.slice(0, 2).map((methodCard, index) => {
+                  const Icon = getPaymentMethodIcon(methodCard.paymentMethod);
+                  const isPrimary = index === 0;
+
+                  return (
+                    <SurfaceCard key={methodCard.key} className="p-7 transition duration-300 hover:bg-surface-container">
+                      <div className="flex items-start justify-between gap-4">
+                        <Icon className="h-7 w-7 text-primary" />
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                          {humanizeToken(methodCard.gatewayProvider)}
+                        </span>
+                      </div>
+                      <div className="mt-10">
+                        <p className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                          {humanizeToken(methodCard.paymentMethod)}
+                        </p>
+                        <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                          Dùng {methodCard.usageCount} lần · gần nhất {formatShortDate(methodCard.lastUsedAt)}
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-on-surface-variant">
+                          Tổng giá trị xử lý {formatCurrency(methodCard.totalAmount)}
+                        </p>
+                      </div>
+                      <div className="mt-8 flex items-center gap-2">
+                        {isPrimary ? (
+                          <>
+                            <div className="h-2 w-2 rounded-full bg-primary" />
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
+                              Primary usage
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                            Transaction derived
+                          </span>
+                        )}
+                      </div>
+                    </SurfaceCard>
+                  );
+                })}
+
+                <div className="flex min-h-[18rem] flex-col items-center justify-center gap-4 rounded-[1.5rem] border border-dashed border-outline-variant bg-transparent px-7 py-8 text-center transition duration-300 hover:border-primary hover:bg-surface-container-low">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-primary">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-primary">Phương thức mới sẽ xuất hiện sau checkout</p>
+                    <p className="text-sm leading-7 text-on-surface-variant">
+                      Repo hiện chưa có API quản lý thẻ lưu sẵn, nên màn này hiển thị phương thức thực sự đã được dùng.
+                    </p>
+                  </div>
+                  <Link href="/checkout" className={buttonStyles({ variant: "secondary" })}>
+                    Đi tới checkout
+                  </Link>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-3">
-              {paymentMethodCards.slice(0, 2).map((methodCard, index) => {
-                const Icon = getPaymentMethodIcon(methodCard.paymentMethod);
-                const isPrimary = index === 0;
+            <div className="space-y-4">
+              <SurfaceCard className="p-6">
+                <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                  Payment Security
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-on-surface-variant">
+                  Payment data được xử lý qua gateway provider. Màn này chỉ phản ánh transaction trail và verification state từ backend.
+                </p>
+              </SurfaceCard>
 
-                return (
-                  <SurfaceCard key={methodCard.key} className="p-7 transition duration-300 hover:bg-surface-container">
-                    <div className="flex items-start justify-between gap-4">
-                      <Icon className="h-7 w-7 text-primary" />
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                        {humanizeToken(methodCard.gatewayProvider)}
-                      </span>
-                    </div>
-                    <div className="mt-10">
-                      <p className="font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                        {humanizeToken(methodCard.paymentMethod)}
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                        Dùng {methodCard.usageCount} lần · gần nhất {formatShortDate(methodCard.lastUsedAt)}
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-on-surface-variant">
-                        Tổng giá trị xử lý {formatCurrency(methodCard.totalAmount)}
-                      </p>
-                    </div>
-                    <div className="mt-8 flex items-center gap-2">
-                      {isPrimary ? (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-                            Primary usage
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                          Transaction derived
-                        </span>
-                      )}
-                    </div>
-                  </SurfaceCard>
-                );
-              })}
-
-              <div className="flex min-h-[18rem] flex-col items-center justify-center gap-4 rounded-[1.5rem] border border-dashed border-outline-variant bg-transparent px-7 py-8 text-center transition duration-300 hover:border-primary hover:bg-surface-container-low">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-primary">
-                  <Wallet className="h-5 w-5" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-primary">Phương thức mới sẽ xuất hiện sau checkout</p>
-                  <p className="text-sm leading-7 text-on-surface-variant">
-                    Repo hiện chưa có API quản lý thẻ lưu sẵn, nên màn này hiển thị phương thức thực sự đã được dùng.
-                  </p>
-                </div>
-                <Link href="/checkout" className={buttonStyles({ variant: "secondary" })}>
-                  Đi tới checkout
-                </Link>
-              </div>
+              <SurfaceCard className="bg-[#f6f1ea] p-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Latest update
+                </p>
+                <p className="mt-4 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                  {latestPayment ? formatDateTime(latestPayment.created_at) : "No records yet"}
+                </p>
+              </SurfaceCard>
             </div>
           </section>
 

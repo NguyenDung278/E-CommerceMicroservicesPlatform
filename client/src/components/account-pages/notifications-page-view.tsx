@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { AccountShell } from "@/components/account-shell";
-import { SurfaceCard } from "@/components/storefront-ui";
+import { AccountShell } from "@/components/account-shared/account-shell";
+import { SurfaceCard } from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrderPayments } from "@/hooks/useOrderPayments";
 import { userApi } from "@/lib/api";
@@ -22,7 +22,7 @@ import {
   humanizeToken,
 } from "@/utils/format";
 
-import { getLatestPayment } from "./shared";
+import { getLatestPayment } from "@/components/account-shared/account-helpers";
 
 const preferenceCards = [
   ["order_updates", "Order updates", "Cập nhật mọi bước xử lý đơn hàng."],
@@ -153,6 +153,10 @@ export function NotificationsPageView() {
   );
   const feed = inboxFeed.length > 0 ? inboxFeed : fallbackFeed;
   const unreadInboxCount = notificationInbox.filter((item) => !item.read_at).length;
+  const enabledPreferenceCount =
+    preferences.length > 0
+      ? preferences.filter((preference) => preference.enabled).length
+      : preferenceCards.length;
 
   async function handleToggle(topic: string, enabled: boolean) {
     if (!token) {
@@ -204,6 +208,33 @@ export function NotificationsPageView() {
         <SurfaceCard className="p-4 text-sm leading-7 text-on-surface-variant">{feedback}</SurfaceCard>
       ) : null}
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <SurfaceCard className="p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+            Active preferences
+          </p>
+          <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+            {enabledPreferenceCount}
+          </p>
+        </SurfaceCard>
+        <SurfaceCard className="p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+            Wishlist alerts
+          </p>
+          <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+            {sortedWishlistAlerts.length}
+          </p>
+        </SurfaceCard>
+        <SurfaceCard className="p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+            Inbox unread
+          </p>
+          <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+            {unreadInboxCount}
+          </p>
+        </SurfaceCard>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {preferenceCards.map(([topic, title, description]) => {
           const enabled = preferenceMap.get(topic) ?? true;
@@ -212,7 +243,16 @@ export function NotificationsPageView() {
           return (
             <SurfaceCard key={topic} className="p-6">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-primary">{title}</p>
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/8 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                    {title
+                      .split(" ")
+                      .map((part) => part.charAt(0))
+                      .join("")
+                      .slice(0, 2)}
+                  </div>
+                  <p className="font-semibold text-primary">{title}</p>
+                </div>
                 <input
                   checked={enabled}
                   disabled={isBusy}

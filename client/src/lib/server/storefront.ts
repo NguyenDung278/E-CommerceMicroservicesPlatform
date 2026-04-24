@@ -183,20 +183,23 @@ export async function getEditorialPageInitialData(identifier: string): Promise<{
 
 export async function getHomePageInitialData(): Promise<HomePageInitialData> {
   try {
-    const [products, popularity] = await Promise.all([
+    const [products, popularity, categories] = await Promise.all([
       fetchProductList({ status: "active", limit: 12 }),
       fetchProductPopularity(8).catch(() => []),
+      fetchStorefrontCategories().catch(() => []),
     ]);
 
     return {
       products,
       popularity,
+      categories,
       error: "",
     };
   } catch (reason) {
     return {
       products: [],
       popularity: [],
+      categories: [],
       error: getErrorMessage(reason),
     };
   }

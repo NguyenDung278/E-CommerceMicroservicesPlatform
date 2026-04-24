@@ -13,9 +13,9 @@ import {
   type AtelierCategoryId,
   type AtelierFilterGroup,
   type AtelierPageConfig,
-} from "@/components/atelier-page-types";
-import { atelierFooterLinks } from "@/components/atelier-page-chrome";
-import { StorefrontImage } from "@/components/storefront-image";
+} from "@/components/storefront-pages/editorial/atelier-page-types";
+import { atelierFooterLinks } from "@/components/storefront-pages/editorial/atelier-page-chrome";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
 import { useAuthState } from "@/hooks/useAuth";
 import { useCartState } from "@/hooks/useCart";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,8 @@ export function AtelierCategoryPage({
 }: AtelierCategoryPageProps) {
   const { isAuthenticated } = useAuthState();
   const { itemCount } = useCartState();
+  const curatedProductCount = config.products.filter((item) => item.type === "product").length;
+  const editorialFeatureCount = config.products.filter((item) => item.type === "feature").length;
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
@@ -52,6 +54,63 @@ export function AtelierCategoryPage({
 
       <main>
         <AtelierHero hero={config.hero} />
+
+        <section className="shell pt-8 md:pt-10">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Curated products
+                </p>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                  {curatedProductCount}
+                </p>
+              </div>
+              <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Editorial panels
+                </p>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                  {editorialFeatureCount}
+                </p>
+              </div>
+              <div className="rounded-[1.6rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Filter groups
+                </p>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                  {config.filters.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-[1.6rem] border border-black/6 bg-surface p-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                Quick links
+              </p>
+              <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                {config.navLabel}
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-on-surface-variant">
+                Route editorial này đã được đưa vào cụm storefront pages mới, nhưng vẫn giữ config-driven rendering từ adapter hiện tại.
+              </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <Link
+                  href={config.catalogHref}
+                  className="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-container"
+                >
+                  Open category archive
+                </Link>
+                <Link
+                  href={isAuthenticated ? "/profile" : "/login?redirect=%2Fprofile"}
+                  className="inline-flex items-center justify-center rounded-lg border border-black/10 bg-white px-5 py-3 text-sm font-medium text-primary transition hover:border-primary/25 hover:bg-[#f7f4ef]"
+                >
+                  {isAuthenticated ? "Open account center" : "Sign in to continue"}
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="shell py-14 md:py-20 lg:py-24">
           <div

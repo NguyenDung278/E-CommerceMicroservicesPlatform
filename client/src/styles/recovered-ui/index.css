@@ -1,0 +1,41 @@
+:root {
+  --page-max-width: 1536px;
+  --page-gutter: clamp(20px, 3vw, 48px);
+  --transition-base: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-soft: 0 20px 40px -26px rgba(27, 28, 25, 0.28);
+  --shadow-focus:
+    0 0 0 2px rgba(6, 27, 14, 0.24),
+    0 0 0 5px rgba(251, 249, 244, 0.94);
+  --radius-pill: 999px;
+  --font-display: var(--font-serif);
+  --font-body: var(--font-sans);
+  --storefront-header-grid-gap: clamp(18px, 2vw, 28px);
+  --storefront-header-row-height: 72px;
+  --storefront-header-line-height: 1;
+  --storefront-header-brand-size: clamp(1.75rem, 2vw, 2rem);
+  --storefront-header-nav-gap: clamp(18px, 2vw, 28px);
+  --storefront-header-link-size: 0.76rem;
+  --storefront-header-link-weight: 700;
+  --storefront-header-link-underline-offset: 4px;
+  --storefront-header-actions-gap: 10px;
+  --storefront-header-bag-size: 44px;
+  --storefront-header-bag-icon-size: 16px;
+  --storefront-header-bag-count-size: 18px;
+  --storefront-header-pill-height: 44px;
+  --storefront-header-pill-padding-inline: 18px;
+  --storefront-header-pill-font-size: 0.7rem;
+  --storefront-header-account-name-size: 0.88rem;
+  --storefront-header-account-meta-size: 0.62rem;
+}
+
+.page-stack {
+  display: grid;
+  gap: 32px;
+}
+
+@import "./account.css";
+@import "./home-editorial.css";
+@import "./storefront-chrome.css";
+@import "./storefront-surfaces.css";
+@import "./storefront-transactional.css";
+@import "./auth.css";

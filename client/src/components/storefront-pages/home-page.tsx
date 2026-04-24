@@ -5,9 +5,11 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { StorefrontImage } from "@/components/storefront-image";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
+import {
+  RecoveredEditorialFooter,
+  RecoveredStorefrontHeader,
+} from "@/components/storefront-shared/recovered-storefront-chrome";
 import {
   EmptyState,
   InlineAlert,
@@ -16,7 +18,7 @@ import {
   ProductCardAction,
   ProductCardSkeleton,
   SectionHeading,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuthState } from "@/hooks/useAuth";
 import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
@@ -25,12 +27,14 @@ import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
 import type { HomePageInitialData } from "@/lib/storefront/initial-data";
 import { cn, fallbackImageForProduct } from "@/lib/utils";
-import type { Product, ProductPopularity } from "@/types/api";
+import { getAtelierPageConfig } from "@/components/storefront-pages/editorial/atelier-page-data";
+import type { Product, ProductPopularity, StorefrontCategory } from "@/types/api";
 import { formatCurrency } from "@/utils/format";
 
 type HomeState = {
   products: Product[];
   popularity: ProductPopularity[];
+  categories: StorefrontCategory[];
   isLoading: boolean;
   error: string;
 };
@@ -38,9 +42,105 @@ type HomeState = {
 const emptyHomeState: HomeState = {
   products: [],
   popularity: [],
+  categories: [],
   isLoading: true,
   error: "",
 };
+
+type HomeAtelierEntry = {
+  key: string;
+  label: string;
+  heroTitle: string;
+  archiveHref: string;
+  editorialHref: string;
+  description: string;
+  imageUrl: string;
+  imageAlt: string;
+  filterPreview: string[];
+  layoutClassName: string;
+};
+
+const homeAtelierCategoryInputs = [
+  {
+    key: "men",
+    identifier: "Shop Men",
+    archiveHref: "/categories/Shop%20Men",
+    editorialHref: "/editorial/Shop%20Men",
+    layoutClassName: "home-atelier-card-men",
+  },
+  {
+    key: "women",
+    identifier: "Shop Women",
+    archiveHref: "/categories/Shop%20Women",
+    editorialHref: "/editorial/Shop%20Women",
+    layoutClassName: "home-atelier-card-women",
+  },
+  {
+    key: "footwear",
+    identifier: "Footwear",
+    archiveHref: "/categories/Footwear",
+    editorialHref: "/editorial/Footwear",
+    layoutClassName: "home-atelier-card-footwear",
+  },
+  {
+    key: "accessories",
+    identifier: "Accessories",
+    archiveHref: "/categories/Accessories",
+    editorialHref: "/editorial/Accessories",
+    layoutClassName: "home-atelier-card-accessories",
+  },
+] as const;
+
+function buildEditorialIdentifier(category: StorefrontCategory) {
+  return category.aliases[0] || category.display_name || category.slug;
+}
+
+function buildCategoryHref(category: StorefrontCategory) {
+  return `/categories/${encodeURIComponent(category.display_name || category.nav_label || category.slug)}`;
+}
+
+function buildEditorialHref(category: StorefrontCategory) {
+  return `/editorial/${encodeURIComponent(buildEditorialIdentifier(category))}`;
+}
+
+function normalizeAtelierLabel(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function readAtelierHeroTitle(categoryName: string) {
+  const config = getAtelierPageConfig(categoryName);
+  return config ? config.hero.titleLines.map((line) => line.text).join(" ") : categoryName;
+}
+
+function readAtelierFilterPreview(categoryName: string) {
+  const config = getAtelierPageConfig(categoryName);
+
+  if (!config) {
+    return [];
+  }
+
+  return config.filters
+    .map((group) => {
+      switch (group.kind) {
+        case "list":
+        case "sizes":
+        case "checkboxes":
+          return group.options.find((option) => option.active)?.label || group.options[0]?.label || "";
+        case "palette":
+          return group.options.find((option) => option.active)?.label || group.options[0]?.label || "";
+        case "chips":
+          return group.options[0] || "";
+        case "price":
+          return group.maxLabel;
+        case "quote-card":
+          return group.attribution;
+        default:
+          return "";
+      }
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
 
 export function HomePage({ initialData }: { initialData?: HomePageInitialData }) {
   const { isAuthenticated } = useAuthState();
@@ -52,6 +152,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
       ? {
           products: initialData.products,
           popularity: initialData.popularity,
+          categories: initialData.categories,
           isLoading: false,
           error: initialData.error,
         }
@@ -77,6 +178,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
         setState({
           products: productResponse.data,
           popularity: "data" in popularityResponse ? popularityResponse.data : [],
+          categories: [],
           isLoading: false,
           error: "",
         });
@@ -89,6 +191,7 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
         setState({
           products: [],
           popularity: [],
+          categories: [],
           isLoading: false,
           error: getErrorMessage(reason),
         });
@@ -100,18 +203,6 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
   }, [initialData]);
 
   const heroProduct = state.products[0] ?? null;
-  const categoryCards = useMemo(() => {
-    const seen = new Set<string>();
-    return state.products
-      .filter((product) => {
-        if (!product.category || seen.has(product.category)) {
-          return false;
-        }
-        seen.add(product.category);
-        return true;
-      })
-      .slice(0, 4);
-  }, [state.products]);
 
   const trendingProducts = useMemo(() => {
     const popularityRank = new Map(
@@ -124,6 +215,46 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
       .slice(0, 6);
   }, [state.popularity, state.products]);
   const calloutProduct = trendingProducts[0] ?? heroProduct;
+  const atelierDestinations = useMemo<HomeAtelierEntry[]>(() => {
+    return homeAtelierCategoryInputs.reduce<HomeAtelierEntry[]>((entries, entry) => {
+      const config = getAtelierPageConfig(entry.identifier);
+
+      if (!config) {
+        return entries;
+      }
+
+      const matchedCategory = state.categories.find((category) => {
+        const categoryLabels = [
+          category.slug,
+          category.display_name,
+          category.nav_label,
+          ...category.aliases,
+        ].map((value) => normalizeAtelierLabel(value));
+
+        return (
+          categoryLabels.includes(normalizeAtelierLabel(entry.identifier)) ||
+          categoryLabels.includes(normalizeAtelierLabel(config.navLabel))
+        );
+      });
+
+      entries.push({
+        key: entry.key,
+        label: config.navLabel,
+        heroTitle: readAtelierHeroTitle(entry.identifier),
+        archiveHref: matchedCategory ? buildCategoryHref(matchedCategory) : entry.archiveHref,
+        editorialHref: matchedCategory
+          ? buildEditorialHref(matchedCategory)
+          : entry.editorialHref,
+        description: config.hero.description,
+        imageUrl: config.hero.imageUrl,
+        imageAlt: config.hero.imageAlt,
+        filterPreview: readAtelierFilterPreview(entry.identifier),
+        layoutClassName: entry.layoutClassName,
+      });
+
+      return entries;
+    }, []);
+  }, [state.categories]);
 
   async function handleAddToCart(product: Product) {
     try {
@@ -137,20 +268,28 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
   if (state.isLoading) {
     return (
       <>
-        <SiteHeader />
-        <main className="shell section-spacing grid gap-6 md:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <ProductCardSkeleton key={index} />
-          ))}
+        <main>
+          <section className="relative overflow-hidden bg-primary-container">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/90 via-primary/72 to-primary/28" />
+            <div className="shell relative flex min-h-[36svh] flex-col gap-10 pb-16 pt-8">
+              <RecoveredStorefrontHeader navigation="core" />
+              <div className="mt-auto grid gap-6 md:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <ProductCardSkeleton key={index} />
+                ))}
+              </div>
+            </div>
+          </section>
+          <section className="shell pb-12">
+            <RecoveredEditorialFooter />
+          </section>
         </main>
-        <SiteFooter />
       </>
     );
   }
 
   return (
     <>
-      <SiteHeader />
       <main>
         <section className="relative overflow-hidden bg-primary-container">
           <div className="absolute inset-0">
@@ -169,7 +308,10 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
           </div>
           <div className="absolute inset-0 bg-gradient-to-r from-primary/90 via-primary/72 to-primary/28" />
 
-          <div className="shell relative grid min-h-[76svh] items-end gap-10 pb-20 pt-28 lg:grid-cols-12">
+          <div className="shell relative flex min-h-[76svh] flex-col gap-10 pb-20 pt-8">
+            <RecoveredStorefrontHeader navigation="core" />
+
+            <div className="mt-auto grid items-end gap-10 lg:grid-cols-12">
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -237,13 +379,16 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
                       <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Sản phẩm active</span>
                     </div>
                     <div>
-                      <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">{categoryCards.length}</span>
-                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Nhóm danh mục</span>
+                      <span className="block font-serif text-3xl font-semibold tracking-[-0.03em]">
+                        {atelierDestinations.length + 1}
+                      </span>
+                      <span className="mt-2 block text-[11px] uppercase tracking-[0.24em] text-surface/58">Entry points</span>
                     </div>
                   </div>
                 </div>
               </div>
             </motion.aside>
+            </div>
           </div>
         </section>
 
@@ -301,65 +446,105 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
           {state.error ? <InlineAlert tone="error">{state.error}</InlineAlert> : null}
 
           <SectionHeading
-            eyebrow="Danh mục"
-            title="Cấu trúc trang bám theo Stitch nhưng nội dung đã được làm sạch cho bối cảnh thương mại điện tử thực tế."
-            description="Các khối danh mục, listing và CTA được tối ưu lại để phản ánh inventory, giá, giỏ hàng và account flow thật của storefront."
+            eyebrow="Archive Atlas"
+            title="All Archive, Men, Women, Footwear, Accessories."
+            description="Tôi đã kéo lại entry surface quan trọng nhất từ home UI cũ: một gateway cho toàn bộ archive và bốn cửa vào category/editorial riêng cho Men, Women, Footwear, Accessories."
           />
 
-          {categoryCards.length === 0 ? (
-            <div className="mt-10">
-              <EmptyState
-                title="Catalog chưa có dữ liệu"
-                description="Khi product-service có sản phẩm active, danh mục và khối nổi bật sẽ xuất hiện tại đây."
-                action={
-                  <Link href="/products" className={buttonStyles({ variant: "secondary" })}>
-                    Tới catalog
-                  </Link>
-                }
-              />
-            </div>
-          ) : (
-            <div className="mt-10 grid gap-6 md:grid-cols-12 md:auto-rows-[260px] lg:h-[1120px] lg:auto-rows-auto">
-              {categoryCards.map((product, index) => {
-                const layoutClass =
-                  index === 0
-                    ? "md:col-span-7"
-                    : index === 1
-                      ? "md:col-span-5 md:row-span-2"
-                      : index === 2
-                        ? "md:col-span-4"
-                        : "md:col-span-3";
+          <div className="home-archive-gateway mt-10">
+            <article className="home-archive-gateway-surface">
+              <div className="home-archive-gateway-copy">
+                <p className="home-archive-kicker">All Archive</p>
+                <h3 className="home-archive-title">The Curated Archive</h3>
+                <p className="home-archive-description">
+                  Mọi sản phẩm active đi qua một cửa vào duy nhất trước khi tách ra thành Men,
+                  Women, Footwear, Accessories. Đây là layer “All Archive” bị mất trong lần xóa
+                  lớn trước và giờ đã được kéo lại trên home.
+                </p>
+              </div>
 
-                return (
-                  <Link
-                    key={product.id}
-                    href={`/categories/${encodeURIComponent(product.category)}`}
-                    className={cn("group relative overflow-hidden rounded-[1.25rem] bg-surface-container-low", layoutClass)}
+              <div className="home-archive-gateway-stats">
+                <div>
+                  <span>{state.products.length}</span>
+                  <small>Active products</small>
+                </div>
+                <div>
+                  <span>{atelierDestinations.length}</span>
+                  <small>Atelier entries</small>
+                </div>
+                <div>
+                  <span>{state.popularity.length || 0}</span>
+                  <small>Trending signals</small>
+                </div>
+              </div>
+
+              <div className="home-archive-gateway-actions">
+                <Link href="/products" className={buttonStyles({ size: "lg" })}>
+                  Open all archive
+                </Link>
+                <Link
+                  href="/editorial/Shop%20Men"
+                  className={buttonStyles({ variant: "secondary", size: "lg" })}
+                >
+                  Open editorial lane
+                </Link>
+              </div>
+            </article>
+
+            {atelierDestinations.length > 0 ? (
+              <div className="home-atelier-grid">
+                {atelierDestinations.map((entry) => (
+                  <article
+                    key={entry.key}
+                    className={cn(
+                      "home-atelier-card group relative overflow-hidden rounded-[1.5rem]",
+                      entry.layoutClassName,
+                    )}
                   >
                     <StorefrontImage
-                      alt={product.category}
-                      src={product.image_urls[0] || product.image_url || fallbackImageForProduct(product.category)}
+                      alt={entry.imageAlt}
+                      src={entry.imageUrl}
                       fill
-                      sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                      className={cn("object-cover transition duration-700 group-hover:scale-[1.05]", index === 0 && "grayscale-[18%]")}
+                      sizes="(min-width: 1280px) 32vw, (min-width: 768px) 48vw, 100vw"
+                      className="home-atelier-card-image object-cover transition duration-700 group-hover:scale-[1.05]"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-primary/72 to-transparent" />
-                    <div className={cn("absolute inset-x-0 text-surface", index === 1 ? "top-0 p-8 md:p-10" : "bottom-0 p-7 md:p-9")}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-surface/72">
-                        {product.brand || "Commerce"}
-                      </p>
-                      <h3 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] md:text-4xl">
-                        {product.category}
-                      </h3>
-                      <p className="mt-3 max-w-md text-sm leading-7 text-surface/80">
-                        {product.description}
-                      </p>
+                    <div className="home-atelier-card-overlay" />
+                    <div className="home-atelier-card-copy">
+                      <p className="home-atelier-card-kicker">{entry.label}</p>
+                      <h3 className="home-atelier-card-title">{entry.heroTitle}</h3>
+                      <p className="home-atelier-card-description">{entry.description}</p>
+
+                      {entry.filterPreview.length > 0 ? (
+                        <div className="home-atelier-chip-row">
+                          {entry.filterPreview.map((chip) => (
+                            <span key={`${entry.key}-${chip}`} className="home-atelier-chip">
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="home-atelier-card-actions">
+                        <Link href={entry.archiveHref} className="home-atelier-link">
+                          Category
+                        </Link>
+                        <Link href={entry.editorialHref} className="home-atelier-link">
+                          Editorial
+                        </Link>
+                      </div>
                     </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-8">
+                <EmptyState
+                  title="Editorial categories đang đồng bộ"
+                  description="Khi storefront categories có dữ liệu, home page sẽ hiển thị cả All Archive lẫn bốn atelier entry đúng như UI cũ."
+                />
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="bg-surface-container-low py-20 md:py-28">
@@ -459,8 +644,10 @@ export function HomePage({ initialData }: { initialData?: HomePageInitialData })
             <PageLinkCard href="/login" title="Xác thực" copy="Đăng nhập, đăng ký, quên mật khẩu, xác minh email và xử lý OAuth." badge="Luồng xác thực" />
           </div>
         </section>
+        <section className="shell pb-12">
+          <RecoveredEditorialFooter />
+        </section>
       </main>
-      <SiteFooter />
     </>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   DndContext,
   DragOverlay,
@@ -27,19 +28,23 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
+import {
+  RecoveredEditorialFooter,
+  RecoveredStorefrontHeader,
+} from "@/components/storefront-shared/recovered-storefront-chrome";
+import { getAtelierPageConfig } from "@/components/storefront-pages/editorial/atelier-page-data";
+import type { AtelierPageConfig } from "@/components/storefront-pages/editorial/atelier-page-types";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
 import {
   EmptyState,
   InlineAlert,
   ProductCard,
   ProductCardAction,
   ProductCardSkeleton,
-  SectionHeading,
   Select,
   SurfaceCard,
   TextInput,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useCartActions } from "@/hooks/useCart";
 import { useWishlist } from "@/hooks/useWishlist";
 import { productApi } from "@/lib/api/product";
@@ -47,13 +52,7 @@ import { buttonStyles } from "@/lib/button-styles";
 import { getErrorMessage } from "@/lib/errors/handler";
 import type { CatalogPageInitialData } from "@/lib/storefront/initial-data";
 import { buildSearchParams, cn } from "@/lib/utils";
-import type {
-  Product,
-  ProductPopularity,
-  ProductSearchFacet,
-  ProductSearchFacetValue,
-  ProductSearchSuggestion,
-} from "@/types/api";
+import type { Product, ProductPopularity, ProductSearchFacet, ProductSearchFacetValue, ProductSearchSuggestion } from "@/types/api";
 
 type SortMode = "latest" | "price_asc" | "price_desc" | "popular" | "merchandising";
 
@@ -162,6 +161,34 @@ function applyCatalogClientTransforms(
   }
 
   return nextProducts;
+}
+
+function readAtelierArchiveTitle(config: AtelierPageConfig) {
+  return config.hero.titleLines.map((line) => line.text).join(" ");
+}
+
+function readAtelierArchiveTags(config: AtelierPageConfig) {
+  return config.filters
+    .map((group) => {
+      switch (group.kind) {
+        case "list":
+        case "sizes":
+        case "checkboxes":
+          return group.options.find((option) => option.active)?.label || group.options[0]?.label || "";
+        case "palette":
+          return group.options.find((option) => option.active)?.label || group.options[0]?.label || "";
+        case "chips":
+          return group.options[0] || "";
+        case "price":
+          return group.maxLabel;
+        case "quote-card":
+          return group.attribution;
+        default:
+          return "";
+      }
+    })
+    .filter(Boolean)
+    .slice(0, 3);
 }
 
 export function CatalogPage({
@@ -501,6 +528,35 @@ function CatalogPageContent({
   const isAssistSummaryActive = Boolean(
     (deferredSearch.trim() || category) && !brand && !size && !color && !minPrice && !maxPrice && !savedOnly,
   );
+  const activeFilterCount = useMemo(
+    () =>
+      [
+        deferredSearch.trim(),
+        category,
+        brand,
+        size,
+        color,
+        minPrice,
+        maxPrice,
+      ].filter(Boolean).length + (savedOnly ? 1 : 0),
+    [brand, category, color, deferredSearch, maxPrice, minPrice, savedOnly, size],
+  );
+  const archiveFocusLabel = category || brand || color || size || "All Archive";
+  const categoryAtelierConfig = useMemo(
+    () => (initialCategory ? getAtelierPageConfig(initialCategory) : null),
+    [initialCategory],
+  );
+  const archiveHeroTitle = categoryAtelierConfig
+    ? readAtelierArchiveTitle(categoryAtelierConfig)
+    : "All Archive";
+  const archiveHeroEyebrow = categoryAtelierConfig ? "Atelier Archive" : "All Archive";
+  const archiveHeroDescription = categoryAtelierConfig
+    ? categoryAtelierConfig.hero.description
+    : "Tailoring, knitwear, footwear, and accessories gathered into one calm archive backed by live product-service data.";
+  const archiveHeroTags = categoryAtelierConfig ? readAtelierArchiveTags(categoryAtelierConfig) : [];
+  const archiveHeroEditorialHref = categoryAtelierConfig
+    ? `/editorial/${encodeURIComponent(initialCategory ?? categoryAtelierConfig.navLabel)}`
+    : null;
 
   function announce(message: string) {
     setAnnouncement(message);
@@ -646,21 +702,130 @@ function CatalogPageContent({
 
   return (
     <>
-      <SiteHeader />
-      <main className="shell section-spacing">
-        <SectionHeading
-          eyebrow="Catalog"
-          title="Tìm kiếm, lọc và sắp xếp trực tiếp trên dữ liệu thật của product-service."
-          description="Các bộ lọc, query params, trạng thái rỗng và kéo thả đều dùng dữ liệu thật để bạn kiểm thử storefront end-to-end thay vì data mẫu."
-        />
+      <main>
+        <section className="relative overflow-hidden border-b border-outline-variant/30 bg-[radial-gradient(circle_at_top_left,rgba(213,184,150,0.18),transparent_28%),rgba(255,255,255,0.58)]">
+          {categoryAtelierConfig ? (
+            <>
+              <div className="absolute inset-0">
+                <StorefrontImage
+                  alt={categoryAtelierConfig.hero.imageAlt}
+                  src={categoryAtelierConfig.hero.imageUrl}
+                  fill
+                  priority
+                  sizes="100vw"
+                  className="object-cover opacity-[0.14]"
+                />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-r from-[#fbf8f2]/94 via-[#fbf8f2]/82 to-[#fbf8f2]/70" />
+            </>
+          ) : null}
+
+          <div className="shell relative flex flex-col gap-10 pb-14 pt-8">
+            <RecoveredStorefrontHeader navigation="fallback" tone="light" />
+
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="rounded-[2rem] border border-[#ddd5cc] bg-white/74 px-6 py-7 shadow-[0_28px_48px_-30px_rgba(27,28,25,0.16)] backdrop-blur md:px-8">
+                <p className="eyebrow">{archiveHeroEyebrow}</p>
+                <h1 className="mt-4 font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.5rem]">
+                  {archiveHeroTitle}
+                </h1>
+                <p className="mt-5 max-w-3xl text-base leading-8 text-on-surface-variant md:text-lg">
+                  {archiveHeroDescription}
+                </p>
+
+                {archiveHeroTags.length > 0 ? (
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    {archiveHeroTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-[#d8d0c7] bg-[#f6f1ea] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-8 grid gap-4 md:grid-cols-3">
+                  <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Archive items
+                    </p>
+                    <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                      {catalogIndex.length || products.length}
+                    </p>
+                  </div>
+                  <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Active filters
+                    </p>
+                    <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                      {activeFilterCount}
+                    </p>
+                  </div>
+                  <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                      Saved pieces
+                    </p>
+                    <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                      {wishlist.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid content-start gap-4 rounded-[2rem] bg-primary px-6 py-7 text-surface shadow-editorial">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-surface/62">
+                    {categoryAtelierConfig ? "Atelier Lane" : "Collection Focus"}
+                  </p>
+                  <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.04em] text-surface">
+                    {categoryAtelierConfig ? categoryAtelierConfig.navLabel : archiveFocusLabel}
+                  </h2>
+                </div>
+                <p className="text-sm leading-7 text-surface/72">
+                  {searchHint ||
+                    "An editorial storefront shaped for calm browsing, discovery, and quick drag-to-cart interactions."}
+                </p>
+                <div className="rounded-[1.4rem] border border-white/10 bg-white/8 px-4 py-4 text-sm leading-7 text-surface/72 backdrop-blur-md">
+                  {isPending || isLoadingProducts
+                    ? "Archive đang đồng bộ kết quả mới."
+                    : `${products.length} kết quả hiện sẵn sàng để duyệt hoặc kéo thả vào giỏ hàng / wishlist.`}
+                </div>
+                {archiveHeroEditorialHref ? (
+                  <div className="flex flex-col gap-3">
+                    <Link
+                      href={archiveHeroEditorialHref}
+                      className={cn(buttonStyles({ size: "md" }), "justify-center")}
+                    >
+                      Open {categoryAtelierConfig?.navLabel} editorial
+                    </Link>
+                    <Link
+                      href="/products"
+                      className={cn(
+                        buttonStyles({ variant: "secondary", size: "md" }),
+                        "justify-center border-white/18 bg-white/10 text-surface hover:bg-white/16 hover:text-surface",
+                      )}
+                    >
+                      Back to all archive
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="shell pb-12 pt-10">
 
         <div aria-live="polite" className="sr-only">
           {announcement}
         </div>
 
-        <div className="mt-10 flex flex-col gap-4 rounded-[1.8rem] bg-surface-container-low p-4 md:flex-row md:items-center md:justify-between md:p-5">
-          <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-3 rounded-full bg-background px-4 py-3">
+        <div className="storefront-results-toolbar-shell mt-10 rounded-[1.8rem] bg-surface-container-low p-4 md:p-5">
+          <div className="storefront-results-toolbar flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="storefront-inline-search-stack flex-1 space-y-3">
+            <div className="storefront-inline-search storefront-inline-search-field flex items-center gap-3 rounded-full bg-background px-4 py-3">
               <Search className="h-4 w-4 text-outline" />
               <TextInput
                 aria-label="Tìm kiếm sản phẩm"
@@ -672,12 +837,12 @@ function CatalogPageContent({
             </div>
 
             {search.trim() && searchSuggestions.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="storefront-search-suggestions flex flex-wrap gap-2">
                 {searchSuggestions.map((suggestion) => (
                   <button
                     key={`${suggestion.kind}-${suggestion.value}`}
                     type="button"
-                    className="rounded-full border border-outline-variant/30 bg-background px-3 py-2 text-xs font-medium text-primary transition hover:border-outline hover:bg-surface"
+                    className="storefront-search-suggestion rounded-full border border-outline-variant/30 bg-background px-3 py-2 text-xs font-medium text-primary transition hover:border-outline hover:bg-surface"
                     onClick={() => handleSelectSearchSuggestion(suggestion)}
                   >
                     {suggestion.value}
@@ -690,32 +855,43 @@ function CatalogPageContent({
             ) : null}
 
             {searchHint ? (
-              <p className="text-sm leading-7 text-on-surface-variant">{searchHint}</p>
+              <p className="storefront-search-hint text-sm leading-7 text-on-surface-variant">{searchHint}</p>
             ) : null}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="storefront-results-toolbar-controls flex items-center gap-3">
             <button
               type="button"
-              className={cn(buttonStyles({ variant: "secondary", size: "sm" }), "lg:hidden")}
+              className={cn(
+                buttonStyles({ variant: "secondary", size: "sm" }),
+                "storefront-filters-toggle lg:hidden",
+              )}
               onClick={() => setIsFilterOpen(true)}
             >
               <SlidersHorizontal className="h-4 w-4" />
               Bộ lọc
             </button>
 
-            <Select
-              aria-label="Sắp xếp sản phẩm"
-              className="min-w-44"
-              value={sort}
-              onChange={(event) => setSort(event.target.value as SortMode)}
-            >
-              {sortOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+            <div className="storefront-sort-control">
+              <div className="storefront-sort-control-label">
+                <span>Sắp xếp</span>
+              </div>
+              <div className="storefront-sort-control-field">
+                <Select
+                  aria-label="Sắp xếp sản phẩm"
+                  className="min-w-44"
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as SortMode)}
+                >
+                  {sortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+          </div>
           </div>
         </div>
 
@@ -755,7 +931,16 @@ function CatalogPageContent({
           }} />
 
           <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-on-surface-variant">
+            <div className="storefront-results-toolbar-shell rounded-[1.5rem] bg-surface-container-low px-5 py-4 text-sm text-on-surface-variant">
+              <div className="storefront-results-toolbar flex flex-wrap items-center justify-between gap-3">
+                <span className="storefront-results-count text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Archive Results
+                </span>
+                <span>
+                  {isPending || isLoadingProducts ? "Đang cập nhật kết quả..." : "Kết quả đã đồng bộ"}
+                </span>
+              </div>
+              <div className="storefront-results-summary mt-3 flex flex-wrap items-center justify-between gap-3">
               <span>
                 Hiển thị <strong className="text-primary">{products.length}</strong>
                 {isAssistSummaryActive ? (
@@ -770,7 +955,12 @@ function CatalogPageContent({
                   </>
                 )}
               </span>
-              <span>{isPending || isLoadingProducts ? "Đang cập nhật kết quả..." : "Kết quả đã đồng bộ"}</span>
+              <span>
+                {activeFilterCount > 0
+                  ? `${activeFilterCount} bộ lọc đang hoạt động`
+                  : "Không có bộ lọc bổ sung"}
+              </span>
+              </div>
             </div>
 
             <DndContext
@@ -837,8 +1027,12 @@ function CatalogPageContent({
             </DndContext>
           </div>
         </div>
+        </section>
+
+        <section className="shell pb-12">
+          <RecoveredEditorialFooter />
+        </section>
       </main>
-      <SiteFooter />
     </>
   );
 }
@@ -846,20 +1040,34 @@ function CatalogPageContent({
 function CatalogPageFallback() {
   return (
     <>
-      <SiteHeader />
-      <main className="shell section-spacing">
-        <SectionHeading
-          eyebrow="Catalog"
-          title="Đang tải catalog sản phẩm"
-          description="Storefront đang đồng bộ bộ lọc và query params trước khi hiển thị dữ liệu thật từ product-service."
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <ProductCardSkeleton key={index} />
-          ))}
-        </div>
+      <main>
+        <section className="border-b border-outline-variant/30 bg-white/52">
+          <div className="shell flex flex-col gap-10 pb-14 pt-8">
+            <RecoveredStorefrontHeader navigation="fallback" tone="light" />
+
+            <div className="max-w-3xl">
+              <p className="eyebrow">Seasonal Archive</p>
+              <h1 className="mt-4 font-serif text-5xl font-semibold tracking-[-0.05em] text-primary md:text-[4.25rem]">
+                Đang tải catalog sản phẩm
+              </h1>
+              <p className="mt-5 text-base leading-8 text-on-surface-variant md:text-lg">
+                Storefront đang đồng bộ bộ lọc và query params trước khi hiển thị dữ liệu thật từ
+                product-service.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section className="shell pb-12 pt-10">
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 9 }).map((_, index) => (
+              <ProductCardSkeleton key={index} />
+            ))}
+          </div>
+        </section>
+        <section className="shell pb-12">
+          <RecoveredEditorialFooter />
+        </section>
       </main>
-      <SiteFooter />
     </>
   );
 }
@@ -871,7 +1079,7 @@ function CatalogFilters(props: FilterPanelProps) {
         <div>
           <p className="eyebrow">Filters</p>
           <h3 className="mt-3 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
-            Lọc catalog
+            Archive filters
           </h3>
         </div>
         <button
@@ -883,79 +1091,117 @@ function CatalogFilters(props: FilterPanelProps) {
         </button>
       </div>
 
-      <div className="mt-6 space-y-5">
-        <Select
-          aria-label="Lọc theo danh mục"
-          value={props.category}
-          onChange={(event) => props.onCategoryChange(event.target.value)}
+      <div className="mt-6 space-y-6">
+        <CatalogFilterSection
+          title="CATEGORY"
+          summary={props.category || "All Archive"}
         >
-          <option value="">Tất cả category</option>
-          {props.categoryOptions.map((item) => (
-            <option key={item} value={item}>
-              {buildFacetOptionLabel(item, props.categoryCounts)}
-            </option>
-          ))}
-        </Select>
+          <div className="flex flex-wrap gap-2">
+            <CatalogFilterButton
+              active={!props.category}
+              label="All Archive"
+              onClick={() => props.onCategoryChange("")}
+            />
+            {props.categoryOptions.map((item) => (
+              <CatalogFilterButton
+                key={item}
+                active={props.category === item}
+                label={buildFacetOptionLabel(item, props.categoryCounts)}
+                onClick={() => props.onCategoryChange(item)}
+              />
+            ))}
+          </div>
+        </CatalogFilterSection>
 
-        <Select
-          aria-label="Lọc theo thương hiệu"
-          value={props.brand}
-          onChange={(event) => props.onBrandChange(event.target.value)}
+        <CatalogFilterSection
+          title="BRAND"
+          summary={props.brand || "All brands"}
         >
-          <option value="">Tất cả brand</option>
-          {props.brandOptions.map((item) => (
-            <option key={item} value={item}>
-              {buildFacetOptionLabel(item, props.brandCounts)}
-            </option>
-          ))}
-        </Select>
-
-        <div className="grid grid-cols-2 gap-3">
           <Select
-            aria-label="Lọc theo kích cỡ"
-            value={props.size}
-            onChange={(event) => props.onSizeChange(event.target.value)}
+            aria-label="Lọc theo thương hiệu"
+            value={props.brand}
+            onChange={(event) => props.onBrandChange(event.target.value)}
           >
-            <option value="">Mọi size</option>
-            {props.sizeOptions.map((item) => (
+            <option value="">Tất cả brand</option>
+            {props.brandOptions.map((item) => (
               <option key={item} value={item}>
-                {buildFacetOptionLabel(item, props.sizeCounts)}
+                {buildFacetOptionLabel(item, props.brandCounts)}
               </option>
             ))}
           </Select>
+        </CatalogFilterSection>
 
-          <Select
-            aria-label="Lọc theo màu sắc"
-            value={props.color}
-            onChange={(event) => props.onColorChange(event.target.value)}
-          >
-            <option value="">Mọi màu</option>
-            {props.colorOptions.map((item) => (
-              <option key={item} value={item}>
-                {buildFacetOptionLabel(item, props.colorCounts)}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <CatalogFilterSection
+          title="SIZE"
+          summary={props.size || "All sizes"}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {props.sizeOptions.length > 0 ? (
+              props.sizeOptions.map((item) => (
+                <CatalogFilterButton
+                  key={item}
+                  active={props.size === item}
+                  label={buildFacetOptionLabel(item, props.sizeCounts)}
+                  onClick={() => props.onSizeChange(props.size === item ? "" : item)}
+                />
+              ))
+            ) : (
+              <p className="text-sm leading-7 text-on-surface-variant">
+                Size options will appear here as soon as variant metadata is available.
+              </p>
+            )}
+          </div>
+        </CatalogFilterSection>
 
-        <div className="grid grid-cols-2 gap-3">
-          <TextInput
-            aria-label="Giá tối thiểu"
-            placeholder="Giá từ"
-            value={props.minPrice}
-            onChange={(event) =>
-              props.onMinPriceChange(event.target.value.replace(/[^\d.]/g, ""))
-            }
-          />
-          <TextInput
-            aria-label="Giá tối đa"
-            placeholder="Giá đến"
-            value={props.maxPrice}
-            onChange={(event) =>
-              props.onMaxPriceChange(event.target.value.replace(/[^\d.]/g, ""))
-            }
-          />
-        </div>
+        <CatalogFilterSection
+          title="COLOR"
+          summary={props.color || "All colors"}
+        >
+          <div className="flex flex-wrap gap-2">
+            {props.colorOptions.length > 0 ? (
+              props.colorOptions.map((item) => (
+                <CatalogFilterButton
+                  key={item}
+                  active={props.color === item}
+                  label={buildFacetOptionLabel(item, props.colorCounts)}
+                  onClick={() => props.onColorChange(props.color === item ? "" : item)}
+                />
+              ))
+            ) : (
+              <p className="text-sm leading-7 text-on-surface-variant">
+                Color options will appear here as soon as search facets are available.
+              </p>
+            )}
+          </div>
+        </CatalogFilterSection>
+
+        <CatalogFilterSection
+          title="PRICE RANGE"
+          summary={
+            props.minPrice || props.maxPrice
+              ? `${props.minPrice || "0"} - ${props.maxPrice || "Any"}`
+              : "Any price"
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput
+              aria-label="Giá tối thiểu"
+              placeholder="Giá từ"
+              value={props.minPrice}
+              onChange={(event) =>
+                props.onMinPriceChange(event.target.value.replace(/[^\d.]/g, ""))
+              }
+            />
+            <TextInput
+              aria-label="Giá tối đa"
+              placeholder="Giá đến"
+              value={props.maxPrice}
+              onChange={(event) =>
+                props.onMaxPriceChange(event.target.value.replace(/[^\d.]/g, ""))
+              }
+            />
+          </div>
+        </CatalogFilterSection>
 
         <label className="flex items-center gap-3 rounded-[1.25rem] bg-surface px-4 py-4 text-sm text-on-surface">
           <input
@@ -965,6 +1211,16 @@ function CatalogFilters(props: FilterPanelProps) {
           />
           Chỉ xem sản phẩm đã lưu
         </label>
+
+        <div className="rounded-[1.4rem] bg-[#f6f1ea] px-4 py-4">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+            Collection Focus
+          </span>
+          <p className="mt-3 text-sm leading-7 text-primary">
+            Bộ lọc hiện đang giữ đúng tinh thần archive cũ: chọn category trước, sau đó tinh chỉnh
+            size, color và mức giá.
+          </p>
+        </div>
       </div>
     </SurfaceCard>
   );
@@ -989,6 +1245,55 @@ function CatalogFilters(props: FilterPanelProps) {
         </div>
       ) : null}
     </>
+  );
+}
+
+function CatalogFilterSection({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="storefront-filter-section space-y-4">
+      <div className="storefront-filter-section-toggle flex items-center justify-between gap-3">
+        <div className="storefront-filter-section-toggle-copy">
+          <strong className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+            {title}
+          </strong>
+          <small className="text-xs text-on-surface-variant">{summary}</small>
+        </div>
+      </div>
+      <div className="storefront-filter-section-body">{children}</div>
+    </div>
+  );
+}
+
+function CatalogFilterButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "rounded-full border px-3 py-2 text-left text-xs font-medium transition",
+        active
+          ? "border-primary/35 bg-primary text-on-primary"
+          : "border-outline-variant/25 bg-background text-primary hover:border-primary/20 hover:bg-surface",
+      )}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 

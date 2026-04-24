@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
-import { AccountShell } from "@/components/account-shell";
+import { AccountShell } from "@/components/account-shared/account-shell";
 import {
   EmptyState,
   InlineAlert,
@@ -10,7 +10,7 @@ import {
   StatusPill,
   SurfaceCard,
   TextInput,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuthState } from "@/hooks/useAuth";
 import { useSavedAddresses } from "@/hooks/useSavedAddresses";
 import { userApi } from "@/lib/api";
@@ -166,7 +166,59 @@ export function AddressesPageView() {
           </form>
         </SurfaceCard>
 
-        <div>
+        <div className="space-y-6">
+          <div className="rounded-[2rem] border border-[#ddd5cc] bg-white/74 px-6 py-7 shadow-[0_28px_48px_-30px_rgba(27,28,25,0.16)] backdrop-blur md:px-8">
+            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="eyebrow">Address book</p>
+                <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary md:text-4xl">
+                  Saved delivery contacts
+                </h2>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-on-surface-variant md:text-base">
+                  Quản lý địa chỉ giao hàng để checkout nhanh hơn và theo dõi đơn thuận tiện hơn ở mọi lần mua.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className={buttonStyles({ variant: "secondary" })}
+                onClick={resetForm}
+              >
+                {editingId ? "Tạo địa chỉ mới" : "Làm mới form"}
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Saved addresses
+                </p>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                  {addresses.length}
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Default ready
+                </p>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                  {addresses.some((address) => address.is_default) ? "Yes" : "No"}
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Checkout route
+                </p>
+                <a
+                  className="mt-4 inline-flex text-sm font-medium text-primary underline"
+                  href="/checkout"
+                >
+                  Open checkout
+                </a>
+              </div>
+            </div>
+          </div>
+
           {isLoading ? (
             <LoadingScreen label="Đang tải sổ địa chỉ..." />
           ) : addresses.length === 0 ? (
@@ -176,10 +228,13 @@ export function AddressesPageView() {
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {addresses.map((address) => (
+              {addresses.map((address, index) => (
                 <SurfaceCard key={address.id} className="p-6">
                   <div className="flex items-start justify-between gap-3">
                     <div>
+                      <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-on-primary">
+                        {address.is_default ? "H" : String(index + 1).padStart(2, "0")}
+                      </div>
                       <p className="font-semibold text-primary">{address.recipient_name}</p>
                       <p className="mt-2 text-sm leading-7 text-on-surface-variant">{address.location}</p>
                       <p className="mt-2 text-sm text-on-surface-variant">{address.phone}</p>
@@ -218,9 +273,28 @@ export function AddressesPageView() {
                     >
                       Xóa
                     </button>
+                    <a href="/checkout" className={buttonStyles({ variant: "tertiary" })}>
+                      Use at checkout
+                    </a>
                   </div>
                 </SurfaceCard>
               ))}
+
+              <button
+                type="button"
+                className="flex min-h-[17rem] flex-col items-center justify-center gap-3 rounded-[1.5rem] border border-dashed border-outline-variant bg-transparent px-6 py-8 text-center transition hover:border-primary hover:bg-surface-container-low"
+                onClick={resetForm}
+              >
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-primary text-2xl text-on-primary">
+                  +
+                </span>
+                <strong className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                  New Address
+                </strong>
+                <span className="max-w-xs text-sm leading-7 text-on-surface-variant">
+                  Add a new destination for your upcoming purchases.
+                </span>
+              </button>
             </div>
           )}
         </div>

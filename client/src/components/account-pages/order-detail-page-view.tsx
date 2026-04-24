@@ -4,15 +4,15 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { AccountShell } from "@/components/account-shell";
-import { StorefrontImage } from "@/components/storefront-image";
+import { AccountShell } from "@/components/account-shared/account-shell";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
 import {
   EmptyState,
   InlineAlert,
   LoadingScreen,
   StatusPill,
   SurfaceCard,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { orderApi, paymentApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
@@ -236,15 +236,17 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
         />
       ) : (
         <div className="space-y-6">
-          <SurfaceCard className="p-6">
+          <SurfaceCard className="p-6 md:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="eyebrow">Order summary</p>
-                <h2 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary">
-                  {formatShortOrderId(order.id)}
+                <p className="eyebrow">{isConfirmation ? "Thank you" : "Order details"}</p>
+                <h2 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
+                  {isConfirmation ? "Order placed successfully." : formatShortOrderId(order.id)}
                 </h2>
-                <p className="mt-3 text-sm leading-7 text-on-surface-variant">
-                  {formatLongDate(order.created_at)} · {formatShippingMethodLabel(order.shipping_method)}
+                <p className="mt-4 max-w-3xl text-sm leading-7 text-on-surface-variant md:text-base">
+                  {isConfirmation
+                    ? "Your order has been placed successfully and is now being prepared with care in our atelier."
+                    : "Review the latest order snapshot, payment state, shipping details and aftercare options in one place."}
                 </p>
               </div>
               <div className="text-right">
@@ -252,6 +254,41 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                 <p className="mt-3 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
                   {formatCurrency(order.total_price)}
                 </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Order number
+                </p>
+                <p className="mt-4 font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                  #{order.id}
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Estimated arrival
+                </p>
+                <p className="mt-4 text-sm font-medium leading-7 text-primary">
+                  {formatArrivalWindow(order.created_at)}
+                </p>
+              </div>
+              <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                  Shipping to
+                </p>
+                {order.shipping_address ? (
+                  <div className="mt-4 text-sm leading-7 text-primary">
+                    <p className="font-medium">{order.shipping_address.recipient_name}</p>
+                    <p>{order.shipping_address.phone}</p>
+                    <p>{order.shipping_address.location}</p>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm leading-7 text-primary">
+                    Pickup order. Shipping address was not required.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -268,14 +305,16 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
             ) : null}
 
             {order.status === "pending" ? (
-              <button
-                type="button"
-                className={`${buttonStyles({ variant: "secondary", size: "lg" })} mt-6`}
-                disabled={busy}
-                onClick={() => void handleCancelOrder()}
-              >
-                {busy ? "Đang hủy..." : "Hủy đơn hàng"}
-              </button>
+              <div className="mt-6">
+                <button
+                  type="button"
+                  className={`${buttonStyles({ variant: "secondary", size: "lg" })}`}
+                  disabled={busy}
+                  onClick={() => void handleCancelOrder()}
+                >
+                  {busy ? "Đang hủy..." : "Hủy đơn hàng"}
+                </button>
+              </div>
             ) : null}
           </SurfaceCard>
 
@@ -357,9 +396,14 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                       backend thật.
                     </p>
                   </div>
-                  <Link href="/returns" className="text-sm font-medium text-primary underline">
-                    Open returns center
-                  </Link>
+                  <div className="flex flex-col items-end gap-3">
+                    <StatusPill
+                      status={`${returnableItems.filter((item) => item.eligible && item.remaining_quantity > 0).length} returnable lines`}
+                    />
+                    <Link href="/returns" className="text-sm font-medium text-primary underline">
+                      Open returns center
+                    </Link>
+                  </div>
                 </div>
 
                 {returnFeedback ? (
@@ -659,4 +703,20 @@ function buildReturnRefundCopy(returnRequest: ReturnRequest) {
   }
 
   return `${formatCurrency(returnRequest.refund_amount)} dự kiến`;
+}
+
+function formatArrivalWindow(createdAt: string) {
+  const createdDate = new Date(createdAt);
+
+  if (Number.isNaN(createdDate.getTime())) {
+    return "Updating delivery estimate";
+  }
+
+  const start = new Date(createdDate);
+  start.setDate(start.getDate() + 3);
+
+  const end = new Date(createdDate);
+  end.setDate(end.getDate() + 7);
+
+  return `${formatLongDate(start.toISOString())} - ${formatLongDate(end.toISOString())}`;
 }

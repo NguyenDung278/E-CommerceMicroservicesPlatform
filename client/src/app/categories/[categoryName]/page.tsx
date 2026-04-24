@@ -1,4 +1,4 @@
-import { CatalogPage } from "@/components/catalog-page";
+import { CatalogPage } from "@/components/storefront-pages/catalog-page";
 import { getCatalogPageInitialData } from "@/lib/server/storefront";
 import { readCatalogPageQuery } from "@/lib/storefront/initial-data";
 

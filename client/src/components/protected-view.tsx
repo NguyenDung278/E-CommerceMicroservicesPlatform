@@ -3,7 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { LoadingScreen } from "@/components/storefront-ui";
+import { LoadingScreen } from "@/components/storefront-shared/storefront-ui";
 import { useAuthState } from "@/hooks/useAuth";
 
 export function ProtectedView({ children }: { children: React.ReactNode }) {

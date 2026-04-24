@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
-import { AccountShell } from "@/components/account-shell";
-import { EmptyState, InlineAlert, LoadingScreen, StatusPill, SurfaceCard } from "@/components/storefront-ui";
+import { AccountShell } from "@/components/account-shared/account-shell";
+import {
+  EmptyState,
+  InlineAlert,
+  LoadingScreen,
+  StatusPill,
+  SurfaceCard,
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { orderApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
@@ -95,6 +101,10 @@ export function ReturnsPageView() {
   }, [page, query, selectedStatus, token]);
 
   const totalPages = Math.max(1, Math.ceil((meta.total ?? 0) / Math.max(meta.limit ?? 1, 1)));
+  const visibleRangeStart =
+    returns.length === 0 ? 0 : ((meta.page ?? page) - 1) * (meta.limit ?? userReturnPageSize) + 1;
+  const visibleRangeEnd =
+    returns.length === 0 ? 0 : visibleRangeStart + Math.max(returns.length - 1, 0);
   const stats = useMemo(() => {
     const activeCount = returns.filter((item) =>
       ["requested", "approved", "received", "refund_pending"].includes(item.status),
@@ -129,26 +139,49 @@ export function ReturnsPageView() {
     >
       {feedback ? <InlineAlert tone="error">{feedback}</InlineAlert> : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <SurfaceCard className="p-6">
-          <p className="text-sm text-on-surface-variant">Open cases</p>
-          <p className="mt-3 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
-            {stats.activeCount}
+      <SurfaceCard className="p-6 md:p-8">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="eyebrow">Post-purchase care</p>
+            <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary md:text-4xl">
+              Returns & Refunds
+            </h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-on-surface-variant md:text-base">
+              Theo dõi yêu cầu trả hàng, refund queue và toàn bộ lịch sử xử lý của từng case ngay trong account center.
+            </p>
+          </div>
+          <p className="text-sm leading-7 text-on-surface-variant">
+            Showing {visibleRangeStart}-{visibleRangeEnd} of {meta.total ?? 0} returns
           </p>
-        </SurfaceCard>
-        <SurfaceCard className="p-6">
-          <p className="text-sm text-on-surface-variant">Refunded</p>
-          <p className="mt-3 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
-            {stats.refundedCount}
-          </p>
-        </SurfaceCard>
-        <SurfaceCard className="p-6">
-          <p className="text-sm text-on-surface-variant">Waiting retry</p>
-          <p className="mt-3 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
-            {stats.waitingRetryCount}
-          </p>
-        </SurfaceCard>
-      </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+              Open cases
+            </p>
+            <p className="mt-4 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
+              {stats.activeCount}
+            </p>
+          </div>
+          <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+              Refunded
+            </p>
+            <p className="mt-4 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
+              {stats.refundedCount}
+            </p>
+          </div>
+          <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+              Waiting retry
+            </p>
+            <p className="mt-4 font-serif text-4xl font-semibold tracking-[-0.03em] text-primary">
+              {stats.waitingRetryCount}
+            </p>
+          </div>
+        </div>
+      </SurfaceCard>
 
       <SurfaceCard className="p-6">
         <form className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={handleSubmitFilters}>
@@ -215,7 +248,7 @@ export function ReturnsPageView() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-on-surface-variant">
             <span>
-              Page {meta.page ?? page}/{totalPages} · {meta.total ?? 0} returns
+              Page {meta.page ?? page}/{totalPages} · Showing {visibleRangeStart}-{visibleRangeEnd} of {meta.total ?? 0} returns
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -310,6 +343,26 @@ export function ReturnsPageView() {
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  {returnRequest.refund_last_error ? (
+                    <div className="mt-6">
+                      <InlineAlert tone="info">
+                        Lần hoàn tiền gần nhất cần chú ý. {returnRequest.refund_last_error}
+                        {returnRequest.refund_next_retry_at
+                          ? ` Retry tiếp theo vào ${formatDateTime(returnRequest.refund_next_retry_at)}.`
+                          : ""}
+                      </InlineAlert>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-6 flex justify-end">
+                    <Link
+                      href={`/returns/${returnRequest.id}`}
+                      className={buttonStyles({ variant: "tertiary" })}
+                    >
+                      View details
+                    </Link>
                   </div>
                 </SurfaceCard>
               );

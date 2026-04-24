@@ -145,7 +145,7 @@ export type AtelierPageConfig = {
 };
 
 export const atelierNavItems: AtelierNavItem[] = [
-  { id: "archive", label: "Catalog", href: "/products" },
+  { id: "archive", label: "All Archive", href: "/products" },
   { id: "men", label: "Men", href: "/editorial/Shop%20Men" },
   { id: "women", label: "Women", href: "/editorial/Shop%20Women" },
   { id: "footwear", label: "Footwear", href: "/editorial/Footwear" },

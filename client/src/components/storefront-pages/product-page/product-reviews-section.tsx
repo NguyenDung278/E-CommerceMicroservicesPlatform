@@ -10,7 +10,7 @@ import {
   SectionHeading,
   SurfaceCard,
   TextArea,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { buttonStyles } from "@/lib/button-styles";
 import { cn } from "@/lib/utils";
 import type { ProductReview, ProductReviewList } from "@/types/api";

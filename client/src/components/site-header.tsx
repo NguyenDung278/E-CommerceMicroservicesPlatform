@@ -79,8 +79,8 @@ export function SiteHeader() {
             </Link>
 
             <Link
-              href="/products?saved=1"
-              className="relative hidden h-11 w-11 items-center justify-center rounded-full bg-surface-container-low text-primary transition hover:bg-surface-container-high md:inline-flex"
+              href="/wishlist"
+              className="relative inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface-container-low text-primary transition hover:bg-surface-container-high"
               aria-label="Mở danh sách yêu thích"
             >
               <Heart className="h-4 w-4" />

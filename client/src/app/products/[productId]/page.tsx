@@ -1,4 +1,4 @@
-import { ProductPage } from "@/components/product-page";
+import { ProductPage } from "@/components/storefront-pages/product-page";
 import { getProductPageInitialData } from "@/lib/server/storefront";
 
 export default async function Page({

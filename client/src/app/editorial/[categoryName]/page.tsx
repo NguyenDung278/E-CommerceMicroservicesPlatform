@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { AtelierCategoryPage } from "@/components/atelier-category-page";
+import { AtelierCategoryPage } from "@/components/storefront-pages/editorial/atelier-category-page";
 import { getEditorialPageInitialData, isServerHttpStatus } from "@/lib/server/storefront";
 import { buildAtelierNavItems, buildAtelierPageConfig } from "@/lib/storefront/editorial-adapter";
 

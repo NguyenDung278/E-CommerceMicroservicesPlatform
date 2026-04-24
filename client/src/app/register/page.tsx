@@ -1,6 +1,5 @@
-import { RegisterPageView } from "@/components/auth-pages";
+import { RegisterPageView } from "@/components/storefront-pages/auth-pages";
 
 export default function Page() {
   return <RegisterPageView />;
 }
-

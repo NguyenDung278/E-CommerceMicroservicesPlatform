@@ -1,6 +1,5 @@
-import { ForgotPasswordPageView } from "@/components/auth-pages";
+import { ForgotPasswordPageView } from "@/components/storefront-pages/auth-pages";
 
 export default function Page() {
   return <ForgotPasswordPageView />;
 }
-

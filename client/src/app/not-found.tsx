@@ -1,15 +1,19 @@
 import Link from "next/link";
 
+import {
+  RecoveredEditorialFooter,
+  RecoveredStorefrontHeader,
+} from "@/components/storefront-shared/recovered-storefront-chrome";
 import { buttonStyles } from "@/lib/button-styles";
-import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
 
 export default function NotFound() {
   return (
-    <>
-      <SiteHeader />
-      <main className="shell flex min-h-[70svh] items-center justify-center py-16">
-        <div className="max-w-2xl rounded-[2rem] bg-white/55 px-8 py-14 text-center shadow-[0_24px_48px_-24px_rgba(27,28,25,0.25)]">
+    <main>
+      <section className="shell pt-6 md:pt-8">
+        <RecoveredStorefrontHeader navigation="fallback" tone="light" />
+      </section>
+      <section className="shell flex min-h-[70svh] items-center justify-center py-16">
+        <div className="max-w-3xl rounded-[2rem] border border-[#d9d2c9] bg-white/72 px-8 py-14 text-center shadow-editorial backdrop-blur">
           <p className="eyebrow">404</p>
           <h1 className="mt-4 font-serif text-5xl font-semibold tracking-[-0.04em] text-primary">
             Không tìm thấy trang bạn đang mở
@@ -31,8 +35,10 @@ export default function NotFound() {
             </Link>
           </div>
         </div>
-      </main>
-      <SiteFooter />
-    </>
+      </section>
+      <section className="shell pb-12">
+        <RecoveredEditorialFooter />
+      </section>
+    </main>
   );
 }

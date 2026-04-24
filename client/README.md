@@ -40,7 +40,7 @@ tests no longer need a manual copy step.
 - TypeScript
 - ESLint
 - `src/` directory layout
-- Storefront/account flows backed by the shared Go services
+- Storefront/account flows backed by the shared Go services, including a dedicated `/wishlist` route
 
 ## Runtime notes
 

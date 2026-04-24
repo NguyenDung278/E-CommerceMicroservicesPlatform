@@ -1,6 +1,5 @@
-import { CheckoutPage } from "@/components/checkout-page";
+import { CheckoutPage } from "@/components/storefront-pages/checkout-page";
 
 export default function Page() {
   return <CheckoutPage />;
 }
-

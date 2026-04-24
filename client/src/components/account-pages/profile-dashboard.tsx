@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
-import { AccountShell } from "@/components/account-shell";
+import { AccountShell } from "@/components/account-shared/account-shell";
 import {
   Badge,
   EmptyState,
@@ -22,7 +22,7 @@ import {
   StatusPill,
   SurfaceCard,
   TextInput,
-} from "@/components/storefront-ui";
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrderPayments } from "@/hooks/useOrderPayments";
 import { useSavedAddresses } from "@/hooks/useSavedAddresses";
@@ -50,7 +50,7 @@ import {
   normalizePhoneDigits,
   type ProfileFeedback,
   type ProfileFieldErrors,
-} from "./shared";
+} from "@/components/account-shared/account-helpers";
 
 export function ProfileDashboard() {
   const {
@@ -165,13 +165,6 @@ export function ProfileDashboard() {
   const otpPanelVisible = phoneChanged && !phoneIsVerifiedForDraft;
   const profileLocation = defaultAddress?.location || "Thêm địa chỉ mặc định để hiển thị khu vực";
   const profilePhone = user?.phone || "Chưa cập nhật số điện thoại";
-  const phoneStatusLabel = phoneChanged
-    ? phoneIsVerifiedForDraft
-      ? "pending_save"
-      : "pending"
-    : user?.phone_verified
-      ? "verified"
-      : "unverified";
 
   const firstNameValue = normalizeInputText(firstName);
   const lastNameValue = normalizeInputText(lastName);
@@ -453,162 +446,101 @@ export function ProfileDashboard() {
     >
       {feedback ? <InlineAlert tone={feedback.tone}>{feedback.message}</InlineAlert> : null}
 
-      <section className="border-b border-outline-variant/30 pb-10">
-        <div className="flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-3xl font-semibold text-on-primary shadow-editorial">
-              {getDisplayName(user?.first_name, user?.last_name)
-                .split(" ")
-                .map((part) => part.charAt(0))
-                .join("")
-                .slice(0, 2)}
+      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+        <div className="rounded-[2rem] border border-[#ddd5cc] bg-white/78 px-6 py-7 shadow-[0_28px_48px_-30px_rgba(27,28,25,0.16)] backdrop-blur md:px-8 md:py-8">
+          <div className="grid gap-8 lg:grid-cols-[160px_minmax(0,1fr)] lg:items-start">
+            <div className="flex justify-center lg:justify-start">
+              <div className="flex h-36 w-36 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-on-primary shadow-editorial">
+                {displayName
+                  .split(" ")
+                  .map((part) => part.charAt(0))
+                  .join("")
+                  .slice(0, 2)}
+              </div>
             </div>
-            <div>
-              <h2 className="font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
-                {getDisplayName(user?.first_name, user?.last_name)}
-              </h2>
-              <p className="mt-3 flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-secondary">
-                <BadgeCheck className="h-4 w-4" />
-                {formatMemberSince(user?.created_at)}
-              </p>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <StatusPill status={user?.email_verified ? "verified" : "pending"} />
-                <Badge className="bg-primary/10 text-primary">{humanizeToken(user?.role || "customer")}</Badge>
-                <StatusPill status={phoneStatusLabel} />
+
+            <div className="space-y-7">
+              <div>
+                <p className="eyebrow">Profile atelier</p>
+                <h2 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
+                  {displayName}
+                </h2>
+                <p className="mt-3 flex items-center gap-2 text-sm font-medium uppercase tracking-[0.22em] text-secondary">
+                  <BadgeCheck className="h-4 w-4" />
+                  {formatMemberSince(user?.created_at)}
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <Badge className="bg-primary/10 text-primary">
+                    {user?.email_verified ? "Email verified" : "Verify email"}
+                  </Badge>
+                  <Badge className="bg-primary/10 text-primary">
+                    {phoneChanged
+                      ? phoneIsVerifiedForDraft
+                        ? "Phone ready to save"
+                        : "Phone pending"
+                      : user?.phone_verified
+                        ? "Phone verified"
+                        : "Phone pending"}
+                  </Badge>
+                  <Badge className="bg-primary/10 text-primary">
+                    {humanizeToken(user?.role || "customer")}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    <Mail className="h-4 w-4" />
+                    Email address
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-primary">{user?.email || "Not available"}</p>
+                </div>
+                <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    <Phone className="h-4 w-4" />
+                    Phone number
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-primary">{profilePhone}</p>
+                </div>
+                <div className="rounded-[1.5rem] bg-[#f6f1ea] px-5 py-5">
+                  <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    <MapPin className="h-4 w-4" />
+                    Saved contact
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-primary">{profileLocation}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    Orders
+                  </p>
+                  <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                    {orders.length}
+                  </p>
+                </div>
+                <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    Net paid
+                  </p>
+                  <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                    {formatCurrency(totalPaid)}
+                  </p>
+                </div>
+                <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
+                    Addresses
+                  </p>
+                  <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+                    {addresses.length}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-3 xl:min-w-[28rem]">
-            <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Orders
-              </p>
-              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                {orders.length}
-              </p>
-            </div>
-            <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Net paid
-              </p>
-              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                {formatCurrency(totalPaid)}
-              </p>
-            </div>
-            <div className="rounded-[1.5rem] bg-surface-container-low px-5 py-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-                Addresses
-              </p>
-              <p className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                {addresses.length}
-              </p>
-            </div>
-          </div>
         </div>
-      </section>
-
-      <section className="grid gap-8 md:grid-cols-3">
-        <div className="space-y-2">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            <Mail className="h-4 w-4" />
-            Email
-          </p>
-          <p className="text-lg text-primary">{user?.email}</p>
-        </div>
-        <div className="space-y-2">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            <Phone className="h-4 w-4" />
-            Phone
-          </p>
-          <p className="text-lg text-primary">{profilePhone}</p>
-        </div>
-        <div className="space-y-2">
-          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            <MapPin className="h-4 w-4" />
-            Location
-          </p>
-          <p className="text-lg text-primary">{profileLocation}</p>
-        </div>
-      </section>
-
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-        <SurfaceCard className="overflow-hidden">
-          <div className="flex flex-col gap-4 px-6 pb-6 pt-6 md:flex-row md:items-end md:justify-between md:px-8 md:pt-8">
-            <div>
-              <p className="eyebrow">Recent orders</p>
-              <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
-                Đơn hàng gần đây
-              </h2>
-            </div>
-            <Link href="/myorders" className={buttonStyles({ variant: "tertiary" })}>
-              Xem toàn bộ
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="px-6 pb-6 md:px-8">
-              <LoadingScreen label="Đang tải lịch sử đơn hàng..." />
-            </div>
-          ) : recentOrders.length === 0 ? (
-            <div className="px-6 pb-6 md:px-8">
-              <EmptyState
-                title="Chưa có đơn hàng"
-                description="Sau khi hoàn tất checkout, các đơn gần đây sẽ xuất hiện tại đây."
-              />
-            </div>
-          ) : (
-            <>
-              <div className="hidden overflow-x-auto px-6 pb-6 md:block md:px-8">
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-outline-variant/20 text-on-surface-variant">
-                      <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Order ID</th>
-                      <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Date</th>
-                      <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Total</th>
-                      <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-outline-variant/10">
-                    {recentOrders.map((order) => (
-                      <tr key={order.id} className="transition hover:bg-surface-container-high/50">
-                        <td className="py-5">
-                          <Link href={`/orders/${order.id}`} className="font-medium text-primary hover:underline">
-                            {formatShortOrderId(order.id)}
-                          </Link>
-                        </td>
-                        <td className="py-5 text-sm text-on-surface-variant">{formatShortDate(order.created_at)}</td>
-                        <td className="py-5 text-sm font-semibold text-primary">{formatCurrency(order.total_price)}</td>
-                        <td className="py-5">
-                          <StatusPill status={order.status} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="grid gap-4 px-6 pb-6 md:hidden">
-                {recentOrders.map((order) => (
-                  <Link
-                    key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="rounded-[1.5rem] bg-surface px-5 py-5 transition hover:bg-surface-container-high"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="font-semibold text-primary">{formatShortOrderId(order.id)}</p>
-                      <StatusPill status={order.status} />
-                    </div>
-                    <p className="mt-3 text-sm text-on-surface-variant">
-                      {formatShortDate(order.created_at)} · {formatShippingMethodLabel(order.shipping_method)}
-                    </p>
-                    <p className="mt-3 font-semibold text-primary">{formatCurrency(order.total_price)}</p>
-                  </Link>
-                ))}
-              </div>
-            </>
-          )}
-        </SurfaceCard>
 
         <div className="space-y-6">
           <SurfaceCard className="p-6">
@@ -636,7 +568,7 @@ export function ProfileDashboard() {
               </div>
               <div>
                 <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-surface">
-                  Bảo mật và thanh toán
+                  Security center
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-on-primary/80">
                   {user?.email_verified
@@ -665,6 +597,136 @@ export function ProfileDashboard() {
           </SurfaceCard>
         </div>
       </section>
+
+      <section className="grid gap-6 md:grid-cols-2">
+        <SurfaceCard className="p-6 md:p-7">
+          <div className="flex items-start gap-4">
+            <div className="rounded-[1rem] bg-primary/8 p-3 text-primary">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                Security Center
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                Review password hygiene, recovery readiness, and verification status from one control panel.
+              </p>
+              <Link href="/security" className={cn(buttonStyles({ variant: "tertiary" }), "mt-6")}>
+                Open security center
+              </Link>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="bg-[#f6f1ea] p-6 md:p-7">
+          <div className="flex items-start gap-4">
+            <div className="rounded-[1rem] bg-primary p-3 text-on-primary">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary">
+                ND Membership
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-on-surface-variant">
+                {user?.email_verified
+                  ? `Thành viên từ ${formatMemberSince(user?.created_at).replace("Thành viên từ ", "")}. Bạn đang có ${orders.length} đơn hàng và ${addresses.length} địa chỉ đã lưu trong tài khoản.`
+                  : "Xác minh email để tăng độ an toàn và hoàn thiện hồ sơ thành viên ND Shop."}
+              </p>
+              {user?.email_verified ? (
+                <Link href="/myorders" className={cn(buttonStyles({ variant: "tertiary" }), "mt-6")}>
+                  View order history
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className={cn(buttonStyles({ variant: "secondary" }), "mt-6")}
+                  disabled={busy}
+                  onClick={() => void handleResendVerification()}
+                >
+                  {busy ? "Sending..." : "Verify email"}
+                </button>
+              )}
+            </div>
+          </div>
+        </SurfaceCard>
+      </section>
+
+      <SurfaceCard className="overflow-hidden">
+        <div className="flex flex-col gap-4 px-6 pb-6 pt-6 md:flex-row md:items-end md:justify-between md:px-8 md:pt-8">
+          <div>
+            <p className="eyebrow">Recent orders</p>
+            <h2 className="mt-4 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+              Đơn hàng gần đây
+            </h2>
+          </div>
+          <Link href="/myorders" className={buttonStyles({ variant: "tertiary" })}>
+            Xem toàn bộ
+          </Link>
+        </div>
+
+        {isLoading ? (
+          <div className="px-6 pb-6 md:px-8">
+            <LoadingScreen label="Đang tải lịch sử đơn hàng..." />
+          </div>
+        ) : recentOrders.length === 0 ? (
+          <div className="px-6 pb-6 md:px-8">
+            <EmptyState
+              title="Chưa có đơn hàng"
+              description="Sau khi hoàn tất checkout, các đơn gần đây sẽ xuất hiện tại đây."
+            />
+          </div>
+        ) : (
+          <>
+            <div className="hidden overflow-x-auto px-6 pb-6 md:block md:px-8">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-outline-variant/20 text-on-surface-variant">
+                    <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Order ID</th>
+                    <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Date</th>
+                    <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Total</th>
+                    <th className="pb-4 text-[10px] font-semibold uppercase tracking-[0.24em]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant/10">
+                  {recentOrders.map((order) => (
+                    <tr key={order.id} className="transition hover:bg-surface-container-high/50">
+                      <td className="py-5">
+                        <Link href={`/orders/${order.id}`} className="font-medium text-primary hover:underline">
+                          {formatShortOrderId(order.id)}
+                        </Link>
+                      </td>
+                      <td className="py-5 text-sm text-on-surface-variant">{formatShortDate(order.created_at)}</td>
+                      <td className="py-5 text-sm font-semibold text-primary">{formatCurrency(order.total_price)}</td>
+                      <td className="py-5">
+                        <StatusPill status={order.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid gap-4 px-6 pb-6 md:hidden">
+              {recentOrders.map((order) => (
+                <Link
+                  key={order.id}
+                  href={`/orders/${order.id}`}
+                  className="rounded-[1.5rem] bg-surface px-5 py-5 transition hover:bg-surface-container-high"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="font-semibold text-primary">{formatShortOrderId(order.id)}</p>
+                    <StatusPill status={order.status} />
+                  </div>
+                  <p className="mt-3 text-sm text-on-surface-variant">
+                    {formatShortDate(order.created_at)} · {formatShippingMethodLabel(order.shipping_method)}
+                  </p>
+                  <p className="mt-3 font-semibold text-primary">{formatCurrency(order.total_price)}</p>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+      </SurfaceCard>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <SurfaceCard className="p-6 md:p-8">

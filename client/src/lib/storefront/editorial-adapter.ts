@@ -9,7 +9,7 @@ import type {
   AtelierNavItem,
   AtelierPageConfig,
   AtelierPaletteOption,
-} from "@/components/atelier-page-types";
+} from "@/components/storefront-pages/editorial/atelier-page-types";
 import { fallbackImageForProduct } from "@/lib/utils";
 import type {
   JsonObject,
@@ -561,7 +561,7 @@ function buildBottomSection(pageData: StorefrontCategoryPageData): AtelierBottom
 }
 
 export function buildAtelierNavItems(categories: StorefrontCategory[]): AtelierNavItem[] {
-  const navItems: AtelierNavItem[] = [{ id: "archive", label: "Catalog", href: "/products" }];
+  const navItems: AtelierNavItem[] = [{ id: "archive", label: "All Archive", href: "/products" }];
   const seen = new Set<string>();
 
   categories.forEach((category) => {

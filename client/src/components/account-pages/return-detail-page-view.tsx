@@ -4,8 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
-import { AccountShell } from "@/components/account-shell";
-import { EmptyState, InlineAlert, LoadingScreen, StatusPill, SurfaceCard } from "@/components/storefront-ui";
+import { AccountShell } from "@/components/account-shared/account-shell";
+import {
+  EmptyState,
+  InlineAlert,
+  LoadingScreen,
+  StatusPill,
+  SurfaceCard,
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { orderApi } from "@/lib/api";
 import { buttonStyles } from "@/lib/button-styles";
@@ -143,13 +149,16 @@ export function ReturnDetailPageView({ returnId }: ReturnDetailPageViewProps) {
         />
       ) : (
         <div className="space-y-6">
-          <SurfaceCard className="p-6">
+          <SurfaceCard className="p-6 md:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="eyebrow">Return case detail</p>
                 <h2 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary">
                   {returnRequest.id}
                 </h2>
+                <p className="mt-4 max-w-3xl text-sm leading-7 text-on-surface-variant md:text-base">
+                  Theo dõi trạng thái xử lý, lịch sử vận hành và bổ sung hình ảnh bằng chứng khi đội xử lý cần thêm thông tin.
+                </p>
                 <p className="mt-3 text-sm leading-7 text-on-surface-variant">
                   Linked order{" "}
                   <Link href={`/orders/${returnRequest.order_id}`} className="underline">
@@ -216,11 +225,21 @@ export function ReturnDetailPageView({ returnId }: ReturnDetailPageViewProps) {
           {returnRequest.refund_last_error ? (
             <InlineAlert tone="info">
               Lần hoàn tiền gần nhất chưa thành công. {returnRequest.refund_last_error}
+              {returnRequest.refund_next_retry_at
+                ? ` Retry tiếp theo vào ${formatDateTime(returnRequest.refund_next_retry_at)}.`
+                : ""}
             </InlineAlert>
           ) : null}
 
           <SurfaceCard className="p-6">
-            <p className="font-semibold text-primary">Evidence gallery</p>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="font-semibold text-primary">Evidence gallery</p>
+                <p className="mt-2 text-sm leading-7 text-on-surface-variant">
+                  JPG, PNG, WEBP · tối đa {maxEvidenceFiles} ảnh cho mỗi lần tải lên.
+                </p>
+              </div>
+            </div>
 
             {returnRequest.evidence.length > 0 ? (
               <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -297,6 +316,9 @@ export function ReturnDetailPageView({ returnId }: ReturnDetailPageViewProps) {
                 >
                   {isUploading ? "Uploading..." : "Upload evidence"}
                 </button>
+                <p className="text-sm leading-7 text-on-surface-variant">
+                  Bạn có thể bổ sung thêm ảnh cho đến khi yêu cầu bị đóng hoặc hoàn tiền xong.
+                </p>
               </div>
             ) : (
               <div className="mt-6 rounded-[1.25rem] bg-surface p-4 text-sm text-on-surface-variant">

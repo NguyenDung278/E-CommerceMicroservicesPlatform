@@ -4,7 +4,7 @@ import Link from "next/link";
 import { LoaderCircle, ShoppingBag, Sparkles } from "lucide-react";
 import type { TextareaHTMLAttributes } from "react";
 
-import { StorefrontImage } from "@/components/storefront-image";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
 import { buttonStyles } from "@/lib/button-styles";
 import { cn, fallbackImageForProduct, getProductImages, getStatusTone } from "@/lib/utils";
 import type { Product } from "@/types/api";
@@ -174,13 +174,13 @@ export function ProductCard({
   const lowStock = product.stock > 0 && product.stock <= 5;
 
   return (
-    <article className="group">
+    <article className="storefront-collection-card group">
       <Link
         href={`/products/${product.id}`}
         className="block overflow-hidden rounded-[1.25rem]"
         onClick={onNavigate}
       >
-        <div className="relative aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-surface-container mb-5">
+        <div className="storefront-collection-card-media relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-surface-container">
           <StorefrontImage
             alt={product.name}
             src={previewImage}
@@ -189,16 +189,22 @@ export function ProductCard({
             className="object-cover transition duration-700 group-hover:scale-[1.05]"
           />
           <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between gap-3">
-            <Badge className="bg-background/90 text-primary">{product.category || "Catalog"}</Badge>
-            {saved ? <Badge className="bg-primary text-on-primary">Đã lưu</Badge> : null}
+            <Badge className="storefront-collection-card-badge bg-background/90 text-primary">
+              {product.category || "Catalog"}
+            </Badge>
+            {saved ? (
+              <Badge className="storefront-collection-card-badge bg-primary text-on-primary">
+                Đã lưu
+              </Badge>
+            ) : null}
           </div>
         </div>
       </Link>
 
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-4">
+      <div className="storefront-collection-card-copy space-y-3">
+        <div className="storefront-collection-card-head flex items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
+            <p className="storefront-collection-card-eyebrow text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
               {product.brand || "ND Shop"}
             </p>
             <Link
@@ -216,7 +222,7 @@ export function ProductCard({
           {product.description}
         </p>
 
-        <div className="flex items-end justify-between gap-4 pt-3">
+        <div className="storefront-collection-card-footer flex items-end justify-between gap-4 pt-3">
           <div className="min-h-10">
             {footerSlot ? footerSlot : (
               <span className="text-xs text-on-surface-variant">

@@ -8,9 +8,13 @@ import {
   formatSecondsLabel,
   isValidVietnamesePhone,
   normalizePhoneDigits,
-} from "@/components/account-pages/shared";
-import { StorefrontImage } from "@/components/storefront-image";
-import { InlineAlert, LoadingScreen, TextInput } from "@/components/storefront-ui";
+} from "@/components/account-shared/account-helpers";
+import { StorefrontImage } from "@/components/storefront-shared/storefront-image";
+import {
+  InlineAlert,
+  LoadingScreen,
+  TextInput,
+} from "@/components/storefront-shared/storefront-ui";
 import { useAuth } from "@/hooks/useAuth";
 import { authApi } from "@/lib/api/auth";
 import { buttonStyles } from "@/lib/button-styles";
@@ -50,6 +54,159 @@ function formatDisplayName(firstName?: string, lastName?: string) {
   return [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ") || "Khách hàng mới";
 }
 
+type AuthShellTheme = {
+  panelPill: string;
+  storyKicker: string;
+  storyTitle: string;
+  storyCopy: string;
+  stats: Array<{ label: string; value: string }>;
+  highlights: Array<{ title: string; copy: string }>;
+  noteLabel: string;
+  noteValue: string;
+  noteCopy: string;
+};
+
+function resolveAuthShellTheme(eyebrow: string, title: string, description: string): AuthShellTheme {
+  const normalizedEyebrow = eyebrow.trim().toLowerCase();
+
+  if (normalizedEyebrow.includes("đăng nhập")) {
+    return {
+      panelPill: "Welcome Back",
+      storyKicker: "Atelier Session",
+      storyTitle: "Curated items for the modern hearth.",
+      storyCopy:
+        "Luồng đăng nhập hiện tại giữ đúng redirect sau xác thực, remember-session và các bước bảo mật bổ sung của backend.",
+      stats: [
+        { label: "Entry point", value: "Email / Phone" },
+        { label: "OAuth lane", value: "Google ready" },
+        { label: "Session", value: "Redirect-safe" },
+      ],
+      highlights: [
+        {
+          title: "Calm sign-in flow",
+          copy: "Đăng nhập thẳng bằng định danh đã xác minh mà không làm mất route ban đầu.",
+        },
+        {
+          title: "Remembered session",
+          copy: "Tùy chọn ghi nhớ vẫn bám đúng local auth flow và bootstrap profile hiện có.",
+        },
+      ],
+      noteLabel: "Featured Collection",
+      noteValue: "The Evergreen Series",
+      noteCopy: "A tactile storefront session recovered from the older client UI.",
+    };
+  }
+
+  if (normalizedEyebrow.includes("đăng ký")) {
+    return {
+      panelPill: "Create Account",
+      storyKicker: "Fast Onboarding",
+      storyTitle: "Three fields, then real verification.",
+      storyCopy:
+        "Đăng ký bằng email hoặc số điện thoại vẫn đi qua OTP thật của backend, rồi chuyển thẳng sang phiên đăng nhập hợp lệ.",
+      stats: [
+        { label: "Email OTP", value: "Supported" },
+        { label: "Telegram OTP", value: "Supported" },
+        { label: "Google", value: "Fallback lane" },
+      ],
+      highlights: [
+        {
+          title: "One identifier field",
+          copy: "Email và số điện thoại cùng đi qua một đầu vào để giữ flow onboarding gọn hơn.",
+        },
+        {
+          title: "Verification-first",
+          copy: "Tài khoản chỉ hoàn tất khi OTP hoặc OAuth đã được backend xác nhận.",
+        },
+      ],
+      noteLabel: "Registration Model",
+      noteValue: "Email or Telegram OTP",
+      noteCopy: "Recovered auth shell now mirrors the older dual-lane signup story.",
+    };
+  }
+
+  if (normalizedEyebrow.includes("oauth")) {
+    return {
+      panelPill: "OAuth Callback",
+      storyKicker: "Session Exchange",
+      storyTitle: "Synchronizing your storefront session.",
+      storyCopy: description,
+      stats: [
+        { label: "Ticket", value: "Short-lived" },
+        { label: "Profile", value: "Bootstrap" },
+        { label: "Redirect", value: "Resume route" },
+      ],
+      highlights: [
+        {
+          title: "Provider hand-off",
+          copy: "Frontend đang đổi OAuth ticket sang token pair chuẩn và tiếp tục route trước đó.",
+        },
+        {
+          title: "Safe resume",
+          copy: "Kể cả khi cần OTP bổ sung, flow vẫn giữ được context đăng nhập vừa chọn.",
+        },
+      ],
+      noteLabel: "Processing",
+      noteValue: "OAuth sync in progress",
+      noteCopy: "Do not close this page while the callback exchange is running.",
+    };
+  }
+
+  if (normalizedEyebrow.includes("xác minh")) {
+    return {
+      panelPill: "Verification",
+      storyKicker: "Secure Account",
+      storyTitle: "Finish the last trust step.",
+      storyCopy: description,
+      stats: [
+        { label: "Email state", value: "Awaiting trust" },
+        { label: "Recovery", value: "Stronger" },
+        { label: "Inbox", value: "Notification-ready" },
+      ],
+      highlights: [
+        {
+          title: "Proof of ownership",
+          copy: "Email verification strengthens recovery and future account notifications.",
+        },
+        {
+          title: "Same backend contract",
+          copy: "Verification tokens are checked directly by the active user-service flow.",
+        },
+      ],
+      noteLabel: "Trust Layer",
+      noteValue: "Identity checkpoint",
+      noteCopy: "Recovered layout keeps the old story-card feel while preserving the Next runtime.",
+    };
+  }
+
+  return {
+    panelPill: normalizedEyebrow.includes("quên") || normalizedEyebrow.includes("đặt lại")
+      ? "Recovery"
+      : eyebrow,
+    storyKicker: "Account Recovery",
+    storyTitle: title,
+    storyCopy: description,
+    stats: [
+      { label: "Reset", value: "Email-driven" },
+      { label: "Tokens", value: "Validated" },
+      { label: "Access", value: "Recovered" },
+    ],
+    highlights: [
+      {
+        title: "Low-friction recovery",
+        copy: "Recovery pages stay concise but still carry the editorial shell from the older UI.",
+      },
+      {
+        title: "Backend authority",
+        copy: "Every reset and verification state still comes from the current auth endpoints.",
+      },
+    ],
+    noteLabel: "Recovery Lane",
+    noteValue: "Password access",
+    noteCopy: "Use this screen to safely re-enter the storefront without breaking the auth flow.",
+  };
+}
+
 function AuthShell({
   eyebrow,
   title,
@@ -63,46 +220,106 @@ function AuthShell({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const theme = resolveAuthShellTheme(eyebrow, title, description);
+
   return (
-    <div className="min-h-screen bg-background">
-      <main className="grid min-h-screen lg:grid-cols-[1.2fr_minmax(0,1fr)]">
-        <section className="relative hidden overflow-hidden bg-primary-container lg:block">
+    <div className="auth-shell min-h-screen bg-background px-4 py-4 lg:px-5 lg:py-5">
+      <main className="auth-shell-grid grid min-h-[calc(100vh-2rem)] gap-5 lg:grid-cols-[minmax(0,1.06fr)_minmax(420px,0.94fr)]">
+        <section className="auth-story-card relative hidden overflow-hidden rounded-[2rem] bg-primary-container lg:block">
           <StorefrontImage
             alt="Nền forest cho trang xác thực"
             src={authVisualImage}
             fill
             priority
             sizes="60vw"
-            className="object-cover opacity-50"
+            className="object-cover opacity-45"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/86 via-primary/50 to-primary/28" />
-          <div className="relative flex h-full flex-col justify-between p-12 text-surface lg:p-20">
-            <Link href="/" className="font-serif text-4xl font-semibold tracking-[-0.04em]">
-              ND Shop
-            </Link>
-            <div className="max-w-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[#efd7ce]">{eyebrow}</p>
-              <h1 className="mt-6 font-serif text-6xl font-semibold leading-[0.92] tracking-[-0.05em] xl:text-7xl">
-                {title}
-              </h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-surface/78">{description}</p>
+          <div className="auth-story-overlay absolute inset-0 bg-gradient-to-b from-primary/38 via-primary/72 to-[#09160f]/94" />
+          <div className="auth-story-content relative grid h-full gap-8 p-10 text-surface xl:p-14">
+            <div className="flex items-start justify-between gap-4">
+              <Link href="/" className="auth-brand-mark font-serif text-4xl font-semibold tracking-[-0.04em]">
+                ND Shop
+              </Link>
+              <span className="auth-panel-pill rounded-full border border-white/10 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-surface/80">
+                {theme.panelPill}
+              </span>
             </div>
-            <div className="ml-auto hidden w-full max-w-[320px] rounded-[1.1rem] border border-white/10 bg-white/8 p-6 backdrop-blur-md xl:block">
-              <span className="block text-[11px] uppercase tracking-[0.26em] text-surface/55">Phiên truy cập</span>
-              <span className="mt-3 block font-serif text-2xl font-semibold tracking-[-0.03em]">ND Shop session</span>
-              <p className="mt-4 text-sm leading-7 text-surface/72">
-                Đăng ký, refresh token, bootstrap profile và redirect sau đăng nhập đều đi theo
-                contract auth thật của hệ thống.
-              </p>
+
+            <div className="grid gap-8 self-end">
+              <div className="auth-story-head max-w-2xl">
+                <p className="auth-story-kicker inline-flex rounded-full border border-white/12 bg-white/8 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-[#efd7ce]">
+                  {theme.storyKicker}
+                </p>
+                <h1 className="mt-6 font-serif text-6xl font-semibold leading-[0.92] tracking-[-0.06em] xl:text-7xl">
+                  {theme.storyTitle}
+                </h1>
+                <p className="auth-story-copy mt-6 max-w-xl text-lg leading-8 text-surface/76">
+                  {theme.storyCopy}
+                </p>
+              </div>
+
+              <div className="auth-story-grid grid gap-3 md:grid-cols-3">
+                {theme.stats.map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="auth-story-stat rounded-[1.4rem] border border-white/10 bg-white/8 px-5 py-5 backdrop-blur-md"
+                  >
+                    <span className="block text-[11px] font-semibold uppercase tracking-[0.24em] text-surface/58">
+                      {stat.label}
+                    </span>
+                    <strong className="mt-4 block font-serif text-[1.75rem] font-semibold tracking-[-0.04em] text-surface">
+                      {stat.value}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+
+              <div className="auth-highlight-list grid gap-3 xl:max-w-[38rem]">
+                {theme.highlights.map((highlight) => (
+                  <div
+                    key={highlight.title}
+                    className="auth-highlight-item grid grid-cols-[auto_1fr] gap-4 rounded-[1.5rem] border border-white/10 bg-white/8 px-5 py-5 backdrop-blur-md"
+                  >
+                    <span className="auth-highlight-mark mt-1 h-3 w-3 rounded-full bg-[#ffbf6b] shadow-[0_0_0_7px_rgba(255,191,107,0.14)]" />
+                    <div>
+                      <strong className="block text-base font-semibold text-surface">
+                        {highlight.title}
+                      </strong>
+                      <p className="mt-2 text-sm leading-7 text-surface/72">{highlight.copy}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="auth-story-note ml-auto grid max-w-[340px] gap-2 rounded-[1.5rem] border border-white/10 bg-white/10 px-5 py-5 backdrop-blur-md">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-surface/58">
+                  {theme.noteLabel}
+                </span>
+                <strong className="font-serif text-2xl font-semibold tracking-[-0.04em] text-surface">
+                  {theme.noteValue}
+                </strong>
+                <p className="text-sm leading-7 text-surface/72">{theme.noteCopy}</p>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="flex items-center justify-center px-5 py-10 sm:px-8 lg:px-14">
-          <div className="w-full max-w-xl rounded-[1.5rem] bg-surface p-6 shadow-editorial md:p-8">
-            <Link href="/" className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary lg:hidden">
-              ND Shop
-            </Link>
+        <section className="auth-form-surface flex items-center justify-center px-2 py-6 sm:px-6 lg:px-12">
+          <div className="auth-form-inner w-full max-w-xl rounded-[2rem] border border-outline-variant/20 bg-white/88 p-6 shadow-editorial backdrop-blur-md md:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <Link href="/" className="font-serif text-2xl font-semibold tracking-[-0.03em] text-primary lg:hidden">
+                ND Shop
+              </Link>
+              <span className="auth-panel-pill rounded-full bg-surface-container-high px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">
+                {theme.panelPill}
+              </span>
+            </div>
+            <div className="auth-form-header mt-6 space-y-3">
+              <p className="eyebrow">{eyebrow}</p>
+              <p className="text-sm leading-7 text-on-surface-variant">
+                {description}
+              </p>
+            </div>
             {children}
             {footer ? <div className="mt-8">{footer}</div> : null}
           </div>
@@ -176,9 +393,9 @@ function LoginPageContent() {
       title="Truy cập tài khoản mua sắm của bạn."
       description="Bạn có thể đăng nhập bằng email hoặc số điện thoại đã xác minh, tiếp tục với Google, rồi hoàn tất các bước bảo mật tiếp theo ngay trong luồng hiện tại."
       footer={
-        <p className="text-sm text-on-surface-variant">
+        <p className="auth-switch-copy text-sm text-on-surface-variant">
           Chưa có tài khoản?{" "}
-          <Link href={`/register?redirect=${encodeURIComponent(redirectTo)}`} className="font-medium text-primary">
+          <Link href={`/register?redirect=${encodeURIComponent(redirectTo)}`} className="auth-text-link font-medium text-primary">
             Đăng ký
           </Link>
         </p>
@@ -194,7 +411,7 @@ function LoginPageContent() {
 
         {feedback || error ? <InlineAlert tone="error">{feedback || error}</InlineAlert> : null}
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant" htmlFor="login-identifier">
               Email hoặc số điện thoại
@@ -210,26 +427,26 @@ function LoginPageContent() {
           </div>
 
           <div className="flex items-center justify-between gap-4 text-sm">
-            <label className="flex items-center gap-3 text-on-surface-variant">
+            <label className="auth-shell-check flex items-center gap-3 text-on-surface-variant">
               <input checked={remember} type="checkbox" onChange={(event) => setRemember(event.target.checked)} />
               Ghi nhớ tôi
             </label>
-            <Link href="/forgot-password" className="font-medium text-primary">
+            <Link href="/forgot-password" className="auth-text-link font-medium text-primary">
               Quên mật khẩu?
             </Link>
           </div>
 
-          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy}>
+          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "auth-submit-full w-full")} disabled={busy}>
             {busy ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </form>
 
         <div className="space-y-3">
-          <p className="text-center text-sm text-on-surface-variant">Hoặc tiếp tục với</p>
+          <p className="auth-switch-copy text-center text-sm text-on-surface-variant">Hoặc tiếp tục với</p>
           <button type="button" className={cn(buttonStyles({ variant: "secondary", size: "lg" }), "w-full")} onClick={() => beginOAuthLogin("google", redirectTo, remember)}>
             Google
           </button>
-          <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5 text-sm leading-7 text-on-surface-variant">
+          <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5 text-sm leading-7 text-on-surface-variant">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
               Các lựa chọn xác thực
             </p>
@@ -639,9 +856,9 @@ function RegisterPageContent() {
       title="Tạo tài khoản nhanh với OTP email hoặc Telegram."
       description="Form đăng ký giữ đúng 3 ô nhập liệu. Nếu bạn nhập email, backend sẽ gửi OTP email để hoàn tất xác minh. Nếu bạn nhập số điện thoại, backend sẽ gửi Telegram OTP và chỉ tạo tài khoản sau khi mã hợp lệ."
       footer={
-        <p className="text-sm text-on-surface-variant">
+        <p className="auth-switch-copy text-sm text-on-surface-variant">
           Đã có tài khoản?{" "}
-          <Link href={`/login?redirect=${encodeURIComponent(redirectTo)}`} className="font-medium text-primary">
+          <Link href={`/login?redirect=${encodeURIComponent(redirectTo)}`} className="auth-text-link font-medium text-primary">
             Đăng nhập
           </Link>
         </p>
@@ -659,7 +876,7 @@ function RegisterPageContent() {
 
         {stage === "form" ? (
           <>
-            <form className="space-y-5" onSubmit={handleSubmit}>
+            <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-2">
                 <label className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant" htmlFor="register-identifier">
                   Email hoặc số điện thoại
@@ -700,13 +917,13 @@ function RegisterPageContent() {
                 Nếu bạn đăng ký bằng email hoặc số điện thoại, backend sẽ tự tạo một họ tên ngẫu nhiên và bạn có thể chỉnh lại sau trong hồ sơ. Nếu bạn tiếp tục với Google, backend sẽ tự đồng bộ email và họ tên từ Google profile.
               </p>
 
-              <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy || phoneBusy}>
+              <button type="submit" className={cn(buttonStyles({ size: "lg" }), "auth-submit-full w-full")} disabled={busy || phoneBusy}>
                 {busy || phoneBusy ? "Đang xử lý..." : isPhoneIdentifier ? "Gửi Telegram OTP" : "Tạo tài khoản"}
               </button>
             </form>
 
             {isPhoneIdentifier ? (
-              <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
+              <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
                   Telegram OTP
                 </p>
@@ -755,7 +972,7 @@ function RegisterPageContent() {
               </div>
             ) : null}
 
-            <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
+            <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
                 Google và số điện thoại
               </p>
@@ -795,7 +1012,7 @@ function RegisterPageContent() {
               </div>
             </div>
 
-            <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
+            <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
                 OTP email
               </p>
@@ -893,9 +1110,9 @@ export function ForgotPasswordPageView() {
     <AuthShell eyebrow="Quên mật khẩu" title="Khôi phục quyền truy cập tài khoản." description="Luồng này dùng đúng endpoint forgot-password của user-service và vẫn giữ thông điệp an toàn ngay cả khi email delivery tạm thời lỗi.">
       <div className="mt-6 space-y-6">
         {feedback ? <InlineAlert tone="info">{feedback}</InlineAlert> : null}
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
           <TextInput autoComplete="email" placeholder="Email tài khoản" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy}>
+          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "auth-submit-full w-full")} disabled={busy}>
             {busy ? "Đang gửi..." : "Gửi email khôi phục"}
           </button>
         </form>
@@ -955,10 +1172,10 @@ function ResetPasswordPageContent() {
     <AuthShell eyebrow="Đặt lại mật khẩu" title="Tạo mật khẩu mới cho tài khoản." description="Token đặt lại được kiểm tra trực tiếp bởi user-service trước khi cấp lại quyền truy cập.">
       <div className="mt-6 space-y-6">
         {feedback ? <InlineAlert tone="error">{feedback}</InlineAlert> : null}
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        <form className="auth-form-stack space-y-5" onSubmit={handleSubmit}>
           <TextInput autoComplete="new-password" placeholder="Mật khẩu mới" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
           <TextInput autoComplete="new-password" placeholder="Xác nhận mật khẩu mới" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
-          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "w-full")} disabled={busy}>
+          <button type="submit" className={cn(buttonStyles({ size: "lg" }), "auth-submit-full w-full")} disabled={busy}>
             {busy ? "Đang cập nhật..." : "Đặt lại mật khẩu"}
           </button>
         </form>
@@ -1279,7 +1496,7 @@ function AuthCallbackPageContent() {
         <InlineAlert tone={feedback.tone}>{feedback.message}</InlineAlert>
 
         {oauthUser ? (
-          <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
+          <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
               Hồ sơ Google đã đồng bộ
             </p>
@@ -1308,7 +1525,7 @@ function AuthCallbackPageContent() {
         ) : null}
 
         {oauthUser && !oauthUser.email_verified ? (
-          <div className="rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
+          <div className="auth-help-card rounded-[1.25rem] border border-outline-variant/35 bg-surface-container-low p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
               Hoàn tất xác minh email
             </p>

@@ -1,6 +1,5 @@
-import { AuthCallbackPageView } from "@/components/auth-pages";
+import { AuthCallbackPageView } from "@/components/storefront-pages/auth-pages";
 
 export default function Page() {
   return <AuthCallbackPageView />;
 }
-

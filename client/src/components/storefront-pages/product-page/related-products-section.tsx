@@ -1,6 +1,10 @@
 "use client";
 
-import { ProductCard, ProductCardAction, SectionHeading } from "@/components/storefront-ui";
+import {
+  ProductCard,
+  ProductCardAction,
+  SectionHeading,
+} from "@/components/storefront-shared/storefront-ui";
 import type { Product } from "@/types/api";
 
 type RelatedProductsSectionProps = {

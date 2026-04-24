@@ -1,4 +1,4 @@
-import type { AtelierFooterLink } from "@/components/atelier-page-types";
+import type { AtelierFooterLink } from "@/components/storefront-pages/editorial/atelier-page-types";
 
 export const atelierFooterLinks: AtelierFooterLink[] = [
   { label: "Journal", href: "/journal" },
