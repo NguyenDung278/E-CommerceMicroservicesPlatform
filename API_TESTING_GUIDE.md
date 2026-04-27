@@ -27,7 +27,7 @@ Khi tài liệu và code lệch nhau, hãy tin các file sau:
 - `api-gateway/internal/handler/*.go`: route public thật
 - `services/*-service/internal/handler/*.go`: contract service thật
 - `client/src/lib/api/`: các route mà UI chính hiện đang gọi
-- `frontend/src/services/api/`: route legacy còn hữu ích khi kiểm tra tooling cũ
+- `frontend/src/services/api/`: route thật của ND Admin/backoffice
 
 Hiện tại, public HTTP entrypoint chuẩn để test là:
 
@@ -86,7 +86,8 @@ curl http://localhost:3000
 Các URL hay dùng:
 
 - `http://localhost:8080`: API Gateway
-- `http://localhost:3000`: client UI cho shopper/account/admin product
+- `http://localhost:3000`: client UI cho shopper/account/post-purchase
+- `http://localhost:4173`: ND Admin/backoffice khi chạy `frontend/` trên host
 - `http://localhost:16686`: Jaeger
 
 Lưu ý:
