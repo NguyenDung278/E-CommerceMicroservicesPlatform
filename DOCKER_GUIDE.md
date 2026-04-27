@@ -1,15 +1,15 @@
 # Docker Guide
 
-Tài liệu này mô tả cách dùng Docker Compose đúng với trạng thái source hiện tại của repo. Mục tiêu là:
+Tài liệu này mô tả cách chạy và debug Docker Compose cho backend/runtime của repo. Mục tiêu:
 
-- biết service nào đang thật sự chạy trong compose
-- biết URL nào mới là entrypoint local đúng
+- biết service nào đang chạy trong compose
+- biết URL backend nào cần dùng
 - biết cách build, up, down, restart, inspect và debug stack
-- tránh các hiểu nhầm phổ biến như "localhost:80 là frontend chính" hoặc "Postgres đã publish ra host"
+- tránh nhầm lẫn giữa gateway, nginx edge proxy và service nội bộ
 
 ---
 
-## 1. Compose Hiện Đang Chạy Gì
+## 1. Compose File
 
 Compose file chính:
 
@@ -17,66 +17,43 @@ Compose file chính:
 deployments/docker/docker-compose.yml
 ```
 
-Stack mặc định hiện có:
+Stack mặc định:
 
 | Service | Vai trò | Truy cập từ host |
 | --- | --- | --- |
-| `client` | storefront/account/admin product runtime Next.js mặc định | `http://localhost:3000` |
-| `nginx` | edge proxy riêng cho `/api` và `/health` | `http://localhost` |
+| `nginx` | edge proxy cho `/api` và `/health` | `http://localhost` |
 | `api-gateway` | public HTTP entrypoint cho backend | `http://localhost:8080` |
 | `user-service` | auth, profile, address, wishlist, OTP | không publish |
-| `product-service` | catalog, review, upload, search, storefront data | không publish |
+| `product-service` | catalog, review, upload, search, catalog aggregation | không publish |
 | `cart-service` | Redis cart | không publish |
-| `order-service` | order, coupon, return, report | không publish |
+| `order-service` | order, coupon, return, report, refund queue | không publish |
 | `payment-service` | payment, refund, webhook | không publish |
 | `notification-service` | queue consumer và email worker | không publish |
 | `postgres` | source of truth cho các DB chính | không publish |
-| `redis` | cart, cache, rate limit phụ trợ | không publish |
+| `redis` | cart, cache, rate limit, inbox phụ trợ | không publish |
 | `rabbitmq` | event broker | không publish |
 | `minio` | object storage cho media | `http://localhost:9000`, console `http://localhost:9001` |
 | `elasticsearch` | search index | `http://localhost:9200` |
-| `jaeger` | tracing local | `http://localhost:16686` |
+| `jaeger` | distributed tracing | `http://localhost:16686` |
 | `prometheus` | metrics scraping | không publish |
 | `grafana` | dashboards | không publish |
 
-Lưu ý rất quan trọng:
+Lưu ý:
 
-- UI mặc định trong compose là `http://localhost:3000`
-- admin sản phẩm nằm ở `http://localhost:3000/admin`
-- `http://localhost` không phải storefront chính
-- Postgres, Redis, RabbitMQ không publish port ra host theo mặc định
-
----
-
-## 2. Client Next.js Đang Chạy Mặc Định Ra Sao
-
-`client/` hiện là storefront/account/admin product runtime mặc định trong Compose, không còn là profile tùy chọn như trước.
-
-Trạng thái runtime đúng theo `deployments/docker/docker-compose.yml`:
-
-- `client` chạy mặc định ở `http://localhost:3000`
-- `nginx` ở `http://localhost` vẫn chỉ proxy `/api` và `/health`, không serve shopper UI
-
-Điều đó có nghĩa:
-
-- shopper/account/admin product flow nên được verify trước trên `3000`
-- khi debug API riêng, vẫn gọi trực tiếp `http://localhost:8080`
-
-Luồng network quan trọng:
-
-- browser-side fetch của `client` dùng `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
-- server-side fetch của `client` dùng `API_GATEWAY_URL=http://api-gateway:8080`
+- Public API chuẩn là `http://localhost:8080`.
+- `http://localhost` chỉ là nginx edge proxy cho `/api/*` và `/health`.
+- PostgreSQL, Redis, RabbitMQ, Prometheus và Grafana không publish port ra host theo mặc định.
 
 ---
 
-## 3. Luồng Cấu Hình Môi Trường
+## 2. Luồng Cấu Hình
 
-Thứ tự cấu hình hiện tại:
+Thứ tự cấu hình:
 
-1. `Makefile` ưu tiên `.env.local`
-2. Compose inject env và mount file config YAML từ `deployments/docker/config/`
-3. các Go service nhận `CONFIG_PATH=/config/config.yaml`
-4. `pkg/config` load file + env override
+1. `Makefile` ưu tiên `.env.local`, fallback `.env.example`.
+2. Compose inject env và mount YAML từ `deployments/docker/config/`.
+3. Go service nhận `CONFIG_PATH=/config/config.yaml`.
+4. `pkg/config` load default, YAML file và environment override.
 
 Chuẩn bị env local:
 
@@ -84,26 +61,23 @@ Chuẩn bị env local:
 cp .env.local.example .env.local
 ```
 
-Các biến cần chú ý:
+Biến backend cần chú ý:
 
 - `POSTGRES_PASSWORD`
 - `JWT_SECRET`
 - `RABBITMQ_PASSWORD`
-- `FRONTEND_BASE_URL`
 - `SMTP_*`
 - `OAUTH_GOOGLE_*`
 - `TELEGRAM_*`
-
-Lưu ý thực tế:
-
-- `FRONTEND_BASE_URL` nên khớp `http://localhost:3000`
-- nếu base URL lệch, các flow như verify email, reset password và OAuth redirect sẽ dễ lỗi
+- `PAYMENT_GATEWAY_MOMO_*`
+- `MINIO_*`
+- `ELASTICSEARCH_*`
 
 ---
 
-## 4. Lệnh Chuẩn Hàng Ngày
+## 3. Lệnh Hàng Ngày
 
-### Render compose cuối cùng
+Render compose:
 
 ```bash
 make docker-config
@@ -115,46 +89,49 @@ File render:
 /tmp/ecommerce-compose.rendered.yaml
 ```
 
-### Build stack
+Build stack:
 
 ```bash
 make compose-build
 ```
 
-### Up stack
+Up stack:
 
 ```bash
 make compose-up
 ```
 
-`make compose-up` chạy ở chế độ attached.
-
-### Down stack
+Down stack:
 
 ```bash
 make compose-down
 ```
 
-### Chạy raw Docker Compose
+Chạy nền bằng Docker Compose:
 
 ```bash
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml up --build -d
+```
+
+Dừng stack:
+
+```bash
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml down
 ```
 
 ---
 
-## 5. Khi Nào Cần Rebuild
+## 4. Khi Nào Cần Rebuild
 
-### Cần rebuild image
+Cần rebuild image khi:
 
 - sửa source Go
-- sửa source client
 - sửa Dockerfile
+- sửa dependency build
 
-### Thường chỉ cần restart
+Thường chỉ cần restart service khi:
 
-- sửa file config mount ở `deployments/docker/config/*.yaml`
+- sửa file `deployments/docker/config/*.yaml`
 - đổi env mà service đọc lúc start
 
 Ví dụ:
@@ -165,56 +142,59 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml re
 
 ---
 
-## 6. URL Và Điểm Vào Quan Trọng
+## 5. URL Và Điểm Vào
 
 | URL | Mục đích |
 | --- | --- |
-| `http://localhost:3000` | client Next.js mặc định trong Compose |
-| `http://localhost:3000/admin` | admin sản phẩm trong client |
 | `http://localhost:8080` | API Gateway |
 | `http://localhost` | nginx edge proxy |
 | `http://localhost:9000` | MinIO API |
 | `http://localhost:9001` | MinIO Console |
 | `http://localhost:9200` | Elasticsearch |
-| `http://localhost:16686` | Jaeger UI |
+| `http://localhost:16686` | Jaeger trace viewer |
 
-Smoke check nhanh:
+Smoke check:
 
 ```bash
-curl http://localhost:3000
 curl http://localhost:8080/health
 curl http://localhost/health
 ```
 
 ---
 
-## 7. Xem Trạng Thái Và Log
+## 6. Log Và Trạng Thái
 
-### Xem service đang chạy
+Xem service:
 
 ```bash
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml ps
 ```
 
-### Xem log
+Log gateway:
 
 ```bash
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f api-gateway
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f user-service product-service
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs --tail=200 postgres
 ```
 
-### Log cho flow quan trọng
+Log domain service:
 
 ```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f user-service product-service
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f order-service payment-service notification-service
+```
+
+Log infra:
+
+```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs --tail=200 postgres
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs --tail=200 redis rabbitmq
 ```
 
 ---
 
-## 8. Healthcheck Và Probe Nội Bộ
+## 7. Healthcheck Và Probe Nội Bộ
 
-Compose healthcheck hiện có trên:
+Compose healthcheck có trên:
 
 - `postgres`
 - `redis`
@@ -223,13 +203,7 @@ Compose healthcheck hiện có trên:
 - `prometheus`
 - `grafana`
 
-Một số Go service không khai báo compose healthcheck, nên cách kiểm tra thực tế hơn là:
-
-- xem log
-- gọi gateway `/health`
-- probe nội bộ trên network compose
-
-Ví dụ probe nội bộ:
+Go service nên được kiểm tra bằng log, gateway `/health`, hoặc probe nội bộ:
 
 ```bash
 docker run --rm --network ecommerce-network curlimages/curl:8.10.1 http://user-service:8081/health
@@ -240,7 +214,7 @@ docker run --rm --network ecommerce-network curlimages/curl:8.10.1 http://paymen
 docker run --rm --network ecommerce-network curlimages/curl:8.10.1 http://notification-service:8086/health
 ```
 
-Kiểm tra health state:
+Health state:
 
 ```bash
 docker inspect --format '{{json .State.Health}}' ecommerce-postgres
@@ -250,75 +224,38 @@ docker inspect --format '{{json .State.Health}}' ecommerce-rabbitmq
 
 ---
 
-## 9. Shell, Inspect, Và Debug Container
+## 8. Shell, Inspect, Network, Volume
 
-### Vào shell các container có shell
+Container có shell:
 
 ```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec client sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec postgres sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec redis sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq sh
 ```
 
-### Với container distroless
-
-Các Go service runtime thường không có shell. Dùng:
+Go service runtime thường không có shell. Dùng:
 
 ```bash
 docker logs -f ecommerce-api-gateway
 docker inspect ecommerce-user-service
-docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' ecommerce-product-service
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' ecommerce-product-service | sort
 ```
 
-### Debug client container
-
-```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f client
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec client env | sort
-```
-
-### Debug Redis Và RabbitMQ
-
-```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec redis redis-cli ping
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq rabbitmqctl list_queues
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq rabbitmqctl list_bindings
-```
-
----
-
-## 10. Debug Network, Env, Volume
-
-### Xem env của container
-
-Container có shell:
-
-```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec postgres env | sort
-```
-
-Container distroless:
-
-```bash
-docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' ecommerce-user-service | sort
-docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' ecommerce-payment-service | sort
-```
-
-### Xem network
+Network:
 
 ```bash
 docker network inspect ecommerce-network
 ```
 
-### Xem volume
+Volume:
 
 ```bash
 docker volume ls | grep ecommerce
 docker volume inspect ecommerce-platform_postgres-data
 ```
 
-### Xem image đã build
+Image:
 
 ```bash
 docker image ls | grep ecommerce
@@ -326,9 +263,26 @@ docker image ls | grep ecommerce
 
 ---
 
-## 11. Truy Cập Database Khi Cần Debug
+## 9. Redis Và RabbitMQ
 
-Postgres không publish ra host, nên debug bằng cách exec vào container:
+Redis:
+
+```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec redis redis-cli ping
+```
+
+RabbitMQ:
+
+```bash
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq rabbitmqctl list_queues
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq rabbitmqctl list_bindings
+```
+
+---
+
+## 10. Database Debug
+
+Postgres không publish ra host. Debug bằng cách exec vào container:
 
 ```bash
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec postgres psql -U admin -d ecommerce_user
@@ -337,7 +291,7 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml ex
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec postgres psql -U admin -d ecommerce_payment
 ```
 
-Các database chính:
+Database chính:
 
 - `ecommerce_user`
 - `ecommerce_product`
@@ -346,135 +300,95 @@ Các database chính:
 
 ---
 
-## 12. Những Hiểu Nhầm Phổ Biến Cần Tránh
+## 11. Migration
 
-### "localhost:80 là frontend chính"
+Các service dùng PostgreSQL tự chạy embedded migration khi startup nếu wiring service hiện tại hỗ trợ.
 
-Sai. `localhost:80` hiện chỉ là edge proxy cho `/api` và `/health`. Shopper UI mặc định trong compose là:
+Migration folder:
 
-```text
-http://localhost:3000
+- `services/user-service/migrations/`
+- `services/product-service/migrations/`
+- `services/order-service/migrations/`
+- `services/payment-service/migrations/`
+
+Make target:
+
+```bash
+make migrate-up
+make migrate-down
+make migrate-force
 ```
 
-### "client đã là runtime mặc định"
+Lưu ý:
 
-Đúng. `client` hiện là shopper/account/admin product runtime mặc định trong compose.
-
-### "Postgres/Redis/RabbitMQ truy cập localhost được ngay"
-
-Sai. Chúng không publish port ra host trong compose mặc định.
-
-### "Sửa config là phải rebuild toàn bộ"
-
-Không hẳn. Nhiều thay đổi config chỉ cần restart service tương ứng.
-
-### "Compose là source of truth duy nhất"
-
-Chưa đủ. Khi debug runtime, hãy đọc thêm:
-
-- `README.md`
-- `deployments/docker/config/*.yaml`
-- `cmd/main.go` của service liên quan
+- Make target migration mặc định dùng container/network compose.
+- Không giả định Postgres publish ở `localhost:5432` trong runtime compose mặc định.
 
 ---
 
-## 13. Quy Trình Debug Nhanh Khi Stack Hỏng
+## 12. Runtime Truth Matrix
 
-Nếu local stack có vấn đề, đi theo thứ tự:
-
-1. `docker compose ... ps`
-2. `curl http://localhost:8080/health`
-3. xem log `api-gateway`
-4. xem log service upstream liên quan
-5. probe nội bộ service đó trên `ecommerce-network`
-6. nếu nghi DB, exec vào `postgres` và kiểm tra dữ liệu / migration
-7. nếu nghi env/config, inspect env + file config mount
-
-Cách này giúp bạn tìm lỗi nhanh hơn rất nhiều so với down/up toàn bộ stack theo phản xạ.
-
----
-
-## 14. Runtime Truth Matrix
-
-Khi local stack đang chạy, hãy coi đây là bảng sự thật để tránh debug nhầm process:
-
-| Bề mặt | URL | Process thật đang trả response |
+| Bề mặt | URL | Process trả response |
 | --- | --- | --- |
-| Shopper storefront/account | `http://localhost:3000` | `client` |
-| Admin product UI | `http://localhost:3000/admin` | `client` |
 | Public API | `http://localhost:8080` | `api-gateway` |
 | Edge `/api` và `/health` | `http://localhost` | `nginx` -> `api-gateway` |
-| Tracing UI | `http://localhost:16686` | `jaeger` |
+| Trace viewer | `http://localhost:16686` | `jaeger` |
+| Object storage API | `http://localhost:9000` | `minio` |
 | Object storage console | `http://localhost:9001` | `minio` |
+| Search index | `http://localhost:9200` | `elasticsearch` |
 
-Nếu UI và API cùng lỗi, nhìn `api-gateway` trước.
+---
 
-Nếu UI lỗi:
+## 13. Debug Theo Triệu Chứng
 
-- nhìn `client`
-- rồi kiểm tra `NEXT_PUBLIC_API_BASE_URL`, `API_GATEWAY_URL`
+### Gateway sống nhưng domain API trả 502 hoặc timeout
 
-## 15. Playbook Debug Theo Triệu Chứng
+1. Xem log `api-gateway`.
+2. Xem log service upstream tương ứng.
+3. Probe nội bộ service đó trên `ecommerce-network`.
+4. Kiểm tra config YAML mount của service.
+5. Nếu nghi DB, vào `postgres` kiểm tra migration/data.
 
-### UI `3000` lên trang trắng hoặc lỗi fetch
+### Service không kết nối được DB
 
-Kiểm tra theo thứ tự:
-
-1. `docker compose ... logs -f client`
-2. `curl http://localhost:3000`
-3. `curl http://localhost:8080/health`
-4. inspect env của container `client`
-5. kiểm tra `NEXT_PUBLIC_API_BASE_URL` và `API_GATEWAY_URL`
-
-### Admin `/admin` lên nhưng API fail hoặc bị 401/403
-
-Kiểm tra theo thứ tự:
-
-1. `curl http://localhost:3000`
-2. `docker compose ... logs -f client api-gateway`
-3. xem token, cookie, `Authorization` header ở browser devtools
-4. kiểm tra role user là `admin` hoặc `staff`
-
-### Gateway sống nhưng một domain API trả 502/timeout
-
-Kiểm tra theo thứ tự:
-
-1. log `api-gateway`
-2. log service upstream tương ứng
-3. probe nội bộ service đó trên `ecommerce-network`
-4. kiểm tra config YAML mount của service
-5. nếu nghi DB, vào `postgres` để xem migration/data
+1. Kiểm tra health `postgres`.
+2. Kiểm tra env `DATABASE_*` trong container service.
+3. Kiểm tra `deployments/docker/config/<service>.yaml`.
+4. Kiểm tra database đã tồn tại trong `postgres-init`.
+5. Xem log migration lúc service startup.
 
 ### Tạo order được nhưng payment/webhook không cập nhật
 
-Kiểm tra theo thứ tự:
+1. Xem log `payment-service`.
+2. Xem log `order-service`.
+3. Kiểm tra route `/api/v1/payments/webhooks/momo`.
+4. Kiểm tra `payments`, `outbox_events`, `inbox_messages`.
+5. Dùng Jaeger để xem trace qua gateway, payment và order.
 
-1. log `payment-service`
-2. log `order-service`
-3. kiểm tra route `/api/v1/payments/webhooks/momo`
-4. kiểm tra record `payments`, `outbox_events`, `inbox_messages`
-5. dùng Jaeger để xem trace qua gateway -> payment -> order
+### Return đã queue refund nhưng chưa hoàn tất
 
-### Return đã queue refund nhưng mãi không hoàn tất
-
-Kiểm tra theo thứ tự:
-
-1. log `order-service` refund worker
-2. log `payment-service`
-3. bảng `returns`:
-   - `refund_attempt_count`
-   - `refund_last_error`
-   - `refund_next_retry_at`
-   - `refund_processing_started_at`
-4. bảng `outbox_events`
-5. nếu nghi auth nội bộ, kiểm tra service JWT giữa order và payment
+1. Xem log `order-service` refund worker.
+2. Xem log `payment-service`.
+3. Kiểm tra bảng `returns`.
+4. Kiểm tra `refund_attempt_count`.
+5. Kiểm tra `refund_last_error`.
+6. Kiểm tra `refund_next_retry_at`.
+7. Kiểm tra `refund_processing_started_at`.
+8. Kiểm tra service JWT giữa order và payment nếu nghi auth nội bộ.
 
 ### Notification không gửi hoặc gửi lặp
 
-Kiểm tra theo thứ tự:
+1. Xem log `notification-service`.
+2. Kiểm tra RabbitMQ queues.
+3. Kiểm tra Redis inbox claim state nếu nghi dedupe.
+4. Kiểm tra preference source ở `user-service`.
+5. Kiểm tra retry queue headers và dead-letter path nếu có.
 
-1. log `notification-service`
-2. `rabbitmqctl list_queues`
-3. Redis claim state nếu nghi dedupe
-4. route/user preference source ở `user-service`
-5. retry queue headers và DLQ nếu flow đã đi xa tới broker
+---
+
+## 14. Hiểu Nhầm Cần Tránh
+
+- `http://localhost` không phải public API chính; public API trực tiếp là `http://localhost:8080`.
+- PostgreSQL, Redis và RabbitMQ không truy cập được qua host port trong compose mặc định.
+- Sửa config mount không luôn cần rebuild image; restart service thường đủ.
+- Compose không thay thế source code; khi debug phải đọc thêm `cmd/main.go`, handler, service, repository và config YAML.

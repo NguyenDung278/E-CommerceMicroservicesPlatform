@@ -13,10 +13,6 @@ POSTGRES_CONTAINER ?= ecommerce-postgres
 GO_DOCKER_IMAGE ?= golang:1.25-alpine
 POSTGRES_CLIENT_IMAGE ?= postgres:15-alpine
 MIGRATE_DOCKER_IMAGE ?= migrate/migrate:v4.18.3
-FRONTEND_ADMIN_URL ?= http://127.0.0.1:4173/admin
-STOREFRONT_API_BASE_URL ?= http://127.0.0.1:8080
-STOREFRONT_SYNC_PRODUCT_STATUS ?= active
-STOREFRONT_SYNC_PRODUCT_LIMIT ?= 100
 
 # Database connection details for migrations.
 # Keep migration targets aligned with the per-service databases created by Docker Compose.
@@ -30,7 +26,7 @@ PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HO
 ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
 PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down frontend-install frontend-dev frontend-build client-install client-dev client-build client-start k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home storefront-sync-live-workbook storefront-open-admin
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
 
 CATALOG_WORKBOOK ?= $(CURDIR)/artifacts/import-templates/catalog-import-sample-workbook.xlsx
 CATALOG_WORKBOOK_CONTAINER ?= /workspace/artifacts/import-templates/catalog-import-sample-workbook.xlsx
@@ -72,27 +68,6 @@ compose-up:
 
 compose-down:
 	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose --env-file $(COMPOSE_ENV_FILE) $(COMPOSE_PROFILE_ARGS) down
-
-frontend-install:
-	@cd frontend && npm install
-
-frontend-dev:
-	@cd frontend && npm run dev
-
-frontend-build:
-	@cd frontend && npm run build
-
-client-install:
-	@cd client && npm install
-
-client-dev:
-	@cd client && npm run dev
-
-client-build:
-	@cd client && npm run build
-
-client-start:
-	@cd client && npm run start
 
 k8s-apply:
 	kubectl apply -f deployments/k8s/
@@ -257,21 +232,3 @@ storefront-explain-home:
 		-e PGPASSWORD="$$POSTGRES_PASSWORD" \
 		"$(POSTGRES_CLIENT_IMAGE)" \
 		psql -v ON_ERROR_STOP=1 -h postgres -U "$$POSTGRES_USER" -d ecommerce_product -f "$(STOREFRONT_EXPLAIN_SQL)"
-
-storefront-sync-live-workbook:
-	@echo "==> Syncing live products from $(STOREFRONT_API_BASE_URL) into frontend/public/content/stitchfix-home.{csv,xlsx}"
-	@cd frontend && \
-		STOREFRONT_API_BASE_URL="$(STOREFRONT_API_BASE_URL)" \
-		STOREFRONT_SYNC_PRODUCT_STATUS="$(STOREFRONT_SYNC_PRODUCT_STATUS)" \
-		STOREFRONT_SYNC_PRODUCT_LIMIT="$(STOREFRONT_SYNC_PRODUCT_LIMIT)" \
-		node ./scripts/sync-live-products-to-workbook.mjs
-
-storefront-open-admin:
-	@echo "==> Opening admin at $(FRONTEND_ADMIN_URL)"
-	@if command -v open >/dev/null 2>&1; then \
-		open "$(FRONTEND_ADMIN_URL)"; \
-	elif command -v xdg-open >/dev/null 2>&1; then \
-		xdg-open "$(FRONTEND_ADMIN_URL)"; \
-	else \
-		echo "Open this URL manually: $(FRONTEND_ADMIN_URL)"; \
-	fi
