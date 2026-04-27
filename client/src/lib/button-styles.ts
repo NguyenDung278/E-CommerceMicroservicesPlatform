@@ -11,20 +11,20 @@ export function buttonStyles({
   variant?: ButtonVariant;
   size?: ButtonSize;
   className?: string;
-} = {}) {
+  } = {}) {
   return cn(
-    "inline-flex items-center justify-center gap-2 rounded-lg transition duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
-    size === "sm" && "px-3 py-2 text-xs font-semibold tracking-[0.2em] uppercase",
-    size === "md" && "px-5 py-2.5 text-sm font-medium",
-    size === "lg" && "px-8 py-4 text-sm font-medium",
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-lg)] transition duration-200 disabled:pointer-events-none disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20",
+    size === "sm" && "min-h-9 px-3 py-2 text-xs font-semibold",
+    size === "md" && "min-h-10 px-4 py-2.5 text-sm font-medium",
+    size === "lg" && "min-h-12 px-6 py-3 text-sm font-semibold",
     variant === "primary" &&
-      "bg-gradient-to-br from-primary to-primary-container text-on-primary shadow-editorial hover:-translate-y-0.5 hover:shadow-[0_28px_48px_-18px_rgba(27,28,25,0.16)] active:scale-[0.98]",
+      "bg-primary text-on-primary shadow-[0_14px_28px_-18px_rgba(238,77,45,0.9)] hover:bg-primary-container hover:shadow-[0_18px_34px_-20px_rgba(238,77,45,0.95)] active:scale-[0.98]",
     variant === "secondary" &&
-      "border border-outline-variant/50 bg-white/45 text-primary hover:border-primary/35 hover:bg-surface-container-highest/80",
+      "border border-outline-variant bg-surface text-on-surface shadow-[0_8px_20px_-18px_rgba(17,24,39,0.46)] hover:border-primary/35 hover:bg-surface-container-low hover:text-primary",
     variant === "tertiary" &&
-      "px-0 text-primary underline decoration-transparent underline-offset-8 hover:decoration-tertiary",
+      "px-0 text-primary underline decoration-transparent underline-offset-8 hover:decoration-primary",
     variant === "ghost" &&
-      "bg-surface-container-low text-primary hover:bg-surface-container-high",
+      "bg-surface-container-low text-on-surface hover:bg-surface-container hover:text-primary",
     className,
   );
 }

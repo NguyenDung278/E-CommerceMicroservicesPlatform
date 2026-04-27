@@ -20,7 +20,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full bg-secondary/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-secondary",
+        "inline-flex items-center rounded-full bg-secondary-container px-3 py-1 text-xs font-semibold uppercase tracking-normal text-secondary",
         className,
       )}
     >
@@ -44,9 +44,9 @@ export function SectionHeading({
     <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
       <div className="max-w-3xl">
         {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-        <h2 className="headline-section mt-4 text-primary">{title}</h2>
+        <h2 className="headline-section mt-3 text-on-surface">{title}</h2>
         {description ? (
-          <p className="mt-5 max-w-2xl text-base leading-8 text-on-surface-variant md:text-lg">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-on-surface-variant">
             {description}
           </p>
         ) : null}
@@ -64,7 +64,7 @@ export function SurfaceCard({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-[1.5rem] bg-surface-container-low", className)}>{children}</div>
+    <div className={cn("commerce-section", className)}>{children}</div>
   );
 }
 
@@ -77,13 +77,13 @@ export function InlineAlert({
 }) {
   const toneClass =
     tone === "error"
-      ? "bg-[#fde4e1] text-[#7c2417]"
+      ? "border-[#fda29b] bg-[#fff1f0] text-[#8a2a1f]"
       : tone === "success"
-        ? "bg-[#e5efe8] text-[#1b4a2c]"
-        : "bg-surface-container-high text-on-surface";
+        ? "border-[#a6f4c5] bg-[#ecfdf3] text-[#05603a]"
+        : "border-outline-variant bg-surface-container-low text-on-surface";
 
   return (
-    <div className={cn("rounded-[1.5rem] px-5 py-4 text-sm leading-7", toneClass)}>
+    <div className={cn("rounded-[var(--radius-xl)] border px-4 py-3 text-sm leading-6 shadow-[0_10px_26px_-24px_rgba(17,24,39,0.42)]", toneClass)}>
       {children}
     </div>
   );
@@ -100,10 +100,10 @@ export function EmptyState({
 }) {
   return (
     <SurfaceCard className="p-8 text-center md:p-12">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-surface text-primary">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[var(--radius-xl)] bg-secondary-container text-secondary">
         <Sparkles className="h-5 w-5" />
       </div>
-      <h3 className="mt-5 font-serif text-3xl font-semibold tracking-[-0.03em] text-primary">
+      <h3 className="mt-5 text-2xl font-semibold text-on-surface md:text-3xl">
         {title}
       </h3>
       <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-on-surface-variant">
@@ -117,7 +117,7 @@ export function EmptyState({
 export function LoadingScreen({ label }: { label: string }) {
   return (
     <div className="shell flex min-h-[60vh] items-center justify-center">
-      <div className="flex items-center gap-3 rounded-full bg-surface-container-low px-6 py-4 text-sm font-medium text-primary">
+      <div className="flex items-center gap-3 rounded-[var(--radius-xl)] border border-outline-variant bg-surface px-6 py-4 text-sm font-semibold text-primary shadow-[var(--shadow-card)]">
         <LoaderCircle className="h-4 w-4 animate-spin" />
         <span>{label}</span>
       </div>
@@ -129,15 +129,15 @@ export function StatusPill({ status }: { status: string }) {
   const tone = getStatusTone(status);
   const className =
     tone === "emerald"
-      ? "bg-[#ddebe1] text-[#254f34]"
+      ? "bg-[#ecfdf3] text-[#05603a]"
       : tone === "amber"
-        ? "bg-[#f8edd2] text-[#865d19]"
+        ? "bg-[#fffaeb] text-[#93370d]"
         : tone === "red"
-          ? "bg-[#fde4e1] text-[#8c2619]"
+          ? "bg-[#fff1f0] text-[#8a2a1f]"
           : "bg-surface-container-high text-on-surface";
 
   return (
-    <span className={cn("inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em]", className)}>
+    <span className={cn("inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-normal", className)}>
       {status.replace(/_/g, " ")}
     </span>
   );
@@ -145,12 +145,14 @@ export function StatusPill({ status }: { status: string }) {
 
 export function ProductCardSkeleton() {
   return (
-    <div className="animate-pulse">
-      <div className="aspect-[4/5] rounded-[1.25rem] bg-surface-container-high" />
-      <div className="mt-4 h-3 w-24 rounded-full bg-surface-container-high" />
-      <div className="mt-3 h-7 w-3/4 rounded-full bg-surface-container-high" />
-      <div className="mt-3 h-4 w-1/2 rounded-full bg-surface-container-high" />
-      <div className="mt-5 h-9 w-28 rounded-lg bg-surface-container-high" />
+    <div className="overflow-hidden rounded-[var(--radius-2xl)] border border-outline-variant bg-surface shadow-[var(--shadow-card)]">
+      <div className="aspect-[4/5] animate-pulse bg-surface-container" />
+      <div className="grid gap-3 p-4">
+        <div className="h-3 w-24 animate-pulse rounded-full bg-surface-container" />
+        <div className="h-6 w-4/5 animate-pulse rounded-full bg-surface-container" />
+        <div className="h-4 w-1/2 animate-pulse rounded-full bg-surface-container" />
+        <div className="h-10 animate-pulse rounded-[var(--radius-lg)] bg-surface-container" />
+      </div>
     </div>
   );
 }
@@ -174,26 +176,26 @@ export function ProductCard({
   const lowStock = product.stock > 0 && product.stock <= 5;
 
   return (
-    <article className="storefront-collection-card group">
+    <article className="commerce-card group overflow-hidden">
       <Link
         href={`/products/${product.id}`}
-        className="block overflow-hidden rounded-[1.25rem]"
+        className="block overflow-hidden"
         onClick={onNavigate}
       >
-        <div className="storefront-collection-card-media relative mb-5 aspect-[4/5] overflow-hidden rounded-[1.25rem] bg-surface-container">
+        <div className="relative aspect-[4/5] overflow-hidden bg-surface-container-low">
           <StorefrontImage
             alt={product.name}
             src={previewImage}
             fill
             sizes="(min-width: 1280px) 29vw, (min-width: 768px) 42vw, 92vw"
-            className="object-cover transition duration-700 group-hover:scale-[1.05]"
+            className="object-cover transition duration-500 group-hover:scale-[1.04]"
           />
-          <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between gap-3">
-            <Badge className="storefront-collection-card-badge bg-background/90 text-primary">
+          <div className="pointer-events-none absolute inset-x-3 top-3 flex items-center justify-between gap-3">
+            <Badge className="bg-background/94 text-primary shadow-[0_10px_20px_-18px_rgba(17,24,39,0.42)]">
               {product.category || "Catalog"}
             </Badge>
             {saved ? (
-              <Badge className="storefront-collection-card-badge bg-primary text-on-primary">
+              <Badge className="bg-primary text-on-primary">
                 Đã lưu
               </Badge>
             ) : null}
@@ -201,28 +203,28 @@ export function ProductCard({
         </div>
       </Link>
 
-      <div className="storefront-collection-card-copy space-y-3">
-        <div className="storefront-collection-card-head flex items-start justify-between gap-4">
-          <div>
-            <p className="storefront-collection-card-eyebrow text-[11px] font-semibold uppercase tracking-[0.24em] text-tertiary">
-              {product.brand || "ND Shop"}
-            </p>
+      <div className="space-y-3 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
             <Link
               href={`/products/${product.id}`}
-              className="mt-2 block font-serif text-[1.7rem] font-semibold leading-[1.1] tracking-[-0.03em] text-primary"
+              className="mt-1 block line-clamp-2 text-base font-semibold leading-snug text-on-surface hover:text-primary"
               onClick={onNavigate}
             >
               {product.name}
             </Link>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              {soldOut ? "Hết hàng" : lowStock ? `Sắp hết: còn ${product.stock}` : `Còn ${product.stock} sản phẩm`}
+            </p>
           </div>
-          <strong className="shrink-0 text-base font-semibold text-primary">{formatCurrency(product.price)}</strong>
+          <strong className="shrink-0 text-lg font-semibold text-primary">{formatCurrency(product.price)}</strong>
         </div>
 
-        <p className="line-clamp-2 text-sm leading-7 text-on-surface-variant">
-          {product.description}
+        <p className="line-clamp-2 min-h-11 text-sm leading-6 text-on-surface-variant">
+          {product.description || "Giá và tồn kho được cập nhật trực tiếp từ catalog quản trị."}
         </p>
 
-        <div className="storefront-collection-card-footer flex items-end justify-between gap-4 pt-3">
+        <div className="flex items-end justify-between gap-4 pt-2">
           <div className="min-h-10">
             {footerSlot ? footerSlot : (
               <span className="text-xs text-on-surface-variant">

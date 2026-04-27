@@ -461,7 +461,7 @@ export function ProfileDashboard() {
 
             <div className="space-y-7">
               <div>
-                <p className="eyebrow">Profile atelier</p>
+                <p className="eyebrow">Hồ sơ</p>
                 <h2 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
                   {displayName}
                 </h2>

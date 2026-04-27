@@ -5,8 +5,6 @@ import {
   normalizeProductList,
   normalizeProductPopularity,
   normalizeProductReviewList,
-  normalizeStorefrontCategoryList,
-  normalizeStorefrontCategoryPageData,
 } from "@/lib/api/normalizers";
 import type { ProductListOptions } from "@/lib/api/product";
 import { getErrorMessage } from "@/lib/errors/handler";
@@ -21,8 +19,6 @@ import type {
   Product,
   ProductPopularity,
   ProductReviewList,
-  StorefrontCategory,
-  StorefrontCategoryPageData,
 } from "@/types/api";
 
 const emptyReviewList: ProductReviewList = {
@@ -123,9 +119,39 @@ function toProductListQuery(options: ProductListOptions) {
   return params.toString();
 }
 
-async function fetchProductList(options: ProductListOptions) {
+async function fetchProductListPage(options: ProductListOptions) {
   const response = await requestServer<unknown>(`/api/v1/products?${toProductListQuery(options)}`);
-  return normalizeProductList(response.data);
+  return {
+    data: normalizeProductList(response.data),
+    meta: response.meta,
+  };
+}
+
+async function fetchProductList(options: ProductListOptions) {
+  const response = await fetchProductListPage(options);
+  return response.data;
+}
+
+async function fetchProductCatalogIndex(options: ProductListOptions) {
+  const products: Product[] = [];
+  let cursor = options.cursor ?? "";
+
+  for (let page = 0; page < 8; page += 1) {
+    const response = await fetchProductListPage({
+      ...options,
+      cursor: cursor || undefined,
+    });
+
+    products.push(...response.data);
+
+    if (!response.meta?.has_next || !response.meta.next_cursor) {
+      break;
+    }
+
+    cursor = response.meta.next_cursor;
+  }
+
+  return Array.from(new Map(products.map((product) => [product.id, product])).values());
 }
 
 async function fetchProduct(productId: string) {
@@ -145,61 +171,22 @@ async function fetchProductReviewList(productId: string, page = 1, limit = 8) {
   return normalizeProductReviewList(response.data);
 }
 
-async function fetchStorefrontCategories() {
-  const response = await requestServer<unknown>("/api/v1/storefront/categories");
-  return normalizeStorefrontCategoryList(response.data);
-}
-
-async function fetchStorefrontCategoryPage(identifier: string) {
-  const response = await requestServer<unknown>(
-    `/api/v1/storefront/categories/${encodeURIComponent(identifier)}`,
-  );
-  return normalizeStorefrontCategoryPageData(response.data);
-}
-
-export function isServerHttpStatus(reason: unknown, status: number) {
-  return (
-    typeof reason === "object" &&
-    reason !== null &&
-    "status" in reason &&
-    (reason as { status?: unknown }).status === status
-  );
-}
-
-export async function getEditorialPageInitialData(identifier: string): Promise<{
-  pageData: StorefrontCategoryPageData;
-  categories: StorefrontCategory[];
-}> {
-  const [pageData, categories] = await Promise.all([
-    fetchStorefrontCategoryPage(identifier),
-    fetchStorefrontCategories().catch(() => []),
-  ]);
-
-  return {
-    pageData,
-    categories: categories.length > 0 ? categories : [pageData.category],
-  };
-}
-
 export async function getHomePageInitialData(): Promise<HomePageInitialData> {
   try {
-    const [products, popularity, categories] = await Promise.all([
-      fetchProductList({ status: "active", limit: 12 }),
+    const [products, popularity] = await Promise.all([
+      fetchProductList({ status: "active", limit: 48, sort: "merchandising" }),
       fetchProductPopularity(8).catch(() => []),
-      fetchStorefrontCategories().catch(() => []),
     ]);
 
     return {
       products,
       popularity,
-      categories,
       error: "",
     };
   } catch (reason) {
     return {
       products: [],
       popularity: [],
-      categories: [],
       error: getErrorMessage(reason),
     };
   }
@@ -223,7 +210,7 @@ export async function getCatalogPageInitialData(
 
   const [catalogIndexResult, productListResult] = await Promise.allSettled([
     Promise.all([
-      fetchProductList({ status: "active", limit: 120 }),
+      fetchProductCatalogIndex({ status: "active", sort: "merchandising", limit: 40 }),
       fetchProductPopularity(120).catch(() => []),
     ]),
     fetchProductList(productListOptions),

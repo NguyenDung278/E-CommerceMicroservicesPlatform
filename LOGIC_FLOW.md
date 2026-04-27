@@ -15,8 +15,8 @@ Tài liệu này ưu tiên thực dụng. Nó không cố mô tả một kiến 
 
 Các khối chính hiện tại:
 
-- `frontend/`: React + Vite, giữ vai trò admin/workbook/local verification
-- `client/`: Next.js runtime mặc định cho shopper/account trong Docker Compose
+- `client/`: Next.js runtime mặc định cho shopper/account/admin product trong Docker Compose
+- `frontend/`: React + Vite legacy cho workbook/local verification cũ
 - `api-gateway/`: cửa vào HTTP chung
 - `services/user-service/`
 - `services/product-service/`
@@ -32,10 +32,8 @@ Các khối chính hiện tại:
 
 ```mermaid
 flowchart LR
-    Browser --> Frontend[frontend/]
     Browser --> Client[client/]
 
-    Frontend -->|/api| Gateway[api-gateway]
     Client -->|HTTP fetch| Gateway
 
     Gateway --> User[user-service]
@@ -69,18 +67,18 @@ flowchart LR
 
 ## 2. Những Điều Cần Hiểu Đúng Ngay Từ Đầu
 
-### 2.1. `frontend/` không còn là shopper runtime chính
+### 2.1. `client/` là UI runtime chính
 
 Trong local compose:
 
-- `client` chạy ở `http://localhost:3000` và là shopper/account runtime mặc định
-- `frontend` chạy ở `http://localhost:4173` cho admin/workbook
+- `client` chạy ở `http://localhost:3000` và là shopper/account/admin product runtime mặc định
+- admin sản phẩm chạy ở `http://localhost:3000/admin`
 - `api-gateway` chạy ở `http://localhost:8080`
 - `nginx` ở `http://localhost` không phải storefront chính
 
-### 2.2. `client/` đã là đường mặc định cho shopper flow
+### 2.2. `frontend/` không còn chạy mặc định trong Compose
 
-Compose hiện chạy `client` mặc định, còn `frontend` vẫn được giữ song song để admin/workbook không bị phụ thuộc vào cùng runtime của shopper.
+Compose hiện chạy `client` mặc định. `frontend/` vẫn tồn tại trong repo cho tooling/workbook và một số màn admin cũ, nhưng không còn là localhost mặc định.
 
 ### 2.3. PostgreSQL là source of truth
 
@@ -427,9 +425,9 @@ Một số helper/test expectation cũ có thể vẫn nhắc tới route không
 
 Một số trang account/admin có thể đi trước hoặc đi sau backend capability. Khi sửa, cần rà cả UI lẫn gateway route thật.
 
-### `frontend/` không nên được giả định là shopper runtime mặc định
+### `frontend/` không nên được giả định là UI runtime mặc định
 
-Hiện tại shopper/account flow trong local stack nên được verify trên `client` ở `3000`, không phải trên `frontend` ở `4173`.
+Hiện tại shopper/account/admin product flow trong local stack nên được verify trên `client` ở `3000`. `frontend/` chỉ còn là bề mặt legacy khi cần tooling cũ.
 
 ---
 

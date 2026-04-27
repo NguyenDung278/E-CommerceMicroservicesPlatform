@@ -390,7 +390,7 @@ export function WishlistPage() {
               }
               action={
                 <Link href="/products" className={buttonStyles()}>
-                  Khám phá All Archive
+                  Khám phá sản phẩm
                 </Link>
               }
             />

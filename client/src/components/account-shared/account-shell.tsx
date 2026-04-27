@@ -37,7 +37,7 @@ export function AccountShell({
 
             <div className="account-content space-y-8">
               <header className="recovered-account-hero rounded-[2rem] border border-[#ddd5cc] bg-white/74 px-6 py-7 shadow-[0_28px_48px_-30px_rgba(27,28,25,0.16)] backdrop-blur md:px-8">
-                <p className="eyebrow">Account Atelier</p>
+                <p className="eyebrow">Tài khoản</p>
                 <h1 className="mt-4 font-serif text-4xl font-semibold tracking-[-0.04em] text-primary md:text-5xl">
                   {title}
                 </h1>

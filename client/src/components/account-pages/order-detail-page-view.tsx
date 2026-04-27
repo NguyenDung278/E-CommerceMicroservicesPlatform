@@ -245,7 +245,7 @@ export function OrderDetailPageView({ orderId }: OrderDetailPageViewProps) {
                 </h2>
                 <p className="mt-4 max-w-3xl text-sm leading-7 text-on-surface-variant md:text-base">
                   {isConfirmation
-                    ? "Your order has been placed successfully and is now being prepared with care in our atelier."
+                    ? "Đơn hàng đã được tạo và đang chờ xử lý."
                     : "Review the latest order snapshot, payment state, shipping details and aftercare options in one place."}
                 </p>
               </div>

@@ -1,4 +1,4 @@
-import type { Product, ProductPopularity, ProductReviewList, StorefrontCategory } from "@/types/api";
+import type { Product, ProductPopularity, ProductReviewList } from "@/types/api";
 
 export type CatalogSortMode = "latest" | "price_asc" | "price_desc" | "popular";
 
@@ -17,7 +17,6 @@ export type CatalogPageQueryState = {
 export type HomePageInitialData = {
   products: Product[];
   popularity: ProductPopularity[];
-  categories: StorefrontCategory[];
   error: string;
 };
 

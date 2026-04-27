@@ -21,8 +21,7 @@ Stack mặc định hiện có:
 
 | Service | Vai trò | Truy cập từ host |
 | --- | --- | --- |
-| `client` | storefront/account runtime Next.js mặc định | `http://localhost:3000` |
-| `frontend` | frontend React + Vite build static, serve bằng Nginx | `http://localhost:4173` |
+| `client` | storefront/account/admin product runtime Next.js mặc định | `http://localhost:3000` |
 | `nginx` | edge proxy riêng cho `/api` và `/health` | `http://localhost` |
 | `api-gateway` | public HTTP entrypoint cho backend | `http://localhost:8080` |
 | `user-service` | auth, profile, address, wishlist, OTP | không publish |
@@ -42,8 +41,8 @@ Stack mặc định hiện có:
 
 Lưu ý rất quan trọng:
 
-- shopper UI mặc định trong compose là `http://localhost:3000`
-- admin/workbook UI mặc định trong compose là `http://localhost:4173`
+- UI mặc định trong compose là `http://localhost:3000`
+- admin sản phẩm nằm ở `http://localhost:3000/admin`
 - `http://localhost` không phải storefront chính
 - Postgres, Redis, RabbitMQ không publish port ra host theo mặc định
 
@@ -51,25 +50,22 @@ Lưu ý rất quan trọng:
 
 ## 2. Client Next.js Đang Chạy Mặc Định Ra Sao
 
-`client/` hiện là storefront/account runtime mặc định trong Compose, không còn là profile tùy chọn như trước.
+`client/` hiện là storefront/account/admin product runtime mặc định trong Compose, không còn là profile tùy chọn như trước.
 
 Trạng thái runtime đúng theo `deployments/docker/docker-compose.yml`:
 
 - `client` chạy mặc định ở `http://localhost:3000`
-- `frontend` vẫn chạy song song ở `http://localhost:4173` cho admin/workbook/local verification
 - `nginx` ở `http://localhost` vẫn chỉ proxy `/api` và `/health`, không serve shopper UI
 
 Điều đó có nghĩa:
 
-- shopper/account flow nên được verify trước trên `3000`
-- admin/workbook flow nên được verify trên `4173`
+- shopper/account/admin product flow nên được verify trước trên `3000`
 - khi debug API riêng, vẫn gọi trực tiếp `http://localhost:8080`
 
 Luồng network quan trọng:
 
 - browser-side fetch của `client` dùng `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
 - server-side fetch của `client` dùng `API_GATEWAY_URL=http://api-gateway:8080`
-- `frontend` Docker static build vẫn tự proxy `/api` về gateway qua nginx trong image của nó
 
 ---
 
@@ -100,8 +96,7 @@ Các biến cần chú ý:
 
 Lưu ý thực tế:
 
-- nếu dùng frontend Docker, `FRONTEND_BASE_URL` nên khớp `http://localhost:4173`
-- nếu dùng Vite dev server, `FRONTEND_BASE_URL` nên khớp `http://localhost:5174`
+- `FRONTEND_BASE_URL` nên khớp `http://localhost:3000`
 - nếu base URL lệch, các flow như verify email, reset password và OAuth redirect sẽ dễ lỗi
 
 ---
@@ -154,9 +149,8 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml do
 ### Cần rebuild image
 
 - sửa source Go
-- sửa source frontend
+- sửa source client
 - sửa Dockerfile
-- sửa `frontend/nginx.conf`
 
 ### Thường chỉ cần restart
 
@@ -176,8 +170,7 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml re
 | URL | Mục đích |
 | --- | --- |
 | `http://localhost:3000` | client Next.js mặc định trong Compose |
-| `http://localhost:4173` | frontend Docker cho admin/workbook |
-| `http://localhost:5174` | frontend Vite dev trên host |
+| `http://localhost:3000/admin` | admin sản phẩm trong client |
 | `http://localhost:8080` | API Gateway |
 | `http://localhost` | nginx edge proxy |
 | `http://localhost:9000` | MinIO API |
@@ -188,7 +181,7 @@ docker compose --env-file .env.local -f deployments/docker/docker-compose.yml re
 Smoke check nhanh:
 
 ```bash
-curl http://localhost:4173/health
+curl http://localhost:3000
 curl http://localhost:8080/health
 curl http://localhost/health
 ```
@@ -262,7 +255,7 @@ docker inspect --format '{{json .State.Health}}' ecommerce-rabbitmq
 ### Vào shell các container có shell
 
 ```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec frontend sh
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec client sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec postgres sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec redis sh
 docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec rabbitmq sh
@@ -278,11 +271,11 @@ docker inspect ecommerce-user-service
 docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' ecommerce-product-service
 ```
 
-### Debug frontend container
+### Debug client container
 
 ```bash
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec frontend cat /etc/nginx/conf.d/default.conf
-docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec frontend ls -la /usr/share/nginx/html
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml logs -f client
+docker compose --env-file .env.local -f deployments/docker/docker-compose.yml exec client env | sort
 ```
 
 ### Debug Redis Và RabbitMQ
@@ -365,7 +358,7 @@ http://localhost:3000
 
 ### "client đã là runtime mặc định"
 
-Đúng. `client` hiện là shopper/account runtime mặc định trong compose, còn `frontend` giữ vai trò admin/workbook song song.
+Đúng. `client` hiện là shopper/account/admin product runtime mặc định trong compose.
 
 ### "Postgres/Redis/RabbitMQ truy cập localhost được ngay"
 
@@ -408,7 +401,7 @@ Khi local stack đang chạy, hãy coi đây là bảng sự thật để tránh
 | Bề mặt | URL | Process thật đang trả response |
 | --- | --- | --- |
 | Shopper storefront/account | `http://localhost:3000` | `client` |
-| Admin/workbook local UI | `http://localhost:4173` | `frontend` |
+| Admin product UI | `http://localhost:3000/admin` | `client` |
 | Public API | `http://localhost:8080` | `api-gateway` |
 | Edge `/api` và `/health` | `http://localhost` | `nginx` -> `api-gateway` |
 | Tracing UI | `http://localhost:16686` | `jaeger` |
@@ -416,19 +409,14 @@ Khi local stack đang chạy, hãy coi đây là bảng sự thật để tránh
 
 Nếu UI và API cùng lỗi, nhìn `api-gateway` trước.
 
-Nếu shopper lỗi nhưng admin vẫn ổn:
+Nếu UI lỗi:
 
 - nhìn `client`
 - rồi kiểm tra `NEXT_PUBLIC_API_BASE_URL`, `API_GATEWAY_URL`
 
-Nếu admin lỗi nhưng shopper vẫn ổn:
-
-- nhìn `frontend`
-- rồi kiểm tra build static, nginx trong image và proxy `/api`
-
 ## 15. Playbook Debug Theo Triệu Chứng
 
-### Shopper `3000` lên trang trắng hoặc lỗi fetch
+### UI `3000` lên trang trắng hoặc lỗi fetch
 
 Kiểm tra theo thứ tự:
 
@@ -438,14 +426,14 @@ Kiểm tra theo thứ tự:
 4. inspect env của container `client`
 5. kiểm tra `NEXT_PUBLIC_API_BASE_URL` và `API_GATEWAY_URL`
 
-### Admin `4173` lên nhưng API fail hoặc bị 401/403
+### Admin `/admin` lên nhưng API fail hoặc bị 401/403
 
 Kiểm tra theo thứ tự:
 
-1. `curl http://localhost:4173/health`
-2. `docker compose ... logs -f frontend api-gateway`
+1. `curl http://localhost:3000`
+2. `docker compose ... logs -f client api-gateway`
 3. xem token, cookie, `Authorization` header ở browser devtools
-4. kiểm tra `FRONTEND_BASE_URL` nếu flow lỗi ở OAuth/email link
+4. kiểm tra role user là `admin` hoặc `staff`
 
 ### Gateway sống nhưng một domain API trả 502/timeout
 

@@ -30,7 +30,7 @@ export default function NotFound() {
               href="/products"
               className={buttonStyles({ variant: "secondary", size: "lg" })}
             >
-              Mở All Archive
+              Mở sản phẩm
             </Link>
           </div>
         </div>

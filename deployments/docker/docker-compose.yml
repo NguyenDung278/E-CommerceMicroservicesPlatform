@@ -172,21 +172,7 @@ services:
     networks:
       - ecommerce-network
 
-  # Admin/workbook runtime kept on Vite so local operations tooling and the
-  # admin console stay stable while shopper traffic moves to the Next.js client.
-  frontend:
-    build:
-      context: ../..
-      dockerfile: frontend/Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
-    container_name: ecommerce-frontend
-    ports:
-      - "4173:80"
-    networks:
-      - ecommerce-network
-
-  # Primary storefront/account runtime.
+  # Primary storefront/account/admin runtime.
   client:
     build:
       context: ../..

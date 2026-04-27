@@ -24,6 +24,12 @@ const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
 });
 
+const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
 const statusLabels: Record<string, string> = {
   pending: "Chờ xử lý",
   paid: "Đã thanh toán",
@@ -56,6 +62,10 @@ export function formatLongDate(value: string) {
 
 export function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
+}
+
+export function formatTime(value: string | Date) {
+  return timeFormatter.format(new Date(value));
 }
 
 export function formatStatusLabel(value: string) {
@@ -103,4 +113,3 @@ export function getInitials(value: string) {
 export function getDisplayName(firstName?: string, lastName?: string) {
   return [firstName, lastName].filter(Boolean).join(" ").trim() || "Tài khoản khách hàng";
 }
-

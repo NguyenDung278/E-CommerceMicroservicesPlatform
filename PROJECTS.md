@@ -344,9 +344,9 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 
 | Surface | Trạng thái | Ghi chú |
 | --- | --- | --- |
-| `client/` shopper/account runtime | `done` | compose mặc định ở `3000` |
-| `frontend/` admin/workbook runtime | `done` | compose chạy song song ở `4173` |
-| Admin returns/payment/order surfaces | `done` | đủ dùng cho local verify và operations flow |
+| `client/` shopper/account/admin product runtime | `done` | compose mặc định ở `3000`, admin sản phẩm ở `/admin` |
+| `frontend/` legacy workbook/runtime | `done` | không còn chạy mặc định trong compose |
+| Admin returns/payment/order surfaces | `done` | vẫn chủ yếu nằm ở `frontend/`; cần migrate nếu muốn một admin đầy đủ trong `client` |
 | Storefront/account parity | `in progress` | shopper/account tiếp tục nên đi vào `client/`; `frontend/` không nên nhận thêm feature storefront mới trừ support/smoke-test |
 
 ## 7. Ưu tiên kỹ thuật Toàn Platform

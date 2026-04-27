@@ -26,7 +26,8 @@ Khi tài liệu và code lệch nhau, hãy tin các file sau:
 
 - `api-gateway/internal/handler/*.go`: route public thật
 - `services/*-service/internal/handler/*.go`: contract service thật
-- `frontend/src/services/api/`: các route mà frontend hiện đang gọi
+- `client/src/lib/api/`: các route mà UI chính hiện đang gọi
+- `frontend/src/services/api/`: route legacy còn hữu ích khi kiểm tra tooling cũ
 
 Hiện tại, public HTTP entrypoint chuẩn để test là:
 
@@ -79,14 +80,13 @@ Kiểm tra nhanh:
 
 ```bash
 curl http://localhost:8080/health
-curl http://localhost:4173/health
+curl http://localhost:3000
 ```
 
 Các URL hay dùng:
 
 - `http://localhost:8080`: API Gateway
-- `http://localhost:4173`: frontend Docker
-- `http://localhost:5174`: frontend Vite dev nếu bạn chạy `make frontend-dev`
+- `http://localhost:3000`: client UI cho shopper/account/admin product
 - `http://localhost:16686`: Jaeger
 
 Lưu ý:

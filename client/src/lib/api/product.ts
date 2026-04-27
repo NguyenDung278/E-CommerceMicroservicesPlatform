@@ -42,6 +42,51 @@ export interface ProductReviewData {
   comment?: string;
 }
 
+export interface ProductVariantInput {
+  sku: string;
+  label: string;
+  size?: string;
+  color?: string;
+  price: number;
+  stock: number;
+  image_urls?: string[];
+  fit_note?: string;
+  size_guide_id?: string;
+  restockable?: boolean;
+  lead_time?: string;
+  badge?: string;
+}
+
+export interface CreateProductData {
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  category: string;
+  brand: string;
+  tags: string[];
+  status: string;
+  sku: string;
+  variants: ProductVariantInput[];
+  image_url: string;
+  image_urls: string[];
+}
+
+export interface UpdateProductData {
+  name?: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  category?: string;
+  brand?: string;
+  tags?: string[];
+  status?: string;
+  sku?: string;
+  variants?: ProductVariantInput[];
+  image_url?: string;
+  image_urls?: string[];
+}
+
 export interface SearchAssistOptions {
   query?: string;
   category?: string;
@@ -192,6 +237,39 @@ export const productApi = {
       method: "POST",
       token,
       body: formData,
+    });
+  },
+
+  createProduct(token: string, body: CreateProductData): Promise<ApiEnvelope<Product>> {
+    return request<unknown>("/api/v1/products", {
+      method: "POST",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProduct(response.data),
+    }));
+  },
+
+  updateProduct(
+    token: string,
+    productId: string,
+    body: UpdateProductData,
+  ): Promise<ApiEnvelope<Product>> {
+    return request<unknown>(`/api/v1/products/${encodeURIComponent(productId)}`, {
+      method: "PUT",
+      token,
+      body,
+    }).then((response) => ({
+      ...response,
+      data: normalizeProduct(response.data),
+    }));
+  },
+
+  deleteProduct(token: string, productId: string): Promise<ApiEnvelope<null>> {
+    return request<null>(`/api/v1/products/${encodeURIComponent(productId)}`, {
+      method: "DELETE",
+      token,
     });
   },
 };
