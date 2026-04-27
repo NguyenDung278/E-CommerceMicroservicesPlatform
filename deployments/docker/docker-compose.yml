@@ -170,6 +170,20 @@ services:
     networks:
       - ecommerce-network
 
+  # Frontend client
+  client:
+    build:
+      context: ../..
+      dockerfile: client/Dockerfile
+    container_name: ecommerce-client
+    ports:
+      - "3000:3000"
+    networks:
+      - ecommerce-network
+    depends_on:
+      api-gateway:
+        condition: service_started
+
   # API Gateway (Go)
   api-gateway:
     build:

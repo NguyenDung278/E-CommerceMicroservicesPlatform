@@ -26,7 +26,7 @@ PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HO
 ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
 PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down client-install client-dev client-build client-preview k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
 
 CATALOG_WORKBOOK ?= $(CURDIR)/artifacts/import-templates/catalog-import-sample-workbook.xlsx
 CATALOG_WORKBOOK_CONTAINER ?= /workspace/artifacts/import-templates/catalog-import-sample-workbook.xlsx
@@ -68,6 +68,18 @@ compose-up:
 
 compose-down:
 	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose --env-file $(COMPOSE_ENV_FILE) $(COMPOSE_PROFILE_ARGS) down
+
+client-install:
+	@cd client && npm install
+
+client-dev:
+	@cd client && npm run dev
+
+client-build:
+	@cd client && npm run build
+
+client-preview:
+	@cd client && npm run preview
 
 k8s-apply:
 	kubectl apply -f deployments/k8s/
