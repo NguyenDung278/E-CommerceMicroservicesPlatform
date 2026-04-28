@@ -10,9 +10,10 @@ import { ProductImage } from "./product-image";
 
 type ProductCardProps = {
   product: Product;
+  onProductClick?: (product: Product) => void;
 };
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, onProductClick }: ProductCardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addItem } = useCart();
@@ -44,12 +45,20 @@ export function ProductCard({ product }: ProductCardProps) {
       >
         <Heart size={18} fill={wishlisted ? "currentColor" : "none"} />
       </button>
-      <Link to={`/products/${product.id}`} className="product-card__image-link">
+      <Link
+        to={`/products/${product.id}`}
+        className="product-card__image-link"
+        onClick={() => onProductClick?.(product)}
+      >
         <ProductImage src={getProductImage(product)} alt={product.name} />
       </Link>
 
       <div className="product-card__body">
-        <Link to={`/products/${product.id}`} className="product-card__name">
+        <Link
+          to={`/products/${product.id}`}
+          className="product-card__name"
+          onClick={() => onProductClick?.(product)}
+        >
           {product.name}
         </Link>
         {product.description ? (

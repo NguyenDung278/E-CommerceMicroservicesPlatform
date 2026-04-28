@@ -86,6 +86,49 @@ func (s *OrderService) ListCoupons(ctx context.Context) ([]*model.Coupon, error)
 	return s.repo.ListCoupons(ctx)
 }
 
+func (s *OrderService) ListPublicCoupons(ctx context.Context, subtotal float64) ([]model.CouponWalletItem, error) {
+	coupons, err := s.repo.ListCoupons(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	items := make([]model.CouponWalletItem, 0, len(coupons))
+	for _, coupon := range coupons {
+		if coupon == nil || !coupon.Active {
+			continue
+		}
+		if coupon.ExpiresAt != nil && now.After(*coupon.ExpiresAt) {
+			continue
+		}
+		if coupon.UsageLimit > 0 && coupon.UsedCount >= coupon.UsageLimit {
+			continue
+		}
+
+		item := model.CouponWalletItem{
+			Code:              coupon.Code,
+			Description:       coupon.Description,
+			DiscountType:      coupon.DiscountType,
+			DiscountValue:     coupon.DiscountValue,
+			MinOrderAmount:    coupon.MinOrderAmount,
+			ExpiresAt:         coupon.ExpiresAt,
+			Eligible:          true,
+			EstimatedDiscount: roundCurrency(calculateDiscount(coupon, subtotal)),
+		}
+		if coupon.UsageLimit > 0 {
+			item.RemainingUsageHint = coupon.UsageLimit - coupon.UsedCount
+		}
+		if subtotal > 0 && coupon.MinOrderAmount > subtotal {
+			item.Eligible = false
+			item.IneligibleReason = "order subtotal is below coupon minimum"
+			item.EstimatedDiscount = 0
+		}
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
 // isCouponError classifies repository coupon failures so CreateOrder can log
 // business errors without promoting them to system-level noise.
 //

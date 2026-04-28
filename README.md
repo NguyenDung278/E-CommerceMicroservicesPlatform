@@ -45,34 +45,34 @@ flowchart LR
 
 ## Thành Phần Chính
 
-| Thành phần | Vai trò |
-| --- | --- |
-| `api-gateway/` | Reverse proxy HTTP dùng Echo, tracing, metrics, Redis-backed rate limiter, request logging, retry chọn lọc và circuit breaker. |
-| `services/user-service/` | Đăng ký, đăng nhập, refresh token, profile, role, address, wishlist, OTP email/phone, OAuth, bootstrap dev accounts. |
-| `services/product-service/` | Product CRUD, upload ảnh, catalog listing, cursor pagination, search assist, review, gRPC product lookup, optional Elasticsearch, optional MinIO. |
-| `services/cart-service/` | Giỏ hàng trên Redis, get/add/update/remove/clear/merge cart, validate product qua gRPC. |
-| `services/order-service/` | Order preview, create order, idempotency, order event, order history/detail, cancel, coupons, admin report, returns, refund queue. |
-| `services/payment-service/` | Create payment, history/detail, refund, MoMo webhook, idempotency, inbox/outbox, audit entries. |
-| `services/notification-service/` | RabbitMQ consumer, Redis inbox dedupe, retry publisher, history/unread state, email worker, wishlist alert worker. |
-| `pkg/` | Shared config, database, logger, middleware, observability, response, validation. |
-| `proto/` | gRPC contracts giữa service. |
-| `deployments/docker/` | Docker Compose, service YAML config, observability config, Nginx edge config, Postgres init script. |
+| Thành phần                       | Vai trò                                                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api-gateway/`                   | Reverse proxy HTTP dùng Echo, tracing, metrics, Redis-backed rate limiter, request logging, retry chọn lọc và circuit breaker.                               |
+| `services/user-service/`         | Đăng ký, đăng nhập, refresh token, profile, role, address, wishlist, OTP email/phone, OAuth, bootstrap dev accounts.                                         |
+| `services/product-service/`      | Product CRUD, upload ảnh, catalog listing, cursor pagination, search assist, review, gRPC product lookup, optional Elasticsearch, optional MinIO.            |
+| `services/cart-service/`         | Giỏ hàng trên Redis, get/add/update/remove/clear/merge cart, validate product qua gRPC.                                                                      |
+| `services/order-service/`        | Order preview, create order, idempotency, order event, order history/detail, cancel, public coupons, shipment tracking, admin report, returns, refund queue. |
+| `services/payment-service/`      | Create payment, history/detail, refund, MoMo webhook, idempotency, inbox/outbox, audit entries.                                                              |
+| `services/notification-service/` | RabbitMQ consumer, Redis inbox dedupe, retry publisher, history/unread state, email worker, wishlist alert worker.                                           |
+| `pkg/`                           | Shared config, database, logger, middleware, observability, response, validation.                                                                            |
+| `proto/`                         | gRPC contracts giữa service.                                                                                                                                 |
+| `deployments/docker/`            | Docker Compose, service YAML config, observability config, Nginx edge config, Postgres init script.                                                          |
 
 ---
 
 ## Hạ Tầng Và Dữ Liệu
 
-| Thành phần | Trạng thái |
-| --- | --- |
-| PostgreSQL | Một container, nhiều database: `ecommerce_user`, `ecommerce_product`, `ecommerce_order`, `ecommerce_payment`. Đây là source of truth chính. |
-| Redis | Cart storage, rate limit, cache, inbox/dedupe hoặc state tạm. |
-| RabbitMQ | Event broker giữa order/payment/notification. |
-| MinIO | Object storage cho media khi product-service bật object storage. |
-| Elasticsearch | Search index khi product-service bật search sync. |
-| Prometheus/Grafana | Metrics scraping và dashboard trong compose. |
-| Jaeger | Distributed tracing local. |
-| ORM | Không dùng ORM; persistence đi qua `database/sql`, `lib/pq` và SQL migration. |
-| Migration | Các service PostgreSQL có `migrations/` và wiring auto-run migration khi startup. |
+| Thành phần         | Trạng thái                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL         | Một container, nhiều database: `ecommerce_user`, `ecommerce_product`, `ecommerce_order`, `ecommerce_payment`. Đây là source of truth chính. |
+| Redis              | Cart storage, rate limit, cache, inbox/dedupe hoặc state tạm.                                                                               |
+| RabbitMQ           | Event broker giữa order/payment/notification.                                                                                               |
+| MinIO              | Object storage cho media khi product-service bật object storage.                                                                            |
+| Elasticsearch      | Search index khi product-service bật search sync.                                                                                           |
+| Prometheus/Grafana | Metrics scraping và dashboard trong compose.                                                                                                |
+| Jaeger             | Distributed tracing local.                                                                                                                  |
+| ORM                | Không dùng ORM; persistence đi qua `database/sql`, `lib/pq` và SQL migration.                                                               |
+| Migration          | Các service PostgreSQL có `migrations/` và wiring auto-run migration khi startup.                                                           |
 
 ---
 
@@ -245,23 +245,23 @@ make migrate-force
 
 ## Cấu Trúc Thư Mục Nên Đọc Đầu Tiên
 
-| Đường dẫn | Nên hiểu gì |
-| --- | --- |
-| `deployments/docker/docker-compose.yml` | Runtime local, service dependency, network, volume. |
-| `deployments/docker/config/*.yaml` | Config runtime của từng service. |
-| `api-gateway/cmd/main.go` | Gateway startup, middleware, tracing, metrics, route wiring. |
-| `api-gateway/internal/handler/` | Public HTTP routes ở gateway. |
-| `api-gateway/internal/proxy/` | Proxy xuống service, retry, circuit breaker. |
-| `services/*-service/cmd/main.go` | Wiring thật của từng service. |
-| `services/*-service/internal/handler/` | API boundary của service. |
-| `services/*-service/internal/service/` | Business logic và orchestration. |
-| `services/*-service/internal/repository/` | SQL, Redis, RabbitMQ persistence/integration. |
-| `services/*-service/internal/model/` | Domain/persistence model. |
-| `services/*-service/internal/dto/` | Request/response DTO. |
-| `services/*-service/internal/grpc/` | gRPC server/caller khi có. |
-| `services/*-service/migrations/` | SQL migrations. |
-| `pkg/` | Shared packages. |
-| `proto/` | gRPC contracts. |
+| Đường dẫn                                 | Nên hiểu gì                                                  |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| `deployments/docker/docker-compose.yml`   | Runtime local, service dependency, network, volume.          |
+| `deployments/docker/config/*.yaml`        | Config runtime của từng service.                             |
+| `api-gateway/cmd/main.go`                 | Gateway startup, middleware, tracing, metrics, route wiring. |
+| `api-gateway/internal/handler/`           | Public HTTP routes ở gateway.                                |
+| `api-gateway/internal/proxy/`             | Proxy xuống service, retry, circuit breaker.                 |
+| `services/*-service/cmd/main.go`          | Wiring thật của từng service.                                |
+| `services/*-service/internal/handler/`    | API boundary của service.                                    |
+| `services/*-service/internal/service/`    | Business logic và orchestration.                             |
+| `services/*-service/internal/repository/` | SQL, Redis, RabbitMQ persistence/integration.                |
+| `services/*-service/internal/model/`      | Domain/persistence model.                                    |
+| `services/*-service/internal/dto/`        | Request/response DTO.                                        |
+| `services/*-service/internal/grpc/`       | gRPC server/caller khi có.                                   |
+| `services/*-service/migrations/`          | SQL migrations.                                              |
+| `pkg/`                                    | Shared packages.                                             |
+| `proto/`                                  | gRPC contracts.                                              |
 
 ---
 
@@ -288,18 +288,18 @@ Các flow này chạm đủ:
 
 ## Hot Path Khi Audit Issue
 
-| Tình huống | File/function nên mở |
-| --- | --- |
-| Order bị tạo lặp hoặc replay lạ | `services/order-service/internal/service/order/order_lifecycle.go`, `createOrderTx`, `GetIdempotencyKey` |
-| Coupon bị dùng quá số lần | `services/order-service/internal/repository/order_repository.go`, `lockAndConsumeCoupon` |
-| Admin list order chậm hoặc pagination lệch | `ListAll`, `ListAllByCursor` trong `order_repository.go` |
-| Payment webhook replay hoặc update sai trạng thái | `services/payment-service/internal/repository/payment/payment_repository.go`, `ApplyWebhookResult` |
-| Inventory bị âm hoặc oversell | `services/product-service/internal/repository/product/product_repository.go`, `UpdateStock` |
-| Review aggregate sai | `product_review_repository.go`, `ApplyReviewSummaryDelta` |
-| Profile update dính address/phone verification | `services/user-service/internal/repository/profile_tx_manager.go` |
-| Notification gửi lặp | `services/notification-service/internal/inbox/redis_store.go`, `retry_publisher.go` |
-| Refund worker bị kẹt hoặc retry vô hạn | `ClaimPendingReturnRefunds`, `MarkReturnRefundAttemptFailed`, `CompleteReturnRefund` |
-| Cart bị mất update khi thao tác nhanh | `services/cart-service/internal/repository/cart/cart_repository.go` |
+| Tình huống                                        | File/function nên mở                                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Order bị tạo lặp hoặc replay lạ                   | `services/order-service/internal/service/order/order_lifecycle.go`, `createOrderTx`, `GetIdempotencyKey` |
+| Coupon bị dùng quá số lần                         | `services/order-service/internal/repository/order_repository.go`, `lockAndConsumeCoupon`                 |
+| Admin list order chậm hoặc pagination lệch        | `ListAll`, `ListAllByCursor` trong `order_repository.go`                                                 |
+| Payment webhook replay hoặc update sai trạng thái | `services/payment-service/internal/repository/payment/payment_repository.go`, `ApplyWebhookResult`       |
+| Inventory bị âm hoặc oversell                     | `services/product-service/internal/repository/product/product_repository.go`, `UpdateStock`              |
+| Review aggregate sai                              | `product_review_repository.go`, `ApplyReviewSummaryDelta`                                                |
+| Profile update dính address/phone verification    | `services/user-service/internal/repository/profile_tx_manager.go`                                        |
+| Notification gửi lặp                              | `services/notification-service/internal/inbox/redis_store.go`, `retry_publisher.go`                      |
+| Refund worker bị kẹt hoặc retry vô hạn            | `ClaimPendingReturnRefunds`, `MarkReturnRefundAttemptFailed`, `CompleteReturnRefund`                     |
+| Cart bị mất update khi thao tác nhanh             | `services/cart-service/internal/repository/cart/cart_repository.go`                                      |
 
 ---
 

@@ -38,6 +38,8 @@ type OrderRepository interface {
 	ListAll(ctx context.Context, filters model.OrderFilters) ([]*model.Order, int64, error)
 	ListAllByCursor(ctx context.Context, filters model.OrderFilters) ([]*model.Order, string, bool, error)
 	GetEventsByOrderID(ctx context.Context, orderID string) ([]*model.OrderEvent, error)
+	GetShipmentTrackingByOrderID(ctx context.Context, orderID string) (*model.ShipmentTracking, error)
+	UpsertShipmentTracking(ctx context.Context, tracking *model.ShipmentTracking) error
 	UpdateStatus(ctx context.Context, id string, status model.OrderStatus, actorID, actorRole, message string, outbox *model.OutboxMessage) error
 	CreateCoupon(ctx context.Context, coupon *model.Coupon) error
 	ListCoupons(ctx context.Context) ([]*model.Coupon, error)

@@ -125,26 +125,48 @@ export type StorefrontHomeData = {
 export type ProductSearchAssist = {
   query: string;
   resolved_query: string;
+  applied_synonyms?: string[];
   result_count: number;
   suggestions: Array<{
     value: string;
     kind: string;
     match_count: number;
   }>;
+  facets?: Array<{
+    key: string;
+    label: string;
+    values: Array<{
+      value: string;
+      count: number;
+    }>;
+  }>;
+  sort_options?: Array<{
+    value: string;
+    label: string;
+  }>;
 };
 
 export type ProductReviewSummary = {
   average_rating: number;
   review_count: number;
+  rating_breakdown?: {
+    one: number;
+    two: number;
+    three: number;
+    four: number;
+    five: number;
+  };
 };
 
 export type ProductReview = {
   id: string;
   product_id: string;
+  user_id?: string;
   author_label: string;
   rating: number;
   comment: string;
   created_at: string;
+  updated_at?: string;
 };
 
 export type ProductReviewList = {
@@ -180,6 +202,19 @@ export type ShippingOption = {
   eta_max_days: number;
   eta_label: string;
   delivery_promise: string;
+};
+
+export type CouponWalletItem = {
+  code: string;
+  description: string;
+  discount_type: "fixed" | "percentage" | string;
+  discount_value: number;
+  min_order_amount: number;
+  expires_at?: string;
+  eligible: boolean;
+  ineligible_reason?: string;
+  estimated_discount: number;
+  remaining_usage_hint?: number;
 };
 
 export type OrderItemRequest = {
@@ -228,10 +263,122 @@ export type Order = {
   shipping_method: string;
   shipping_fee: number;
   shipping_address?: ShippingAddress;
+  reservation_expires_at?: string;
+  reservation_allocated_at?: string;
   total_price: number;
   items: OrderItem[];
   created_at: string;
   updated_at: string;
+};
+
+export type OrderEvent = {
+  id: string;
+  order_id: string;
+  type: string;
+  status: string;
+  actor_id?: string;
+  actor_role?: string;
+  message: string;
+  created_at: string;
+};
+
+export type ShipmentTracking = {
+  id: string;
+  order_id: string;
+  carrier: string;
+  tracking_number: string;
+  tracking_url?: string;
+  status: string;
+  estimated_delivery_at?: string;
+  last_checked_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReturnEligibilityItem = {
+  order_item_id: string;
+  product_id: string;
+  product_name: string;
+  ordered_quantity: number;
+  already_requested_quantity: number;
+  remaining_quantity: number;
+  eligible: boolean;
+  reason?: string;
+};
+
+export type ReturnEligibilitySnapshot = {
+  order_id: string;
+  order_status: string;
+  eligible: boolean;
+  reason?: string;
+  return_window_days: number;
+  return_window_started_at?: string;
+  return_window_expires_at?: string;
+  items: ReturnEligibilityItem[];
+};
+
+export type ReturnItem = {
+  id: string;
+  return_id: string;
+  order_item_id: string;
+  product_id: string;
+  quantity: number;
+  reason?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReturnEvent = {
+  id: string;
+  return_id: string;
+  status: string;
+  actor_id?: string;
+  actor_role?: string;
+  message: string;
+  created_at: string;
+};
+
+export type ReturnEvidence = {
+  id: string;
+  return_id: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  url: string;
+  uploaded_by?: string;
+  uploaded_by_role?: string;
+  created_at: string;
+};
+
+export type ReturnRequest = {
+  id: string;
+  order_id: string;
+  user_id: string;
+  user_email?: string;
+  status: string;
+  reason: string;
+  items: ReturnItem[];
+  events?: ReturnEvent[];
+  evidence?: ReturnEvidence[];
+  refund_amount?: number;
+  refund_charge_payment_id?: string;
+  refund_payment_id?: string;
+  refund_last_error?: string;
+  refund_attempt_count?: number;
+  refund_requested_at?: string;
+  refund_completed_at?: string;
+  refund_next_retry_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateReturnRequest = {
+  reason: string;
+  items: Array<{
+    order_item_id: string;
+    quantity: number;
+    reason?: string;
+  }>;
 };
 
 export type PaymentSummary = Payment;
@@ -249,9 +396,16 @@ export type Payment = {
   amount: number;
   status: string;
   transaction_type: string;
+  reference_payment_id?: string;
   payment_method: string;
   gateway_provider: string;
+  gateway_transaction_id?: string;
+  gateway_order_id?: string;
   checkout_url?: string;
+  signature_verified?: boolean;
+  failure_reason?: string;
+  net_paid_amount?: number;
+  outstanding_amount?: number;
   created_at: string;
   updated_at: string;
 };

@@ -137,6 +137,32 @@ type Coupon struct {
 	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
+type CouponWalletItem struct {
+	Code               string             `json:"code"`
+	Description        string             `json:"description"`
+	DiscountType       CouponDiscountType `json:"discount_type"`
+	DiscountValue      float64            `json:"discount_value"`
+	MinOrderAmount     float64            `json:"min_order_amount"`
+	ExpiresAt          *time.Time         `json:"expires_at,omitempty"`
+	Eligible           bool               `json:"eligible"`
+	IneligibleReason   string             `json:"ineligible_reason,omitempty"`
+	EstimatedDiscount  float64            `json:"estimated_discount"`
+	RemainingUsageHint int                `json:"remaining_usage_hint,omitempty"`
+}
+
+type ShipmentTracking struct {
+	ID                  string     `json:"id"`
+	OrderID             string     `json:"order_id"`
+	Carrier             string     `json:"carrier"`
+	TrackingNumber      string     `json:"tracking_number"`
+	TrackingURL         string     `json:"tracking_url,omitempty"`
+	Status              string     `json:"status"`
+	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty"`
+	LastCheckedAt       *time.Time `json:"last_checked_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
 type OrderEvent struct {
 	ID        string      `json:"id"`
 	OrderID   string      `json:"order_id"`

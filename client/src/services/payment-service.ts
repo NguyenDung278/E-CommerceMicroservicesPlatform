@@ -23,3 +23,26 @@ export async function listPaymentHistory(token: string): Promise<Payment[]> {
   const response = await request<Payment[]>("/api/v1/payments/history", { token });
   return Array.isArray(response.data) ? response.data : [];
 }
+
+export async function getPayment(token: string, paymentId: string): Promise<Payment> {
+  const response = await request<Payment>(`/api/v1/payments/${encodeURIComponent(paymentId)}`, {
+    token,
+  });
+  return response.data;
+}
+
+export async function getPaymentByOrder(token: string, orderId: string): Promise<Payment> {
+  const response = await request<Payment>(
+    `/api/v1/payments/order/${encodeURIComponent(orderId)}`,
+    { token },
+  );
+  return response.data;
+}
+
+export async function listPaymentsByOrder(token: string, orderId: string): Promise<Payment[]> {
+  const response = await request<Payment[]>(
+    `/api/v1/payments/order/${encodeURIComponent(orderId)}/history`,
+    { token },
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}

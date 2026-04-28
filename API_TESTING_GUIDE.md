@@ -115,22 +115,22 @@ Nếu bootstrap tắt, đăng ký user thường rồi seed role admin/staff b�
 
 Biến nên có:
 
-| Biến | Mục đích |
-| --- | --- |
-| `base_url` | `http://localhost:8080` |
-| `access_token` | token user thường |
-| `admin_access_token` | token admin/staff |
-| `refresh_token` | refresh token |
-| `user_id` | user hiện tại |
-| `product_id` | sản phẩm đang test |
-| `order_id` | đơn hàng đang test |
-| `payment_id` | payment đang test |
-| `address_id` | địa chỉ đã tạo |
-| `return_id` | return request đã tạo |
-| `coupon_code` | coupon admin đã tạo |
-| `order_idempotency_key` | key test create-order replay |
+| Biến                      | Mục đích                       |
+| ------------------------- | ------------------------------ |
+| `base_url`                | `http://localhost:8080`        |
+| `access_token`            | token user thường              |
+| `admin_access_token`      | token admin/staff              |
+| `refresh_token`           | refresh token                  |
+| `user_id`                 | user hiện tại                  |
+| `product_id`              | sản phẩm đang test             |
+| `order_id`                | đơn hàng đang test             |
+| `payment_id`              | payment đang test              |
+| `address_id`              | địa chỉ đã tạo                 |
+| `return_id`               | return request đã tạo          |
+| `coupon_code`             | coupon admin đã tạo            |
+| `order_idempotency_key`   | key test create-order replay   |
 | `payment_idempotency_key` | key test payment/refund replay |
-| `oauth_ticket` | ticket cho OAuth exchange |
+| `oauth_ticket`            | ticket cho OAuth exchange      |
 
 Header thường dùng:
 
@@ -187,132 +187,136 @@ Khi test, verify:
 
 ### 7.1 Auth
 
-| Method | Route |
-| --- | --- |
-| `POST` | `/api/v1/auth/register` |
-| `POST` | `/api/v1/auth/register/email/send-otp` |
+| Method | Route                                    |
+| ------ | ---------------------------------------- |
+| `POST` | `/api/v1/auth/register`                  |
+| `POST` | `/api/v1/auth/register/email/send-otp`   |
 | `POST` | `/api/v1/auth/register/email/verify-otp` |
 | `POST` | `/api/v1/auth/register/email/resend-otp` |
-| `POST` | `/api/v1/auth/register/phone/send-otp` |
+| `POST` | `/api/v1/auth/register/phone/send-otp`   |
 | `POST` | `/api/v1/auth/register/phone/verify-otp` |
 | `POST` | `/api/v1/auth/register/phone/resend-otp` |
-| `POST` | `/api/v1/auth/login` |
-| `POST` | `/api/v1/auth/refresh` |
-| `POST` | `/api/v1/auth/verify-email` |
-| `POST` | `/api/v1/auth/forgot-password` |
-| `POST` | `/api/v1/auth/reset-password` |
-| `GET` | `/api/v1/auth/oauth/google/start` |
-| `GET` | `/api/v1/auth/oauth/google/callback` |
-| `POST` | `/api/v1/auth/oauth/exchange` |
+| `POST` | `/api/v1/auth/login`                     |
+| `POST` | `/api/v1/auth/refresh`                   |
+| `POST` | `/api/v1/auth/verify-email`              |
+| `POST` | `/api/v1/auth/forgot-password`           |
+| `POST` | `/api/v1/auth/reset-password`            |
+| `GET`  | `/api/v1/auth/oauth/google/start`        |
+| `GET`  | `/api/v1/auth/oauth/google/callback`     |
+| `POST` | `/api/v1/auth/oauth/exchange`            |
 
 ### 7.2 Users
 
-| Method | Route |
-| --- | --- |
-| `GET` | `/api/v1/users/profile` |
-| `PUT` | `/api/v1/users/profile` |
-| `POST` | `/api/v1/users/avatar` |
-| `PUT` | `/api/v1/users/password` |
-| `GET` | `/api/v1/users/profile/phone-verification` |
-| `POST` | `/api/v1/users/profile/phone-verification/send-otp` |
-| `POST` | `/api/v1/users/profile/phone-verification/verify-otp` |
-| `POST` | `/api/v1/users/profile/phone-verification/resend-otp` |
-| `GET` | `/api/v1/users/verify-email/status` |
-| `POST` | `/api/v1/users/verify-email/send-otp` |
-| `POST` | `/api/v1/users/verify-email/verify-otp` |
-| `POST` | `/api/v1/users/verify-email/resend-otp` |
-| `POST` | `/api/v1/users/verify-email/resend` |
-| `POST` | `/api/v1/users/addresses` |
-| `GET` | `/api/v1/users/addresses` |
-| `PUT` | `/api/v1/users/addresses/:id` |
-| `DELETE` | `/api/v1/users/addresses/:id` |
-| `PUT` | `/api/v1/users/addresses/:id/default` |
-| `GET` | `/api/v1/users/wishlist` |
-| `POST` | `/api/v1/users/wishlist` |
-| `POST` | `/api/v1/users/wishlist/sync` |
-| `DELETE` | `/api/v1/users/wishlist/:productId` |
+| Method   | Route                                                 |
+| -------- | ----------------------------------------------------- |
+| `GET`    | `/api/v1/users/profile`                               |
+| `PUT`    | `/api/v1/users/profile`                               |
+| `POST`   | `/api/v1/users/avatar`                                |
+| `PUT`    | `/api/v1/users/password`                              |
+| `GET`    | `/api/v1/users/profile/phone-verification`            |
+| `POST`   | `/api/v1/users/profile/phone-verification/send-otp`   |
+| `POST`   | `/api/v1/users/profile/phone-verification/verify-otp` |
+| `POST`   | `/api/v1/users/profile/phone-verification/resend-otp` |
+| `GET`    | `/api/v1/users/verify-email/status`                   |
+| `POST`   | `/api/v1/users/verify-email/send-otp`                 |
+| `POST`   | `/api/v1/users/verify-email/verify-otp`               |
+| `POST`   | `/api/v1/users/verify-email/resend-otp`               |
+| `POST`   | `/api/v1/users/verify-email/resend`                   |
+| `POST`   | `/api/v1/users/addresses`                             |
+| `GET`    | `/api/v1/users/addresses`                             |
+| `PUT`    | `/api/v1/users/addresses/:id`                         |
+| `DELETE` | `/api/v1/users/addresses/:id`                         |
+| `PUT`    | `/api/v1/users/addresses/:id/default`                 |
+| `GET`    | `/api/v1/users/wishlist`                              |
+| `POST`   | `/api/v1/users/wishlist`                              |
+| `POST`   | `/api/v1/users/wishlist/sync`                         |
+| `DELETE` | `/api/v1/users/wishlist/:productId`                   |
 
 ### 7.3 Products And Reviews
 
-| Method | Route |
-| --- | --- |
-| `GET` | `/api/v1/products` |
-| `GET` | `/api/v1/products/batch` |
-| `GET` | `/api/v1/products/search/assist` |
-| `GET` | `/api/v1/products/:id` |
-| `GET` | `/api/v1/products/:id/reviews` |
-| `POST` | `/api/v1/products` |
-| `POST` | `/api/v1/products/uploads` |
-| `PUT` | `/api/v1/products/:id` |
-| `DELETE` | `/api/v1/products/:id` |
-| `GET` | `/api/v1/products/:id/reviews/me` |
-| `POST` | `/api/v1/products/:id/reviews` |
-| `PUT` | `/api/v1/products/:id/reviews/me` |
+| Method   | Route                             |
+| -------- | --------------------------------- |
+| `GET`    | `/api/v1/products`                |
+| `GET`    | `/api/v1/products/batch`          |
+| `GET`    | `/api/v1/products/search/assist`  |
+| `GET`    | `/api/v1/products/:id`            |
+| `GET`    | `/api/v1/products/:id/reviews`    |
+| `POST`   | `/api/v1/products`                |
+| `POST`   | `/api/v1/products/uploads`        |
+| `PUT`    | `/api/v1/products/:id`            |
+| `DELETE` | `/api/v1/products/:id`            |
+| `GET`    | `/api/v1/products/:id/reviews/me` |
+| `POST`   | `/api/v1/products/:id/reviews`    |
+| `PUT`    | `/api/v1/products/:id/reviews/me` |
 | `DELETE` | `/api/v1/products/:id/reviews/me` |
 
 ### 7.4 Catalog Aggregation
 
-| Method | Route |
-| --- | --- |
-| `GET` | `/api/v1/storefront/home` |
-| `GET` | `/api/v1/storefront/categories` |
-| `GET` | `/api/v1/storefront/categories/:identifier` |
-| `GET` | `/api/v1/catalog/popularity` |
+| Method | Route                                       |
+| ------ | ------------------------------------------- |
+| `GET`  | `/api/v1/storefront/home`                   |
+| `GET`  | `/api/v1/storefront/categories`             |
+| `GET`  | `/api/v1/storefront/categories/:identifier` |
+| `GET`  | `/api/v1/catalog/popularity`                |
 
 ### 7.5 Cart
 
-| Method | Route |
-| --- | --- |
-| `GET` | `/api/v1/cart` |
-| `DELETE` | `/api/v1/cart` |
-| `POST` | `/api/v1/cart/merge` |
-| `POST` | `/api/v1/cart/items` |
-| `PUT` | `/api/v1/cart/items/:productId` |
+| Method   | Route                           |
+| -------- | ------------------------------- |
+| `GET`    | `/api/v1/cart`                  |
+| `DELETE` | `/api/v1/cart`                  |
+| `POST`   | `/api/v1/cart/merge`            |
+| `POST`   | `/api/v1/cart/items`            |
+| `PUT`    | `/api/v1/cart/items/:productId` |
 | `DELETE` | `/api/v1/cart/items/:productId` |
 
 ### 7.6 Orders, Returns, Coupons
 
-| Method | Route |
-| --- | --- |
-| `POST` | `/api/v1/orders/preview` |
-| `POST` | `/api/v1/orders` |
-| `GET` | `/api/v1/orders/summary` |
-| `GET` | `/api/v1/orders` |
-| `GET` | `/api/v1/orders/:id/events` |
-| `GET` | `/api/v1/orders/:id/return-eligibility` |
-| `GET` | `/api/v1/orders/:id` |
-| `PUT` | `/api/v1/orders/:id/cancel` |
-| `POST` | `/api/v1/orders/:id/returns` |
-| `GET` | `/api/v1/orders/:id/returns` |
-| `GET` | `/api/v1/returns` |
-| `GET` | `/api/v1/returns/:id` |
-| `POST` | `/api/v1/returns/:id/evidence` |
-| `GET` | `/api/v1/admin/orders/report` |
-| `GET` | `/api/v1/admin/orders` |
-| `GET` | `/api/v1/admin/orders/:id/events` |
-| `GET` | `/api/v1/admin/orders/:id` |
-| `PUT` | `/api/v1/admin/orders/:id/cancel` |
-| `PUT` | `/api/v1/admin/orders/:id/status` |
-| `GET` | `/api/v1/admin/returns` |
-| `GET` | `/api/v1/admin/returns/health` |
-| `PUT` | `/api/v1/admin/returns/:id/status` |
-| `POST` | `/api/v1/admin/returns/:id/refund` |
-| `POST` | `/api/v1/admin/coupons` |
-| `GET` | `/api/v1/admin/coupons` |
+| Method | Route                                   |
+| ------ | --------------------------------------- |
+| `GET`  | `/api/v1/coupons/public`                |
+| `POST` | `/api/v1/orders/preview`                |
+| `POST` | `/api/v1/orders`                        |
+| `GET`  | `/api/v1/orders/summary`                |
+| `GET`  | `/api/v1/orders`                        |
+| `GET`  | `/api/v1/orders/:id/events`             |
+| `GET`  | `/api/v1/orders/:id/tracking`           |
+| `GET`  | `/api/v1/orders/:id/return-eligibility` |
+| `GET`  | `/api/v1/orders/:id`                    |
+| `PUT`  | `/api/v1/orders/:id/cancel`             |
+| `POST` | `/api/v1/orders/:id/returns`            |
+| `GET`  | `/api/v1/orders/:id/returns`            |
+| `GET`  | `/api/v1/returns`                       |
+| `GET`  | `/api/v1/returns/:id`                   |
+| `POST` | `/api/v1/returns/:id/evidence`          |
+| `GET`  | `/api/v1/admin/orders/report`           |
+| `GET`  | `/api/v1/admin/orders`                  |
+| `GET`  | `/api/v1/admin/orders/:id/events`       |
+| `GET`  | `/api/v1/admin/orders/:id/tracking`     |
+| `PUT`  | `/api/v1/admin/orders/:id/tracking`     |
+| `GET`  | `/api/v1/admin/orders/:id`              |
+| `PUT`  | `/api/v1/admin/orders/:id/cancel`       |
+| `PUT`  | `/api/v1/admin/orders/:id/status`       |
+| `GET`  | `/api/v1/admin/returns`                 |
+| `GET`  | `/api/v1/admin/returns/health`          |
+| `PUT`  | `/api/v1/admin/returns/:id/status`      |
+| `POST` | `/api/v1/admin/returns/:id/refund`      |
+| `POST` | `/api/v1/admin/coupons`                 |
+| `GET`  | `/api/v1/admin/coupons`                 |
 
 ### 7.7 Payments
 
-| Method | Route |
-| --- | --- |
-| `POST` | `/api/v1/payments` |
-| `GET` | `/api/v1/payments/history` |
-| `GET` | `/api/v1/payments/:id` |
-| `GET` | `/api/v1/payments/order/:orderId` |
-| `GET` | `/api/v1/payments/order/:orderId/history` |
-| `POST` | `/api/v1/payments/webhooks/momo` |
-| `GET` | `/api/v1/admin/payments/history` |
-| `GET` | `/api/v1/admin/payments/order/:orderId/history` |
-| `POST` | `/api/v1/admin/payments/:id/refunds` |
+| Method | Route                                           |
+| ------ | ----------------------------------------------- |
+| `POST` | `/api/v1/payments`                              |
+| `GET`  | `/api/v1/payments/history`                      |
+| `GET`  | `/api/v1/payments/:id`                          |
+| `GET`  | `/api/v1/payments/order/:orderId`               |
+| `GET`  | `/api/v1/payments/order/:orderId/history`       |
+| `POST` | `/api/v1/payments/webhooks/momo`                |
+| `GET`  | `/api/v1/admin/payments/history`                |
+| `GET`  | `/api/v1/admin/payments/order/:orderId/history` |
+| `POST` | `/api/v1/admin/payments/:id/refunds`            |
 
 Không dùng `GET /api/v1/payments/:id/verify` làm contract nếu gateway handler chưa expose route này.
 

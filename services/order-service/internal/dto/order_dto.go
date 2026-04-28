@@ -63,3 +63,12 @@ type CreateCouponRequest struct {
 	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
 	Active         *bool      `json:"active,omitempty"`
 }
+
+type UpdateShipmentTrackingRequest struct {
+	Carrier             string     `json:"carrier" validate:"required,min=2,max=80"`
+	TrackingNumber      string     `json:"tracking_number" validate:"required,min=3,max=120"`
+	TrackingURL         string     `json:"tracking_url" validate:"omitempty,url,max=512"`
+	Status              string     `json:"status" validate:"required,oneof=pending in_transit out_for_delivery delivered exception"`
+	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty"`
+	LastCheckedAt       *time.Time `json:"last_checked_at,omitempty"`
+}

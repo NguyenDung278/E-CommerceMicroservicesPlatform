@@ -33,6 +33,7 @@ type fakeOrderRepo struct {
 	orderEventsByOrderID map[string][]*model.OrderEvent
 	idempotencyRecords   map[string]*model.OrderIdempotencyRecord
 	returnsByID          map[string]*model.ReturnRequest
+	trackingByOrderID    map[string]*model.ShipmentTracking
 }
 
 func (r *fakeOrderRepo) Create(_ context.Context, order *model.Order, outbox *model.OutboxMessage) error {
@@ -273,6 +274,24 @@ func (r *fakeOrderRepo) MarkReturnRefundAttemptFailed(_ context.Context, returnI
 	current.RefundLastError = lastError
 	current.RefundProcessingStarted = nil
 	current.RefundNextRetryAt = &nextRetryAt
+	return nil
+}
+
+func (r *fakeOrderRepo) GetShipmentTrackingByOrderID(_ context.Context, orderID string) (*model.ShipmentTracking, error) {
+	tracking := r.trackingByOrderID[orderID]
+	if tracking == nil {
+		return nil, nil
+	}
+	copyValue := *tracking
+	return &copyValue, nil
+}
+
+func (r *fakeOrderRepo) UpsertShipmentTracking(_ context.Context, tracking *model.ShipmentTracking) error {
+	if r.trackingByOrderID == nil {
+		r.trackingByOrderID = map[string]*model.ShipmentTracking{}
+	}
+	copyValue := *tracking
+	r.trackingByOrderID[tracking.OrderID] = &copyValue
 	return nil
 }
 
@@ -620,6 +639,119 @@ func TestPreviewOrderRejectsCouponWhenMinimumNotMet(t *testing.T) {
 	}
 	if err != ErrCouponMinimumNotMet {
 		t.Fatalf("expected ErrCouponMinimumNotMet, got %v", err)
+	}
+}
+
+func TestListPublicCouponsFiltersUnavailableAndMarksEligibility(t *testing.T) {
+	expiresAt := time.Now().Add(time.Hour)
+	expiredAt := time.Now().Add(-time.Hour)
+	repo := &fakeOrderRepo{
+		coupons: map[string]*model.Coupon{
+			"SAVE10": {
+				Code:           "SAVE10",
+				Description:    "Ten percent off",
+				DiscountType:   model.CouponDiscountTypePercentage,
+				DiscountValue:  10,
+				MinOrderAmount: 50,
+				Active:         true,
+				ExpiresAt:      &expiresAt,
+			},
+			"BIGORDER": {
+				Code:           "BIGORDER",
+				Description:    "Large order voucher",
+				DiscountType:   model.CouponDiscountTypeFixed,
+				DiscountValue:  25,
+				MinOrderAmount: 500,
+				Active:         true,
+			},
+			"INACTIVE": {
+				Code:          "INACTIVE",
+				DiscountType:  model.CouponDiscountTypeFixed,
+				DiscountValue: 5,
+				Active:        false,
+			},
+			"EXPIRED": {
+				Code:          "EXPIRED",
+				DiscountType:  model.CouponDiscountTypeFixed,
+				DiscountValue: 5,
+				Active:        true,
+				ExpiresAt:     &expiredAt,
+			},
+			"USEDUP": {
+				Code:          "USEDUP",
+				DiscountType:  model.CouponDiscountTypeFixed,
+				DiscountValue: 5,
+				UsageLimit:    3,
+				UsedCount:     3,
+				Active:        true,
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	coupons, err := svc.ListPublicCoupons(context.Background(), 100)
+	if err != nil {
+		t.Fatalf("ListPublicCoupons returned error: %v", err)
+	}
+
+	byCode := make(map[string]model.CouponWalletItem, len(coupons))
+	for _, coupon := range coupons {
+		byCode[coupon.Code] = coupon
+	}
+	if _, ok := byCode["INACTIVE"]; ok {
+		t.Fatal("inactive coupon should not be public")
+	}
+	if _, ok := byCode["EXPIRED"]; ok {
+		t.Fatal("expired coupon should not be public")
+	}
+	if _, ok := byCode["USEDUP"]; ok {
+		t.Fatal("exhausted coupon should not be public")
+	}
+	if !byCode["SAVE10"].Eligible || byCode["SAVE10"].EstimatedDiscount != 10 {
+		t.Fatalf("expected SAVE10 to be eligible with 10 discount, got %+v", byCode["SAVE10"])
+	}
+	if byCode["BIGORDER"].Eligible || byCode["BIGORDER"].IneligibleReason == "" {
+		t.Fatalf("expected BIGORDER to be shown as ineligible, got %+v", byCode["BIGORDER"])
+	}
+}
+
+func TestShipmentTrackingAccessAndUpsert(t *testing.T) {
+	repo := &fakeOrderRepo{
+		ordersByID: map[string]*model.Order{
+			"order-1": {
+				ID:        "order-1",
+				UserID:    "user-1",
+				Status:    model.OrderStatusShipped,
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			},
+		},
+	}
+	svc := NewOrderService(repo, nil, zap.NewNop(), nil, nil)
+
+	tracking, err := svc.UpsertShipmentTracking(context.Background(), "order-1", dto.UpdateShipmentTrackingRequest{
+		Carrier:        "GHN Express",
+		TrackingNumber: "GHN123456",
+		Status:         "in_transit",
+	})
+	if err != nil {
+		t.Fatalf("UpsertShipmentTracking returned error: %v", err)
+	}
+	if tracking == nil || tracking.Carrier != "GHN Express" || tracking.Status != "in_transit" {
+		t.Fatalf("unexpected tracking: %+v", tracking)
+	}
+
+	loaded, err := svc.GetShipmentTracking(context.Background(), "order-1", "user-1", "user")
+	if err != nil {
+		t.Fatalf("GetShipmentTracking returned error: %v", err)
+	}
+	if loaded == nil || loaded.TrackingNumber != "GHN123456" {
+		t.Fatalf("unexpected loaded tracking: %+v", loaded)
+	}
+
+	_, err = svc.GetShipmentTracking(context.Background(), "order-1", "user-2", "user")
+	if !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("expected ErrOrderNotFound for another user, got %v", err)
 	}
 }
 

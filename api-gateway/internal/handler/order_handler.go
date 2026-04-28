@@ -21,6 +21,9 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	catalog := e.Group("/api/v1/catalog")
 	catalog.GET("/popularity", h.forward)
 
+	coupons := e.Group("/api/v1/coupons")
+	coupons.GET("/public", h.forward)
+
 	orders := e.Group("/api/v1/orders")
 	orders.Use(appmw.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.forward)
@@ -28,6 +31,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.GET("/summary", h.forward)
 	orders.GET("", h.forward)
 	orders.GET("/:id/events", h.forward)
+	orders.GET("/:id/tracking", h.forward)
 	orders.GET("/:id/return-eligibility", h.forward)
 	orders.POST("/:id/returns", h.forward)
 	orders.GET("/:id/returns", h.forward)
@@ -50,6 +54,8 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminOrders.GET("/report", h.forward)
 	adminOrders.GET("", h.forward)
 	adminOrders.GET("/:id/events", h.forward)
+	adminOrders.GET("/:id/tracking", h.forward)
+	adminOrders.PUT("/:id/tracking", h.forward)
 	adminOrders.GET("/:id", h.forward)
 	adminOrders.PUT("/:id/cancel", h.forward)
 	adminOrders.PUT("/:id/status", h.forward)

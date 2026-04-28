@@ -30,6 +30,9 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	catalog := e.Group("/api/v1/catalog")
 	catalog.GET("/popularity", h.ListPopularProducts)
 
+	coupons := e.Group("/api/v1/coupons")
+	coupons.GET("/public", h.ListPublicCoupons)
+
 	orders := e.Group("/api/v1/orders")
 	orders.Use(middleware.JWTAuth(jwtSecret))
 	orders.POST("/preview", h.PreviewOrder)
@@ -37,6 +40,7 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	orders.GET("/summary", h.GetUserOrderSummary)
 	orders.GET("", h.GetUserOrders)
 	orders.GET("/:id/events", h.GetOrderTimeline)
+	orders.GET("/:id/tracking", h.GetShipmentTracking)
 	orders.GET("/:id/return-eligibility", h.GetReturnEligibility)
 	orders.POST("/:id/returns", h.CreateReturn)
 	orders.GET("/:id/returns", h.ListOrderReturns)
@@ -59,6 +63,8 @@ func (h *OrderHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminOrders.GET("/report", h.GetAdminReport)
 	adminOrders.GET("", h.ListAdminOrders)
 	adminOrders.GET("/:id/events", h.GetAdminOrderTimeline)
+	adminOrders.GET("/:id/tracking", h.GetShipmentTracking)
+	adminOrders.PUT("/:id/tracking", h.UpdateShipmentTracking)
 	adminOrders.GET("/:id", h.GetAdminOrder)
 	adminOrders.PUT("/:id/cancel", h.CancelOrderAsAdmin)
 	adminOrders.PUT("/:id/status", h.UpdateOrderStatus)
@@ -552,6 +558,61 @@ func (h *OrderHandler) ListCoupons(c echo.Context) error {
 		return response.Error(c, http.StatusInternalServerError, "error", "failed to list coupons")
 	}
 	return response.Success(c, http.StatusOK, "coupons retrieved", coupons)
+}
+
+func (h *OrderHandler) ListPublicCoupons(c echo.Context) error {
+	subtotal, _ := strconv.ParseFloat(c.QueryParam("subtotal"), 64)
+	if subtotal < 0 {
+		subtotal = 0
+	}
+
+	coupons, err := h.orderService.ListPublicCoupons(c.Request().Context(), subtotal)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to list public coupons")
+	}
+	if coupons == nil {
+		coupons = []model.CouponWalletItem{}
+	}
+
+	return response.Success(c, http.StatusOK, "public coupons retrieved", coupons)
+}
+
+func (h *OrderHandler) GetShipmentTracking(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	tracking, err := h.orderService.GetShipmentTracking(
+		c.Request().Context(),
+		c.Param("id"),
+		claims.UserID,
+		claims.Role,
+	)
+	if err != nil {
+		if errors.Is(err, service.ErrOrderNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "order not found")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to get shipment tracking")
+	}
+
+	return response.Success(c, http.StatusOK, "shipment tracking retrieved", tracking)
+}
+
+func (h *OrderHandler) UpdateShipmentTracking(c echo.Context) error {
+	var req dto.UpdateShipmentTrackingRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	tracking, err := h.orderService.UpsertShipmentTracking(c.Request().Context(), c.Param("id"), req)
+	if err != nil {
+		if errors.Is(err, service.ErrOrderNotFound) {
+			return response.Error(c, http.StatusNotFound, "not found", "order not found")
+		}
+		return response.Error(c, http.StatusInternalServerError, "error", "failed to update shipment tracking")
+	}
+
+	return response.Success(c, http.StatusOK, "shipment tracking updated", tracking)
 }
 
 func (h *OrderHandler) CancelOrderAsAdmin(c echo.Context) error {

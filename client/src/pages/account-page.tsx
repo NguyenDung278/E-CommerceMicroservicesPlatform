@@ -621,7 +621,7 @@ export function AccountPage() {
               return (
                 <article key={order.id} className="order-card order-card--rich">
                   <div>
-                    <strong>{order.id}</strong>
+                    <Link to={`/account/orders/${order.id}`}>{order.id}</Link>
                     <p>{formatDate(order.created_at)}</p>
                   </div>
                   <span className="status-pill">{statusLabel(order.status)}</span>
@@ -651,7 +651,7 @@ export function AccountPage() {
             {safePayments.map((payment) => (
               <article key={payment.id} className="payment-card">
                 <div>
-                  <strong>{payment.payment_method}</strong>
+                  <Link to={`/payments/${payment.id}`}>{payment.payment_method}</Link>
                   <p>{payment.order_id}</p>
                 </div>
                 <span className="status-pill">{statusLabel(payment.status)}</span>

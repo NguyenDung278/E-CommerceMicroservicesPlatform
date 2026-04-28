@@ -38,6 +38,8 @@ const (
 )
 
 type Coupon = ordermodel.Coupon
+type CouponWalletItem = ordermodel.CouponWalletItem
+type ShipmentTracking = ordermodel.ShipmentTracking
 type OrderEvent = ordermodel.OrderEvent
 type OrderFilters = ordermodel.OrderFilters
 type AuditEntry = ordermodel.AuditEntry

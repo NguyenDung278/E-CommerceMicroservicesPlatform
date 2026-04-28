@@ -32,6 +32,7 @@ type fakeOrderHandlerRepo struct {
 	ordersByID           map[string]*model.Order
 	orderEventsByOrderID map[string][]*model.OrderEvent
 	returnsByID          map[string]*model.ReturnRequest
+	trackingByOrderID    map[string]*model.ShipmentTracking
 	queueHealth          *model.ReturnQueueHealth
 	forceNilQueueHealth  bool
 }
@@ -240,6 +241,24 @@ func (r *fakeOrderHandlerRepo) GetEventsByOrderID(_ context.Context, orderID str
 		events = append(events, &copyValue)
 	}
 	return events, nil
+}
+
+func (r *fakeOrderHandlerRepo) GetShipmentTrackingByOrderID(_ context.Context, orderID string) (*model.ShipmentTracking, error) {
+	tracking := r.trackingByOrderID[orderID]
+	if tracking == nil {
+		return nil, nil
+	}
+	copyValue := *tracking
+	return &copyValue, nil
+}
+
+func (r *fakeOrderHandlerRepo) UpsertShipmentTracking(_ context.Context, tracking *model.ShipmentTracking) error {
+	if r.trackingByOrderID == nil {
+		r.trackingByOrderID = map[string]*model.ShipmentTracking{}
+	}
+	copyValue := *tracking
+	r.trackingByOrderID[tracking.OrderID] = &copyValue
+	return nil
 }
 
 func (r *fakeOrderHandlerRepo) UpdateStatus(_ context.Context, _ string, _ model.OrderStatus, _, _, _ string, _ *model.OutboxMessage) error {

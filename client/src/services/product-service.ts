@@ -3,6 +3,7 @@ import { buildQuery } from "../utils/query";
 import type {
   ApiEnvelope,
   Product,
+  ProductReview,
   ProductReviewList,
   ProductSearchAssist,
   StorefrontCategory,
@@ -12,15 +13,43 @@ import type {
 export type ProductListParams = {
   search?: string;
   category?: string;
+  brand?: string;
+  tag?: string;
   cursor?: string;
   limit?: number;
   sort?: string;
+  min_price?: number;
+  max_price?: number;
+  size?: string;
+  color?: string;
+};
+
+export type SearchAssistParams = {
+  query?: string;
+  category?: string;
+  status?: string;
+  limit?: number;
+};
+
+export type ProductSearchEventRequest = {
+  source: string;
+  event_kind: "result_click" | "filter_apply";
+  query?: string;
+  category?: string;
+  filter_key?: string;
+  filter_value?: string;
 };
 
 export async function listProducts(
   params: ProductListParams = {},
 ): Promise<ApiEnvelope<Product[]>> {
-  return request<Product[]>(`/api/v1/products${buildQuery({ limit: 24, ...params })}`);
+  const response = await request<Product[]>(
+    `/api/v1/products${buildQuery({ limit: 24, ...params })}`,
+  );
+  return {
+    ...response,
+    data: Array.isArray(response.data) ? response.data : [],
+  };
 }
 
 export async function getProduct(productId: string): Promise<Product> {
@@ -32,7 +61,60 @@ export async function getProductReviews(productId: string): Promise<ProductRevie
   const response = await request<ProductReviewList>(
     `/api/v1/products/${encodeURIComponent(productId)}/reviews`,
   );
+  return {
+    summary: response.data?.summary ?? { average_rating: 0, review_count: 0 },
+    items: Array.isArray(response.data?.items) ? response.data.items : [],
+  };
+}
+
+export async function getMyProductReview(
+  token: string,
+  productId: string,
+): Promise<ProductReview | null> {
+  const response = await request<ProductReview>(
+    `/api/v1/products/${encodeURIComponent(productId)}/reviews/me`,
+    { token },
+  );
+  return response.data ?? null;
+}
+
+export async function createProductReview(
+  token: string,
+  productId: string,
+  body: { rating: number; comment: string },
+): Promise<ProductReview> {
+  const response = await request<ProductReview>(
+    `/api/v1/products/${encodeURIComponent(productId)}/reviews`,
+    {
+      method: "POST",
+      token,
+      body,
+    },
+  );
   return response.data;
+}
+
+export async function updateMyProductReview(
+  token: string,
+  productId: string,
+  body: { rating: number; comment: string },
+): Promise<ProductReview> {
+  const response = await request<ProductReview>(
+    `/api/v1/products/${encodeURIComponent(productId)}/reviews/me`,
+    {
+      method: "PUT",
+      token,
+      body,
+    },
+  );
+  return response.data;
+}
+
+export async function deleteMyProductReview(token: string, productId: string): Promise<void> {
+  await request<null>(`/api/v1/products/${encodeURIComponent(productId)}/reviews/me`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function getSearchAssist(query: string): Promise<ProductSearchAssist> {
@@ -40,6 +122,37 @@ export async function getSearchAssist(query: string): Promise<ProductSearchAssis
     `/api/v1/products/search/assist${buildQuery({ q: query, limit: 6 })}`,
   );
   return response.data;
+}
+
+export async function getProductSearchAssist(
+  params: SearchAssistParams = {},
+): Promise<ProductSearchAssist> {
+  const response = await request<ProductSearchAssist>(
+    `/api/v1/products/search/assist${buildQuery({
+      q: params.query,
+      category: params.category,
+      status: params.status,
+      limit: params.limit ?? 8,
+    })}`,
+  );
+  return {
+    query: response.data?.query ?? params.query ?? "",
+    resolved_query: response.data?.resolved_query ?? "",
+    applied_synonyms: Array.isArray(response.data?.applied_synonyms)
+      ? response.data.applied_synonyms
+      : [],
+    result_count: response.data?.result_count ?? 0,
+    suggestions: Array.isArray(response.data?.suggestions) ? response.data.suggestions : [],
+    facets: Array.isArray(response.data?.facets) ? response.data.facets : [],
+    sort_options: Array.isArray(response.data?.sort_options) ? response.data.sort_options : [],
+  };
+}
+
+export async function recordSearchAnalyticsEvent(body: ProductSearchEventRequest): Promise<void> {
+  await request<{ accepted: boolean }>("/api/v1/products/analytics/search/events", {
+    method: "POST",
+    body,
+  });
 }
 
 export async function getStorefrontHome(): Promise<StorefrontHomeData> {

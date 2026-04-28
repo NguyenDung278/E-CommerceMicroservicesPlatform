@@ -113,6 +113,39 @@ func scanCoupon(scanner rowScanner) (*model.Coupon, error) {
 	return coupon, nil
 }
 
+func scanShipmentTracking(scanner rowScanner) (*model.ShipmentTracking, error) {
+	tracking := &model.ShipmentTracking{}
+	var trackingURL sql.NullString
+	var estimatedDeliveryAt sql.NullTime
+	var lastCheckedAt sql.NullTime
+	if err := scanner.Scan(
+		&tracking.ID,
+		&tracking.OrderID,
+		&tracking.Carrier,
+		&tracking.TrackingNumber,
+		&trackingURL,
+		&tracking.Status,
+		&estimatedDeliveryAt,
+		&lastCheckedAt,
+		&tracking.CreatedAt,
+		&tracking.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	if trackingURL.Valid {
+		tracking.TrackingURL = trackingURL.String
+	}
+	if estimatedDeliveryAt.Valid {
+		value := estimatedDeliveryAt.Time
+		tracking.EstimatedDeliveryAt = &value
+	}
+	if lastCheckedAt.Valid {
+		value := lastCheckedAt.Time
+		tracking.LastCheckedAt = &value
+	}
+	return tracking, nil
+}
+
 func scanReturn(scanner rowScanner) (*model.ReturnRequest, error) {
 	returnRequest := &model.ReturnRequest{}
 	var refundChargePaymentID sql.NullString

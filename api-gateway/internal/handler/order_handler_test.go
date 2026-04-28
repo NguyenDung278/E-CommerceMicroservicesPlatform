@@ -92,14 +92,18 @@ func TestOrderHandlerRegisterRoutesParity(t *testing.T) {
 	handler.RegisterRoutes(e, "test-secret")
 
 	assertRoutesPresent(t, e,
+		routeExpectation{method: http.MethodGet, path: "/api/v1/coupons/public"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/orders/preview"},
 		routeExpectation{method: http.MethodPost, path: "/api/v1/orders"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/summary"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id/events"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id/tracking"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id/return-eligibility"},
 		routeExpectation{method: http.MethodGet, path: "/api/v1/orders/:id"},
 		routeExpectation{method: http.MethodPut, path: "/api/v1/orders/:id/cancel"},
+		routeExpectation{method: http.MethodGet, path: "/api/v1/admin/orders/:id/tracking"},
+		routeExpectation{method: http.MethodPut, path: "/api/v1/admin/orders/:id/tracking"},
 	)
 
 	assertRoutesAbsent(t, e,
