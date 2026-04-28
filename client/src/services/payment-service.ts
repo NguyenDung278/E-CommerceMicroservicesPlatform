@@ -18,3 +18,8 @@ export async function processPayment(token: string, body: ProcessPaymentRequest)
   });
   return response.data;
 }
+
+export async function listPaymentHistory(token: string): Promise<Payment[]> {
+  const response = await request<Payment[]>("/api/v1/payments/history", { token });
+  return Array.isArray(response.data) ? response.data : [];
+}

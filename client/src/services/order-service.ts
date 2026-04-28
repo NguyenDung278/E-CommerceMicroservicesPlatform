@@ -1,5 +1,5 @@
 import { request } from "./http";
-import type { CreateOrderRequest, Order, OrderPreview } from "../types/api";
+import type { CreateOrderRequest, Order, OrderPreview, UserOrderSummary } from "../types/api";
 
 export async function previewOrder(token: string, body: CreateOrderRequest): Promise<OrderPreview> {
   const response = await request<OrderPreview>("/api/v1/orders/preview", {
@@ -24,5 +24,13 @@ export async function createOrder(token: string, body: CreateOrderRequest): Prom
 
 export async function listOrders(token: string): Promise<Order[]> {
   const response = await request<Order[]>("/api/v1/orders", { token });
-  return response.data;
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getOrderSummary(token: string): Promise<UserOrderSummary> {
+  const response = await request<UserOrderSummary>("/api/v1/orders/summary", { token });
+  return {
+    orders: Array.isArray(response.data?.orders) ? response.data.orders : [],
+    payments_by_order: response.data?.payments_by_order ?? {},
+  };
 }

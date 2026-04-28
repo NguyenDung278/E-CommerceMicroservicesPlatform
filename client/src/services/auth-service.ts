@@ -1,4 +1,5 @@
 import { request } from "./http";
+import { apiBaseUrl } from "./config";
 import type { AuthPayload, UserProfile } from "../types/api";
 
 export type LoginRequest = {
@@ -14,6 +15,14 @@ export type RegisterRequest = {
   last_name: string;
 };
 
+export type OAuthExchangeRequest = {
+  ticket: string;
+};
+
+function apiUrl(path: string): string {
+  return `${apiBaseUrl.replace(/\/$/, "")}${path}`;
+}
+
 export async function login(body: LoginRequest): Promise<AuthPayload> {
   const response = await request<AuthPayload>("/api/v1/auth/login", {
     method: "POST",
@@ -28,6 +37,19 @@ export async function register(body: RegisterRequest): Promise<AuthPayload> {
     body,
   });
   return response.data;
+}
+
+export async function exchangeOAuthTicket(body: OAuthExchangeRequest): Promise<AuthPayload> {
+  const response = await request<AuthPayload>("/api/v1/auth/oauth/exchange", {
+    method: "POST",
+    body,
+  });
+  return response.data;
+}
+
+export function getGoogleOAuthStartUrl(redirectTo = "/account"): string {
+  const params = new URLSearchParams({ redirect_to: redirectTo });
+  return apiUrl(`/api/v1/auth/oauth/google/start?${params.toString()}`);
 }
 
 export async function getProfile(token: string): Promise<UserProfile> {

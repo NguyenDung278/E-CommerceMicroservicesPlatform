@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import {
+  exchangeOAuthTicket,
   getProfile,
   login as loginRequest,
   register as registerRequest,
@@ -13,6 +14,8 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (body: RegisterRequest) => Promise<void>;
+  completeOAuthLogin: (ticket: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   logout: () => void;
 };
 
@@ -23,6 +26,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(storageKey));
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(Boolean(token));
+
+  const refreshProfile = useCallback(async () => {
+    if (!token) {
+      setUser(null);
+      return;
+    }
+
+    const profile = await getProfile(token);
+    setUser(profile);
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -60,28 +73,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [token]);
 
-  async function login(email: string, password: string) {
+  const login = useCallback(async (email: string, password: string) => {
     const payload = await loginRequest({ email, password });
     localStorage.setItem(storageKey, payload.token);
     setToken(payload.token);
     setUser(payload.user);
-  }
+  }, []);
 
-  async function register(body: RegisterRequest) {
+  const register = useCallback(async (body: RegisterRequest) => {
     const payload = await registerRequest(body);
     localStorage.setItem(storageKey, payload.token);
     setToken(payload.token);
     setUser(payload.user);
-  }
+  }, []);
 
-  function logout() {
+  const completeOAuthLogin = useCallback(async (ticket: string) => {
+    const payload = await exchangeOAuthTicket({ ticket });
+    localStorage.setItem(storageKey, payload.token);
+    setToken(payload.token);
+    setUser(payload.user);
+  }, []);
+
+  const logout = useCallback(() => {
     localStorage.removeItem(storageKey);
     setToken(null);
     setUser(null);
-  }
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        token,
+        user,
+        loading,
+        login,
+        register,
+        completeOAuthLogin,
+        refreshProfile,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

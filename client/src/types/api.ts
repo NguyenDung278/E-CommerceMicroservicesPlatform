@@ -34,6 +34,33 @@ export type AuthPayload = {
   user: UserProfile;
 };
 
+export type WishlistItem = {
+  user_id: string;
+  product_id: string;
+  baseline_price?: number;
+  baseline_stock?: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WishlistAlert = {
+  product_id: string;
+  product_name?: string;
+  kind: "back_in_stock" | "price_drop" | string;
+  baseline_price?: number;
+  current_price?: number;
+  baseline_stock?: number;
+  current_stock?: number;
+  detected_at: string;
+};
+
+export type NotificationPreference = {
+  user_id: string;
+  topic: string;
+  enabled: boolean;
+  updated_at: string;
+};
+
 export type ProductVariant = {
   sku: string;
   label: string;
@@ -205,6 +232,13 @@ export type Order = {
   items: OrderItem[];
   created_at: string;
   updated_at: string;
+};
+
+export type PaymentSummary = Payment;
+
+export type UserOrderSummary = {
+  orders: Order[];
+  payments_by_order: Record<string, PaymentSummary[]>;
 };
 
 export type Payment = {

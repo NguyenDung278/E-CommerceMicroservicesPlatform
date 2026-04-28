@@ -37,6 +37,20 @@
 - Nếu back-end không hỗ trợ chức năng, không tự tạo flow giả ở front-end.
 - Nếu route API chưa rõ, kiểm tra tài liệu back-end hoặc route map trước khi dùng.
 
+## Capability Back-end Hiện Có Cần Dùng
+
+- Auth email/password đang đi qua gateway với `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `POST /api/v1/auth/refresh`; login chấp nhận `email` hoặc `identifier` và trả `AuthPayload` gồm `token`, `refresh_token`, `user`.
+- Đăng nhập Gmail/Google OAuth đã có ở `user-service`: bắt đầu bằng `GET /api/v1/auth/oauth/google/start?redirect_to=/account`, backend redirect sang Google, callback backend trả về frontend ở `/auth/callback#ticket=...&next=...`, frontend phải gọi `POST /api/v1/auth/oauth/exchange` với `{ "ticket": "..." }` để nhận token chuẩn. Không đọc token trực tiếp từ URL.
+- Profile user dùng `GET /api/v1/users/profile` và `PUT /api/v1/users/profile`; avatar dùng `POST /api/v1/users/avatar`; các route này cần Bearer token.
+- Wishlist đã có ở backend và cần được ưu tiên dùng cho UI yêu thích sản phẩm: `GET /api/v1/users/wishlist`, `POST /api/v1/users/wishlist` với `{ "product_id": "..." }`, `POST /api/v1/users/wishlist/sync` với `{ "product_ids": [...] }`, `DELETE /api/v1/users/wishlist/:productId`, `GET /api/v1/users/wishlist/alerts`. Source of truth là PostgreSQL trong `user-service`; frontend không lưu wishlist thật ở localStorage.
+- Wishlist item hiện trả `user_id`, `product_id`, `baseline_price`, `baseline_stock`, `created_at`, `updated_at`; nếu UI cần tên/ảnh sản phẩm thì gọi product API bằng `product_id`, không tự bịa field.
+- Notification preferences đã có dưới `/api/v1/users/notification-preferences`; wishlist alerts phụ thuộc preference `wishlist_back_in_stock` và `wishlist_price_drop`.
+- Address book đã có dưới `/api/v1/users/addresses`; checkout/profile nên dùng API này khi cần địa chỉ thay vì tạo dữ liệu địa chỉ giả.
+- Product catalog có `GET /api/v1/products`, `GET /api/v1/products/batch`, `GET /api/v1/products/:id`, `GET /api/v1/products/:id/reviews`, `GET /api/v1/products/search/assist`, `GET /api/v1/storefront/home`, `GET /api/v1/storefront/categories`; list sản phẩm dùng cursor pagination qua `meta.next_cursor` và `meta.has_next`.
+- Cart dùng `GET/DELETE /api/v1/cart`, `POST /api/v1/cart/merge`, `POST /api/v1/cart/items`, `PUT/DELETE /api/v1/cart/items/:productId`.
+- Order dùng `POST /api/v1/orders/preview`, `POST /api/v1/orders`, `GET /api/v1/orders`, `GET /api/v1/orders/summary`, `GET /api/v1/orders/:id`, `PUT /api/v1/orders/:id/cancel`, return flow dùng `/api/v1/orders/:id/returns` và `/api/v1/returns`.
+- Payment dùng `POST /api/v1/payments`, `GET /api/v1/payments/history`, `GET /api/v1/payments/:id`, `GET /api/v1/payments/order/:orderId`, `GET /api/v1/payments/order/:orderId/history`; webhook `POST /api/v1/payments/webhooks/momo` không phải flow browser thông thường. Side effect quan trọng phải giữ idempotency key nếu service đã yêu cầu.
+
 ## Kiến Trúc Thư Mục
 
 - Mã nguồn phải chia rõ trách nhiệm theo thư mục.
@@ -60,8 +74,10 @@
 - `/cart`: giỏ hàng.
 - `/checkout`: thanh toán.
 - `/account`: tài khoản.
+- `/auth/callback`: callback nội bộ để đổi OAuth ticket từ Gmail/Google thành session frontend.
 - `/account/orders`: danh sách đơn hàng nếu back-end hỗ trợ.
 - `/account/orders/:id`: chi tiết đơn hàng nếu back-end hỗ trợ.
+- Wishlist có thể đặt trong `/account#wishlist` hoặc route riêng `/account/wishlist` nếu UI cần tách màn hình; chỉ dùng khi backend wishlist route đã được gọi thật.
 - Route cần đăng nhập phải có guard rõ ràng.
 - Route không tồn tại phải có trang not found đơn giản.
 - Không redirect vòng lặp khi token hết hạn hoặc người dùng chưa đăng nhập.
@@ -77,6 +93,7 @@
 - Chi tiết sản phẩm cần hiển thị: ảnh lớn, tên, giá, mô tả, trạng thái có thể mua nếu API cung cấp, nút thêm vào giỏ.
 - Giỏ hàng cần hiển thị item, số lượng, giá, tổng tiền nếu API cung cấp.
 - Thanh toán chỉ hiển thị các trường và bước mà back-end thật sự hỗ trợ.
+- Nút wishlist trên product card/detail phải phản ánh trạng thái thật từ `/api/v1/users/wishlist`; nếu chưa đăng nhập thì yêu cầu đăng nhập, không lưu tạm như dữ liệu chính thức.
 - Không thêm hiệu ứng phức tạp làm giảm khả năng đọc hoặc gây nhiễu flow mua hàng.
 - Không mô tả hoặc giải thích về giao diện trong output sinh mã; chỉ tạo file và code cần thiết.
 

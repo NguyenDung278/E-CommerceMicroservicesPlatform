@@ -1,16 +1,22 @@
+import { Heart } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { PriceLabel } from "../components/price-label";
 import { ProductImage } from "../components/product-image";
 import { ErrorView, LoadingView } from "../components/status-view";
 import { getProduct, getProductReviews } from "../services/product-service";
+import { useAuth } from "../state/auth-context";
 import { useCart } from "../state/cart-context";
+import { useWishlist } from "../state/wishlist-context";
 import type { Product, ProductReviewList } from "../types/api";
 import { getProductImage } from "../utils/format";
 
 export function ProductDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { addItem } = useCart();
+  const { isWishlisted, toggleItem, updatingProductIds } = useWishlist();
   const [product, setProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<ProductReviewList | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +67,21 @@ export function ProductDetailPage() {
     return <ErrorView message={error ?? "Không tìm thấy sản phẩm"} />;
   }
 
+  const productId = product.id;
   const isUnavailable = product.status !== "active" || product.stock <= 0;
+  const wishlisted = isWishlisted(productId);
+  const wishlistBusy = updatingProductIds.includes(productId);
+
+  function handleWishlistToggle() {
+    if (!user) {
+      navigate("/account", {
+        state: { authError: "Bạn cần đăng nhập để lưu sản phẩm yêu thích" },
+      });
+      return;
+    }
+
+    void toggleItem(productId);
+  }
 
   return (
     <div className="page-stack">
@@ -87,14 +107,25 @@ export function ProductDetailPage() {
               </span>
             ) : null}
           </div>
-          <button
-            className="button button--primary detail-button"
-            type="button"
-            disabled={isUnavailable}
-            onClick={() => void addItem(product.id)}
-          >
-            {isUnavailable ? "Tạm hết hàng" : "Thêm vào giỏ"}
-          </button>
+          <div className="detail-actions">
+            <button
+              className="button button--primary detail-button"
+              type="button"
+              disabled={isUnavailable}
+              onClick={() => void addItem(product.id)}
+            >
+              {isUnavailable ? "Tạm hết hàng" : "Thêm vào giỏ"}
+            </button>
+            <button
+              className={`button button--secondary detail-wishlist${wishlisted ? " is-active" : ""}`}
+              type="button"
+              disabled={wishlistBusy}
+              onClick={handleWishlistToggle}
+            >
+              <Heart size={18} fill={wishlisted ? "currentColor" : "none"} />
+              {wishlisted ? "Đã lưu wishlist" : "Lưu wishlist"}
+            </button>
+          </div>
         </div>
       </section>
     </div>
