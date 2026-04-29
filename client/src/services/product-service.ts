@@ -3,10 +3,12 @@ import { buildQuery } from "../utils/query";
 import type {
   ApiEnvelope,
   Product,
+  ProductPopularity,
   ProductReview,
   ProductReviewList,
   ProductSearchAssist,
   StorefrontCategory,
+  StorefrontCategoryPageData,
   StorefrontHomeData,
 } from "../types/api";
 
@@ -55,6 +57,20 @@ export async function listProducts(
 export async function getProduct(productId: string): Promise<Product> {
   const response = await request<Product>(`/api/v1/products/${encodeURIComponent(productId)}`);
   return response.data;
+}
+
+export async function listProductsByIDs(productIds: string[]): Promise<Product[]> {
+  const uniqueProductIds = Array.from(
+    new Set(productIds.map((productId) => productId.trim()).filter(Boolean)),
+  );
+  if (uniqueProductIds.length === 0) {
+    return [];
+  }
+
+  const response = await request<Product[]>(
+    `/api/v1/products/batch${buildQuery({ ids: uniqueProductIds.join(",") })}`,
+  );
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function getProductReviews(productId: string): Promise<ProductReviewList> {
@@ -163,4 +179,26 @@ export async function getStorefrontHome(): Promise<StorefrontHomeData> {
 export async function listCategories(): Promise<StorefrontCategory[]> {
   const response = await request<StorefrontCategory[]>("/api/v1/storefront/categories");
   return response.data;
+}
+
+export async function getStorefrontCategory(
+  identifier: string,
+): Promise<StorefrontCategoryPageData> {
+  const response = await request<StorefrontCategoryPageData>(
+    `/api/v1/storefront/categories/${encodeURIComponent(identifier)}`,
+  );
+  return {
+    category: response.data.category,
+    sections: Array.isArray(response.data.sections) ? response.data.sections : [],
+    featured_products: Array.isArray(response.data.featured_products)
+      ? response.data.featured_products
+      : [],
+  };
+}
+
+export async function getCatalogPopularity(limit = 8): Promise<ProductPopularity[]> {
+  const response = await request<ProductPopularity[]>(
+    `/api/v1/catalog/popularity${buildQuery({ limit })}`,
+  );
+  return Array.isArray(response.data) ? response.data : [];
 }

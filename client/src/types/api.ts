@@ -28,6 +28,39 @@ export type UserProfile = {
   updated_at: string;
 };
 
+export type PhoneVerificationStatus = {
+  verification_id: string;
+  phone: string;
+  phone_masked: string;
+  status: string;
+  expires_at?: string;
+  resend_available_at?: string;
+  expires_in_seconds: number;
+  resend_in_seconds: number;
+  max_attempts: number;
+  remaining_attempts: number;
+  verified_at?: string | null;
+};
+
+export type EmailVerificationStatus = {
+  verification_id: string;
+  email: string;
+  email_masked: string;
+  status: string;
+  expires_at?: string;
+  resend_available_at?: string;
+  expires_in_seconds: number;
+  resend_in_seconds: number;
+  max_attempts: number;
+  remaining_attempts: number;
+  verified_at?: string | null;
+};
+
+export type UploadAvatarResponse = {
+  avatar_url?: string;
+  user?: UserProfile;
+};
+
 export type AuthPayload = {
   token: string;
   refresh_token: string;
@@ -59,6 +92,31 @@ export type NotificationPreference = {
   topic: string;
   enabled: boolean;
   updated_at: string;
+};
+
+export type NotificationInboxItem = {
+  id: string;
+  user_id: string;
+  topic: string;
+  routing_key: string;
+  delivery_status: string;
+  visible_to_user: boolean;
+  attempt_count?: number;
+  last_error?: string;
+  next_retry_at?: string;
+  title: string;
+  message: string;
+  action_href?: string;
+  action_label?: string;
+  order_id?: string;
+  payment_id?: string;
+  return_id?: string;
+  created_at: string;
+  read_at?: string;
+};
+
+export type MarkNotificationReadResult = {
+  updated_count: number;
 };
 
 export type ProductVariant = {
@@ -95,6 +153,12 @@ export type StorefrontCategory = {
   display_name: string;
   nav_label: string;
   status: string;
+  hero?: unknown;
+  filter_config?: unknown;
+  seo?: unknown;
+  aliases?: string[];
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type StorefrontProduct = Product & {
@@ -112,8 +176,18 @@ export type StorefrontFeaturedProduct = {
   product: StorefrontProduct;
 };
 
+export type StorefrontEditorialSection = {
+  id: string;
+  category_slug: string;
+  section_type: string;
+  position: number;
+  payload?: unknown;
+  published: boolean;
+};
+
 export type StorefrontCategoryPageData = {
   category: StorefrontCategory;
+  sections?: StorefrontEditorialSection[];
   featured_products: StorefrontFeaturedProduct[];
 };
 
@@ -144,6 +218,11 @@ export type ProductSearchAssist = {
     value: string;
     label: string;
   }>;
+};
+
+export type ProductPopularity = {
+  product_id: string;
+  quantity: number;
 };
 
 export type ProductReviewSummary = {

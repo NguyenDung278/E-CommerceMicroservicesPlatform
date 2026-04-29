@@ -2,6 +2,7 @@ import { request } from "./http";
 import type {
   CreateOrderRequest,
   CreateReturnRequest,
+  ApiEnvelope,
   Order,
   OrderEvent,
   OrderPreview,
@@ -10,6 +11,7 @@ import type {
   ShipmentTracking,
   UserOrderSummary,
 } from "../types/api";
+import { buildQuery } from "../utils/query";
 
 export async function previewOrder(token: string, body: CreateOrderRequest): Promise<OrderPreview> {
   const response = await request<OrderPreview>("/api/v1/orders/preview", {
@@ -120,6 +122,39 @@ export async function listOrderReturns(token: string, orderId: string): Promise<
     { token },
   );
   return Array.isArray(response.data) ? response.data : [];
+}
+
+export type ReturnListParams = {
+  page?: number;
+  limit?: number;
+  status?: string;
+  query?: string;
+};
+
+export async function listUserReturns(
+  token: string,
+  params: ReturnListParams = {},
+): Promise<ApiEnvelope<ReturnRequest[]>> {
+  const response = await request<ReturnRequest[]>(
+    `/api/v1/returns${buildQuery({
+      page: params.page ?? 1,
+      limit: params.limit ?? 10,
+      status: params.status,
+      query: params.query,
+    })}`,
+    { token },
+  );
+  return {
+    ...response,
+    data: Array.isArray(response.data) ? response.data : [],
+  };
+}
+
+export async function getReturn(token: string, returnId: string): Promise<ReturnRequest> {
+  const response = await request<ReturnRequest>(`/api/v1/returns/${encodeURIComponent(returnId)}`, {
+    token,
+  });
+  return response.data;
 }
 
 export async function uploadReturnEvidence(

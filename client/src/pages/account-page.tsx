@@ -1,29 +1,59 @@
-import { Bell, CreditCard, Heart, MapPin, PackageCheck, ShieldCheck } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Bell,
+  Camera,
+  CreditCard,
+  Heart,
+  Inbox,
+  KeyRound,
+  MailCheck,
+  MapPin,
+  PackageCheck,
+  Pencil,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { PriceLabel } from "../components/price-label";
 import { ProductImage } from "../components/product-image";
-import { getGoogleOAuthStartUrl } from "../services/auth-service";
+import { forgotPassword, getGoogleOAuthStartUrl, resetPassword } from "../services/auth-service";
+import { markAllNotificationsRead, listNotifications } from "../services/notification-service";
 import { getOrderSummary, listOrders } from "../services/order-service";
 import { listPaymentHistory } from "../services/payment-service";
-import { getProduct } from "../services/product-service";
+import { listProductsByIDs } from "../services/product-service";
 import {
+  changePassword,
   createAddress,
   deleteAddress,
+  getEmailVerificationStatus,
+  getPhoneVerificationStatus,
   listAddresses,
   listNotificationPreferences,
+  resendEmailVerificationOTP,
+  resendPhoneVerificationOTP,
   setDefaultAddress,
+  sendEmailVerificationOTP,
+  sendPhoneVerificationOTP,
+  updateAddress,
   updateNotificationPreferences,
   updateProfile,
+  uploadAvatar,
+  verifyEmailVerificationOTP,
+  verifyPhoneVerificationOTP,
 } from "../services/user-service";
 import { listWishlistAlerts } from "../services/wishlist-service";
 import { useAuth } from "../state/auth-context";
 import { useWishlist } from "../state/wishlist-context";
 import type {
   Address,
+  EmailVerificationStatus,
   NotificationPreference,
+  NotificationInboxItem,
   Order,
   Payment,
+  PhoneVerificationStatus,
   Product,
   WishlistAlert,
 } from "../types/api";
@@ -34,6 +64,12 @@ const emptyAddressForm = {
   phone: "",
   location: "",
   is_default: false,
+};
+
+const emptyPasswordForm = {
+  current_password: "",
+  new_password: "",
+  confirm_password: "",
 };
 
 const notificationTopics = [
@@ -78,6 +114,50 @@ function preferenceEnabled(preferences: NotificationPreference[], topic: string)
   return preferences.find((preference) => preference.topic === topic)?.enabled ?? true;
 }
 
+function notificationHref(notification: NotificationInboxItem) {
+  if (notification.action_href) {
+    return notification.action_href;
+  }
+  if (notification.return_id) {
+    return `/account/returns/${notification.return_id}`;
+  }
+  if (notification.order_id) {
+    return `/account/orders/${notification.order_id}`;
+  }
+  if (notification.payment_id) {
+    return `/payments/${notification.payment_id}`;
+  }
+  return "";
+}
+
+function notificationActionLabel(notification: NotificationInboxItem) {
+  if (notification.action_label) {
+    return notification.action_label;
+  }
+  if (notification.return_id) {
+    return "Xem yêu cầu trả hàng";
+  }
+  if (notification.order_id) {
+    return "Xem đơn hàng";
+  }
+  if (notification.payment_id) {
+    return "Xem thanh toán";
+  }
+  return "";
+}
+
+function phoneVerificationLabel(status?: string) {
+  const labels: Record<string, string> = {
+    pending: "Đang chờ OTP",
+    verified: "Đã xác thực OTP",
+    locked: "Đã khóa",
+    expired: "Hết hạn",
+    consumed: "Đã dùng",
+  };
+
+  return status ? (labels[status] ?? status) : "Chưa gửi OTP";
+}
+
 export function AccountPage() {
   const { token, user, loading, login, register, refreshProfile, logout } = useAuth();
   const {
@@ -86,18 +166,29 @@ export function AccountPage() {
     removeItem: removeWishlistItem,
   } = useWishlist();
   const location = useLocation();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">("login");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
-  const [profileForm, setProfileForm] = useState({ first_name: "", last_name: "" });
+  const [resetToken, setResetToken] = useState("");
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [profileForm, setProfileForm] = useState({ first_name: "", last_name: "", phone: "" });
+  const [emailVerification, setEmailVerification] = useState<EmailVerificationStatus | null>(null);
+  const [emailOtp, setEmailOtp] = useState("");
+  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationStatus | null>(null);
+  const [phoneOtp, setPhoneOtp] = useState("");
   const [addressForm, setAddressForm] = useState(emptyAddressForm);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [editAddressForm, setEditAddressForm] = useState(emptyAddressForm);
+  const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
   const [orders, setOrders] = useState<Order[]>([]);
   const [paymentsByOrder, setPaymentsByOrder] = useState<Record<string, Payment[]>>({});
   const [payments, setPayments] = useState<Payment[]>([]);
   const [addresses, setAddresses] = useState<Address[]>([]);
+  const [notifications, setNotifications] = useState<NotificationInboxItem[]>([]);
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreference[]>(
     [],
   );
@@ -107,13 +198,28 @@ export function AccountPage() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [emailOtpSending, setEmailOtpSending] = useState(false);
+  const [emailOtpVerifying, setEmailOtpVerifying] = useState(false);
+  const [emailOtpResending, setEmailOtpResending] = useState(false);
+  const [phoneOtpSending, setPhoneOtpSending] = useState(false);
+  const [phoneOtpVerifying, setPhoneOtpVerifying] = useState(false);
+  const [phoneOtpResending, setPhoneOtpResending] = useState(false);
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
   const [addressSubmitting, setAddressSubmitting] = useState(false);
+  const [notificationUpdating, setNotificationUpdating] = useState(false);
   const [preferenceUpdating, setPreferenceUpdating] = useState<string | null>(null);
 
   const safeOrders = useMemo(() => (Array.isArray(orders) ? orders : []), [orders]);
   const safePayments = useMemo(() => (Array.isArray(payments) ? payments : []), [payments]);
   const safeAddresses = useMemo(() => (Array.isArray(addresses) ? addresses : []), [addresses]);
+  const safeNotifications = useMemo(
+    () => (Array.isArray(notifications) ? notifications : []),
+    [notifications],
+  );
   const safeNotificationPreferences = useMemo(
     () => (Array.isArray(notificationPreferences) ? notificationPreferences : []),
     [notificationPreferences],
@@ -136,7 +242,21 @@ export function AccountPage() {
   );
 
   const pendingOrders = safeOrders.filter((order) => order.status === "pending").length;
+  const unreadNotifications = safeNotifications.filter((notification) => !notification.read_at);
   const defaultAddress = safeAddresses.find((address) => address.is_default);
+  const requestedProfilePhone = profileForm.phone.trim();
+  const currentProfilePhone = user?.phone?.trim() ?? "";
+  const profilePhoneChanged = requestedProfilePhone !== currentProfilePhone;
+  const verifiedPhoneMatchesProfile =
+    phoneVerification?.status === "verified" && phoneVerification.phone === requestedProfilePhone;
+  const canResendPhoneOtp =
+    Boolean(phoneVerification?.verification_id) &&
+    phoneVerification?.status === "pending" &&
+    (phoneVerification.resend_in_seconds ?? 0) <= 0;
+  const canResendEmailOtp =
+    Boolean(emailVerification?.verification_id) &&
+    emailVerification?.status === "pending" &&
+    (emailVerification.resend_in_seconds ?? 0) <= 0;
 
   useEffect(() => {
     const state = location.state as { authError?: string } | null;
@@ -153,8 +273,55 @@ export function AccountPage() {
     setProfileForm({
       first_name: user.first_name ?? "",
       last_name: user.last_name ?? "",
+      phone: user.phone ?? "",
     });
   }, [user]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadEmailVerification() {
+      if (!token || user?.email_verified) {
+        setEmailVerification(null);
+        setEmailOtp("");
+        return;
+      }
+
+      const status = await getEmailVerificationStatus(token).catch(() => null);
+      if (active) {
+        setEmailVerification(status);
+      }
+    }
+
+    void loadEmailVerification();
+
+    return () => {
+      active = false;
+    };
+  }, [token, user?.email_verified]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPhoneVerification() {
+      if (!token) {
+        setPhoneVerification(null);
+        setPhoneOtp("");
+        return;
+      }
+
+      const status = await getPhoneVerificationStatus(token).catch(() => null);
+      if (active) {
+        setPhoneVerification(status);
+      }
+    }
+
+    void loadPhoneVerification();
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -165,6 +332,7 @@ export function AccountPage() {
         setPaymentsByOrder({});
         setPayments([]);
         setAddresses([]);
+        setNotifications([]);
         setNotificationPreferences([]);
         setWishlistAlerts([]);
         return;
@@ -178,6 +346,7 @@ export function AccountPage() {
           fallbackOrdersResult,
           paymentResult,
           addressResult,
+          notificationResult,
           preferenceResult,
           alertResult,
         ] = await Promise.allSettled([
@@ -185,6 +354,7 @@ export function AccountPage() {
           listOrders(token),
           listPaymentHistory(token),
           listAddresses(token),
+          listNotifications(token, 20),
           listNotificationPreferences(token),
           listWishlistAlerts(token),
         ]);
@@ -212,6 +382,11 @@ export function AccountPage() {
           setAddresses(Array.isArray(addressResult.value) ? addressResult.value : []);
         } else {
           failures.push("Không tải được sổ địa chỉ");
+        }
+        if (notificationResult.status === "fulfilled") {
+          setNotifications(
+            Array.isArray(notificationResult.value) ? notificationResult.value : [],
+          );
         }
         if (preferenceResult.status === "fulfilled") {
           setNotificationPreferences(
@@ -248,18 +423,12 @@ export function AccountPage() {
         return;
       }
 
-      const entries = await Promise.all(
-        safeWishlistItems.map(async (item) => {
-          const product = await getProduct(item.product_id).catch(() => null);
-          return product ? ([item.product_id, product] as const) : null;
-        }),
-      );
+      const productIds = safeWishlistItems.map((item) => item.product_id);
+      const products = await listProductsByIDs(productIds).catch(() => []);
 
       if (active) {
         setWishlistProducts(
-          Object.fromEntries(
-            entries.filter((entry): entry is readonly [string, Product] => Boolean(entry)),
-          ),
+          Object.fromEntries(products.map((product) => [product.id, product] as const)),
         );
       }
     }
@@ -307,22 +476,261 @@ export function AccountPage() {
     }
   }
 
+  async function handleForgotPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      setAuthNotice(null);
+      await forgotPassword({ email });
+      setAuthNotice("Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi.");
+      setMode("reset");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không gửi được yêu cầu đặt lại mật khẩu");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      setAuthNotice(null);
+      await resetPassword({
+        token: resetToken.trim(),
+        new_password: resetPasswordValue,
+      });
+      setResetToken("");
+      setResetPasswordValue("");
+      setAuthNotice("Đã đặt lại mật khẩu. Bạn có thể đăng nhập bằng mật khẩu mới.");
+      setMode("login");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không đặt lại được mật khẩu");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) {
       return;
     }
 
+    if (profilePhoneChanged) {
+      if (!requestedProfilePhone) {
+        setProfileStatus("Số điện thoại không được để trống khi cập nhật.");
+        return;
+      }
+      if (!verifiedPhoneMatchesProfile) {
+        setProfileStatus("Vui lòng xác thực số điện thoại bằng OTP Telegram trước khi lưu.");
+        return;
+      }
+    }
+
     try {
+      setProfileSubmitting(true);
       setProfileStatus(null);
       await updateProfile(token, {
         first_name: profileForm.first_name.trim(),
         last_name: profileForm.last_name.trim(),
+        ...(profilePhoneChanged
+          ? {
+              phone: requestedProfilePhone,
+              phone_verification_id: phoneVerification?.verification_id,
+            }
+          : {}),
       });
       await refreshProfile();
+      if (profilePhoneChanged) {
+        setPhoneVerification(null);
+      }
       setProfileStatus("Đã cập nhật hồ sơ");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "Không cập nhật được hồ sơ");
+    } finally {
+      setProfileSubmitting(false);
+    }
+  }
+
+  async function handleSendEmailOtp() {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setEmailOtpSending(true);
+      setProfileStatus(null);
+      setEmailOtp("");
+      const status = await sendEmailVerificationOTP(token);
+      setEmailVerification(status);
+      setProfileStatus("Đã gửi OTP đến email. Nhập mã để xác thực.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Không gửi được OTP email");
+    } finally {
+      setEmailOtpSending(false);
+    }
+  }
+
+  async function handleVerifyEmailOtp() {
+    if (!token || !emailVerification?.verification_id) {
+      return;
+    }
+
+    try {
+      setEmailOtpVerifying(true);
+      setProfileStatus(null);
+      const status = await verifyEmailVerificationOTP(
+        token,
+        emailVerification.verification_id,
+        emailOtp.trim(),
+      );
+      setEmailVerification(status);
+      setEmailOtp("");
+      await refreshProfile();
+      setProfileStatus("Email đã được xác thực.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "OTP email không hợp lệ");
+    } finally {
+      setEmailOtpVerifying(false);
+    }
+  }
+
+  async function handleResendEmailOtp() {
+    if (!token || !emailVerification?.verification_id) {
+      return;
+    }
+
+    try {
+      setEmailOtpResending(true);
+      setProfileStatus(null);
+      const status = await resendEmailVerificationOTP(token, emailVerification.verification_id);
+      setEmailVerification(status);
+      setEmailOtp("");
+      setProfileStatus("Đã gửi lại OTP email.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Không gửi lại được OTP email");
+    } finally {
+      setEmailOtpResending(false);
+    }
+  }
+
+  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!token || !file) {
+      return;
+    }
+
+    try {
+      setAvatarUploading(true);
+      setProfileStatus(null);
+      await uploadAvatar(token, file);
+      await refreshProfile();
+      setProfileStatus("Đã cập nhật ảnh đại diện");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Không tải được ảnh đại diện");
+    } finally {
+      setAvatarUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleSendPhoneOtp() {
+    if (!token) {
+      return;
+    }
+    if (!requestedProfilePhone) {
+      setProfileStatus("Nhập số điện thoại trước khi gửi OTP.");
+      return;
+    }
+
+    try {
+      setPhoneOtpSending(true);
+      setProfileStatus(null);
+      setPhoneOtp("");
+      const status = await sendPhoneVerificationOTP(token, requestedProfilePhone);
+      setPhoneVerification(status);
+      setProfileForm((current) => ({ ...current, phone: status.phone || requestedProfilePhone }));
+      setProfileStatus("Đã gửi OTP qua Telegram. Nhập mã để xác thực số điện thoại.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Không gửi được OTP Telegram");
+    } finally {
+      setPhoneOtpSending(false);
+    }
+  }
+
+  async function handleVerifyPhoneOtp() {
+    if (!token || !phoneVerification?.verification_id) {
+      return;
+    }
+
+    try {
+      setPhoneOtpVerifying(true);
+      setProfileStatus(null);
+      const status = await verifyPhoneVerificationOTP(
+        token,
+        phoneVerification.verification_id,
+        phoneOtp.trim(),
+      );
+      setPhoneVerification(status);
+      setPhoneOtp("");
+      if (status.status === "verified") {
+        setProfileForm((current) => ({ ...current, phone: status.phone }));
+        setProfileStatus("Số điện thoại đã xác thực. Bấm Lưu hồ sơ để cập nhật.");
+      }
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "OTP không hợp lệ");
+    } finally {
+      setPhoneOtpVerifying(false);
+    }
+  }
+
+  async function handleResendPhoneOtp() {
+    if (!token || !phoneVerification?.verification_id) {
+      return;
+    }
+
+    try {
+      setPhoneOtpResending(true);
+      setProfileStatus(null);
+      const status = await resendPhoneVerificationOTP(token, phoneVerification.verification_id);
+      setPhoneVerification(status);
+      setPhoneOtp("");
+      setProfileStatus("Đã gửi lại OTP qua Telegram.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Không gửi lại được OTP Telegram");
+    } finally {
+      setPhoneOtpResending(false);
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) {
+      return;
+    }
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordStatus("Mật khẩu mới không khớp.");
+      return;
+    }
+
+    try {
+      setPasswordSubmitting(true);
+      setPasswordStatus(null);
+      await changePassword(token, {
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+      });
+      setPasswordForm(emptyPasswordForm);
+      setPasswordStatus("Đã đổi mật khẩu.");
+    } catch (err) {
+      setPasswordStatus(err instanceof Error ? err.message : "Không đổi được mật khẩu");
+    } finally {
+      setPasswordSubmitting(false);
     }
   }
 
@@ -352,6 +760,48 @@ export function AccountPage() {
     } finally {
       setAddressSubmitting(false);
     }
+  }
+
+  function startEditAddress(address: Address) {
+    setEditingAddressId(address.id);
+    setEditAddressForm({
+      recipient_name: address.recipient_name,
+      phone: address.phone,
+      location: address.location,
+      is_default: address.is_default,
+    });
+  }
+
+  async function handleUpdateAddress(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !editingAddressId) {
+      return;
+    }
+
+    try {
+      setAddressSubmitting(true);
+      setAccountError(null);
+      const updated = await updateAddress(token, editingAddressId, editAddressForm);
+      setAddresses((current) =>
+        (Array.isArray(current) ? current : []).map((address) => {
+          if (updated.is_default && address.id !== updated.id) {
+            return { ...address, is_default: false };
+          }
+          return address.id === updated.id ? updated : address;
+        }),
+      );
+      setEditingAddressId(null);
+      setEditAddressForm(emptyAddressForm);
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Không cập nhật được địa chỉ");
+    } finally {
+      setAddressSubmitting(false);
+    }
+  }
+
+  function cancelEditAddress() {
+    setEditingAddressId(null);
+    setEditAddressForm(emptyAddressForm);
   }
 
   async function handleSetDefaultAddress(addressId: string) {
@@ -407,6 +857,29 @@ export function AccountPage() {
     }
   }
 
+  async function handleMarkAllNotificationsRead() {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setNotificationUpdating(true);
+      setAccountError(null);
+      await markAllNotificationsRead(token);
+      const nextNotifications = await listNotifications(token, 20).catch(() =>
+        safeNotifications.map((notification) => ({
+          ...notification,
+          read_at: notification.read_at ?? new Date().toISOString(),
+        })),
+      );
+      setNotifications(nextNotifications);
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Không cập nhật được thông báo");
+    } finally {
+      setNotificationUpdating(false);
+    }
+  }
+
   function handleGoogleLogin() {
     setError(null);
     window.location.assign(getGoogleOAuthStartUrl("/account"));
@@ -425,70 +898,158 @@ export function AccountPage() {
       <div className="account-layout">
         <section className="surface-section account-panel">
           <span className="eyebrow">Account</span>
-          <h1>{mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</h1>
-          <form className="auth-form" onSubmit={mode === "login" ? handleLogin : handleRegister}>
-            <button className="button button--google" type="button" onClick={handleGoogleLogin}>
-              Đăng nhập bằng Gmail
-            </button>
-            <div className="auth-divider">
-              <span>hoặc</span>
-            </div>
-            {mode === "register" ? (
-              <div className="form-grid">
-                <label>
-                  Tên
-                  <input
-                    value={firstName}
-                    onChange={(event) => setFirstName(event.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  Họ
-                  <input
-                    value={lastName}
-                    onChange={(event) => setLastName(event.target.value)}
-                    required
-                  />
-                </label>
+          <h1>
+            {mode === "register"
+              ? "Tạo tài khoản"
+              : mode === "forgot"
+                ? "Quên mật khẩu"
+                : mode === "reset"
+                  ? "Đặt lại mật khẩu"
+                  : "Đăng nhập"}
+          </h1>
+          {mode === "login" || mode === "register" ? (
+            <form className="auth-form" onSubmit={mode === "login" ? handleLogin : handleRegister}>
+              <button className="button button--google" type="button" onClick={handleGoogleLogin}>
+                Đăng nhập bằng Gmail
+              </button>
+              <div className="auth-divider">
+                <span>hoặc</span>
               </div>
-            ) : null}
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            {mode === "register" ? (
+              {mode === "register" ? (
+                <div className="form-grid">
+                  <label>
+                    Tên
+                    <input
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Họ
+                    <input
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+              ) : null}
               <label>
-                Số điện thoại
-                <input value={phone} onChange={(event) => setPhone(event.target.value)} />
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
               </label>
-            ) : null}
-            <label>
-              Mật khẩu
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-            {error ? <p className="inline-error">{error}</p> : null}
-            <button className="button button--primary" type="submit" disabled={submitting}>
-              {submitting ? "Đang xử lý" : mode === "login" ? "Đăng nhập" : "Đăng ký"}
-            </button>
-            <button
-              className="button button--ghost"
-              type="button"
-              onClick={() => setMode((current) => (current === "login" ? "register" : "login"))}
-            >
-              {mode === "login" ? "Tạo tài khoản mới" : "Tôi đã có tài khoản"}
-            </button>
-          </form>
+              {mode === "register" ? (
+                <label>
+                  Số điện thoại
+                  <input value={phone} onChange={(event) => setPhone(event.target.value)} />
+                </label>
+              ) : null}
+              <label>
+                Mật khẩu
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </label>
+              {authNotice ? <p className="inline-success">{authNotice}</p> : null}
+              {error ? <p className="inline-error">{error}</p> : null}
+              <button className="button button--primary" type="submit" disabled={submitting}>
+                {submitting ? "Đang xử lý" : mode === "login" ? "Đăng nhập" : "Đăng ký"}
+              </button>
+              <div className="inline-actions">
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  onClick={() => setMode((current) => (current === "login" ? "register" : "login"))}
+                >
+                  {mode === "login" ? "Tạo tài khoản mới" : "Tôi đã có tài khoản"}
+                </button>
+                {mode === "login" ? (
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setAuthNotice(null);
+                      setMode("forgot");
+                    }}
+                  >
+                    Quên mật khẩu
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          ) : null}
+
+          {mode === "forgot" ? (
+            <form className="auth-form" onSubmit={handleForgotPassword}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </label>
+              {authNotice ? <p className="inline-success">{authNotice}</p> : null}
+              {error ? <p className="inline-error">{error}</p> : null}
+              <button className="button button--primary" type="submit" disabled={submitting}>
+                {submitting ? "Đang gửi" : "Gửi hướng dẫn"}
+              </button>
+              <div className="inline-actions">
+                <button className="button button--ghost" type="button" onClick={() => setMode("login")}>
+                  Đăng nhập
+                </button>
+                <button className="button button--ghost" type="button" onClick={() => setMode("reset")}>
+                  Tôi đã có token
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {mode === "reset" ? (
+            <form className="auth-form" onSubmit={handleResetPassword}>
+              <label>
+                Reset token
+                <input
+                  value={resetToken}
+                  onChange={(event) => setResetToken(event.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                Mật khẩu mới
+                <input
+                  type="password"
+                  value={resetPasswordValue}
+                  onChange={(event) => setResetPasswordValue(event.target.value)}
+                  required
+                />
+              </label>
+              {authNotice ? <p className="inline-success">{authNotice}</p> : null}
+              {error ? <p className="inline-error">{error}</p> : null}
+              <button className="button button--primary" type="submit" disabled={submitting}>
+                {submitting ? "Đang lưu" : "Đặt lại mật khẩu"}
+              </button>
+              <div className="inline-actions">
+                <button className="button button--ghost" type="button" onClick={() => setMode("login")}>
+                  Đăng nhập
+                </button>
+                <button className="button button--ghost" type="button" onClick={() => setMode("forgot")}>
+                  Gửi lại hướng dẫn
+                </button>
+              </div>
+            </form>
+          ) : null}
         </section>
       </div>
     );
@@ -525,7 +1086,9 @@ export function AccountPage() {
       </section>
 
       <div className="account-quick-nav">
+        <a href="#profile">Hồ sơ</a>
         <a href="#orders">Đơn hàng</a>
+        <Link to="/account/returns">Trả hàng</Link>
         <a href="#payments">Thanh toán</a>
         <a href="#addresses">Địa chỉ</a>
         <a href="#wishlist">Wishlist</a>
@@ -558,7 +1121,7 @@ export function AccountPage() {
         </article>
       </section>
 
-      <section className="surface-section">
+      <section className="surface-section" id="profile">
         <div className="section-heading">
           <div>
             <span className="eyebrow">Profile</span>
@@ -566,38 +1129,287 @@ export function AccountPage() {
           </div>
           <ShieldCheck size={24} />
         </div>
-        <form className="profile-form" onSubmit={handleProfileSubmit}>
+        <div className="profile-layout">
+          <aside className="avatar-upload-card">
+            <div className="account-avatar account-avatar--large">
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt={user.first_name || user.email} />
+              ) : (
+                <span>{getInitials(user.first_name, user.email)}</span>
+              )}
+            </div>
+            <div>
+              <strong>Ảnh đại diện</strong>
+              <p>JPG, PNG hoặc WebP tối đa 5MB.</p>
+            </div>
+            <label className="button button--secondary avatar-upload-button">
+              <Camera size={16} />
+              {avatarUploading ? "Đang tải" : "Đổi ảnh"}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={avatarUploading}
+                onChange={handleAvatarChange}
+              />
+            </label>
+          </aside>
+
+          <form className="profile-form" onSubmit={handleProfileSubmit}>
+            <div className="form-grid">
+              <label>
+                Tên
+                <input
+                  value={profileForm.first_name}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({
+                      ...current,
+                      first_name: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+              <label>
+                Họ
+                <input
+                  value={profileForm.last_name}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({
+                      ...current,
+                      last_name: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+            </div>
+
+            <div className="profile-verification-card">
+              <div className="phone-verification-status">
+                <MailCheck size={18} />
+                <span className={user.email_verified ? "status-pill is-good" : "status-pill"}>
+                  Email {user.email_verified ? "đã xác thực" : phoneVerificationLabel(emailVerification?.status)}
+                </span>
+                {emailVerification?.email_masked ? <span>{emailVerification.email_masked}</span> : null}
+                {emailVerification?.status === "pending" ? (
+                  <>
+                    <span>Còn {Math.ceil(emailVerification.expires_in_seconds / 60)} phút</span>
+                    <span>{emailVerification.remaining_attempts} lần nhập còn lại</span>
+                  </>
+                ) : null}
+              </div>
+
+              {!user.email_verified ? (
+                <>
+                  <div className="inline-actions">
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      disabled={emailOtpSending}
+                      onClick={() => void handleSendEmailOtp()}
+                    >
+                      <Send size={16} />
+                      {emailOtpSending ? "Đang gửi" : "Gửi OTP email"}
+                    </button>
+                    {emailVerification?.verification_id ? (
+                      <button
+                        className="button button--ghost"
+                        type="button"
+                        disabled={!canResendEmailOtp || emailOtpResending}
+                        onClick={() => void handleResendEmailOtp()}
+                      >
+                        <RefreshCw size={16} />
+                        {emailOtpResending
+                          ? "Đang gửi lại"
+                          : emailVerification.resend_in_seconds > 0
+                            ? `Gửi lại (${emailVerification.resend_in_seconds}s)`
+                            : "Gửi lại"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {emailVerification?.verification_id &&
+                  emailVerification.status !== "verified" ? (
+                    <div className="otp-row">
+                      <input
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={emailOtp}
+                        onChange={(event) => setEmailOtp(event.target.value.replace(/\D/g, ""))}
+                        placeholder="Mã OTP"
+                      />
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        disabled={emailOtp.trim().length !== 6 || emailOtpVerifying}
+                        onClick={() => void handleVerifyEmailOtp()}
+                      >
+                        {emailOtpVerifying ? "Đang xác thực" : "Xác thực"}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+
+            <label>
+              Số điện thoại
+              <input
+                inputMode="tel"
+                value={profileForm.phone}
+                onChange={(event) => {
+                  const nextPhone = event.target.value;
+                  setProfileForm((current) => ({ ...current, phone: nextPhone }));
+                  setPhoneVerification((current) =>
+                    current?.phone === nextPhone.trim() ? current : null,
+                  );
+                }}
+                placeholder="0987654321"
+              />
+            </label>
+
+            <div className="profile-verification-card">
+              <div className="phone-verification-status">
+                <span
+                  className={
+                    verifiedPhoneMatchesProfile || (!profilePhoneChanged && user.phone_verified)
+                      ? "status-pill is-good"
+                      : "status-pill"
+                  }
+                >
+                  {profilePhoneChanged
+                    ? phoneVerificationLabel(phoneVerification?.status)
+                    : user.phone_verified
+                      ? "SĐT đã xác thực"
+                      : "SĐT chưa xác thực"}
+                </span>
+                {phoneVerification?.phone_masked ? (
+                  <span>{phoneVerification.phone_masked}</span>
+                ) : null}
+                {phoneVerification?.status === "pending" ? (
+                  <>
+                    <span>Còn {Math.ceil(phoneVerification.expires_in_seconds / 60)} phút</span>
+                    <span>{phoneVerification.remaining_attempts} lần nhập còn lại</span>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="inline-actions">
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={!requestedProfilePhone || phoneOtpSending}
+                  onClick={() => void handleSendPhoneOtp()}
+                >
+                  <Send size={16} />
+                  {phoneOtpSending ? "Đang gửi" : "Gửi OTP Telegram"}
+                </button>
+                {phoneVerification?.verification_id ? (
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    disabled={!canResendPhoneOtp || phoneOtpResending}
+                    onClick={() => void handleResendPhoneOtp()}
+                  >
+                    <RefreshCw size={16} />
+                    {phoneOtpResending
+                      ? "Đang gửi lại"
+                      : phoneVerification.resend_in_seconds > 0
+                        ? `Gửi lại (${phoneVerification.resend_in_seconds}s)`
+                        : "Gửi lại"}
+                  </button>
+                ) : null}
+              </div>
+
+              {phoneVerification?.verification_id && phoneVerification.status !== "verified" ? (
+                <div className="otp-row">
+                  <input
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={phoneOtp}
+                    onChange={(event) => setPhoneOtp(event.target.value.replace(/\D/g, ""))}
+                    placeholder="Mã OTP"
+                  />
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={phoneOtp.trim().length !== 6 || phoneOtpVerifying}
+                    onClick={() => void handleVerifyPhoneOtp()}
+                  >
+                    {phoneOtpVerifying ? "Đang xác thực" : "Xác thực"}
+                  </button>
+                </div>
+              ) : null}
+
+              {verifiedPhoneMatchesProfile && profilePhoneChanged ? (
+                <p className="inline-success">OTP hợp lệ, sẵn sàng lưu số mới.</p>
+              ) : null}
+            </div>
+
+            {profileStatus ? <p className="muted-text">{profileStatus}</p> : null}
+            <button className="button button--secondary" type="submit" disabled={profileSubmitting}>
+              {profileSubmitting ? "Đang lưu" : "Lưu hồ sơ"}
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section className="surface-section">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Security</span>
+            <h2>Đổi mật khẩu</h2>
+          </div>
+          <KeyRound size={24} />
+        </div>
+        <form className="profile-form" onSubmit={handleChangePassword}>
           <div className="form-grid">
             <label>
-              Tên
+              Mật khẩu hiện tại
               <input
-                value={profileForm.first_name}
+                type="password"
+                value={passwordForm.current_password}
                 onChange={(event) =>
-                  setProfileForm((current) => ({
+                  setPasswordForm((current) => ({
                     ...current,
-                    first_name: event.target.value,
+                    current_password: event.target.value,
                   }))
                 }
                 required
               />
             </label>
             <label>
-              Họ
+              Mật khẩu mới
               <input
-                value={profileForm.last_name}
+                type="password"
+                value={passwordForm.new_password}
                 onChange={(event) =>
-                  setProfileForm((current) => ({
+                  setPasswordForm((current) => ({
                     ...current,
-                    last_name: event.target.value,
+                    new_password: event.target.value,
+                  }))
+                }
+                required
+              />
+            </label>
+            <label>
+              Nhập lại mật khẩu mới
+              <input
+                type="password"
+                value={passwordForm.confirm_password}
+                onChange={(event) =>
+                  setPasswordForm((current) => ({
+                    ...current,
+                    confirm_password: event.target.value,
                   }))
                 }
                 required
               />
             </label>
           </div>
-          {profileStatus ? <p className="muted-text">{profileStatus}</p> : null}
-          <button className="button button--secondary" type="submit">
-            Lưu hồ sơ
+          {passwordStatus ? <p className="muted-text">{passwordStatus}</p> : null}
+          <button className="button button--secondary" type="submit" disabled={passwordSubmitting}>
+            {passwordSubmitting ? "Đang đổi" : "Đổi mật khẩu"}
           </button>
         </form>
       </section>
@@ -730,36 +1542,123 @@ export function AccountPage() {
             {safeAddresses.length === 0 ? (
               <p>Chưa có địa chỉ.</p>
             ) : (
-              safeAddresses.map((address) => (
-                <article key={address.id} className="address-card">
-                  <div>
-                    <strong>{address.recipient_name}</strong>
-                    <p>{address.phone}</p>
-                    <p>{address.location}</p>
-                  </div>
-                  {address.is_default ? (
-                    <span className="status-pill is-good">Mặc định</span>
-                  ) : null}
-                  <div className="inline-actions">
-                    {!address.is_default ? (
-                      <button
-                        className="button button--secondary"
-                        type="button"
-                        onClick={() => void handleSetDefaultAddress(address.id)}
-                      >
-                        Đặt mặc định
-                      </button>
-                    ) : null}
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      onClick={() => void handleDeleteAddress(address.id)}
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                </article>
-              ))
+              safeAddresses.map((address) => {
+                const isEditing = editingAddressId === address.id;
+                return (
+                  <article key={address.id} className="address-card">
+                    {isEditing ? (
+                      <form className="address-edit-form" onSubmit={handleUpdateAddress}>
+                        <label>
+                          Người nhận
+                          <input
+                            value={editAddressForm.recipient_name}
+                            onChange={(event) =>
+                              setEditAddressForm((current) => ({
+                                ...current,
+                                recipient_name: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          Số điện thoại
+                          <input
+                            value={editAddressForm.phone}
+                            onChange={(event) =>
+                              setEditAddressForm((current) => ({
+                                ...current,
+                                phone: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </label>
+                        <label>
+                          Địa chỉ
+                          <input
+                            value={editAddressForm.location}
+                            onChange={(event) =>
+                              setEditAddressForm((current) => ({
+                                ...current,
+                                location: event.target.value,
+                              }))
+                            }
+                            required
+                          />
+                        </label>
+                        <label className="checkbox-row">
+                          <input
+                            type="checkbox"
+                            checked={editAddressForm.is_default}
+                            onChange={(event) =>
+                              setEditAddressForm((current) => ({
+                                ...current,
+                                is_default: event.target.checked,
+                              }))
+                            }
+                          />
+                          Đặt làm mặc định
+                        </label>
+                        <div className="inline-actions">
+                          <button
+                            className="button button--secondary"
+                            type="submit"
+                            disabled={addressSubmitting}
+                          >
+                            Lưu
+                          </button>
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={cancelEditAddress}
+                          >
+                            <X size={16} />
+                            Hủy
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div>
+                          <strong>{address.recipient_name}</strong>
+                          <p>{address.phone}</p>
+                          <p>{address.location}</p>
+                        </div>
+                        {address.is_default ? (
+                          <span className="status-pill is-good">Mặc định</span>
+                        ) : null}
+                        <div className="inline-actions">
+                          {!address.is_default ? (
+                            <button
+                              className="button button--secondary"
+                              type="button"
+                              onClick={() => void handleSetDefaultAddress(address.id)}
+                            >
+                              Đặt mặc định
+                            </button>
+                          ) : null}
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={() => startEditAddress(address)}
+                          >
+                            <Pencil size={16} />
+                            Sửa
+                          </button>
+                          <button
+                            className="button button--ghost"
+                            type="button"
+                            onClick={() => void handleDeleteAddress(address.id)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </article>
+                );
+              })
             )}
           </div>
         </div>
@@ -832,9 +1731,68 @@ export function AccountPage() {
         <div className="section-heading">
           <div>
             <span className="eyebrow">Notifications</span>
-            <h2>Tùy chọn thông báo</h2>
+            <h2>Thông báo</h2>
+            <p>{unreadNotifications.length} thông báo chưa đọc</p>
           </div>
           <Bell size={24} />
+        </div>
+
+        <div className="notification-inbox">
+          <div className="section-heading section-heading--compact">
+            <div>
+              <strong>Inbox</strong>
+              <p>Thông báo mới nhất từ đơn hàng, thanh toán, trả hàng và wishlist.</p>
+            </div>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={notificationUpdating || unreadNotifications.length === 0}
+              onClick={() => void handleMarkAllNotificationsRead()}
+            >
+              <Inbox size={16} />
+              {notificationUpdating ? "Đang cập nhật" : "Đánh dấu đã đọc"}
+            </button>
+          </div>
+
+          {safeNotifications.length === 0 ? (
+            <p className="muted-text">Chưa có thông báo.</p>
+          ) : (
+            <div className="notification-list">
+              {safeNotifications.map((notification) => {
+                const href = notificationHref(notification);
+                const actionLabel = notificationActionLabel(notification);
+                return (
+                  <article
+                    key={notification.id}
+                    className={`notification-card${notification.read_at ? "" : " is-unread"}`}
+                  >
+                    <div>
+                      <div className="notification-card__heading">
+                        <strong>{notification.title || notification.topic}</strong>
+                        <span className="status-pill">
+                          {notification.read_at ? "Đã đọc" : "Mới"}
+                        </span>
+                      </div>
+                      <p>{notification.message}</p>
+                      <small>{formatDate(notification.created_at)}</small>
+                    </div>
+                    {href && actionLabel ? (
+                      <Link className="button button--ghost" to={href}>
+                        {actionLabel}
+                      </Link>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="section-heading section-heading--compact">
+          <div>
+            <strong>Tùy chọn thông báo</strong>
+            <p>Bật/tắt các nhóm notification bạn muốn nhận.</p>
+          </div>
         </div>
         <div className="preference-list">
           {notificationTopics.map((item) => {

@@ -67,6 +67,8 @@ export function ProductListPage() {
   const [assist, setAssist] = useState<ProductSearchAssist | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [meta, setMeta] = useState<ApiMeta | null>(null);
+  const [pageCursors, setPageCursors] = useState<string[]>([""]);
+  const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -104,10 +106,33 @@ export function ProductListPage() {
       ].filter(Boolean).length,
     [brand, category, color, maxPrice, minPrice, search, size, sort, tag],
   );
+  const filterKey = useMemo(
+    () => [search, category, brand, tag, size, color, sort, minPrice, maxPrice].join("|"),
+    [brand, category, color, maxPrice, minPrice, search, size, sort, tag],
+  );
+  const knownCursorIndex = cursor ? pageCursors.indexOf(cursor) : 0;
+  const pageLabel = cursor && knownCursorIndex < 0 ? "Trang hiện tại" : `Trang ${pageIndex + 1}`;
 
   useEffect(() => {
     setRecentSearches(readRecentSearches());
   }, []);
+
+  useEffect(() => {
+    setPageCursors([""]);
+    setPageIndex(0);
+  }, [filterKey]);
+
+  useEffect(() => {
+    if (!cursor) {
+      setPageIndex(0);
+      return;
+    }
+
+    const knownCursorIndex = pageCursors.indexOf(cursor);
+    if (knownCursorIndex >= 0) {
+      setPageIndex(knownCursorIndex);
+    }
+  }, [cursor, pageCursors]);
 
   useEffect(() => {
     setSearchDraft(search);
@@ -254,10 +279,36 @@ export function ProductListPage() {
       return;
     }
 
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set("cursor", meta.next_cursor ?? "");
-      return next;
+    const nextCursor = meta.next_cursor;
+    startTransition(() => {
+      setPageCursors((current) => [...current.slice(0, pageIndex + 1), nextCursor]);
+      setPageIndex((current) => current + 1);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("cursor", nextCursor);
+        return next;
+      });
+    });
+  }
+
+  function goPrevious() {
+    if (pageIndex <= 0) {
+      return;
+    }
+
+    const previousIndex = pageIndex - 1;
+    const previousCursor = pageCursors[previousIndex] ?? "";
+    startTransition(() => {
+      setPageIndex(previousIndex);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        if (previousCursor) {
+          next.set("cursor", previousCursor);
+        } else {
+          next.delete("cursor");
+        }
+        return next;
+      });
     });
   }
 
@@ -450,12 +501,31 @@ export function ProductListPage() {
                   />
                 ))}
               </div>
-              {meta?.has_next ? (
-                <div className="pagination-row">
-                  <button className="button button--secondary" type="button" onClick={goNext}>
-                    Xem tiếp
+              {meta?.has_next || pageIndex > 0 ? (
+                <nav
+                  className="pagination-row pagination-row--catalog"
+                  aria-label="Phân trang sản phẩm"
+                >
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    disabled={pageIndex === 0 || loading || isPending}
+                    onClick={goPrevious}
+                  >
+                    Trước
                   </button>
-                </div>
+                  <span className="pagination-row__status" aria-live="polite">
+                    {pageLabel}
+                  </span>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={!meta?.has_next || loading || isPending}
+                    onClick={goNext}
+                  >
+                    Tiếp
+                  </button>
+                </nav>
               ) : null}
             </>
           ) : null}

@@ -42,6 +42,7 @@
 - Auth email/password đang đi qua gateway với `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `POST /api/v1/auth/refresh`; login chấp nhận `email` hoặc `identifier` và trả `AuthPayload` gồm `token`, `refresh_token`, `user`.
 - Đăng nhập Gmail/Google OAuth đã có ở `user-service`: bắt đầu bằng `GET /api/v1/auth/oauth/google/start?redirect_to=/account`, backend redirect sang Google, callback backend trả về frontend ở `/auth/callback#ticket=...&next=...`, frontend phải gọi `POST /api/v1/auth/oauth/exchange` với `{ "ticket": "..." }` để nhận token chuẩn. Không đọc token trực tiếp từ URL.
 - Profile user dùng `GET /api/v1/users/profile` và `PUT /api/v1/users/profile`; avatar dùng `POST /api/v1/users/avatar`; các route này cần Bearer token.
+- Đổi số điện thoại trong profile phải đi qua OTP Telegram thật: `GET /api/v1/users/profile/phone-verification`, `POST /api/v1/users/profile/phone-verification/send-otp`, `POST /api/v1/users/profile/phone-verification/verify-otp`, `POST /api/v1/users/profile/phone-verification/resend-otp`; chỉ gửi `phone` + `phone_verification_id` vào `PUT /api/v1/users/profile` sau khi challenge có trạng thái `verified`.
 - Wishlist đã có ở backend và cần được ưu tiên dùng cho UI yêu thích sản phẩm: `GET /api/v1/users/wishlist`, `POST /api/v1/users/wishlist` với `{ "product_id": "..." }`, `POST /api/v1/users/wishlist/sync` với `{ "product_ids": [...] }`, `DELETE /api/v1/users/wishlist/:productId`, `GET /api/v1/users/wishlist/alerts`. Source of truth là PostgreSQL trong `user-service`; frontend không lưu wishlist thật ở localStorage.
 - Wishlist item hiện trả `user_id`, `product_id`, `baseline_price`, `baseline_stock`, `created_at`, `updated_at`; nếu UI cần tên/ảnh sản phẩm thì gọi product API bằng `product_id`, không tự bịa field.
 - Notification preferences đã có dưới `/api/v1/users/notification-preferences`; wishlist alerts phụ thuộc preference `wishlist_back_in_stock` và `wishlist_price_drop`.
@@ -93,6 +94,7 @@
 - Ưu tiên layout nhiều section nhưng không rối.
 - Header nên có logo/text brand, ô tìm kiếm, lối vào giỏ hàng và tài khoản.
 - Danh sách sản phẩm nên dùng grid responsive.
+- Bộ lọc danh sách sản phẩm phải gọn, dễ quét bằng mắt; cursor pagination nên hiển thị điều hướng `Trước / Trang hiện tại / Tiếp` dựa trên `meta.next_cursor` và `meta.has_next`, không dùng phân trang giả nếu API không trả tổng số trang.
 - Product card cần hiển thị tối thiểu: ảnh, tên, giá, mô tả ngắn nếu có, nút thêm vào giỏ.
 - Chi tiết sản phẩm cần hiển thị: ảnh lớn, tên, giá, mô tả, trạng thái có thể mua nếu API cung cấp, nút thêm vào giỏ.
 - Giỏ hàng cần hiển thị item, số lượng, giá, tổng tiền nếu API cung cấp.

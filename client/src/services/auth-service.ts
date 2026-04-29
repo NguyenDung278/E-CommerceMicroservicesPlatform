@@ -19,6 +19,15 @@ export type OAuthExchangeRequest = {
   ticket: string;
 };
 
+export type ForgotPasswordRequest = {
+  email: string;
+};
+
+export type ResetPasswordRequest = {
+  token: string;
+  new_password: string;
+};
+
 function apiUrl(path: string): string {
   return `${apiBaseUrl.replace(/\/$/, "")}${path}`;
 }
@@ -37,6 +46,20 @@ export async function register(body: RegisterRequest): Promise<AuthPayload> {
     body,
   });
   return response.data;
+}
+
+export async function forgotPassword(body: ForgotPasswordRequest): Promise<void> {
+  await request<null>("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function resetPassword(body: ResetPasswordRequest): Promise<void> {
+  await request<null>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body,
+  });
 }
 
 export async function exchangeOAuthTicket(body: OAuthExchangeRequest): Promise<AuthPayload> {
