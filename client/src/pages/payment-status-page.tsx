@@ -6,16 +6,11 @@ import { getPayment, getPaymentByOrder, listPaymentsByOrder } from "../services/
 import { useAuth } from "../state/auth-context";
 import type { Payment } from "../types/api";
 import { formatCurrency, formatDate } from "../utils/format";
+import { statusLabel as sharedStatusLabel } from "../utils/status";
 
+// Ngữ cảnh payment: "pending" nghĩa là chờ thanh toán, không phải chờ xử lý.
 function statusLabel(value: string) {
-  const labels: Record<string, string> = {
-    pending: "Chờ thanh toán",
-    completed: "Hoàn tất",
-    failed: "Thất bại",
-    refunded: "Đã hoàn tiền",
-  };
-
-  return labels[value] ?? value;
+  return value === "pending" ? "Chờ thanh toán" : sharedStatusLabel(value);
 }
 
 function statusIcon(status: string) {

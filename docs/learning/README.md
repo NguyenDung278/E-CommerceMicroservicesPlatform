@@ -10,6 +10,11 @@ Mục tiêu:
 - hiểu pattern nào đang được áp dụng đúng, pattern nào còn nửa vời
 - có bài tập cụ thể để nâng tay từ Junior lên Mid/Senior backend Go
 
+Tài liệu mentor theo yêu cầu học REST API Golang qua project thật nằm ở
+[`golang-rest-api-mentor-vi.md`](golang-rest-api-mentor-vi.md). Nên đọc file
+đó trước nếu mục tiêu hiện tại là học flow auth/JWT, CRUD, PostgreSQL,
+middleware và error handling bằng tiếng Việt.
+
 ---
 
 ## 1. Cách Học Repo Này Không Bị Lạc

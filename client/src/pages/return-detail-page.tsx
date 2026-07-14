@@ -6,24 +6,7 @@ import { getReturn, uploadReturnEvidence } from "../services/order-service";
 import { useAuth } from "../state/auth-context";
 import type { ReturnRequest } from "../types/api";
 import { formatCurrency, formatDate } from "../utils/format";
-
-function statusLabel(value: string) {
-  const labels: Record<string, string> = {
-    requested: "Đã gửi yêu cầu",
-    approved: "Đã duyệt",
-    rejected: "Từ chối",
-    received: "Đã nhận hàng trả",
-    refund_pending: "Đang hoàn tiền",
-    refunded: "Đã hoàn tiền",
-    cancelled: "Đã hủy",
-  };
-
-  return labels[value] ?? value;
-}
-
-function isPositiveStatus(value: string) {
-  return ["approved", "received", "refund_pending", "refunded"].includes(value);
-}
+import { isPositiveStatus, statusLabel } from "../utils/status";
 
 function formatFileSize(size: number) {
   if (!Number.isFinite(size) || size <= 0) {

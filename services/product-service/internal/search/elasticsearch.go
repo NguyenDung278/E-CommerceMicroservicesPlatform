@@ -266,21 +266,21 @@ func (i *ElasticsearchIndex) applyAuth(req *http.Request) {
 
 func buildDocument(product *model.Product) map[string]any {
 	return map[string]any{
-		"id":             product.ID,
-		"name":           product.Name,
-		"description":    product.Description,
-		"category":       product.Category,
-		"brand":          product.Brand,
-		"tags":           product.Tags,
-		"status":         product.Status,
-		"sku":            product.SKU,
-		"price":          product.Price,
-		"stock":          product.Stock,
+		"id":                 product.ID,
+		"name":               product.Name,
+		"description":        product.Description,
+		"category":           product.Category,
+		"brand":              product.Brand,
+		"tags":               product.Tags,
+		"status":             product.Status,
+		"sku":                product.SKU,
+		"price":              product.Price,
+		"stock":              product.Stock,
 		"merchandising_rank": product.MerchandisingRank,
-		"created_at":     product.CreatedAt,
-		"updated_at":     product.UpdatedAt,
-		"variant_sizes":  collectVariantSizes(product.Variants),
-		"variant_colors": collectVariantColors(product.Variants),
+		"created_at":         product.CreatedAt,
+		"updated_at":         product.UpdatedAt,
+		"variant_sizes":      collectVariantSizes(product.Variants),
+		"variant_colors":     collectVariantColors(product.Variants),
 	}
 }
 

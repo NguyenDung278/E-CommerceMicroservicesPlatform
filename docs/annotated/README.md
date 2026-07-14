@@ -674,6 +674,8 @@ Consumer chính xử lý các routing key:
 
 #### `internal/handler/event_handler.go`
 
+Package handler được tách theo trách nhiệm: pipeline `HandleMessage`/`processMessage` ở `event_handler.go`; handler theo từng event + nội dung email ở `event_handler_events.go`; builder history item ở `event_handler_history.go`; phân loại lỗi permanent/transient ở `delivery_error.go`.
+
 1. `HandleMessage`
    - Build delivery metadata trước khi làm gì khác.
    - Nếu có `inboxStore`, service cố `Claim` message trước khi xử lý.

@@ -333,7 +333,7 @@ File nên mở:
 
 - `services/order-service/internal/model/messaging.go`
 - `services/payment-service/internal/model/messaging.go`
-- `services/notification-service/internal/handler/event_handler.go`
+- `services/notification-service/internal/handler/event_handler.go` (pipeline nhận message; handler theo từng event ở `event_handler_events.go`)
 - `services/notification-service/internal/inbox/`
 - `services/notification-service/internal/messaging/retry_publisher.go`
 

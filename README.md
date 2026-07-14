@@ -305,6 +305,7 @@ Các flow này chạm đủ:
 
 ## Tài Liệu Liên Quan
 
+- [HUONG_DAN_CHAY.md](./HUONG_DAN_CHAY.md): chạy toàn bộ hệ thống từ đầu — backend compose + frontend dev + test + lỗi thường gặp.
 - [DOCKER_GUIDE.md](./DOCKER_GUIDE.md): Docker Compose, container, debug local stack.
 - [API_TESTING_GUIDE.md](./API_TESTING_GUIDE.md): route public, smoke flow, negative flow, replay/idempotency test.
 - [LOGIC_FLOW.md](./LOGIC_FLOW.md): flow backend từ API boundary xuống service/repository/async worker.
@@ -313,3 +314,4 @@ Các flow này chạm đủ:
 - [docs/learning/README.md](./docs/learning/README.md): roadmap học repo và checklist audit.
 - [docs/deep-dive/README.md](./docs/deep-dive/README.md): runtime map, boundary, data flow order/payment/notification.
 - [docs/annotated/README.md](./docs/annotated/README.md): feature-to-source map và pattern đáng học.
+- [docs/PROMPT_TOI_UU_PROJECT.md](./docs/PROMPT_TOI_UU_PROJECT.md): prompt sẵn dùng để giao cho AI agent tối ưu codebase + backlog nợ kỹ thuật.

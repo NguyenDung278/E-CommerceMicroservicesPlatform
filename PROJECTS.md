@@ -108,7 +108,7 @@ Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source c
 
 | Layer | Function | File | Mục đích | Trạng thái | Test / verify |
 | --- | --- | --- | --- | --- | --- |
-| notification | `returnEmailContent` | `services/notification-service/internal/handler/event_handler.go` | Gửi nội dung mail cho các trạng thái `requested`, `approved`, `received`, `refund_pending`, `refunded`, `rejected`, `cancelled` | `done` | `TestHandleMessageReturnApprovedAcknowledgesAndSendsEmail` + compile verify |
+| notification | `returnEmailContent` | `services/notification-service/internal/handler/event_handler_events.go` | Gửi nội dung mail cho các trạng thái `requested`, `approved`, `received`, `refund_pending`, `refunded`, `rejected`, `cancelled` | `done` | `TestHandleMessageReturnApprovedAcknowledgesAndSendsEmail` + compile verify |
 | notification | queue binding `return.*` | `services/notification-service/internal/messaging/queue_monitor.go` | Đảm bảo consumer nhận mọi event lifecycle của return | `done` | Compile verify |
 | gateway | proxy `/api/v1/returns`, `/api/v1/returns/:id`, `/api/v1/orders/:id/returns` | `api-gateway/internal/handler/order_handler.go` | Expose returns surface cho user portal storefront/account | `done` | Compile verify |
 | gateway | proxy `/api/v1/admin/returns`, `/api/v1/admin/returns/health`, `/api/v1/admin/returns/:id/status`, `/api/v1/admin/returns/:id/refund` | `api-gateway/internal/handler/order_handler.go` | Expose đầy đủ admin returns + queue health ra ngoài gateway | `done` | Compile verify |
