@@ -165,7 +165,7 @@ func main() {
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
-	e.Use(appmw.FrontendCORS())
+	e.Use(appmw.FrontendCORS(cfg.Frontend.BaseURL))
 	e.Use(echomw.Secure())
 	e.Use(appobs.RequestIDMiddleware())
 	e.Use(appobs.EchoMiddleware("product-service"))

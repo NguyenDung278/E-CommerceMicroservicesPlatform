@@ -77,7 +77,7 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(echomw.Recover())
-	e.Use(appmw.FrontendCORS())
+	e.Use(appmw.FrontendCORS(cfg.Frontend.BaseURL))
 	e.Use(echomw.Secure())
 	e.Use(appobs.EchoMiddleware("api-gateway"))
 	e.Use(appmw.NewRedisBackedRateLimiter("api-gateway", cfg.Redis, log, 60, 120, 2*time.Minute))

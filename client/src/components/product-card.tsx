@@ -51,6 +51,11 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
         onClick={() => onProductClick?.(product)}
       >
         <ProductImage src={getProductImage(product)} alt={product.name} />
+        {isUnavailable ? (
+          <span className="product-card__flag product-card__flag--out">Tạm hết hàng</span>
+        ) : product.stock <= 5 ? (
+          <span className="product-card__flag">Chỉ còn {product.stock}</span>
+        ) : null}
       </Link>
 
       <div className="product-card__body">

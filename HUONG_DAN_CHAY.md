@@ -87,7 +87,25 @@ cd client && npm run lint    # eslint
 cd client && npm run build   # tsc -b && vite build
 ```
 
-## 6. Lỗi thường gặp
+## 6. Môi trường dev / production
+
+Hệ thống phân biệt môi trường qua biến `APP_ENV` (`development` mặc định | `staging` | `production`), đi từ env file → Docker Compose → `pkg/config`.
+
+**Development** (mặc định): mọi secret có default an toàn cho local, chạy như mục 2–4.
+
+**Production**: dùng env file riêng và bị kiểm tra nghiêm khi startup:
+
+```bash
+cp .env.production.example .env.production   # điền TOÀN BỘ secret (không commit)
+make docker-config-prod                       # render compose với .env.production
+make compose-up-prod                          # dựng stack production
+```
+
+Với `APP_ENV=production`, mỗi service **từ chối khởi động** nếu còn secret mặc định/yếu (xem `validateProductionSecrets` trong [pkg/config/config.go](./pkg/config/config.go)): `JWT_SECRET` < 32 ký tự, password DB/RabbitMQ mặc định, webhook secret dev, pepper `change-me`, MinIO `minioadmin`, hay `BOOTSTRAP_DEV_ACCOUNTS_ENABLED=true`. CORS tự cho phép origin trong `FRONTEND_BASE_URL`.
+
+Frontend theo Vite mode: `client/.env.development` (dev — để trống, dùng proxy) và `client/.env.production` (build — chỉ điền `VITE_API_BASE_URL` khi API khác origin; giá trị này nhúng vào bundle công khai, không đặt secret).
+
+## 7. Lỗi thường gặp
 
 | Triệu chứng | Nguyên nhân / cách xử lý |
 | --- | --- |
@@ -98,7 +116,7 @@ cd client && npm run build   # tsc -b && vite build
 | Frontend gọi API bị CORS/404 | Đảm bảo chạy qua `make client-dev` (proxy sẵn) và backend đang chạy ở `:8080`. |
 | Migration hỏng giữa chừng | `make migrate-force` để ép version, xem thêm DOCKER_GUIDE.md. |
 
-## 7. Đọc gì tiếp theo
+## 8. Đọc gì tiếp theo
 
 - [README.md](./README.md) — kiến trúc tổng quan, bảng "Hot Path Khi Audit Issue".
 - [LOGIC_FLOW.md](./LOGIC_FLOW.md) — flow end-to-end từ API xuống worker.

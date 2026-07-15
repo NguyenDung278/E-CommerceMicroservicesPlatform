@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { Header } from "./header";
+import { SiteFooter } from "./site-footer";
 
 export function AppShell() {
   return (
@@ -8,6 +9,7 @@ export function AppShell() {
       <main className="main-shell">
         <Outlet />
       </main>
+      <SiteFooter />
     </div>
   );
 }

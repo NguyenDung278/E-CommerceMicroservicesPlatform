@@ -146,9 +146,10 @@ Lưu ý:
 
 Luồng config:
 
-1. `Makefile` ưu tiên `.env.local`, fallback `.env.example`.
+1. `Makefile` ưu tiên `.env.local`, fallback `.env.example`. Production dùng `.env.production` (copy từ `.env.production.example`) qua `make docker-config-prod` / `compose-up-prod`.
 2. Docker Compose mount `deployments/docker/config/*.yaml` vào từng service qua `CONFIG_PATH=/config/config.yaml`.
 3. `pkg/config` load default, config file và environment variable override.
+4. `APP_ENV` chọn môi trường (`development` mặc định). Với `APP_ENV=production`, service **fail fast** khi startup nếu còn secret mặc định/yếu (xem `validateProductionSecrets` trong `pkg/config/config.go`).
 
 File config runtime:
 

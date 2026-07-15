@@ -95,9 +95,13 @@ export function HomePage() {
     <div className="page-stack">
       <section className="hero-section">
         <div>
-          <span className="eyebrow">Marketplace deals</span>
-          <p></p>
-          <Link className="button button--primary" to="/products">
+          <span className="eyebrow">ND Shop marketplace</span>
+          <h1>Mua sắm giá tốt mỗi ngày</h1>
+          <p>
+            Tìm sản phẩm theo danh mục, theo dõi đơn hàng, thanh toán MoMo và đổi trả — tất cả
+            trong một nơi.
+          </p>
+          <Link className="button button--hero" to="/products">
             Xem tất cả sản phẩm
           </Link>
         </div>

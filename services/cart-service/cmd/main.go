@@ -80,7 +80,7 @@ func main() {
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
 	e.Use(echomw.Recover())
-	e.Use(appmw.FrontendCORS())
+	e.Use(appmw.FrontendCORS(cfg.Frontend.BaseURL))
 	e.Use(echomw.Secure())
 	e.Use(appobs.EchoMiddleware("cart-service"))
 	e.Use(appmw.NewRedisBackedRateLimiter("cart-service", cfg.Redis, log, 60, 120, 2*time.Minute))

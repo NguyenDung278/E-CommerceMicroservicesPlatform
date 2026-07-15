@@ -115,7 +115,7 @@ Tăng độ phủ test có chủ đích, không chạy theo con số:
 Mỗi test mới phải chạy được bằng lệnh chuẩn của repo và nêu rõ nó chốt hành vi nào.
 ```
 
-## 3. Backlog đã biết (cập nhật 2026-07-14)
+## 3. Backlog đã biết (cập nhật 2026-07-15)
 
 | # | Vấn đề | Vị trí | Trạng thái |
 | --- | --- | --- | --- |
@@ -128,3 +128,7 @@ Mỗi test mới phải chạy được bằng lệnh chuẩn của repo và nê
 | 7 | `statusLabel`/`isPositiveStatus` lặp ở 4+ page | `client/src/utils/status.ts` | ✅ Đã gom (07/2026) |
 | 8 | `importer.go` 1033 dòng một file | `services/product-service/internal/importer/` | ✅ Đã tách (07/2026) |
 | 9 | `event_handler.go` 762 dòng một file | `services/notification-service/internal/handler/` | ✅ Đã tách (07/2026) |
+| 10 | Không có khái niệm môi trường — secret default chạy im lặng ở production | `pkg/config` | ✅ APP_ENV + fail-fast (07/2026) |
+| 11 | CORS hardcode localhost, không nhận origin production | `pkg/middleware/cors.go` | ✅ Nhận `FRONTEND_BASE_URL` (07/2026) |
+| 12 | Token lưu ở localStorage — chấp nhận được cho học tập, nâng cấp thật cần httpOnly cookie + refresh rotation | `client/src/state/auth-context.tsx` | Ghi nhận, chưa xử lý |
+| 13 | Client build production nếu API khác origin phải set `VITE_API_BASE_URL` trong `client/.env.production` | `client/` | Đã có template |

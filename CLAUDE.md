@@ -73,6 +73,8 @@ Mỗi service theo layout: `cmd/main.go` (wiring thật) → `internal/handler` 
 
 `Makefile` → `.env.local` (fallback `.env.example`) → Docker Compose mount `deployments/docker/config/<service>.yaml` vào container qua `CONFIG_PATH` → `pkg/config` load default + file + env override. Thêm config production-critical: thêm vào `pkg/config`, đặt default local an toàn, cập nhật YAML trong `deployments/docker/config/`, cập nhật `.env.example`; startup phải **fail fast** nếu thiếu secret/endpoint bắt buộc.
 
+Môi trường phân biệt qua `APP_ENV` (default `development`). Với `APP_ENV=production`, `pkg/config.Load` chạy `validateProductionSecrets` và từ chối khởi động nếu còn secret mặc định (JWT, DB/RabbitMQ password, webhook secret, pepper, MinIO key, dev accounts). Thêm secret mới thì thêm cả check vào hàm này và biến vào `.env.production.example`. Production chạy qua `make docker-config-prod` / `compose-up-prod` với `.env.production`.
+
 ## Khi debug / audit
 
 README có bảng **"Hot Path Khi Audit Issue"** map từng triệu chứng (order tạo lặp, coupon dùng quá số lần, payment webhook replay, inventory oversell, notification gửi lặp, refund worker kẹt...) tới file/function cụ thể. Bắt đầu từ đó thay vì grep mù.

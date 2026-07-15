@@ -194,6 +194,7 @@ services:
       - "8080:8080" # Can keep this exposed for direct access if needed, or remove to force going through Nginx
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
       - ./config/api-gateway.yaml:/config/config.yaml
@@ -222,6 +223,7 @@ services:
       - ../../.env.local
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
@@ -266,6 +268,7 @@ services:
     container_name: ecommerce-product-service
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
@@ -292,6 +295,7 @@ services:
     container_name: ecommerce-cart-service
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:
@@ -316,6 +320,7 @@ services:
     container_name: ecommerce-order-service
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
@@ -341,6 +346,7 @@ services:
     container_name: ecommerce-payment-service
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-me-db-password}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
@@ -367,6 +373,7 @@ services:
     container_name: ecommerce-notification-service
     environment:
       CONFIG_PATH: /config/config.yaml
+      APP_ENV: ${APP_ENV:-development}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
     volumes:

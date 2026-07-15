@@ -26,7 +26,7 @@ PRODUCT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HO
 ORDER_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_order?sslmode=$(POSTGRES_SSLMODE)
 PAYMENT_DB_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/ecommerce_payment?sslmode=$(POSTGRES_SSLMODE)
 
-.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down client-install client-dev client-build client-preview k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
+.PHONY: fmt tidy test vet ci docker-config compose-build compose-up compose-down docker-config-prod compose-up-prod compose-down-prod client-install client-dev client-build client-preview k8s-apply k8s-delete migrate-up migrate-down migrate-force storefront-import-dry-run storefront-import-sample storefront-reset-sample storefront-explain-home
 
 CATALOG_WORKBOOK ?= $(CURDIR)/artifacts/import-templates/catalog-import-sample-workbook.xlsx
 CATALOG_WORKBOOK_CONTAINER ?= /workspace/artifacts/import-templates/catalog-import-sample-workbook.xlsx
@@ -59,6 +59,22 @@ ci: fmt tidy vet test
 
 docker-config:
 	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose --env-file $(COMPOSE_ENV_FILE) $(COMPOSE_PROFILE_ARGS) config >/tmp/ecommerce-compose.rendered.yaml && echo "Rendered compose saved to /tmp/ecommerce-compose.rendered.yaml"
+
+# Production: dùng .env.production (copy từ .env.production.example, KHÔNG commit).
+# Service sẽ fail fast nếu APP_ENV=production mà secret còn giá trị mặc định.
+PROD_ENV_FILE := $(CURDIR)/.env.production
+
+docker-config-prod:
+	@test -f $(PROD_ENV_FILE) || { echo "Thiếu .env.production — copy từ .env.production.example và điền secret."; exit 1; }
+	@$(MAKE) docker-config COMPOSE_ENV_FILE=$(PROD_ENV_FILE)
+
+compose-up-prod:
+	@test -f $(PROD_ENV_FILE) || { echo "Thiếu .env.production — copy từ .env.production.example và điền secret."; exit 1; }
+	@$(MAKE) compose-up COMPOSE_ENV_FILE=$(PROD_ENV_FILE)
+
+compose-down-prod:
+	@test -f $(PROD_ENV_FILE) || { echo "Thiếu .env.production — copy từ .env.production.example và điền secret."; exit 1; }
+	@$(MAKE) compose-down COMPOSE_ENV_FILE=$(PROD_ENV_FILE)
 
 compose-build:
 	@cd $(COMPOSE_DIR) && DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) COMPOSE_DOCKER_CLI_BUILD=$(COMPOSE_DOCKER_CLI_BUILD) docker compose --env-file $(COMPOSE_ENV_FILE) $(COMPOSE_PROFILE_ARGS) build --progress plain $(SERVICES)

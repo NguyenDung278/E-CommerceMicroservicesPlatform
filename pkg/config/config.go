@@ -15,9 +15,33 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Environment names recognised by App.Env (APP_ENV).
+const (
+	EnvDevelopment = "development"
+	EnvStaging     = "staging"
+	EnvProduction  = "production"
+)
+
+// Default placeholder secrets. They exist so local dev works out of the box,
+// and validateProductionSecrets refuses to boot production with any of them.
+const (
+	defaultJWTSecret        = "change-me-in-production"
+	defaultDatabasePassword = "postgres"
+	defaultRabbitMQPassword = "guest"
+	defaultWebhookSecret    = "dev-momo-secret"
+	defaultSecretPepper     = "change-me"
+	defaultObjectStorageKey = "minioadmin"
+)
+
+// AppConfig identifies which environment the service is running in.
+type AppConfig struct {
+	Env string `mapstructure:"env"`
+}
+
 // Config holds all configuration for a microservice.
 // Each service can embed this struct and add service-specific fields.
 type Config struct {
+	App               AppConfig               `mapstructure:"app"`
 	Server            ServerConfig            `mapstructure:"server"`
 	Database          DatabaseConfig          `mapstructure:"database"`
 	Redis             RedisConfig             `mapstructure:"redis"`
@@ -237,7 +261,9 @@ func Load(serviceName string) (*Config, error) {
 	v := viper.New()
 
 	// Set defaults — these are sane development defaults.
-	// In production, all values should come from env vars or config files.
+	// In production, all values should come from env vars or config files;
+	// Load fails fast when APP_ENV=production still uses placeholder secrets.
+	v.SetDefault("app.env", EnvDevelopment)
 	v.SetDefault("server.port", "8080")
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.read_timeout", 10)
@@ -258,7 +284,7 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("rabbitmq.port", "5672")
 	v.SetDefault("rabbitmq.user", "guest")
 	v.SetDefault("rabbitmq.password", "guest")
-	v.SetDefault("jwt.secret", "change-me-in-production")
+	v.SetDefault("jwt.secret", defaultJWTSecret)
 	v.SetDefault("jwt.expiration", 24)
 	v.SetDefault("grpc.port", "50051")
 	v.SetDefault("smtp.host", "")
@@ -288,11 +314,11 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("notification.queue_metrics_interval_seconds", 15)
 	v.SetDefault("notification.wishlist_poll_interval_seconds", 300)
 	v.SetDefault("notification.wishlist_batch_limit", 50)
-	v.SetDefault("payment_gateway.webhook_secret", "dev-momo-secret")
+	v.SetDefault("payment_gateway.webhook_secret", defaultWebhookSecret)
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:3000/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")
-	v.SetDefault("object_storage.access_key", "minioadmin")
-	v.SetDefault("object_storage.secret_key", "minioadmin")
+	v.SetDefault("object_storage.access_key", defaultObjectStorageKey)
+	v.SetDefault("object_storage.secret_key", defaultObjectStorageKey)
 	v.SetDefault("object_storage.bucket", "product-media")
 	v.SetDefault("object_storage.use_ssl", false)
 	v.SetDefault("object_storage.public_base_url", "http://localhost:9000/product-media")
@@ -319,13 +345,13 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("telegram.otp_max_attempts", 5)
 	v.SetDefault("telegram.otp_daily_limit_per_user", 5)
 	v.SetDefault("telegram.otp_hourly_limit_per_ip", 10)
-	v.SetDefault("telegram.secret_pepper", "change-me")
+	v.SetDefault("telegram.secret_pepper", defaultSecretPepper)
 	v.SetDefault("email_verification.otp_message_ttl_seconds", 600)
 	v.SetDefault("email_verification.otp_resend_cooldown_seconds", 60)
 	v.SetDefault("email_verification.otp_max_attempts", 5)
 	v.SetDefault("email_verification.otp_daily_limit_per_user", 5)
 	v.SetDefault("email_verification.otp_hourly_limit_per_ip", 10)
-	v.SetDefault("email_verification.secret_pepper", "change-me")
+	v.SetDefault("email_verification.secret_pepper", defaultSecretPepper)
 
 	// Enable reading from environment variables.
 	// E.g., SERVER_PORT maps to server.port
@@ -358,5 +384,83 @@ func Load(serviceName string) (*Config, error) {
 		return nil, fmt.Errorf("error unmarshaling config: %w", err)
 	}
 
+	// Fail fast: a service must never boot in production while still using
+	// placeholder secrets — a silent fallback here means everyone knows the
+	// JWT signing key.
+	if cfg.IsProduction() {
+		if err := cfg.validateProductionSecrets(serviceName); err != nil {
+			return nil, err
+		}
+	}
+
 	return &cfg, nil
+}
+
+// IsProduction reports whether the service runs with APP_ENV=production.
+func (c *Config) IsProduction() bool {
+	return strings.EqualFold(strings.TrimSpace(c.App.Env), EnvProduction)
+}
+
+// isPlaceholderSecret catches empty values and every "change-me" style
+// placeholder used across .env examples and compose defaults — string
+// equality with one default is not enough because compose ships its own
+// placeholder values (e.g. "change-me-jwt-secret-at-least-32-chars").
+func isPlaceholderSecret(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return trimmed == "" || strings.Contains(strings.ToLower(trimmed), "change-me")
+}
+
+// validateProductionSecrets rejects placeholder secrets in production.
+// Checks are scoped per service so a service is not blocked by secrets of
+// subsystems it never touches (e.g. cart-service has no PostgreSQL).
+func (c *Config) validateProductionSecrets(serviceName string) error {
+	var problems []string
+
+	// Every service validates JWT tokens, so the signing secret is universal.
+	if isPlaceholderSecret(c.JWT.Secret) || len(c.JWT.Secret) < 32 {
+		problems = append(problems, "jwt.secret (JWT_SECRET) must be a random string of at least 32 characters, not a placeholder")
+	}
+
+	switch serviceName {
+	case "user-service", "product-service", "order-service", "payment-service":
+		if isPlaceholderSecret(c.Database.Password) || c.Database.Password == defaultDatabasePassword {
+			problems = append(problems, "database.password (DATABASE_PASSWORD) must not be empty, a placeholder, or the development default")
+		}
+	}
+
+	switch serviceName {
+	case "order-service", "payment-service", "notification-service":
+		if isPlaceholderSecret(c.RabbitMQ.Password) || c.RabbitMQ.Password == defaultRabbitMQPassword {
+			problems = append(problems, "rabbitmq.password (RABBITMQ_PASSWORD) must not be empty, a placeholder, or \"guest\"")
+		}
+	}
+
+	if serviceName == "payment-service" {
+		if isPlaceholderSecret(c.PaymentGateway.WebhookSecret) || c.PaymentGateway.WebhookSecret == defaultWebhookSecret {
+			problems = append(problems, "payment_gateway.webhook_secret (PAYMENT_GATEWAY_WEBHOOK_SECRET) must not be empty, a placeholder, or the development default")
+		}
+	}
+
+	if serviceName == "user-service" {
+		if c.Bootstrap.DevAccounts.Enabled {
+			problems = append(problems, "bootstrap.dev_accounts.enabled must be false in production")
+		}
+		if c.Telegram.Enabled && isPlaceholderSecret(c.Telegram.SecretPepper) {
+			problems = append(problems, "telegram.secret_pepper (TELEGRAM_SECRET_PEPPER) must not be empty or a placeholder")
+		}
+		if isPlaceholderSecret(c.EmailVerification.SecretPepper) {
+			problems = append(problems, "email_verification.secret_pepper (EMAIL_VERIFICATION_SECRET_PEPPER) must not be empty or a placeholder")
+		}
+	}
+
+	if serviceName == "product-service" {
+		if c.ObjectStorage.AccessKey == defaultObjectStorageKey || c.ObjectStorage.SecretKey == defaultObjectStorageKey {
+			problems = append(problems, "object_storage access/secret key (OBJECT_STORAGE_ACCESS_KEY / OBJECT_STORAGE_SECRET_KEY) must not be \"minioadmin\"")
+		}
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("unsafe production config for %s:\n  - %s", serviceName, strings.Join(problems, "\n  - "))
+	}
+	return nil
 }
