@@ -40,19 +40,19 @@ fmt:
 tidy:
 	@for module in $(MODULES); do \
 		echo "==> go mod tidy $$module"; \
-		(cd $$module && go mod tidy); \
+		(cd $$module && go mod tidy) || exit 1; \
 	done
 
 test:
 	@for module in $(MODULES); do \
 		echo "==> go test $$module"; \
-		(cd $$module && go test ./...); \
+		(cd $$module && go test ./...) || exit 1; \
 	done
 
 vet:
 	@for module in $(MODULES); do \
 		echo "==> go vet $$module"; \
-		(cd $$module && go vet ./...); \
+		(cd $$module && go vet ./...) || exit 1; \
 	done
 
 ci: fmt tidy vet test

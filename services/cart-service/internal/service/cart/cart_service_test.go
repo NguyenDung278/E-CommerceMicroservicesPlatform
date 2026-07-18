@@ -10,6 +10,7 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/model"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 type fakeCartRepo struct {
@@ -58,8 +59,7 @@ func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*p
 	if !ok {
 		return nil, grpcstatus.Error(codes.NotFound, "product not found")
 	}
-	copyProduct := *product
-	return &copyProduct, nil
+	return proto.Clone(product).(*pb.Product), nil
 }
 
 func TestAddItemAddsNewProductAndUpdatesTotal(t *testing.T) {
