@@ -70,3 +70,6 @@ temp/
 obj/
 __pycache__/
 *.py[cod]
+
+# Graphify knowledge graph output (generated)
+graphify-out/
