@@ -1,6 +1,7 @@
 import { Heart, Search, ShoppingCart, UserRound } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { ThemeToggle } from "./theme-toggle";
 import { getSearchAssist } from "../services/product-service";
 import { useAuth } from "../state/auth-context";
 import { useCart } from "../state/cart-context";
@@ -87,6 +88,7 @@ export function Header() {
         </div>
 
         <div className="header-actions">
+          <ThemeToggle />
           <Link to="/cart" className="header-action" aria-label="Giỏ hàng">
             <ShoppingCart size={21} />
             {totalItems > 0 ? <span className="header-action__badge">{totalItems}</span> : null}
