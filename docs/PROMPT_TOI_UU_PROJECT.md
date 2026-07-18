@@ -46,9 +46,9 @@ Cách làm việc:
 
 ```text
 Xử lý lần lượt các nợ kỹ thuật sau, mỗi mục một commit riêng:
-1. shared/ (shared/types/api.ts, shared/web-sdk/) không được client/ hay bất kỳ code
-   nào import — xác nhận lại bằng grep, rồi đề xuất: hợp nhất type trùng với
-   client/src/types/api.ts hoặc xóa hẳn thư mục. Hỏi trước khi xóa.
+1. (ĐÃ XONG 2026-07-19) shared/types/api.ts và shared/web-sdk/ đã xóa sau khi grep
+   xác nhận không nơi nào import; giữ lại shared/sample-catalog-data.mjs vì
+   artifacts/import-templates/generate_catalog_import_sample_data.mjs còn dùng.
 2. PROJECTS.md mục 3.x (frontend) mô tả cây frontend/ không tồn tại (repo thật là
    client/ với cấu trúc khác). Viết lại các bảng đó theo source thật.
 3. BACKEND_STRUCTURE_VI.md ~1.7MB là file sinh tự động chưa được track — quyết định:
