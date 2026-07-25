@@ -56,6 +56,9 @@ type OrderRepository interface {
 		actorID, actorRole, message string,
 		outbox *model.OutboxMessage,
 	) (bool, error)
+	ListExpiredPendingReservationOrderIDs(ctx context.Context, limit int) ([]string, error)
+	ListCancelledOrdersPendingStockRelease(ctx context.Context, limit int) ([]string, error)
+	MarkOrderStockReleased(ctx context.Context, orderID string) error
 	ApplyInboxStatusTransition(
 		ctx context.Context,
 		inbox *model.InboxMessage,

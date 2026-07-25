@@ -131,10 +131,16 @@ RPC được khai báo:
 | `UpdateProduct`  | `UpdateProductRequest`  | `UpdateProductResponse`  | cập nhật sản phẩm             |
 | `DeleteProduct`  | `DeleteProductRequest`  | `DeleteProductResponse`  | xoá sản phẩm                  |
 | `SearchProducts` | `SearchProductsRequest` | `SearchProductsResponse` | search sản phẩm               |
+| `ReserveStock`   | `ReserveStockRequest`   | `ReserveStockResponse`   | giữ chỗ tồn kho cho một order: all-or-nothing mọi item, idempotent theo `order_id` |
+| `ReleaseStock`   | `ReleaseStockRequest`   | `ReleaseStockResponse`   | trả tồn kho đã giữ của một order; replay là no-op |
 
 ### 6.3. Điều đang xảy ra trong code thực tế
 
-Hiện tại server product trong `services/product-service/internal/grpc/product_grpc.go` **mới implement `GetProductByID` và `UpdateProduct`**.
+Hiện tại server product trong `services/product-service/internal/grpc/product_grpc.go` **mới implement `GetProductByID`, `UpdateProduct`, `ReserveStock` và `ReleaseStock`**.
+
+Với luồng checkout, `order-service` không dùng `UpdateProduct` stock-delta nữa mà
+gọi `ReserveStock`/`ReleaseStock`; `UpdateProduct` stock-delta vẫn giữ để tương
+thích contract cũ.
 
 Vì `ProductGRPCServer` embed `pb.UnimplementedProductServiceServer`, nên các RPC còn lại nếu bị gọi sẽ trả `codes.Unimplemented`.
 

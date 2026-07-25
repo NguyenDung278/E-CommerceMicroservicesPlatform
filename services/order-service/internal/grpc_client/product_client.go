@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/order-service/internal/model"
 )
 
 type ProductClient struct {
@@ -59,63 +60,57 @@ func (c *ProductClient) GetProduct(ctx context.Context, productID string) (*pb.P
 	return res.Product, nil
 }
 
-// DecreaseStock atomically decrements stock through the existing UpdateProduct
-// RPC using the service's stock-delta mode.
-func (c *ProductClient) DecreaseStock(ctx context.Context, productID string, quantity int) error {
+// ReserveOrderStock reserves stock for every item of one order through the
+// all-or-nothing ReserveStock RPC. order_id is the idempotency key, so retries
+// after a network failure are safe; already_reserved marks such replays.
+func (c *ProductClient) ReserveOrderStock(ctx context.Context, orderID string, items []model.OrderItem) (bool, error) {
 	startedAt := time.Now()
 	requestLog := appobs.LoggerWithContext(c.log, ctx,
-		zap.String("product_id", productID),
-		zap.Int("quantity", quantity),
+		zap.String("order_id", orderID),
+		zap.Int("item_count", len(items)),
 	)
-	defer func() {
-		appobs.ObserveOperation("order-service", "stock_decrease_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
-	}()
 
-	if quantity <= 0 {
-		return fmt.Errorf("quantity must be positive")
+	reservationItems := make([]*pb.StockReservationItem, 0, len(items))
+	for _, item := range items {
+		reservationItems = append(reservationItems, &pb.StockReservationItem{
+			ProductId: item.ProductID,
+			Quantity:  int32(item.Quantity),
+		})
 	}
 
-	_, err := c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
-		ProductId:     productID,
-		StockQuantity: int32(quantity),
+	res, err := c.client.ReserveStock(ctx, &pb.ReserveStockRequest{
+		OrderId: orderID,
+		Items:   reservationItems,
 	})
 	if err != nil {
-		appobs.ObserveOperation("order-service", "stock_decrease_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to decrease stock via product-service gRPC", zap.Error(err))
-		return fmt.Errorf("failed to decrease stock for product %s: %w", productID, err)
+		appobs.ObserveOperation("order-service", "stock_reserve_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Warn("failed to reserve stock via product-service gRPC", zap.Error(err))
+		return false, fmt.Errorf("failed to reserve stock for order %s: %w", orderID, err)
 	}
 
-	requestLog.Info("decreased stock via product-service gRPC")
-
-	return nil
+	appobs.ObserveOperation("order-service", "stock_reserve_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("reserved stock via product-service gRPC",
+		zap.Bool("already_reserved", res.GetAlreadyReserved()),
+	)
+	return res.GetAlreadyReserved(), nil
 }
 
-// RestoreStock increments stock by using the product-service stock-delta mode
-// exposed through the existing UpdateProduct RPC.
-func (c *ProductClient) RestoreStock(ctx context.Context, productID string, quantity int) error {
+// ReleaseOrderStock returns every still-held reservation of one order back into
+// stock through the idempotent ReleaseStock RPC.
+func (c *ProductClient) ReleaseOrderStock(ctx context.Context, orderID string) (int, error) {
 	startedAt := time.Now()
-	requestLog := appobs.LoggerWithContext(c.log, ctx,
-		zap.String("product_id", productID),
-		zap.Int("quantity", quantity),
-	)
-	defer func() {
-		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
-	}()
+	requestLog := appobs.LoggerWithContext(c.log, ctx, zap.String("order_id", orderID))
 
-	if quantity <= 0 {
-		return fmt.Errorf("quantity must be positive")
-	}
-
-	_, err := c.client.UpdateProduct(ctx, &pb.UpdateProductRequest{
-		ProductId:     productID,
-		StockQuantity: -int32(quantity),
-	})
+	res, err := c.client.ReleaseStock(ctx, &pb.ReleaseStockRequest{OrderId: orderID})
 	if err != nil {
-		appobs.ObserveOperation("order-service", "stock_restore_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
-		requestLog.Error("failed to restore stock via product-service gRPC", zap.Error(err))
-		return fmt.Errorf("failed to restore stock for product %s: %w", productID, err)
+		appobs.ObserveOperation("order-service", "stock_release_grpc", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Warn("failed to release stock via product-service gRPC", zap.Error(err))
+		return 0, fmt.Errorf("failed to release stock for order %s: %w", orderID, err)
 	}
 
-	requestLog.Info("restored stock via product-service gRPC")
-	return nil
+	appobs.ObserveOperation("order-service", "stock_release_grpc", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("released stock via product-service gRPC",
+		zap.Int("released_items", int(res.GetReleasedItems())),
+	)
+	return int(res.GetReleasedItems()), nil
 }

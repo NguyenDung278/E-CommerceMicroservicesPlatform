@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	appobs "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/observability"
@@ -207,6 +208,80 @@ func (s *ProductGRPCServer) updateProductStockDelta(
 	return &pb.UpdateProductResponse{
 		Product: toProtoProduct(product),
 	}, nil
+}
+
+// ReserveStock giữ chỗ tồn kho cho toàn bộ item của một order trong một
+// transaction: hoặc trừ đủ mọi item, hoặc không trừ gì. order_id là idempotency
+// key nên order-service retry an toàn.
+func (s *ProductGRPCServer) ReserveStock(ctx context.Context, req *pb.ReserveStockRequest) (*pb.ReserveStockResponse, error) {
+	startedAt := time.Now()
+	orderID := req.GetOrderId()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("rpc.method", "ReserveStock"),
+		zap.String("order_id", orderID),
+		zap.Int("item_count", len(req.GetItems())),
+	)
+
+	items := make([]model.StockReservationItem, 0, len(req.GetItems()))
+	for _, item := range req.GetItems() {
+		items = append(items, model.StockReservationItem{
+			ProductID: item.GetProductId(),
+			Quantity:  int(item.GetQuantity()),
+		})
+	}
+
+	replayed, err := s.productService.ReserveStockForOrder(ctx, orderID, items)
+	if err != nil {
+		outcome := appobs.OutcomeFromError(err, service.ErrProductNotFound, service.ErrInsufficientStock)
+		appobs.ObserveOperation("product-service", "grpc_reserve_stock", outcome, time.Since(startedAt))
+		switch {
+		case errors.Is(err, service.ErrReservationOrderRequired),
+			errors.Is(err, service.ErrReservationItemsRequired),
+			errors.Is(err, service.ErrReservationItemInvalid):
+			requestLog.Warn("grpc stock reservation rejected", zap.Error(err))
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		case errors.Is(err, service.ErrProductNotFound):
+			requestLog.Warn("grpc stock reservation failed: product not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, "product not found")
+		case errors.Is(err, service.ErrInsufficientStock):
+			requestLog.Warn("grpc stock reservation failed: insufficient stock", zap.Error(err))
+			return nil, status.Error(codes.FailedPrecondition, "insufficient stock")
+		default:
+			requestLog.Error("grpc stock reservation failed", zap.Error(err))
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
+	appobs.ObserveOperation("product-service", "grpc_reserve_stock", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("stock reserved for order via gRPC", zap.Bool("already_reserved", replayed))
+	return &pb.ReserveStockResponse{AlreadyReserved: replayed}, nil
+}
+
+// ReleaseStock trả tồn kho đã giữ của một order về kho. Idempotent: release
+// lần hai hoặc release một order không có reservation là no-op thành công.
+func (s *ProductGRPCServer) ReleaseStock(ctx context.Context, req *pb.ReleaseStockRequest) (*pb.ReleaseStockResponse, error) {
+	startedAt := time.Now()
+	orderID := req.GetOrderId()
+	requestLog := appobs.LoggerWithContext(s.log, ctx,
+		zap.String("rpc.method", "ReleaseStock"),
+		zap.String("order_id", orderID),
+	)
+
+	released, err := s.productService.ReleaseStockForOrder(ctx, orderID)
+	if err != nil {
+		if errors.Is(err, service.ErrReservationOrderRequired) {
+			appobs.ObserveOperation("product-service", "grpc_release_stock", appobs.OutcomeBusinessError, time.Since(startedAt))
+			requestLog.Warn("grpc stock release rejected", zap.Error(err))
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		appobs.ObserveOperation("product-service", "grpc_release_stock", appobs.OutcomeSystemError, time.Since(startedAt))
+		requestLog.Error("grpc stock release failed", zap.Error(err))
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	appobs.ObserveOperation("product-service", "grpc_release_stock", appobs.OutcomeSuccess, time.Since(startedAt))
+	requestLog.Info("stock released for order via gRPC", zap.Int("released_items", released))
+	return &pb.ReleaseStockResponse{ReleasedItems: int32(released)}, nil
 }
 
 func toProtoProduct(product *model.Product) *pb.Product {

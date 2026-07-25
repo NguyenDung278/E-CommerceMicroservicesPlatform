@@ -44,6 +44,7 @@ Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source c
 
 | Hạng mục | Trạng thái | Ghi chú |
 | --- | --- | --- |
+| Inventory reservation transaction-safe ở checkout | `done` | gRPC `ReserveStock`/`ReleaseStock` all-or-nothing, ledger `stock_reservations`, worker expiry nền, k6 + testcontainers chứng minh không oversell |
 | Payment idempotency cho `POST /api/v1/payments` | `done` | Có replay, conflict detection, test service |
 | Returns/RMA cơ bản | `done` | Tạo return, xem chi tiết, xem theo order, đổi trạng thái |
 | `refund_pending` production-safe | `done` | Queue nội bộ, worker async, retry-safe, idempotent refund call |
@@ -113,7 +114,24 @@ Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source c
 | gateway | proxy `/api/v1/returns`, `/api/v1/returns/:id`, `/api/v1/orders/:id/returns` | `api-gateway/internal/handler/order_handler.go` | Expose returns surface cho user portal storefront/account | `done` | Compile verify |
 | gateway | proxy `/api/v1/admin/returns`, `/api/v1/admin/returns/health`, `/api/v1/admin/returns/:id/status`, `/api/v1/admin/returns/:id/refund` | `api-gateway/internal/handler/order_handler.go` | Expose đầy đủ admin returns + queue health ra ngoài gateway | `done` | Compile verify |
 
-### 2.5 Back-end còn thiếu
+### 2.5 Inventory reservation transaction-safe (checkout)
+
+| Layer | Function | File | Mục đích | Trạng thái | Test liên quan |
+| --- | --- | --- | --- | --- | --- |
+| proto | `ReserveStock` / `ReleaseStock` | `proto/product.proto` | Contract giữ chỗ/trả kho theo order, idempotent theo `order_id` | `done` | Compile verify + integration tests |
+| repository (product) | `ReserveStockForOrder` | `services/product-service/internal/repository/product/product_stock_reservation_repository.go` | Transaction all-or-nothing: ledger `stock_reservations` + CAS `stock >= qty` từng item, sort theo `product_id` chống deadlock | `done` | `TestReserveStockForOrderConcurrentReservationsNeverOversell`, `TestReserveStockForOrderReplayDoesNotDoubleDecrement`, `TestReserveStockForOrderIsAllOrNothingAcrossItems` |
+| repository (product) | `ReleaseStockForOrder` | như trên | Flip ledger `active -> released` + cộng kho trong một transaction, replay là no-op | `done` | `TestReleaseStockForOrderIsIdempotent` |
+| service (product) | `ReserveStockForOrder` / `ReleaseStockForOrder` | `services/product-service/internal/service/product_stock_reservations.go` | Validate input, map lỗi, reindex best-effort | `done` | Cover qua fake repo service tests |
+| grpc (product) | `ReserveStock` / `ReleaseStock` | `services/product-service/internal/grpc/product_grpc.go` | Map lỗi nghiệp vụ sang `FailedPrecondition`/`NotFound`, observability | `done` | Compile verify |
+| client (order) | `ReserveOrderStock` / `ReleaseOrderStock` | `services/order-service/internal/grpc_client/product_client.go` | Gọi RPC mới, metric `stock_reserve_grpc`/`stock_release_grpc` | `done` | Cover qua service tests với fake catalog |
+| service (order) | `reserveCreatedOrderStock` | `services/order-service/internal/service/order/order_lifecycle.go` | Một RPC reserve cho cả order thay vì loop từng item | `done` | `TestCreateOrderReturnsInsufficientStockWhenReservationFails`, `TestCreateOrderReplaysIdempotentRequest` |
+| service (order) | `releaseOrderStock` / `releaseOrphanReservation` | như trên | Release idempotent + mark `stock_released_at`; bù trừ khi persist order fail | `done` | `TestCreateOrderRestoresReservedStockWhenPersistenceFails`, `TestCancelOrderReleasesReservationAndMarksReleased` |
+| service (order) | `StartReservationExpiryWorker` | `services/order-service/internal/service/order/order_reservation_expiry_worker.go` | Worker nền: hủy đơn pending quá hạn giữ chỗ, release stock retry-safe | `done` | `TestReservationExpiryWorkerCancelsExpiredOrderAndReleasesStock`, `TestReservationExpiryWorkerSkipsAllocatedAndUnexpiredOrders`, `TestReservationExpiryWorkerRetriesReleaseAfterFailure` |
+| repository (order) | `ListExpiredPendingReservationOrderIDs`, `ListCancelledOrdersPendingStockRelease`, `MarkOrderStockReleased` | `services/order-service/internal/repository/order_repository_reservations.go` | Vòng quét của worker + đánh dấu released | `done` | `TestReservationExpiryAndStockReleaseScanIntegration` (testcontainers) |
+| migration | `000008_create_stock_reservations` (product), `000012_add_order_stock_release_tracking` (order) | `services/*/migrations/` | Ledger + cột `stock_released_at` + backfill đơn cancelled cũ | `done` | Chạy qua testcontainers migrations |
+| load test | k6 oversell | `tests/load/oversell.js`, `tests/load/run_oversell.sh` | N VU cùng checkout 1 sản phẩm stock nhỏ; threshold `successful_orders == STOCK`, verify DB sau khi bắn | `done` | Xem `tests/load/README.md` |
+
+### 2.6 Back-end còn thiếu
 
 | Hạng mục | Trạng thái | Ghi chú |
 | --- | --- | --- |
@@ -256,7 +274,6 @@ go tool cover -func=coverage_returns_portal_handler.out | grep 'ListUserReturns\
 
 ### Ưu tiên portfolio
 
-- Inventory reservation transaction-safe ở checkout.
 - SLA / timeline hợp nhất cho `order.*`, `payment.*`, `return.*`.
 - Recommendation hoặc recently viewed trên storefront.
 - Return analytics dashboard: lý do trả hàng phổ biến, tỷ lệ refund thành công, thời gian xử lý trung bình.
@@ -294,6 +311,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Storefront data | `done` | categories, editorial sections, featured products |
 | Review system | `done` | create/update/delete, summary delta, tx manager, cache |
 | Product gRPC | `done` | cart/order gọi để lấy truth sản phẩm |
+| Stock reservation ledger | `done` | `ReserveStock`/`ReleaseStock` gRPC all-or-nothing, idempotent theo `order_id`, bảng `stock_reservations` (migration 000008), integration test concurrency bằng testcontainers |
 | Optional MinIO / Elasticsearch | `done` | degrade gracefully khi dependency phụ lỗi |
 | Điểm cần theo dõi | `in progress` | benchmark search assist và variant facet; review list public vẫn là offset path |
 
@@ -316,7 +334,8 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Admin report / coupons | `done` | reporting cơ bản, coupon CRUD admin |
 | Return / refund queue | `done` | requested -> approved -> refund_pending -> refunded |
 | Outbox / inbox transition | `done` | relay-safe và event-safe khá rõ |
-| Điểm cần theo dõi | `in progress` | admin list lớn vẫn còn `COUNT(*) + OFFSET`; inventory reservation vẫn là invariant xuyên service cần tiếp tục hardening |
+| Reservation expiry worker | `done` | `StartReservationExpiryWorker` hủy đơn pending quá hạn giữ chỗ và release stock retry-safe qua cột `stock_released_at` (migration 000012) |
+| Điểm cần theo dõi | `in progress` | admin list lớn vẫn còn `COUNT(*) + OFFSET`; edge hiếm: đơn cancelled chuyển refunded ngay trước khi worker kịp release sẽ rời scan `status='cancelled'` (ledger vẫn giữ, cần release tay) |
 
 ### 6.6. Payment service
 
@@ -357,5 +376,5 @@ Nếu chỉ được chọn vài việc thật sự đáng tiền sau lớp retu
 2. Bổ sung metric/dashboard rõ hơn cho refund worker, outbox lag và notification retry.
 3. Chuẩn hóa thêm transaction helper cho các write flow nhiều bước ngoài review/profile.
 4. Benchmark `product-service` search assist, storefront query và review path thay vì tối ưu cảm tính.
-5. Làm rõ hơn invariant inventory xuyên service khi checkout/payment volume tăng.
+5. Theo dõi reservation ledger khi volume tăng: dọn row `released`/đơn đã paid lâu ngày, metric cho worker expiry, và edge cancelled→refunded chưa kịp release.
 6. Giữ root docs và `docs/*` bám đúng compose/gateway/runtime thật mỗi khi route hoặc flow đổi.

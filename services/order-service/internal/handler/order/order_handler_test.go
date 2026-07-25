@@ -353,6 +353,18 @@ type fakeOrderHandlerCatalog struct {
 	products map[string]*pb.Product
 }
 
+func (r *fakeOrderHandlerRepo) ListExpiredPendingReservationOrderIDs(_ context.Context, _ int) ([]string, error) {
+	return nil, nil
+}
+
+func (r *fakeOrderHandlerRepo) ListCancelledOrdersPendingStockRelease(_ context.Context, _ int) ([]string, error) {
+	return nil, nil
+}
+
+func (r *fakeOrderHandlerRepo) MarkOrderStockReleased(_ context.Context, _ string) error {
+	return nil
+}
+
 func (c *fakeOrderHandlerCatalog) GetProduct(_ context.Context, productID string) (*pb.Product, error) {
 	if product, ok := c.products[productID]; ok {
 		return product, nil
@@ -361,12 +373,12 @@ func (c *fakeOrderHandlerCatalog) GetProduct(_ context.Context, productID string
 	return nil, grpcstatus.Error(codes.NotFound, "product not found")
 }
 
-func (c *fakeOrderHandlerCatalog) DecreaseStock(_ context.Context, _ string, _ int) error {
-	return nil
+func (c *fakeOrderHandlerCatalog) ReserveOrderStock(_ context.Context, _ string, _ []model.OrderItem) (bool, error) {
+	return false, nil
 }
 
-func (c *fakeOrderHandlerCatalog) RestoreStock(_ context.Context, _ string, _ int) error {
-	return nil
+func (c *fakeOrderHandlerCatalog) ReleaseOrderStock(_ context.Context, _ string) (int, error) {
+	return 0, nil
 }
 
 type fakeOrderHandlerPaymentClient struct {

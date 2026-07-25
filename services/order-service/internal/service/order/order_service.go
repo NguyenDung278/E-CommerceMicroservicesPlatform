@@ -88,11 +88,11 @@ type OrderService struct {
 const orderReservationHoldDuration = 15 * time.Minute
 
 // ProductCatalog describes the downstream product capabilities the order
-// service needs for pricing and stock restoration.
+// service needs for pricing and order-scoped stock reservation.
 type ProductCatalog interface {
 	GetProduct(ctx context.Context, productID string) (*pb.Product, error)
-	DecreaseStock(ctx context.Context, productID string, quantity int) error
-	RestoreStock(ctx context.Context, productID string, quantity int) error
+	ReserveOrderStock(ctx context.Context, orderID string, items []model.OrderItem) (bool, error)
+	ReleaseOrderStock(ctx context.Context, orderID string) (int, error)
 }
 
 // PaymentHistorySource describes the downstream payment lookup needed to build

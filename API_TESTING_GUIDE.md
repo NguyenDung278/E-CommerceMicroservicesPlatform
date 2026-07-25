@@ -476,6 +476,26 @@ Kỳ vọng:
 - replay không nhân đôi transition/outbox effect
 - signature sai bị reject
 
+### 11.6 Concurrent Checkout Không Oversell
+
+Bài này chạy tự động bằng k6, không cần Postman:
+
+```bash
+./tests/load/run_oversell.sh   # stack phải đang chạy, cần k6
+```
+
+Script seed một sản phẩm stock nhỏ, bắn N request `POST /api/v1/orders` đồng
+thời (mỗi request một `Idempotency-Key` khác nhau) rồi verify DB.
+
+Kỳ vọng:
+
+- số đơn tạo thành công đúng bằng stock ban đầu
+- `products.stock` về 0, không âm
+- ledger `stock_reservations` active khớp đúng tổng đã giữ
+- request thua trả lỗi nghiệp vụ 4xx `insufficient stock`, không có 5xx
+
+Chi tiết ở `tests/load/README.md`.
+
 ---
 
 ## 12. Verify Async Flow

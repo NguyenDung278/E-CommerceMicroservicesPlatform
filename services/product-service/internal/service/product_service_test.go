@@ -23,6 +23,7 @@ type fakeProductServiceRepo struct {
 	listErr        error
 	listByIDsInput []string
 	searchProducts []*model.Product
+	reservations   map[string][]model.StockReservationItem
 }
 
 type fakeProductSearchIndex struct {
@@ -127,6 +128,43 @@ func (r *fakeProductServiceRepo) RestoreStock(_ context.Context, id string, quan
 	}
 	product.Stock += quantity
 	return nil
+}
+
+func (r *fakeProductServiceRepo) ReserveStockForOrder(_ context.Context, orderID string, items []model.StockReservationItem) (bool, error) {
+	if r.reservations == nil {
+		r.reservations = map[string][]model.StockReservationItem{}
+	}
+	if _, ok := r.reservations[orderID]; ok {
+		return true, nil
+	}
+	for _, item := range items {
+		product, ok := r.products[item.ProductID]
+		if !ok {
+			return false, repository.ErrProductNotFound
+		}
+		if product.Stock < item.Quantity {
+			return false, repository.ErrInsufficientStock
+		}
+	}
+	for _, item := range items {
+		r.products[item.ProductID].Stock -= item.Quantity
+	}
+	r.reservations[orderID] = append([]model.StockReservationItem(nil), items...)
+	return false, nil
+}
+
+func (r *fakeProductServiceRepo) ReleaseStockForOrder(_ context.Context, orderID string) ([]model.StockReservationItem, error) {
+	items, ok := r.reservations[orderID]
+	if !ok {
+		return []model.StockReservationItem{}, nil
+	}
+	for _, item := range items {
+		if product, exists := r.products[item.ProductID]; exists {
+			product.Stock += item.Quantity
+		}
+	}
+	delete(r.reservations, orderID)
+	return items, nil
 }
 
 func (r *fakeProductServiceRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {

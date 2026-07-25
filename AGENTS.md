@@ -560,6 +560,7 @@ Ví dụ:
 Ví dụ:
 
 - `UpdateStock`
+- `ReserveStockForOrder` (CAS từng item + ledger idempotent trong một transaction)
 - `ExpirePendingReservation`
 - `ApplyWebhookResult`
 

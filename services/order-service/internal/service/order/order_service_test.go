@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ type fakeOrderRepo struct {
 	userOrders           []*model.Order
 	createErr            error
 	ordersByID           map[string]*model.Order
+	stockReleased        map[string]bool
 	orderEventsByOrderID map[string][]*model.OrderEvent
 	idempotencyRecords   map[string]*model.OrderIdempotencyRecord
 	returnsByID          map[string]*model.ReturnRequest
@@ -383,6 +385,46 @@ func (r *fakeOrderRepo) ExpirePendingReservation(
 	return true, nil
 }
 
+func (r *fakeOrderRepo) ListExpiredPendingReservationOrderIDs(_ context.Context, limit int) ([]string, error) {
+	ids := make([]string, 0)
+	now := time.Now()
+	for id, order := range r.ordersByID {
+		if order.Status == model.OrderStatusPending &&
+			order.ReservationAllocatedAt == nil &&
+			order.ReservationExpiresAt != nil &&
+			!order.ReservationExpiresAt.After(now) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	return ids, nil
+}
+
+func (r *fakeOrderRepo) ListCancelledOrdersPendingStockRelease(_ context.Context, limit int) ([]string, error) {
+	ids := make([]string, 0)
+	for id, order := range r.ordersByID {
+		if order.Status == model.OrderStatusCancelled && !r.stockReleased[id] {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	if len(ids) > limit {
+		ids = ids[:limit]
+	}
+	return ids, nil
+}
+
+func (r *fakeOrderRepo) MarkOrderStockReleased(_ context.Context, orderID string) error {
+	if r.stockReleased == nil {
+		r.stockReleased = map[string]bool{}
+	}
+	r.stockReleased[orderID] = true
+	return nil
+}
+
 func (r *fakeOrderRepo) ApplyInboxStatusTransition(
 	_ context.Context,
 	_ *model.InboxMessage,
@@ -409,12 +451,13 @@ func cloneReturnRequest(returnRequest *model.ReturnRequest) *model.ReturnRequest
 var _ repository.OrderRepository = (*fakeOrderRepo)(nil)
 
 type fakeProductCatalog struct {
-	products            map[string]*pb.Product
-	calls               map[string]int
-	decreaseCalls       map[string]int
-	restoreCalls        map[string]int
-	failDecreaseForID   string
-	failDecreaseWithErr error
+	products           map[string]*pb.Product
+	calls              map[string]int
+	reservations       map[string][]model.OrderItem
+	reserveCalls       []string
+	releaseCalls       map[string]int
+	failReserveWithErr error
+	failReleaseWithErr error
 }
 
 func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*pb.Product, error) {
@@ -428,41 +471,54 @@ func (c *fakeProductCatalog) GetProduct(_ context.Context, productID string) (*p
 	return nil, grpcstatus.Error(codes.NotFound, "product not found")
 }
 
-func (c *fakeProductCatalog) DecreaseStock(_ context.Context, productID string, quantity int) error {
-	if c.decreaseCalls == nil {
-		c.decreaseCalls = map[string]int{}
+func (c *fakeProductCatalog) ReserveOrderStock(_ context.Context, orderID string, items []model.OrderItem) (bool, error) {
+	c.reserveCalls = append(c.reserveCalls, orderID)
+	if c.failReserveWithErr != nil {
+		return false, c.failReserveWithErr
 	}
-	c.decreaseCalls[productID]++
-
-	if c.failDecreaseForID == productID && c.failDecreaseWithErr != nil {
-		return c.failDecreaseWithErr
+	if c.reservations == nil {
+		c.reservations = map[string][]model.OrderItem{}
 	}
-
-	product, ok := c.products[productID]
-	if !ok {
-		return grpcstatus.Error(codes.NotFound, "product not found")
-	}
-	if int(product.StockQuantity) < quantity {
-		return grpcstatus.Error(codes.FailedPrecondition, "insufficient stock")
+	if _, ok := c.reservations[orderID]; ok {
+		return true, nil
 	}
 
-	product.StockQuantity -= int32(quantity)
-	return nil
+	for _, item := range items {
+		product, ok := c.products[item.ProductID]
+		if !ok {
+			return false, grpcstatus.Error(codes.NotFound, "product not found")
+		}
+		if int(product.StockQuantity) < item.Quantity {
+			return false, grpcstatus.Error(codes.FailedPrecondition, "insufficient stock")
+		}
+	}
+	for _, item := range items {
+		c.products[item.ProductID].StockQuantity -= int32(item.Quantity)
+	}
+	c.reservations[orderID] = append([]model.OrderItem(nil), items...)
+	return false, nil
 }
 
-func (c *fakeProductCatalog) RestoreStock(_ context.Context, productID string, quantity int) error {
-	if c.restoreCalls == nil {
-		c.restoreCalls = map[string]int{}
+func (c *fakeProductCatalog) ReleaseOrderStock(_ context.Context, orderID string) (int, error) {
+	if c.releaseCalls == nil {
+		c.releaseCalls = map[string]int{}
 	}
-	c.restoreCalls[productID]++
+	c.releaseCalls[orderID]++
+	if c.failReleaseWithErr != nil {
+		return 0, c.failReleaseWithErr
+	}
 
-	product, ok := c.products[productID]
+	items, ok := c.reservations[orderID]
 	if !ok {
-		return grpcstatus.Error(codes.NotFound, "product not found")
+		return 0, nil
 	}
-
-	product.StockQuantity += int32(quantity)
-	return nil
+	for _, item := range items {
+		if product, exists := c.products[item.ProductID]; exists {
+			product.StockQuantity += int32(item.Quantity)
+		}
+	}
+	delete(c.reservations, orderID)
+	return len(items), nil
 }
 
 type fakePaymentHistoryClient struct {
@@ -1668,8 +1724,8 @@ func TestCreateOrderRestoresReservedStockWhenPersistenceFails(t *testing.T) {
 	if catalog.products["product-1"].StockQuantity != 5 {
 		t.Fatalf("expected stock rollback to restore quantity 5, got %d", catalog.products["product-1"].StockQuantity)
 	}
-	if catalog.restoreCalls["product-1"] != 1 {
-		t.Fatalf("expected one stock restore call, got %d", catalog.restoreCalls["product-1"])
+	if len(catalog.releaseCalls) != 1 {
+		t.Fatalf("expected one stock release call, got %#v", catalog.releaseCalls)
 	}
 }
 
@@ -1756,8 +1812,8 @@ func TestCreateOrderReplaysIdempotentRequest(t *testing.T) {
 	if repo.createdOrder != nil {
 		t.Fatal("expected idempotent replay to skip repository create")
 	}
-	if len(catalog.decreaseCalls) != 0 {
-		t.Fatalf("expected no stock reservation on replay, got %#v", catalog.decreaseCalls)
+	if len(catalog.reserveCalls) != 0 {
+		t.Fatalf("expected no stock reservation on replay, got %#v", catalog.reserveCalls)
 	}
 }
 
@@ -1814,6 +1870,9 @@ func TestGetOrderExpiresPendingReservationAndRestoresStock(t *testing.T) {
 				StockQuantity: 1,
 			},
 		},
+		reservations: map[string][]model.OrderItem{
+			"order-1": {{ProductID: "product-1", Quantity: 2}},
+		},
 	}
 	svc := NewOrderService(repo, nil, zap.NewNop(), catalog, nil)
 
@@ -1827,6 +1886,9 @@ func TestGetOrderExpiresPendingReservationAndRestoresStock(t *testing.T) {
 	}
 	if catalog.products["product-1"].StockQuantity != 3 {
 		t.Fatalf("expected stock restore to bring quantity to 3, got %d", catalog.products["product-1"].StockQuantity)
+	}
+	if !repo.stockReleased["order-1"] {
+		t.Fatal("expected lazy expiry to mark order stock released")
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 var (
 	ErrInvalidCursor     = productrepo.ErrInvalidCursor
 	ErrInsufficientStock = productrepo.ErrInsufficientStock
+	ErrProductNotFound   = productrepo.ErrProductNotFound
 )
 
 type ListProductsParams = productrepo.ListProductsParams

@@ -26,6 +26,14 @@ service ProductService {
   
   // Search products
   rpc SearchProducts (SearchProductsRequest) returns (SearchProductsResponse);
+
+  // Reserve stock for one order: all-or-nothing across items, idempotent per
+  // order_id. Replaying the same order_id must not decrement stock twice.
+  rpc ReserveStock (ReserveStockRequest) returns (ReserveStockResponse);
+
+  // Release every active reservation of one order back into stock. Idempotent:
+  // releasing an unknown or already-released order is a successful no-op.
+  rpc ReleaseStock (ReleaseStockRequest) returns (ReleaseStockResponse);
 }
 
 // Get products request.
@@ -116,6 +124,37 @@ message SearchProductsResponse {
   int32 total_count = 2;
   int32 page = 3;
   int32 limit = 4;
+}
+
+// One reserved line item inside a stock reservation.
+message StockReservationItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+// Reserve stock request. order_id doubles as the idempotency key of the whole
+// reservation; items must be the full item list of that order.
+message ReserveStockRequest {
+  string order_id = 1;
+  repeated StockReservationItem items = 2;
+}
+
+// Reserve stock response. already_reserved is true when the order_id was
+// reserved by an earlier call and stock was left untouched.
+message ReserveStockResponse {
+  bool already_reserved = 1;
+}
+
+// Release stock request. Only order_id is needed; the product-service ledger
+// remembers which items are still held.
+message ReleaseStockRequest {
+  string order_id = 1;
+}
+
+// Release stock response. released_items counts reservation rows flipped from
+// active to released by this call (0 on idempotent replays).
+message ReleaseStockResponse {
+  int32 released_items = 1;
 }
 
 // Product model.

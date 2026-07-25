@@ -116,6 +116,12 @@ func (r *fakeProductRepo) SearchAssist(_ context.Context, _ repository.SearchAss
 }
 func (r *fakeProductRepo) UpdateStock(_ context.Context, id string, quantity int) error  { return nil }
 func (r *fakeProductRepo) RestoreStock(_ context.Context, id string, quantity int) error { return nil }
+func (r *fakeProductRepo) ReserveStockForOrder(_ context.Context, orderID string, items []model.StockReservationItem) (bool, error) {
+	return false, nil
+}
+func (r *fakeProductRepo) ReleaseStockForOrder(_ context.Context, orderID string) ([]model.StockReservationItem, error) {
+	return []model.StockReservationItem{}, nil
+}
 func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
 	return []*model.Product{}, nil
 }
