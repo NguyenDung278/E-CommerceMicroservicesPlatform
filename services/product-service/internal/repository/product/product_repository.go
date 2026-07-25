@@ -57,6 +57,8 @@ type ProductRepository interface {
 	SearchAssist(ctx context.Context, params SearchAssistParams) (*model.ProductSearchAssist, error)
 	UpdateStock(ctx context.Context, id string, quantity int) error
 	RestoreStock(ctx context.Context, id string, quantity int) error
+	ReserveStockForOrder(ctx context.Context, orderID string, items []model.StockReservationItem) (bool, error)
+	ReleaseStockForOrder(ctx context.Context, orderID string) ([]model.StockReservationItem, error)
 	ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error)
 }
 

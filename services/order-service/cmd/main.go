@@ -113,6 +113,7 @@ func main() {
 		go orderService.StartOutboxRelay(relayCtx)
 	}
 	go orderService.StartReturnRefundWorker(relayCtx)
+	go orderService.StartReservationExpiryWorker(relayCtx)
 	go orderService.StartReturnRefundQueueMonitor(relayCtx)
 	if amqpConsumerCh != nil {
 		if err := service.StartPaymentEventConsumer(amqpConsumerCh, log, orderService); err != nil {

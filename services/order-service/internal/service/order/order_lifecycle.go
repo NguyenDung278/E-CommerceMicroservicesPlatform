@@ -118,7 +118,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail, idemp
 	}
 
 	if err := s.persistCreatedOrder(ctx, requestLog, order, createdOutbox, idempotencyRecord); err != nil {
-		s.restoreOrderItemsStock(ctx, order.ID, order.Items, "create order persistence rollback")
+		s.releaseOrphanReservation(ctx, order.ID)
 		if normalizedKey != "" && isOrderUniqueViolation(err) {
 			replayedOrder, replayErr := s.findIdempotentOrder(ctx, userID, normalizedKey, requestHash)
 			if replayErr == nil && replayedOrder != nil {
@@ -360,7 +360,7 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 		CreatedAt: time.Now(),
 	})
 
-	s.restoreCancelledOrderStock(ctx, order)
+	s.releaseOrderStock(ctx, order.ID, "cancelled order stock release")
 	return nil
 }
 
@@ -541,72 +541,69 @@ func (s *OrderService) markOrderCancelled(
 	return s.repo.UpdateStatus(ctx, order.ID, model.OrderStatusCancelled, actorID, actorRole, message, outbox)
 }
 
-// restoreCancelledOrderStock best-effort restores stock for every cancelled line
-// item.
-//
-// Inputs:
-//   - ctx carries cancellation to product-service restore calls.
-//   - order is the cancelled order whose inventory must be restored.
-//
-// Returns:
-//   - none.
-//
-// Edge cases:
-//   - individual restore failures are logged and skipped so one bad product does
-//     not block the rest.
-//
-// Side effects:
-//   - makes one remote stock restore call per order item.
-//   - emits observability metrics and logs.
-//
-// Performance:
-//   - O(n) remote calls over the order items.
-func (s *OrderService) restoreCancelledOrderStock(ctx context.Context, order *model.Order) {
-	s.restoreOrderItemsStock(ctx, order.ID, order.Items, "cancelled order stock restore")
-}
-
 func (s *OrderService) reserveCreatedOrderStock(ctx context.Context, requestLog *zap.Logger, order *model.Order) error {
-	reservedItems := make([]model.OrderItem, 0, len(order.Items))
-	for _, item := range order.Items {
-		stockDecreaseStartedAt := time.Now()
-		if err := s.productClient.DecreaseStock(ctx, item.ProductID, item.Quantity); err != nil {
-			appobs.ObserveOperation("order-service", "reserve_stock", appobs.OutcomeSystemError, time.Since(stockDecreaseStartedAt))
-			s.restoreOrderItemsStock(ctx, order.ID, reservedItems, "create order stock rollback")
-			return mapCreateOrderStockError(err)
-		}
-
-		appobs.ObserveOperation("order-service", "reserve_stock", appobs.OutcomeSuccess, time.Since(stockDecreaseStartedAt))
-		requestLog.Info("reserved stock for order item",
-			zap.String("order_id", order.ID),
-			zap.String("product_id", item.ProductID),
-			zap.Int("quantity", item.Quantity),
-		)
-		reservedItems = append(reservedItems, item)
+	stockReserveStartedAt := time.Now()
+	replayed, err := s.productClient.ReserveOrderStock(ctx, order.ID, order.Items)
+	if err != nil {
+		mapped := mapCreateOrderStockError(err)
+		appobs.ObserveOperation("order-service", "reserve_stock",
+			appobs.OutcomeFromError(mapped, ErrProductNotFound, ErrInsufficientStock), time.Since(stockReserveStartedAt))
+		return mapped
 	}
 
+	appobs.ObserveOperation("order-service", "reserve_stock", appobs.OutcomeSuccess, time.Since(stockReserveStartedAt))
+	requestLog.Info("reserved stock for order",
+		zap.String("order_id", order.ID),
+		zap.Int("item_count", len(order.Items)),
+		zap.Bool("already_reserved", replayed),
+	)
 	return nil
 }
 
-func (s *OrderService) restoreOrderItemsStock(
-	ctx context.Context,
-	orderID string,
-	items []model.OrderItem,
-	restoreReason string,
-) {
-	for _, item := range items {
-		stockRestoreStartedAt := time.Now()
-		if err := s.productClient.RestoreStock(ctx, item.ProductID, item.Quantity); err != nil {
-			appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSystemError, time.Since(stockRestoreStartedAt))
-			s.log.Error("failed to restore stock for product",
-				zap.String("product_id", item.ProductID),
+// releaseOrderStock returns the reserved stock of one order and, on success,
+// marks the order row so the reservation expiry worker stops retrying it.
+//
+// Edge cases:
+//   - the release RPC is idempotent per order, so a failure here is safe to
+//     retry later; the caller decides whether a worker picks it up.
+//   - a failed MarkOrderStockReleased only causes one extra no-op release.
+func (s *OrderService) releaseOrderStock(ctx context.Context, orderID, reason string) bool {
+	stockReleaseStartedAt := time.Now()
+	if _, err := s.productClient.ReleaseOrderStock(ctx, orderID); err != nil {
+		appobs.ObserveOperation("order-service", "release_stock", appobs.OutcomeSystemError, time.Since(stockReleaseStartedAt))
+		s.log.Warn("failed to release reserved stock, worker will retry",
+			zap.String("order_id", orderID),
+			zap.String("reason", reason),
+			zap.Error(err),
+		)
+		return false
+	}
+	appobs.ObserveOperation("order-service", "release_stock", appobs.OutcomeSuccess, time.Since(stockReleaseStartedAt))
+
+	if err := s.repo.MarkOrderStockReleased(ctx, orderID); err != nil {
+		s.log.Warn("failed to mark order stock released",
+			zap.String("order_id", orderID),
+			zap.Error(err),
+		)
+	}
+	return true
+}
+
+// releaseOrphanReservation compensates a reservation whose order row was never
+// persisted. There is no order row for the worker to find, so this path retries
+// inline before giving up loudly.
+func (s *OrderService) releaseOrphanReservation(ctx context.Context, orderID string) {
+	const maxAttempts = 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if _, err := s.productClient.ReleaseOrderStock(ctx, orderID); err == nil {
+			return
+		} else if attempt == maxAttempts {
+			appobs.IncEvent("order-service", "orphan_reservation_release_failed", appobs.OutcomeSystemError)
+			s.log.Error("reservation has no persisted order and could not be released; manual release required",
 				zap.String("order_id", orderID),
-				zap.Int("quantity", item.Quantity),
-				zap.String("reason", restoreReason),
 				zap.Error(err),
 			)
-			continue
 		}
-		appobs.ObserveOperation("order-service", "restore_stock", appobs.OutcomeSuccess, time.Since(stockRestoreStartedAt))
 	}
 }
 

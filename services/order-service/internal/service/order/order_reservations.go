@@ -72,7 +72,7 @@ func (s *OrderService) finalizeOrderReservationState(ctx context.Context, order 
 			zap.String("order_id", order.ID),
 			zap.Time("reservation_expires_at", *order.ReservationExpiresAt),
 		).Info("expired pending order reservation")
-		s.restoreCancelledOrderStock(ctx, order)
+		s.releaseOrderStock(ctx, order.ID, "expired reservation stock release")
 	}
 
 	refreshedOrder, err := s.repo.GetByID(ctx, order.ID)

@@ -295,7 +295,8 @@ Các flow này chạm đủ:
 | Coupon bị dùng quá số lần                         | `services/order-service/internal/repository/order_repository.go`, `lockAndConsumeCoupon`                 |
 | Admin list order chậm hoặc pagination lệch        | `ListAll`, `ListAllByCursor` trong `order_repository.go`                                                 |
 | Payment webhook replay hoặc update sai trạng thái | `services/payment-service/internal/repository/payment/payment_repository.go`, `ApplyWebhookResult`       |
-| Inventory bị âm hoặc oversell                     | `services/product-service/internal/repository/product/product_repository.go`, `UpdateStock`              |
+| Inventory bị âm hoặc oversell                     | `services/product-service/internal/repository/product/product_stock_reservation_repository.go`, `ReserveStockForOrder`; load test `tests/load/run_oversell.sh` |
+| Stock bị giam sau khi đơn hủy/hết hạn             | `services/order-service/internal/service/order/order_reservation_expiry_worker.go`, `StartReservationExpiryWorker`; ledger `stock_reservations` |
 | Review aggregate sai                              | `product_review_repository.go`, `ApplyReviewSummaryDelta`                                                |
 | Profile update dính address/phone verification    | `services/user-service/internal/repository/profile_tx_manager.go`                                        |
 | Notification gửi lặp                              | `services/notification-service/internal/inbox/redis_store.go`, `retry_publisher.go`                      |

@@ -16,6 +16,7 @@ const (
 
 type ProductVariant = productmodel.ProductVariant
 type Product = productmodel.Product
+type StockReservationItem = productmodel.StockReservationItem
 type ProductReview = productmodel.ProductReview
 type ProductRatingBreakdown = productmodel.ProductRatingBreakdown
 type ProductReviewSummary = productmodel.ProductReviewSummary

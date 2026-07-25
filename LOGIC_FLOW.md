@@ -168,6 +168,7 @@ Invariant:
 - catalog cursor phải stable theo sort thật.
 - ordering cần tie-breaker ổn định.
 - stock không được âm khi concurrent write.
+- reservation theo order phải all-or-nothing và idempotent (ledger `stock_reservations`).
 - review aggregate update phải transaction-safe.
 - MinIO và Elasticsearch là optional integration.
 
@@ -176,6 +177,7 @@ Hot path:
 - `decodeProductListCursor`
 - `appendCursorClause`
 - `UpdateStock`
+- `ReserveStockForOrder` / `ReleaseStockForOrder`
 - `ApplyReviewSummaryDelta`
 
 ---
@@ -213,7 +215,13 @@ Luồng chính:
 2. Gateway forward tới `order-service`.
 3. `order_pricing.go` tính subtotal, shipping, coupon, total.
 4. `POST /api/v1/orders` tạo order với `Idempotency-Key`.
-5. `order_lifecycle.go` tạo order, item, event, outbox và idempotency record.
+5. `order-service` gọi gRPC `ReserveStock` sang `product-service`: giữ chỗ tồn kho
+   all-or-nothing cho mọi item, idempotent theo `order_id` (ledger
+   `stock_reservations` + CAS trong một transaction).
+6. `order_lifecycle.go` tạo order, item, event, outbox và idempotency record;
+   nếu persist fail thì gọi `ReleaseStock` bù trừ.
+7. Đơn pending không thanh toán trong 15 phút bị `StartReservationExpiryWorker`
+   hủy và trả kho qua `ReleaseStock` (retry qua cột `stock_released_at`).
 
 File nên mở:
 
@@ -221,14 +229,18 @@ File nên mở:
 - `services/order-service/internal/handler/order_handler.go`
 - `services/order-service/internal/service/order/order_pricing.go`
 - `services/order-service/internal/service/order/order_lifecycle.go`
+- `services/order-service/internal/service/order/order_reservation_expiry_worker.go`
 - `services/order-service/internal/repository/order_repository.go`
+- `services/product-service/internal/repository/product/product_stock_reservation_repository.go`
 
 Invariant:
 
 - order, order items, first event, outbox và idempotency record phải cùng commit.
 - coupon usage limit phải serialize bằng DB row lock.
 - order create replay-safe theo actor, idempotency key và request hash.
-- inventory reservation là invariant xuyên service cần tiếp tục hardening.
+- reserve stock all-or-nothing và idempotent theo `order_id`; release idempotent
+  (ledger `stock_reservations` quyết định, không cộng kho hai lần).
+- load test chống oversell: `tests/load/run_oversell.sh`.
 
 Hot path:
 
@@ -236,6 +248,8 @@ Hot path:
 - `lockAndConsumeCoupon`
 - `GetIdempotencyKey`
 - `CreateOrder`
+- `ReserveStockForOrder` / `ReleaseStockForOrder`
+- `StartReservationExpiryWorker`
 
 ---
 
@@ -366,6 +380,7 @@ Ví dụ:
 Ví dụ:
 
 - `UpdateStock`
+- `ReserveStockForOrder`
 - `ExpirePendingReservation`
 - `ApplyWebhookResult`
 
