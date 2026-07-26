@@ -344,9 +344,11 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Create payment | `done` | idempotency + outbox |
 | Payment history/detail | `done` | user/admin/history by order |
 | Refund payment | `done` | idempotent refund path |
-| Webhook MoMo | `done` | signature verify + inbox + guarded update |
+| Webhook MoMo | `done` | HMAC-SHA256, signature verify + inbox + guarded update |
+| Webhook VNPay | `done` | HMAC-SHA512 trên query string đã sắp xếp; provider tùy chọn, tắt khi thiếu secret |
+| Gateway abstraction | `done` | interface `PaymentGateway` + `GatewayWebhook` trung tính; `ProcessPayment`/`HandleGatewayWebhook` không còn biết tên provider |
 | Audit trail | `done` | audit entries cho payment write path |
-| Điểm cần theo dõi | `in progress` | gateway abstraction hiện vẫn khá MoMo-centric; cần giữ contract replay-safe khi thêm provider mới |
+| Điểm cần theo dõi | `in progress` | VNPay hiện là sandbox mô phỏng, chưa đối chiếu với payload thật của cổng; cần contract test khi lên production |
 
 ### 6.7. Notification service
 

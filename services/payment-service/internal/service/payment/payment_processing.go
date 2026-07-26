@@ -136,6 +136,16 @@ func (s *PaymentService) processPaymentCore(
 		return nil, err
 	}
 
+	gateway, err := s.gatewayFor(method)
+	if err != nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment processing rejected because gateway is not configured",
+			zap.String("payment_method", method),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
 	now := time.Now()
 	payment := &model.Payment{
 		ID:              uuid.New().String(),
@@ -146,15 +156,16 @@ func (s *PaymentService) processPaymentCore(
 		Status:          model.PaymentStatusCompleted,
 		TransactionType: model.PaymentTransactionTypeCharge,
 		PaymentMethod:   method,
-		GatewayProvider: resolveGatewayProvider(method),
+		GatewayProvider: gateway.Provider(),
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
-	if payment.GatewayProvider == "momo" {
+	// Cổng nào không chốt ngay thì payment dừng ở `pending` và chỉ đổi trạng thái
+	// khi webhook đã xác thực gọi về — xem HandleGatewayWebhook.
+	if !gateway.SettlesImmediately() {
 		payment.Status = model.PaymentStatusPending
-		payment.GatewayOrderID = buildMomoGatewayOrderID(payment.ID)
-		payment.CheckoutURL = buildMomoCheckoutURL(s.momoReturnURL, payment.GatewayOrderID)
+		gateway.PreparePending(payment)
 	}
 
 	enriched := enrichPayment(payment, append([]*model.Payment{payment}, payments...))

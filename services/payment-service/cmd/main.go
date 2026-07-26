@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo-contrib/echoprometheus"
@@ -84,9 +85,16 @@ func main() {
 		orderClient,
 		amqpCh,
 		log,
-		cfg.PaymentGateway.WebhookSecret,
-		cfg.PaymentGateway.MomoReturnURL,
+		service.GatewaySettings{
+			MomoSecret:     cfg.PaymentGateway.WebhookSecret,
+			MomoReturnURL:  cfg.PaymentGateway.MomoReturnURL,
+			VNPaySecret:    cfg.PaymentGateway.VNPayWebhookSecret,
+			VNPayReturnURL: cfg.PaymentGateway.VNPayReturnURL,
+		},
 	)
+	if strings.TrimSpace(cfg.PaymentGateway.VNPayWebhookSecret) == "" {
+		log.Warn("VNPay gateway disabled because payment_gateway.vnpay_webhook_secret is empty")
+	}
 	paymentHandler := handler.NewPaymentHandler(paymentService)
 	relayCtx, relayCancel := context.WithCancel(context.Background())
 	defer relayCancel()

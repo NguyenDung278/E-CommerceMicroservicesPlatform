@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -21,6 +22,12 @@ type fakePaymentRepo struct {
 	payments           []*model.Payment
 	createdOutbox      *model.OutboxMessage
 	idempotencyRecords map[string]*model.PaymentIdempotencyRecord
+
+	// inbox mô phỏng bảng `inbox_messages` với PRIMARY KEY (consumer, message_id).
+	inbox map[string]struct{}
+	// beforeApplyWebhook cho phép test chèn một delivery song song vào đúng khe
+	// hở giữa lúc service đọc status và lúc compare-and-set chạy.
+	beforeApplyWebhook func()
 }
 
 func (r *fakePaymentRepo) Create(_ context.Context, payment *model.Payment, outbox *model.OutboxMessage) error {
@@ -162,12 +169,56 @@ func (r *fakePaymentRepo) CreateAuditEntry(_ context.Context, _ *model.AuditEntr
 	return nil
 }
 
-func (r *fakePaymentRepo) ApplyWebhookResult(_ context.Context, payment *model.Payment, _ *model.InboxMessage, outbox *model.OutboxMessage) (bool, error) {
+// ApplyWebhookResult mô phỏng đúng ba bước của repository thật:
+// inbox dedupe → compare-and-set trên `status = 'pending'` → ghi outbox.
+func (r *fakePaymentRepo) ApplyWebhookResult(
+	_ context.Context,
+	payment *model.Payment,
+	inbox *model.InboxMessage,
+	outbox *model.OutboxMessage,
+) (bool, error) {
+	if r.beforeApplyWebhook != nil {
+		r.beforeApplyWebhook()
+	}
+
+	// Bước 1 — INSERT ... ON CONFLICT (consumer, message_id) DO NOTHING.
+	if inbox != nil {
+		key := fakeInboxKey(inbox.Consumer, inbox.MessageID)
+		if _, exists := r.inbox[key]; exists {
+			return true, nil
+		}
+		if r.inbox == nil {
+			r.inbox = map[string]struct{}{}
+		}
+		r.inbox[key] = struct{}{}
+	}
+
+	// Bước 2 — UPDATE ... WHERE id = $1 AND status = 'pending'.
+	stored, err := r.GetByID(context.Background(), payment.ID)
+	if err != nil {
+		return false, err
+	}
+	if stored == nil || stored.Status != model.PaymentStatusPending {
+		return true, nil
+	}
+
+	// Bước 3 — chỉ ghi outbox khi payment thực sự đổi trạng thái.
 	if err := r.Update(context.Background(), payment, outbox); err != nil {
 		return false, err
 	}
 	r.createdOutbox = outbox
 	return false, nil
+}
+
+func (r *fakePaymentRepo) seedInbox(consumer, messageID string) {
+	if r.inbox == nil {
+		r.inbox = map[string]struct{}{}
+	}
+	r.inbox[fakeInboxKey(consumer, messageID)] = struct{}{}
+}
+
+func fakeInboxKey(consumer, messageID string) string {
+	return consumer + "|" + messageID
 }
 
 func (r *fakePaymentRepo) ClaimPendingOutbox(_ context.Context, _ int, _ time.Duration) ([]*model.OutboxMessage, error) {
@@ -239,7 +290,7 @@ func TestProcessPaymentDefaultsToOutstandingAmount(t *testing.T) {
 			Status:     "pending",
 		},
 	}
-	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	payment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "", dto.ProcessPaymentRequest{
 		OrderID:       "order-1",
@@ -273,7 +324,7 @@ func TestProcessPaymentReplaysCompletedRequestByIdempotencyKey(t *testing.T) {
 			Status:     "pending",
 		},
 	}
-	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	firstPayment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
 		OrderID:       "order-1",
@@ -311,7 +362,7 @@ func TestProcessPaymentRejectsIdempotencyKeyReuseForDifferentPayload(t *testing.
 			Status:     "pending",
 		},
 	}
-	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, orderLookup, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	if _, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "checkout-order-1", dto.ProcessPaymentRequest{
 		OrderID:       "order-1",
@@ -349,7 +400,7 @@ func TestRefundPaymentReplaysCompletedRequestByIdempotencyKey(t *testing.T) {
 			},
 		},
 	}
-	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	firstRefund, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
 		Amount:  40,
@@ -393,7 +444,7 @@ func TestRefundPaymentRejectsIdempotencyKeyReuseForDifferentPayload(t *testing.T
 			},
 		},
 	}
-	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	if _, err := svc.RefundPayment(context.Background(), "payment-1", "staff-1", "staff", "", "return-refund-1", dto.RefundPaymentRequest{
 		Amount:  40,
@@ -430,7 +481,7 @@ func TestHandleMomoWebhookCompletesPendingPayment(t *testing.T) {
 			},
 		},
 	}
-	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "top-secret", "https://example.com/return")
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "top-secret", MomoReturnURL: "https://example.com/return"})
 
 	req := dto.MomoWebhookRequest{
 		PaymentID:            "payment-1",
@@ -441,9 +492,9 @@ func TestHandleMomoWebhookCompletesPendingPayment(t *testing.T) {
 	}
 	req.Signature = signatureForTest("top-secret", req)
 
-	payment, err := svc.HandleMomoWebhook(context.Background(), req)
+	payment, err := svc.HandleGatewayWebhook(context.Background(), "momo", MomoWebhookFromDTO(req))
 	if err != nil {
-		t.Fatalf("HandleMomoWebhook returned error: %v", err)
+		t.Fatalf("HandleGatewayWebhook returned error: %v", err)
 	}
 
 	if payment.Status != model.PaymentStatusCompleted {
@@ -457,6 +508,147 @@ func TestHandleMomoWebhookCompletesPendingPayment(t *testing.T) {
 	}
 	if payment.OutstandingAmount != 75 {
 		t.Fatalf("expected outstanding amount 75, got %.2f", payment.OutstandingAmount)
+	}
+}
+
+// pendingMomoRepo dựng một repo chỉ có đúng một payment MoMo đang `pending`,
+// dùng chung cho các test webhook bên dưới.
+func pendingMomoRepo() *fakePaymentRepo {
+	return &fakePaymentRepo{
+		payments: []*model.Payment{
+			{
+				ID:              "payment-1",
+				OrderID:         "order-1",
+				UserID:          "user-1",
+				OrderTotal:      100,
+				Amount:          25,
+				Status:          model.PaymentStatusPending,
+				TransactionType: model.PaymentTransactionTypeCharge,
+				PaymentMethod:   "momo",
+				GatewayProvider: "momo",
+				GatewayOrderID:  "MOMO-payment-1",
+				CreatedAt:       time.Now().Add(-time.Hour),
+				UpdatedAt:       time.Now().Add(-time.Hour),
+			},
+		},
+	}
+}
+
+func pendingMomoWebhookRequest() dto.MomoWebhookRequest {
+	return dto.MomoWebhookRequest{
+		PaymentID:            "payment-1",
+		GatewayOrderID:       "MOMO-payment-1",
+		GatewayTransactionID: "txn-123",
+		Amount:               25,
+		ResultCode:           0,
+	}
+}
+
+// Webhook là endpoint công khai (không JWT), nên chữ ký HMAC là lớp phòng thủ duy
+// nhất. Chữ ký sai phải bị từ chối TRƯỚC khi chạm vào state.
+func TestHandleMomoWebhookRejectsInvalidSignature(t *testing.T) {
+	repo := pendingMomoRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "top-secret", MomoReturnURL: "https://example.com/return"})
+
+	req := pendingMomoWebhookRequest()
+	req.Signature = "definitely-not-a-valid-signature"
+
+	if _, err := svc.HandleGatewayWebhook(context.Background(), "momo", MomoWebhookFromDTO(req)); !errors.Is(err, ErrInvalidWebhookSignature) {
+		t.Fatalf("expected ErrInvalidWebhookSignature, got %v", err)
+	}
+
+	stored, err := repo.GetByID(context.Background(), "payment-1")
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if stored.Status != model.PaymentStatusPending {
+		t.Fatalf("expected payment to stay pending, got %s", stored.Status)
+	}
+	if repo.createdOutbox != nil {
+		t.Fatal("expected no outbox message for a webhook with an invalid signature")
+	}
+}
+
+// Secret rỗng phải fail closed: từ chối tất cả, không phải cho qua tất cả.
+func TestHandleMomoWebhookFailsClosedWithoutSecret(t *testing.T) {
+	repo := pendingMomoRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "", MomoReturnURL: "https://example.com/return"})
+
+	req := pendingMomoWebhookRequest()
+	req.Signature = signatureForTest("", req)
+
+	if _, err := svc.HandleGatewayWebhook(context.Background(), "momo", MomoWebhookFromDTO(req)); !errors.Is(err, ErrInvalidWebhookSignature) {
+		t.Fatalf("expected ErrInvalidWebhookSignature when the webhook secret is empty, got %v", err)
+	}
+
+	stored, err := repo.GetByID(context.Background(), "payment-1")
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if stored.Status != model.PaymentStatusPending {
+		t.Fatalf("expected payment to stay pending, got %s", stored.Status)
+	}
+}
+
+// Inbox pattern: một delivery song song đã ghi inbox row trong lúc delivery này
+// còn đang đọc payment. Delivery thứ hai phải bị chặn ở inbox và KHÔNG được
+// enqueue thêm một event `payment.completed` nữa.
+func TestHandleMomoWebhookSkipsDuplicateInboxDelivery(t *testing.T) {
+	repo := pendingMomoRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "top-secret", MomoReturnURL: "https://example.com/return"})
+
+	req := pendingMomoWebhookRequest()
+	req.Signature = signatureForTest("top-secret", req)
+
+	repo.seedInbox(webhookConsumerName("momo"), newMomoGateway("top-secret", "").WebhookMessageID(MomoWebhookFromDTO(req)))
+
+	payment, err := svc.HandleGatewayWebhook(context.Background(), "momo", MomoWebhookFromDTO(req))
+	if err != nil {
+		t.Fatalf("HandleGatewayWebhook returned error: %v", err)
+	}
+
+	if payment.Status != model.PaymentStatusPending {
+		t.Fatalf("expected duplicate delivery to report the stored status pending, got %s", payment.Status)
+	}
+	if repo.createdOutbox != nil {
+		t.Fatal("expected duplicate delivery not to enqueue a second outbox message")
+	}
+
+	stored, err := repo.GetByID(context.Background(), "payment-1")
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if stored.Status != model.PaymentStatusPending {
+		t.Fatalf("expected stored payment to stay pending, got %s", stored.Status)
+	}
+}
+
+// Compare-and-set là lớp phòng thủ thứ hai: inbox không chặn được (message_id
+// khác), nhưng payment đã rời `pending` nên UPDATE không khớp dòng nào. Caller
+// phải trả về state THẬT trong DB, không phải bản in-memory đã gán completed.
+func TestHandleMomoWebhookReportsStoredStateWhenCompareAndSetMisses(t *testing.T) {
+	repo := pendingMomoRepo()
+	repo.beforeApplyWebhook = func() {
+		// Một delivery song song đã finalize payment thành `failed` ngay sau khi
+		// delivery hiện tại đọc thấy `pending`.
+		repo.payments[0].Status = model.PaymentStatusFailed
+		repo.payments[0].FailureReason = "finalized by a concurrent delivery"
+	}
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "top-secret", MomoReturnURL: "https://example.com/return"})
+
+	req := pendingMomoWebhookRequest()
+	req.Signature = signatureForTest("top-secret", req)
+
+	payment, err := svc.HandleGatewayWebhook(context.Background(), "momo", MomoWebhookFromDTO(req))
+	if err != nil {
+		t.Fatalf("HandleGatewayWebhook returned error: %v", err)
+	}
+
+	if payment.Status != model.PaymentStatusFailed {
+		t.Fatalf("expected the stored status failed to win, got %s", payment.Status)
+	}
+	if repo.createdOutbox != nil {
+		t.Fatal("expected no outbox message when the compare-and-set matched no row")
 	}
 }
 
@@ -535,7 +727,7 @@ func TestListPaymentsByOrderIDsAdminGroupsEnrichedPayments(t *testing.T) {
 			},
 		},
 	}
-	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), "secret", "https://example.com/return")
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), GatewaySettings{MomoSecret: "secret", MomoReturnURL: "https://example.com/return"})
 
 	paymentsByOrder, err := svc.ListPaymentsByOrderIDsAdmin(
 		context.Background(),
@@ -584,4 +776,180 @@ func hmacHex(secret, payload string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// ---------------------------------------------------------------------------
+// VNPay — cổng thứ hai.
+//
+// Các test dưới đây là bằng chứng abstraction đứng vững: VNPay khác MoMo ở
+// thuật toán ký (SHA512), khuôn dạng payload (query string đã sắp xếp), đơn vị
+// số tiền (nhân 100) và mã thành công ("00" thay vì 0) — nhưng ProcessPayment
+// và HandleGatewayWebhook không đổi một dòng nào.
+// ---------------------------------------------------------------------------
+
+const vnpayTestSecret = "vnpay-sandbox-secret"
+
+func vnpaySettings() GatewaySettings {
+	return GatewaySettings{
+		MomoSecret:     "top-secret",
+		MomoReturnURL:  "https://example.com/return",
+		VNPaySecret:    vnpayTestSecret,
+		VNPayReturnURL: "https://example.com/return",
+	}
+}
+
+func payableOrderLookup() *fakeOrderLookup {
+	return &fakeOrderLookup{
+		order: &client.Order{ID: "order-1", UserID: "user-1", TotalPrice: 120, Status: "pending"},
+	}
+}
+
+// signVNPayParams ký tham số theo đúng quy ước VNPay để test dựng được callback
+// hợp lệ mà không cần gọi sandbox thật.
+func signVNPayParams(secret string, params map[string]string) string {
+	payload := (&vnpayGateway{}).signaturePayload(GatewayWebhook{Params: params})
+	mac := hmac.New(sha512.New, []byte(secret))
+	_, _ = mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestProcessPaymentWithVNPayStaysPendingUntilWebhook(t *testing.T) {
+	repo := &fakePaymentRepo{}
+	svc := NewPaymentService(repo, payableOrderLookup(), nil, zap.NewNop(), vnpaySettings())
+
+	payment, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "",
+		dto.ProcessPaymentRequest{OrderID: "order-1", PaymentMethod: "vnpay", Amount: 120})
+	if err != nil {
+		t.Fatalf("ProcessPayment returned error: %v", err)
+	}
+
+	if payment.Status != model.PaymentStatusPending {
+		t.Fatalf("expected vnpay payment to stay pending, got %s", payment.Status)
+	}
+	if payment.GatewayProvider != "vnpay" {
+		t.Fatalf("expected gateway provider vnpay, got %q", payment.GatewayProvider)
+	}
+	if payment.GatewayOrderID != "VNP-"+payment.ID {
+		t.Fatalf("expected gateway order id VNP-%s, got %q", payment.ID, payment.GatewayOrderID)
+	}
+	// Chốt quan trọng nhất: chưa có tiền thì tuyệt đối chưa được bắn event.
+	if repo.createdOutbox != nil {
+		t.Fatal("expected no outbox message before the vnpay webhook confirms the payment")
+	}
+}
+
+// Cổng chưa cấu hình secret thì không được đăng ký, và request phải bị từ chối
+// ở biên thay vì đi vào một luồng hỏng ngầm.
+func TestProcessPaymentRejectsVNPayWhenGatewayNotConfigured(t *testing.T) {
+	repo := &fakePaymentRepo{}
+	svc := NewPaymentService(repo, payableOrderLookup(), nil, zap.NewNop(),
+		GatewaySettings{MomoSecret: "top-secret", MomoReturnURL: "https://example.com/return"})
+
+	_, err := svc.ProcessPayment(context.Background(), "user-1", "user@example.com", "Bearer token", "",
+		dto.ProcessPaymentRequest{OrderID: "order-1", PaymentMethod: "vnpay", Amount: 120})
+	if !errors.Is(err, ErrUnsupportedPaymentMethod) {
+		t.Fatalf("expected ErrUnsupportedPaymentMethod when vnpay is not configured, got %v", err)
+	}
+	if len(repo.payments) != 0 {
+		t.Fatalf("expected no payment to be persisted, got %d", len(repo.payments))
+	}
+}
+
+func pendingVNPayRepo() *fakePaymentRepo {
+	return &fakePaymentRepo{
+		payments: []*model.Payment{
+			{
+				ID:              "payment-9",
+				OrderID:         "order-1",
+				UserID:          "user-1",
+				OrderTotal:      100,
+				Amount:          25,
+				Status:          model.PaymentStatusPending,
+				TransactionType: model.PaymentTransactionTypeCharge,
+				PaymentMethod:   "vnpay",
+				GatewayProvider: "vnpay",
+				GatewayOrderID:  "VNP-payment-9",
+				CreatedAt:       time.Now().Add(-time.Hour),
+				UpdatedAt:       time.Now().Add(-time.Hour),
+			},
+		},
+	}
+}
+
+// VNPay không gửi payment id nội bộ — payment phải được tra qua gateway order id.
+func vnpayWebhookParams() map[string]string {
+	return map[string]string{
+		"vnp_TmnCode":       "TESTMERCHANT",
+		"vnp_Amount":        "2500", // 25.00 × 100
+		"vnp_TxnRef":        "VNP-payment-9",
+		"vnp_TransactionNo": "14202468",
+		"vnp_ResponseCode":  "00",
+		"vnp_OrderInfo":     "Thanh toan don hang",
+	}
+}
+
+func TestHandleVNPayWebhookCompletesPendingPayment(t *testing.T) {
+	repo := pendingVNPayRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), vnpaySettings())
+
+	params := vnpayWebhookParams()
+	params["vnp_SecureHash"] = signVNPayParams(vnpayTestSecret, params)
+
+	payment, err := svc.HandleGatewayWebhook(context.Background(), "vnpay", VNPayWebhookFromParams(params))
+	if err != nil {
+		t.Fatalf("HandleGatewayWebhook returned error: %v", err)
+	}
+
+	if payment.Status != model.PaymentStatusCompleted {
+		t.Fatalf("expected completed payment, got %s", payment.Status)
+	}
+	if !payment.SignatureVerified {
+		t.Fatal("expected signature to be marked verified")
+	}
+	if payment.GatewayTransactionID != "14202468" {
+		t.Fatalf("expected gateway transaction id 14202468, got %q", payment.GatewayTransactionID)
+	}
+	if payment.OutstandingAmount != 75 {
+		t.Fatalf("expected outstanding amount 75, got %.2f", payment.OutstandingAmount)
+	}
+	if repo.createdOutbox == nil {
+		t.Fatal("expected a confirmed vnpay payment to enqueue an outbox message")
+	}
+}
+
+// Chữ ký phải khoá cả số tiền: đổi vnp_Amount là chữ ký hỏng ngay.
+func TestHandleVNPayWebhookRejectsTamperedAmount(t *testing.T) {
+	repo := pendingVNPayRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), vnpaySettings())
+
+	params := vnpayWebhookParams()
+	params["vnp_SecureHash"] = signVNPayParams(vnpayTestSecret, params)
+	params["vnp_Amount"] = "1" // kẻ tấn công hạ số tiền sau khi VNPay đã ký
+
+	if _, err := svc.HandleGatewayWebhook(context.Background(), "vnpay", VNPayWebhookFromParams(params)); !errors.Is(err, ErrInvalidWebhookSignature) {
+		t.Fatalf("expected ErrInvalidWebhookSignature for a tampered amount, got %v", err)
+	}
+
+	stored, err := repo.GetByID(context.Background(), "payment-9")
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if stored.Status != model.PaymentStatusPending {
+		t.Fatalf("expected payment to stay pending, got %s", stored.Status)
+	}
+}
+
+// Chữ ký MoMo hợp lệ không được dùng để xác thực callback VNPay và ngược lại:
+// mỗi cổng có secret và thuật toán riêng.
+func TestHandleGatewayWebhookRejectsProviderMismatch(t *testing.T) {
+	repo := pendingVNPayRepo()
+	svc := NewPaymentService(repo, &fakeOrderLookup{}, nil, zap.NewNop(), vnpaySettings())
+
+	params := vnpayWebhookParams()
+	params["vnp_SecureHash"] = signVNPayParams(vnpayTestSecret, params)
+
+	// Callback VNPay hợp lệ nhưng bị gửi vào endpoint của MoMo.
+	if _, err := svc.HandleGatewayWebhook(context.Background(), "momo", VNPayWebhookFromParams(params)); !errors.Is(err, ErrPaymentNotFound) {
+		t.Fatalf("expected ErrPaymentNotFound for a provider mismatch, got %v", err)
+	}
 }

@@ -147,8 +147,15 @@ type NotificationConfig struct {
 }
 
 type PaymentGatewayConfig struct {
+	// WebhookSecret là secret ký webhook của MoMo. Giữ nguyên tên key để không
+	// phá vỡ biến môi trường PAYMENT_GATEWAY_WEBHOOK_SECRET đang dùng.
 	WebhookSecret string `mapstructure:"webhook_secret"`
 	MomoReturnURL string `mapstructure:"momo_return_url"`
+
+	// VNPay là provider tùy chọn: để trống thì cổng không được đăng ký và
+	// request chọn phương thức `vnpay` bị từ chối ở biên thay vì đi vào luồng hỏng.
+	VNPayWebhookSecret string `mapstructure:"vnpay_webhook_secret"`
+	VNPayReturnURL     string `mapstructure:"vnpay_return_url"`
 }
 
 type TracingConfig struct {
@@ -316,6 +323,8 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("notification.wishlist_batch_limit", 50)
 	v.SetDefault("payment_gateway.webhook_secret", defaultWebhookSecret)
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:3000/payments")
+	v.SetDefault("payment_gateway.vnpay_webhook_secret", "")
+	v.SetDefault("payment_gateway.vnpay_return_url", "http://localhost:3000/payments")
 	v.SetDefault("object_storage.endpoint", "minio:9000")
 	v.SetDefault("object_storage.access_key", defaultObjectStorageKey)
 	v.SetDefault("object_storage.secret_key", defaultObjectStorageKey)
@@ -438,6 +447,12 @@ func (c *Config) validateProductionSecrets(serviceName string) error {
 	if serviceName == "payment-service" {
 		if isPlaceholderSecret(c.PaymentGateway.WebhookSecret) || c.PaymentGateway.WebhookSecret == defaultWebhookSecret {
 			problems = append(problems, "payment_gateway.webhook_secret (PAYMENT_GATEWAY_WEBHOOK_SECRET) must not be empty, a placeholder, or the development default")
+		}
+		// VNPay là optional: để trống nghĩa là không bật cổng đó. Nhưng đã bật
+		// thì secret phải thật, không được là placeholder.
+		if strings.TrimSpace(c.PaymentGateway.VNPayWebhookSecret) != "" &&
+			isPlaceholderSecret(c.PaymentGateway.VNPayWebhookSecret) {
+			problems = append(problems, "payment_gateway.vnpay_webhook_secret (PAYMENT_GATEWAY_VNPAY_WEBHOOK_SECRET) must not be a placeholder when VNPay is enabled")
 		}
 	}
 

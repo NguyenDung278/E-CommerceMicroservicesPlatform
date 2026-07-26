@@ -261,14 +261,23 @@ Luồng chính:
 2. Gateway forward tới `payment-service`.
 3. `payment-service` tạo payment record với idempotency.
 4. Payment event được publish qua outbox/RabbitMQ.
-5. MoMo webhook vào `/api/v1/payments/webhooks/momo`.
-6. Webhook được verify signature, dedupe và guarded update.
-7. Payment state sync sang order flow khi cần.
+5. Webhook của cổng vào `/api/v1/payments/webhooks/momo` hoặc `/api/v1/payments/webhooks/vnpay`.
+6. Handler dịch payload về `service.GatewayWebhook` (dạng trung tính) rồi gọi `HandleGatewayWebhook`.
+7. Webhook được verify signature (theo `PaymentGateway` của từng provider), dedupe qua inbox và guarded update bằng compare-and-set.
+8. Payment state sync sang order flow khi cần.
+
+Provider được chọn qua interface `PaymentGateway` (`internal/service/payment/gateway.go`):
+`manual` chốt ngay, `momo` và `vnpay` dừng ở `pending` cho tới khi webhook xác thực gọi về.
+Cổng nào thiếu secret thì không được đăng ký, và request chọn phương thức đó nhận
+`ErrUnsupportedPaymentMethod` ngay ở biên.
 
 File nên mở:
 
 - `api-gateway/internal/handler/payment_handler.go`
 - `services/payment-service/internal/handler/`
+- `services/payment-service/internal/service/payment/gateway.go`
+- `services/payment-service/internal/service/payment/gateway_momo.go`
+- `services/payment-service/internal/service/payment/gateway_vnpay.go`
 - `services/payment-service/internal/service/payment/payment_processing.go`
 - `services/payment-service/internal/service/payment/payment_refunds.go`
 - `services/payment-service/internal/service/payment/payment_idempotency.go`

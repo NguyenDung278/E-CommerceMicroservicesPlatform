@@ -47,7 +47,7 @@ Guide này tập trung vào HTTP API có thể test trực tiếp:
 - order preview, order create, order history, order events
 - returns, evidence upload, refund queue
 - coupons, admin order/report
-- payments, refunds, MoMo webhook
+- payments, refunds, webhook MoMo và VNPay
 
 Không test trực tiếp bằng Postman:
 
@@ -314,6 +314,8 @@ Khi test, verify:
 | `GET`  | `/api/v1/payments/order/:orderId`               |
 | `GET`  | `/api/v1/payments/order/:orderId/history`       |
 | `POST` | `/api/v1/payments/webhooks/momo`                |
+| `POST` | `/api/v1/payments/webhooks/vnpay`               |
+| `GET`  | `/api/v1/payments/webhooks/vnpay`               |
 | `GET`  | `/api/v1/admin/payments/history`                |
 | `GET`  | `/api/v1/admin/payments/order/:orderId/history` |
 | `POST` | `/api/v1/admin/payments/:id/refunds`            |

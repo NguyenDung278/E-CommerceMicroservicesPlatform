@@ -35,15 +35,25 @@ type OrderLookup interface {
 	GetOrder(ctx context.Context, authHeader, orderID string) (*client.Order, error)
 }
 
+// GatewaySettings gom cấu hình của mọi cổng thanh toán được hỗ trợ.
+//
+// Dùng struct thay vì thêm tham số vị trí để việc thêm cổng thứ ba không biến
+// constructor thành một hàng chục string không tên.
+type GatewaySettings struct {
+	MomoSecret     string
+	MomoReturnURL  string
+	VNPaySecret    string
+	VNPayReturnURL string
+}
+
 // PaymentService coordinates payment validation, persistence, and lifecycle
 // event publication.
 type PaymentService struct {
-	repo          repository.PaymentRepository
-	orderClient   OrderLookup
-	amqpCh        *amqp.Channel
-	log           *zap.Logger
-	webhookSecret string
-	momoReturnURL string
+	repo        repository.PaymentRepository
+	orderClient OrderLookup
+	amqpCh      *amqp.Channel
+	log         *zap.Logger
+	gateways    map[string]PaymentGateway
 }
 
 // NewPaymentService wires the dependencies needed by payment workflows.
@@ -53,8 +63,7 @@ type PaymentService struct {
 //   - orderClient loads authoritative order state before charging.
 //   - amqpCh publishes lifecycle events when RabbitMQ is available.
 //   - log records structured diagnostics.
-//   - webhookSecret verifies MoMo webhook signatures.
-//   - momoReturnURL seeds simulated checkout URLs for pending wallet payments.
+//   - settings cấu hình secret và return URL cho từng cổng thanh toán.
 //
 // Returns:
 //   - a ready-to-use payment service.
@@ -62,6 +71,8 @@ type PaymentService struct {
 // Edge cases:
 //   - optional dependencies such as amqpCh may be nil; affected flows degrade
 //     gracefully.
+//   - cổng nào thiếu secret thì KHÔNG được đăng ký, nên request chọn phương thức
+//     đó nhận ErrUnsupportedPaymentMethod thay vì đi vào một luồng hỏng ngầm.
 //
 // Side effects:
 //   - none during construction.
@@ -73,15 +84,44 @@ func NewPaymentService(
 	orderClient OrderLookup,
 	amqpCh *amqp.Channel,
 	log *zap.Logger,
-	webhookSecret string,
-	momoReturnURL string,
+	settings GatewaySettings,
 ) *PaymentService {
-	return &PaymentService{
-		repo:          repo,
-		orderClient:   orderClient,
-		amqpCh:        amqpCh,
-		log:           log,
-		webhookSecret: strings.TrimSpace(webhookSecret),
-		momoReturnURL: strings.TrimSpace(momoReturnURL),
+	gateways := map[string]PaymentGateway{
+		"manual": newManualGateway(),
+		"momo":   newMomoGateway(settings.MomoSecret, settings.MomoReturnURL),
 	}
+	if strings.TrimSpace(settings.VNPaySecret) != "" {
+		gateways["vnpay"] = newVNPayGateway(settings.VNPaySecret, settings.VNPayReturnURL)
+	}
+
+	return &PaymentService{
+		repo:        repo,
+		orderClient: orderClient,
+		amqpCh:      amqpCh,
+		log:         log,
+		gateways:    gateways,
+	}
+}
+
+// gatewayFor tra cổng theo phương thức đã chuẩn hóa.
+//
+// Returns:
+//   - implementation tương ứng.
+//   - ErrUnsupportedPaymentMethod khi cổng chưa được cấu hình.
+func (s *PaymentService) gatewayFor(method string) (PaymentGateway, error) {
+	gateway, ok := s.gateways[method]
+	if !ok {
+		return nil, ErrUnsupportedPaymentMethod
+	}
+	return gateway, nil
+}
+
+// gatewayForProvider tra cổng theo định danh provider dùng cho luồng webhook.
+func (s *PaymentService) gatewayForProvider(provider string) (PaymentGateway, error) {
+	for _, gateway := range s.gateways {
+		if gateway.Provider() == provider {
+			return gateway, nil
+		}
+	}
+	return nil, ErrUnsupportedPaymentMethod
 }
