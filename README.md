@@ -52,7 +52,7 @@ flowchart LR
 | `services/product-service/`      | Product CRUD, upload ảnh, catalog listing, cursor pagination, search assist, review, gRPC product lookup, optional Elasticsearch, optional MinIO.            |
 | `services/cart-service/`         | Giỏ hàng trên Redis, get/add/update/remove/clear/merge cart, validate product qua gRPC.                                                                      |
 | `services/order-service/`        | Order preview, create order, idempotency, order event, order history/detail, cancel, public coupons, shipment tracking, admin report, returns, refund queue. |
-| `services/payment-service/`      | Create payment, history/detail, refund, MoMo webhook, idempotency, inbox/outbox, audit entries.                                                              |
+| `services/payment-service/`      | Create payment, history/detail, refund, webhook MoMo + VNPay qua `PaymentGateway` abstraction, idempotency, inbox/outbox, audit entries.                     |
 | `services/notification-service/` | RabbitMQ consumer, Redis inbox dedupe, retry publisher, history/unread state, email worker, wishlist alert worker.                                           |
 | `pkg/`                           | Shared config, database, logger, middleware, observability, response, validation.                                                                            |
 | `proto/`                         | gRPC contracts giữa service.                                                                                                                                 |

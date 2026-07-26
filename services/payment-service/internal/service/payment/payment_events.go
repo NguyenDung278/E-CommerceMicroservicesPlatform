@@ -19,7 +19,6 @@ const (
 	paymentOutboxPollInterval = time.Second
 	paymentOutboxLease        = 30 * time.Second
 	paymentOutboxClaimLimit   = 50
-	paymentWebhookConsumer    = "momo-webhook"
 )
 
 // buildPaymentOutboxMessage materializes the durable broker message that must

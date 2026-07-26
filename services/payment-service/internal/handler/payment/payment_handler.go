@@ -39,8 +39,12 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminPayments.GET("/order/:orderId/history", h.ListPaymentsByOrderAdmin)
 	adminPayments.POST("/:id/refunds", h.RefundPayment)
 
+	// Webhook là endpoint công khai: cổng thanh toán không có JWT của khách.
+	// Lớp phòng thủ duy nhất là chữ ký HMAC, xác thực trong PaymentGateway.
 	webhooks := e.Group("/api/v1/payments/webhooks")
 	webhooks.POST("/momo", h.HandleMomoWebhook)
+	webhooks.POST("/vnpay", h.HandleVNPayWebhook)
+	webhooks.GET("/vnpay", h.HandleVNPayWebhook)
 }
 
 // ProcessPayment handles POST /api/v1/payments
@@ -219,13 +223,37 @@ func (h *PaymentHandler) ListPaymentsByOrderIDsAdmin(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "payments retrieved", paymentsByOrder)
 }
 
+// HandleMomoWebhook nhận callback JSON của MoMo và dịch sang dạng trung tính.
+//
+// Handler chỉ làm việc của tầng biên: đọc khuôn dạng HTTP rồi chuyển tiếp.
+// Toàn bộ luật xác thực và chuyển trạng thái nằm ở service.
 func (h *PaymentHandler) HandleMomoWebhook(c echo.Context) error {
 	var req dto.MomoWebhookRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
 	}
 
-	payment, err := h.paymentService.HandleMomoWebhook(c.Request().Context(), req)
+	return h.handleGatewayWebhook(c, "momo", service.MomoWebhookFromDTO(req))
+}
+
+// HandleVNPayWebhook nhận callback của VNPay.
+//
+// VNPay gửi tham số qua query string (cả IPN lẫn return URL), không phải JSON
+// body — đây chính là lý do GatewayWebhook tồn tại: khuôn dạng vận chuyển khác
+// nhau nhưng luồng nghiệp vụ phía sau là một.
+func (h *PaymentHandler) HandleVNPayWebhook(c echo.Context) error {
+	params := make(map[string]string, len(c.QueryParams()))
+	for key, values := range c.QueryParams() {
+		if len(values) > 0 {
+			params[key] = values[0]
+		}
+	}
+
+	return h.handleGatewayWebhook(c, "vnpay", service.VNPayWebhookFromParams(params))
+}
+
+func (h *PaymentHandler) handleGatewayWebhook(c echo.Context, provider string, hook service.GatewayWebhook) error {
+	payment, err := h.paymentService.HandleGatewayWebhook(c.Request().Context(), provider, hook)
 	if err != nil {
 		if errors.Is(err, service.ErrPaymentNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "payment not found")

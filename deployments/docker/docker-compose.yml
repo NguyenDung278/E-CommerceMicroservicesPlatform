@@ -351,6 +351,9 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
       PAYMENT_GATEWAY_MOMO_RETURN_URL: ${PAYMENT_GATEWAY_MOMO_RETURN_URL:-http://localhost:3000/payments}
+      PAYMENT_GATEWAY_WEBHOOK_SECRET: ${PAYMENT_GATEWAY_WEBHOOK_SECRET:-dev-momo-secret}
+      PAYMENT_GATEWAY_VNPAY_WEBHOOK_SECRET: ${PAYMENT_GATEWAY_VNPAY_WEBHOOK_SECRET:-}
+      PAYMENT_GATEWAY_VNPAY_RETURN_URL: ${PAYMENT_GATEWAY_VNPAY_RETURN_URL:-http://localhost:3000/payments}
     volumes:
       - ./config/payment-service.yaml:/config/config.yaml
     networks:

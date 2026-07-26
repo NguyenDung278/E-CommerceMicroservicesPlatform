@@ -206,12 +206,18 @@ func (s *PaymentService) RefundPayment(
 	return enriched, nil
 }
 
-// HandleMomoWebhook verifies and applies a simulated MoMo webhook to a pending
-// payment.
+// HandleGatewayWebhook verifies and applies a payment gateway callback to a
+// pending payment.
+//
+// Hàm này KHÔNG biết mình đang xử lý cổng nào: mọi khác biệt về thuật toán chữ
+// ký, khuôn dạng payload và cách sinh khóa dedupe đều nằm sau interface
+// PaymentGateway. Thêm cổng thứ ba không cần sửa hàm này.
 //
 // Inputs:
 //   - ctx carries cancellation to repository work and event publication.
-//   - req contains the webhook payload from the payment gateway.
+//   - provider xác định cổng gửi callback, dùng để chọn implementation và để
+//     đối chiếu với `gateway_provider` đã lưu trên payment.
+//   - hook là payload đã được chuẩn hóa về dạng trung tính.
 //
 // Returns:
 //   - the updated enriched payment record.
@@ -220,6 +226,8 @@ func (s *PaymentService) RefundPayment(
 // Edge cases:
 //   - repeated callbacks for already-finalized payments are treated as idempotent
 //     replays and simply return the current state.
+//   - khi inbox chặn hoặc compare-and-set không khớp, state THẬT trong DB được
+//     đọc lại và trả về thay cho bản in-memory đã mutate.
 //
 // Side effects:
 //   - updates the payment row when the pending payment transitions.
@@ -227,19 +235,32 @@ func (s *PaymentService) RefundPayment(
 //
 // Performance:
 //   - dominated by up to two repository reads, one update, and O(n) sibling-payment scans.
-func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebhookRequest) (*model.Payment, error) {
+func (s *PaymentService) HandleGatewayWebhook(
+	ctx context.Context,
+	provider string,
+	hook GatewayWebhook,
+) (*model.Payment, error) {
 	startedAt := time.Now()
 	outcome := appobs.OutcomeSuccess
+	provider = strings.TrimSpace(strings.ToLower(provider))
 	requestLog := appobs.LoggerWithContext(s.log, ctx,
-		zap.String("payment_id", strings.TrimSpace(req.PaymentID)),
-		zap.String("gateway_order_id", strings.TrimSpace(req.GatewayOrderID)),
-		zap.Int("result_code", req.ResultCode),
+		zap.String("gateway_provider", provider),
+		zap.String("payment_id", resolveWebhookPaymentID(hook)),
+		zap.String("gateway_order_id", hook.GatewayOrderID),
+		zap.Bool("gateway_succeeded", hook.Succeeded),
 	)
 	defer func() {
-		appobs.ObserveOperation("payment-service", "momo_webhook", outcome, time.Since(startedAt))
+		appobs.ObserveOperation("payment-service", "gateway_webhook", outcome, time.Since(startedAt))
 	}()
 
-	payment, err := s.findWebhookPayment(ctx, req)
+	gateway, err := s.gatewayForProvider(provider)
+	if err != nil {
+		outcome = appobs.OutcomeBusinessError
+		requestLog.Warn("payment webhook rejected because gateway is not configured", zap.Error(err))
+		return nil, ErrPaymentNotFound
+	}
+
+	payment, err := s.findWebhookPayment(ctx, hook)
 	if err != nil {
 		outcome = appobs.OutcomeSystemError
 		requestLog.Error("payment webhook failed while resolving target payment", zap.Error(err))
@@ -250,14 +271,14 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		requestLog.Warn("payment webhook rejected because payment was not found")
 		return nil, ErrPaymentNotFound
 	}
-	if payment.GatewayProvider != "momo" {
+	if payment.GatewayProvider != gateway.Provider() {
 		outcome = appobs.OutcomeBusinessError
 		requestLog.Warn("payment webhook rejected because gateway provider does not match payment",
-			zap.String("gateway_provider", payment.GatewayProvider),
+			zap.String("payment_gateway_provider", payment.GatewayProvider),
 		)
 		return nil, ErrPaymentNotFound
 	}
-	if !verifyMomoWebhookSignature(s.webhookSecret, req) {
+	if !gateway.VerifyWebhook(hook) {
 		outcome = appobs.OutcomeBusinessError
 		requestLog.Warn("payment webhook rejected due to invalid signature")
 		return nil, ErrInvalidWebhookSignature
@@ -274,10 +295,10 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		)
 		return enrichPayment(payment, payments), nil
 	}
-	if roundMoney(req.Amount) != roundMoney(payment.Amount) {
+	if roundMoney(hook.Amount) != roundMoney(payment.Amount) {
 		outcome = appobs.OutcomeBusinessError
 		requestLog.Warn("payment webhook rejected due to amount mismatch",
-			zap.Float64("webhook_amount", req.Amount),
+			zap.Float64("webhook_amount", hook.Amount),
 			zap.Float64("expected_amount", payment.Amount),
 		)
 		return nil, ErrPaymentAmountMismatch
@@ -291,14 +312,14 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 	}
 
 	payment.SignatureVerified = true
-	payment.GatewayTransactionID = strings.TrimSpace(req.GatewayTransactionID)
+	payment.GatewayTransactionID = strings.TrimSpace(hook.GatewayTransactionID)
 	payment.UpdatedAt = time.Now()
-	if req.ResultCode == 0 {
+	if hook.Succeeded {
 		payment.Status = model.PaymentStatusCompleted
 		payment.FailureReason = ""
 	} else {
 		payment.Status = model.PaymentStatusFailed
-		payment.FailureReason = strings.TrimSpace(req.Message)
+		payment.FailureReason = strings.TrimSpace(hook.Message)
 	}
 
 	enriched := enrichPayment(payment, replacePayment(payments, payment))
@@ -309,10 +330,10 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		return nil, err
 	}
 
-	duplicate, err := s.repo.ApplyWebhookResult(ctx, payment, &model.InboxMessage{
-		Consumer:   paymentWebhookConsumer,
-		MessageID:  momoWebhookMessageID(req),
-		RoutingKey: "payment.momo.webhook",
+	unchanged, err := s.repo.ApplyWebhookResult(ctx, payment, &model.InboxMessage{
+		Consumer:   webhookConsumerName(gateway.Provider()),
+		MessageID:  gateway.WebhookMessageID(hook),
+		RoutingKey: "payment." + gateway.Provider() + ".webhook",
 		CreatedAt:  time.Now(),
 	}, outbox)
 	if err != nil {
@@ -323,11 +344,11 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 		)
 		return nil, err
 	}
-	if duplicate {
+	if unchanged {
 		payments, err := s.repo.ListByOrderID(ctx, payment.OrderID)
 		if err != nil {
 			outcome = appobs.OutcomeSystemError
-			requestLog.Error("payment webhook failed while reloading duplicate delivery state", zap.Error(err))
+			requestLog.Error("payment webhook failed while reloading unchanged delivery state", zap.Error(err))
 			return nil, err
 		}
 		current := payment
@@ -337,7 +358,9 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 				break
 			}
 		}
-		requestLog.Info("payment webhook skipped because inbox message already exists")
+		requestLog.Info("payment webhook did not change payment state",
+			zap.String("stored_status", string(current.Status)),
+		)
 		return enrichPayment(current, payments), nil
 	}
 	requestLog.Info("payment webhook processed",
@@ -353,7 +376,7 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 //
 // Inputs:
 //   - ctx carries cancellation to repository work.
-//   - req contains the webhook payload.
+//   - hook contains the normalized webhook payload.
 //
 // Returns:
 //   - the matching payment when found.
@@ -361,7 +384,8 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 //   - any repository error encountered during lookup.
 //
 // Edge cases:
-//   - payment id takes precedence because it is the internal primary key.
+//   - payment id takes precedence because it is the internal primary key; VNPay
+//     không gửi payment id nên luôn rơi vào nhánh gateway order id.
 //
 // Side effects:
 //   - none.
@@ -369,12 +393,12 @@ func (s *PaymentService) HandleMomoWebhook(ctx context.Context, req dto.MomoWebh
 // Performance:
 //   - at most one repository lookup because the second path is only used when
 //     payment_id is absent.
-func (s *PaymentService) findWebhookPayment(ctx context.Context, req dto.MomoWebhookRequest) (*model.Payment, error) {
-	if strings.TrimSpace(req.PaymentID) != "" {
-		return s.repo.GetByID(ctx, strings.TrimSpace(req.PaymentID))
+func (s *PaymentService) findWebhookPayment(ctx context.Context, hook GatewayWebhook) (*model.Payment, error) {
+	if paymentID := resolveWebhookPaymentID(hook); paymentID != "" {
+		return s.repo.GetByID(ctx, paymentID)
 	}
-	if strings.TrimSpace(req.GatewayOrderID) != "" {
-		return s.repo.GetByGatewayOrderID(ctx, strings.TrimSpace(req.GatewayOrderID))
+	if gatewayOrderID := strings.TrimSpace(hook.GatewayOrderID); gatewayOrderID != "" {
+		return s.repo.GetByGatewayOrderID(ctx, gatewayOrderID)
 	}
 	return nil, nil
 }

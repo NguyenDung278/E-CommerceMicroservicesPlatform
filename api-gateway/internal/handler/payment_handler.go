@@ -35,6 +35,10 @@ func (h *PaymentHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	adminPayments.GET("/order/:orderId/history", h.forward)
 	adminPayments.POST("/:id/refunds", h.forward)
 
+	// Webhook không gắn JWT: cổng thanh toán không có token của khách. Việc xác
+	// thực do payment-service làm bằng chữ ký HMAC của từng cổng.
 	webhooks := e.Group("/api/v1/payments/webhooks")
 	webhooks.POST("/momo", h.forward)
+	webhooks.POST("/vnpay", h.forward)
+	webhooks.GET("/vnpay", h.forward)
 }

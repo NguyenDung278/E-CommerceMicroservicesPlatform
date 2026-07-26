@@ -26,6 +26,10 @@ type PaymentRepository interface {
 	ListByOrderIDForUser(ctx context.Context, orderID, userID string) ([]*model.Payment, error)
 	ListByUserID(ctx context.Context, userID string) ([]*model.Payment, error)
 	Update(ctx context.Context, payment *model.Payment, outbox *model.OutboxMessage) error
+	// ApplyWebhookResult trả về `unchanged = true` khi delivery này không đổi được
+	// state: hoặc inbox đã có message (duplicate delivery), hoặc compare-and-set
+	// không khớp vì payment đã rời trạng thái `pending`. Cả hai trường hợp caller
+	// đều phải đọc lại state thật từ DB thay vì dùng bản in-memory đã mutate.
 	ApplyWebhookResult(ctx context.Context, payment *model.Payment, inbox *model.InboxMessage, outbox *model.OutboxMessage) (bool, error)
 	CreateAuditEntry(ctx context.Context, entry *model.AuditEntry) error
 	ClaimPendingOutbox(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.OutboxMessage, error)
@@ -375,10 +379,13 @@ func (r *postgresPaymentRepository) ApplyWebhookResult(
 		return false, fmt.Errorf("failed to read webhook update rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
+		// Giữ lại inbox row (delivery này đã được ghi nhận) nhưng KHÔNG ghi outbox
+		// vì payment không đổi trạng thái. Báo `unchanged` để caller đọc lại state
+		// thật thay vì trả bản in-memory đã được gán status mới.
 		if err := tx.Commit(); err != nil {
 			return false, fmt.Errorf("failed to commit no-op webhook transaction: %w", err)
 		}
-		return false, nil
+		return true, nil
 	}
 
 	if err := r.insertOutboxMessageTx(ctx, tx, outbox); err != nil {

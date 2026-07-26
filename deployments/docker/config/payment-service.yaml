@@ -30,3 +30,6 @@ jwt:
 payment_gateway:
   webhook_secret: "dev-momo-secret"
   momo_return_url: "http://localhost:3000/payments"
+  # VNPay tùy chọn: để trống thì cổng không được đăng ký.
+  vnpay_webhook_secret: ""
+  vnpay_return_url: "http://localhost:3000/payments"
