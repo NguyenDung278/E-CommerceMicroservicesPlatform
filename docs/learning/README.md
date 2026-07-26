@@ -15,6 +15,13 @@ Tài liệu mentor theo yêu cầu học REST API Golang qua project thật nằ
 đó trước nếu mục tiêu hiện tại là học flow auth/JWT, CRUD, PostgreSQL,
 middleware và error handling bằng tiếng Việt.
 
+Khóa học **Clean Architecture với Go** (9 buổi, viết cho người ít kinh nghiệm lập
+trình) nằm ở [`clean-architecture-go-tong-hop-vi.md`](clean-architecture-go-tong-hop-vi.md):
+đi từ interface/DI/error → cơ chế Go → vòng tròn Clean Architecture → `CreateOrder`
+và transaction bundle → webhook/inbox → outbox relay → bảo mật, gateway chịu tải,
+testing. Mỗi buổi có sơ đồ, bảng so sánh, `file:line` trỏ vào source thật, quiz và
+đáp án mẫu.
+
 ---
 
 ## 1. Cách Học Repo Này Không Bị Lạc
