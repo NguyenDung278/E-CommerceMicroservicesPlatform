@@ -25,6 +25,7 @@
 | [Buổi 7A](#buổi-7a--bảo-mật) | JWT, RBAC, rate limit, bcrypt, pepper | pkg/middleware, user-service |
 | [Buổi 7B](#buổi-7b--chịu-tải-ở-gateway) | Circuit breaker, retry chọn lọc | api-gateway |
 | [Buổi 7C](#buổi-7c--testing) | Fake, table test, testcontainers | toàn repo |
+| [Buổi 8](#buổi-8--redis-caching) | Cache-aside, invalidation, index set, TTL, stampede | product-service |
 
 ---
 
@@ -2154,6 +2155,308 @@ test sẽ bỏ sót đúng phần khó nhất.
 
 ---
 
+## Buổi 8 — Redis Caching
+
+Buổi 5–6 học Redis trong vai **hàng đợi/khử trùng lặp**. Buổi này học vai còn lại của nó:
+**cache**. Repo đã có sẵn một implementation chất lượng cao ở
+`services/product-service/internal/repository/product/product_review_cache.go` — ta mổ nó.
+
+### Vấn đề
+
+Mỗi lần khách mở trang sản phẩm, backend chạy hai query:
+
+```sql
+SELECT AVG(rating), COUNT(*) FROM product_reviews WHERE product_id = 'abc';
+SELECT * FROM product_reviews WHERE product_id = 'abc' ORDER BY created_at DESC LIMIT 10;
+```
+
+Sản phẩm hot có 50.000 review, 1.000 người xem/phút → PostgreSQL quét-tính-sắp xếp **1.000
+lần/phút cho cùng một kết quả y hệt**.
+
+📖 Nhận xét then chốt: review **đọc rất nhiều, ghi rất ít** — tỷ lệ lệch cỡ 10.000:1. Đó là
+chữ ký của dữ liệu đáng cache.
+
+📖 **Ví von:** cache là **ly cà phê pha sẵn để trên bàn**. Pha mất 3 phút, rót mất 2 giây. Đổi
+lại hai rắc rối — cà phê **nguội** (cần TTL) và **đổi loại hạt thì bình cũ thành sai** (cần
+invalidation). Toàn bộ buổi này xoay quanh hai rắc rối đó.
+
+| | PostgreSQL | Redis |
+|---|---|---|
+| Lưu ở đâu | đĩa cứng (bền) | RAM (nhanh, dễ mất) |
+| Tốc độ đọc | mili-giây | **micro-giây** (~100–1000× nhanh hơn) |
+| Vai trò | **nguồn sự thật** | **bản sao tạm** |
+| Mất dữ liệu | thảm họa | chấp nhận được (tính lại từ DB) |
+
+🎯 **Nguyên tắc sống còn: cache không bao giờ là nguồn sự thật.** Mất sạch Redis thì hệ thống
+chỉ **chậm đi**, không được **sai đi**.
+
+### Cache-Aside — mẫu đọc
+
+`services/product-service/internal/service/product_review_service.go:378`:
+
+```go
+func (s *ProductReviewService) loadReviewSummary(ctx context.Context, productID string) (*model.ProductReviewSummary, error) {
+	if s.cache != nil {
+		summary, hit, err := s.cache.GetSummary(ctx, productID)
+		if err != nil {
+			// ② Redis lỗi → CHỈ cảnh báo, KHÔNG return
+			s.warnCacheFailure(ctx, "failed to get product review summary from cache", productID, err)
+			appobs.IncEvent(productReviewMetricsService, "review_summary_cache_fallback", appobs.OutcomeSystemError)
+		} else if hit {
+			// ③ HIT → trả luôn, không đụng PostgreSQL
+			appobs.IncEvent(productReviewMetricsService, "review_summary_cache_hit", appobs.OutcomeSuccess)
+			return summary, nil
+		} else {
+			// ④ MISS → ghi nhận rồi đi tiếp
+			appobs.IncEvent(productReviewMetricsService, "review_summary_cache_miss", appobs.OutcomeSuccess)
+		}
+	}
+
+	summary, err := s.repo.GetReviewSummary(ctx, productID)   // ⑤ nguồn sự thật
+	if err != nil {
+		return nil, err
+	}
+
+	if s.cache != nil {                                       // ⑥ nhét vào cache cho lần sau
+		if err := s.cache.SetSummary(ctx, productID, summary); err != nil {
+			s.warnCacheFailure(ctx, "failed to set product review summary cache", productID, err)
+		}
+	}
+	return summary, nil
+}
+```
+
+```
+   Request ──▶ ① hỏi cache
+                  │
+       HIT ✓ ─────┴───── MISS ✗
+         │                 │
+   ③ trả (~0.2ms)    ⑤ query PostgreSQL (~20ms)
+                           │
+                     ⑥ ghi vào cache → trả
+```
+
+📖 Gọi là **cache-aside** ("cache đứng bên cạnh") vì cache **không nằm trên đường đi bắt buộc**:
+app tự hỏi, tự query DB khi miss, tự nhét lại. Ưu điểm lớn nhất — **cache chết thì hệ thống vẫn
+chạy**.
+
+### Ba trạng thái, không phải hai
+
+```go
+GetSummary(ctx, productID) (*model.ProductReviewSummary, bool, error)
+//                            ▲dữ liệu               ▲hit  ▲lỗi
+```
+
+Biến thể của **comma-ok idiom** (buổi 2). Phải phân biệt:
+
+| Tình huống | `hit` | `err` | Xử lý |
+|---|---|---|---|
+| Có trong cache | `true` | `nil` | trả luôn |
+| **Miss** (chưa cache) | `false` | `nil` | im lặng query DB |
+| **Redis lỗi** | `false` | lỗi | **log + metric** rồi query DB |
+
+```go
+value, err := c.client.Get(ctx, c.summaryKey(productID)).Result()
+if err == redis.Nil {          // ← "key không tồn tại", KHÔNG phải lỗi
+	return nil, false, nil
+}
+if err != nil {                // ← lỗi thật
+	return nil, false, fmt.Errorf("failed to get product review summary cache: %w", err)
+}
+```
+
+📖 `redis.Nil` là **sentinel error** (buổi 1) — đúng cách `redisCartRepository.Get` xử lý ở
+buổi 1. Gộp miss với lỗi = mất khả năng biết Redis đang chết.
+
+### Thiết kế khóa
+
+```go
+func (c *RedisProductReviewCache) summaryKey(productID string) string {
+	return fmt.Sprintf("product-review:summary:%s", productID)
+}
+func (c *RedisProductReviewCache) firstPageKey(productID string, limit int) string {
+	return fmt.Sprintf("product-review:list:%s:limit:%d", productID, limit)
+}
+```
+
+```
+product-review : summary : abc123
+    ▲              ▲         ▲
+    │              │         └── định danh cụ thể
+    │              └──────────── loại dữ liệu
+    └─────────────────────────── namespace
+```
+
+🎯 **`limit` nằm trong key.** Vì "10 review đầu" ≠ "20 review đầu". Quy tắc tổng quát: **cache
+key phải là hàm của TẤT CẢ đầu vào ảnh hưởng tới đầu ra** (filter, sort, page, limit, và
+`userID` nếu kết quả khác nhau theo người dùng).
+
+### Invalidation qua Observer
+
+`services/product-service/internal/service/product_review_observer.go:57`:
+
+```go
+type productReviewCacheInvalidationObserver struct{ cache ProductReviewCache }
+
+func (o productReviewCacheInvalidationObserver) Handle(ctx context.Context, event ProductReviewEvent) error {
+	return o.cache.Invalidate(ctx, event.ProductID)
+}
+```
+
+Thay vì `CreateReview` tự gọi đủ thứ việc phụ, nó **phát một sự kiện**; ai quan tâm tự đăng ký:
+
+```go
+// ❌ nhét vào service core → càng ngày càng phình
+...runInTx(); s.cache.Invalidate(); s.metrics.Inc(); s.searchIndex.Update()
+
+// ✅ repo làm
+...runInTx(); s.observers.Notify(ctx, event)
+```
+
+Thêm việc phụ = thêm observer, **không sửa `CreateReview`** → Open/Closed Principle.
+
+🎯 **Nối buổi 1 và 3:** `ProductReviewCache` là interface khai ở **tầng service**
+(`product_review_service.go:48`), implementation Redis ở tầng repository. Đây là bản **chuẩn
+mực hơn** `CartRepository` đã bàn ở buổi 3 — consumer sở hữu hợp đồng, mũi tên phụ thuộc hướng
+đúng vào trong.
+
+### 🎩 Index Set — xóa hàng loạt mà không dùng `KEYS`
+
+Một sản phẩm có nhiều key list (`limit:5`, `limit:10`, `limit:20`) + key summary. Khi có review
+mới phải xóa hết. Làm sao biết key nào tồn tại?
+
+❌ `KEYS product-review:list:abc:*` — **quét toàn bộ keyspace và chặn Redis**. Redis xử lý
+**đơn luồng**, nên một lệnh chậm làm *mọi* client khác đứng hình: giỏ hàng, rate limiter, dedupe
+notification đều dùng chung Redis này. **Không bao giờ dùng `KEYS` trong production.**
+
+✅ Repo **tự ghi sổ**:
+
+```go
+func (c *RedisProductReviewCache) SetFirstPage(ctx, productID string, limit int, reviews []*model.ProductReview) error {
+	pageKey  := c.firstPageKey(productID, limit)
+	indexKey := c.firstPageIndexKey(productID)
+
+	pipe := c.client.TxPipeline()
+	pipe.Set(ctx, pageKey, payload, c.ttl)   // ① lưu dữ liệu
+	pipe.SAdd(ctx, indexKey, pageKey)        // ② ghi tên key vào "mục lục"
+	pipe.Expire(ctx, indexKey, c.ttl)        // ③ mục lục cũng có hạn
+	_, err := pipe.Exec(ctx)
+}
+
+func (c *RedisProductReviewCache) Invalidate(ctx context.Context, productID string) error {
+	pageKeys, _ := c.client.SMembers(ctx, indexKey).Result()   // ① đọc mục lục
+	keys := append([]string{c.summaryKey(productID), indexKey}, pageKeys...)
+	return c.client.Del(ctx, keys...).Err()                    // ② xóa một phát
+}
+```
+
+📖 Đây là **mục lục cuốn sách**: thay vì lật từng trang tìm chỗ cần xé, mở mục lục thấy ngay
+"trang 5, 10, 20". Độ phức tạp từ *O(toàn bộ database)* xuống *O(số key của riêng sản phẩm đó)*.
+
+⚠️ **`TxPipeline` ≠ transaction SQL.** Nó gộp nhiều lệnh vào **một chuyến mạng** và chạy liền
+mạch không bị chen, nhưng Redis **không có rollback** — một lệnh lỗi thì các lệnh khác vẫn chạy.
+
+### TTL — lưới an toàn
+
+Đã có invalidation chủ động rồi, vì sao vẫn cần TTL? Vì invalidation **có thể sót**:
+- ai đó sửa dữ liệu thẳng trong DB bằng script → observer không chạy;
+- lệnh `Invalidate` lỗi mạng và chỉ được log rồi bỏ qua;
+- lập trình viên thêm đường ghi mới mà **quên gắn observer**.
+
+🎯 TTL biến một bug "vĩnh viễn" thành bug "kéo dài tối đa N phút". **Luôn đặt TTL cho mọi key
+cache**, kể cả khi tin invalidation của mình hoàn hảo.
+
+| TTL | Ưu | Nhược |
+|---|---|---|
+| Ngắn (30s) | dữ liệu tươi | ít hit, DB vẫn nặng |
+| Dài (1h) | hit cao | ôi lâu nếu sót invalidation |
+
+### Graceful degradation
+
+Redis sập hoàn toàn → API **vẫn đúng, chỉ chậm hơn**. Vì cache là thứ *tăng tốc*, không phải
+*bắt buộc*. Bắt request fail chỉ vì ghi cache hỏng = tự biến Redis thành **điểm chết đơn lẻ**.
+
+⚠️ Nhưng "degrade" **không phải** "nuốt lỗi": code vẫn `warnCacheFailure` + tăng metric
+`cache_fallback` với outcome `SystemError` → vẫn nhìn thấy trên dashboard. Đúng tinh thần
+`CLAUDE.md`: *graceful degradation là chủ đích, không phải nuốt lỗi*.
+
+### Đo hit rate
+
+```go
+appobs.IncEvent(..., "review_summary_cache_hit", ...)
+appobs.IncEvent(..., "review_summary_cache_miss", ...)
+appobs.IncEvent(..., "review_summary_cache_fallback", ...)
+```
+
+**Hit Rate = hit / (hit + miss)** — chỉ số quan trọng nhất.
+
+| Hit rate | Ý nghĩa |
+|---|---|
+| > 90% | cache đang làm tốt |
+| 50–80% | ổn, cân nhắc tăng TTL |
+| < 30% | 🚩 gần như vô dụng — TTL quá ngắn, invalidate quá nhiều, hoặc key thiết kế sai |
+
+🎯 Cache **không đo được = không biết có tác dụng hay không**.
+
+### Bốn mẫu caching
+
+| Mẫu | Cách chạy | Đánh đổi |
+|---|---|---|
+| **Cache-aside** (repo dùng) | app tự hỏi → miss thì tự query → tự nhét | ✅ đơn giản, cache chết vẫn chạy |
+| Read-through | app chỉ nói với cache; cache tự lấy DB | ❌ cache thành đường bắt buộc |
+| Write-through | ghi cache + DB đồng bộ | ✅ luôn tươi ❌ ghi chậm |
+| Write-behind | ghi cache trước, DB sau | ❌ **mất dữ liệu** nếu cache sập |
+
+👉 Cache-aside đúng cho repo vì nó giữ nguyên *"PostgreSQL là nguồn sự thật"*. Write-behind sẽ
+biến Redis (RAM) thành nơi giữ dữ liệu thật một khoảng thời gian — vi phạm nguyên tắc đó.
+
+### Cache stampede (gap thật của repo)
+
+```
+t=0.000s  cache của sản phẩm hot hết hạn
+t=0.001s  Request 1 → miss → query DB (200ms)
+t=0.002s  Request 2 → miss (R1 chưa kịp ghi cache) → query DB
+   ...
+t=0.200s  → 1.000 query GIỐNG HỆT NHAU cùng đập vào PostgreSQL
+```
+
+Trớ trêu: **cache sinh ra để bảo vệ DB, nhưng đúng lúc hết hạn lại dồn tải cực đại vào DB** — và
+đúng vào lúc đông khách nhất. Nếu DB chậm lại, cửa sổ miss rộng ra → càng nhiều request dồn vào
+→ **vòng xoáy sụp đổ**.
+
+Ba cách chống (repo **chưa** làm — bài tập tốt):
+1. **Khóa phân tán** (`SETNX`) — chỉ 1 request đi query, số còn lại đợi kết quả đó.
+2. **Jitter** — TTL `300s ± ngẫu nhiên 30s` để các key không hết hạn cùng giây.
+3. **Làm mới sớm** — còn 10% thời gian sống thì chủ động refresh, các request khác vẫn dùng bản cũ.
+
+### Khi nào KHÔNG nên cache
+
+| Tình huống | Vì sao |
+|---|---|
+| Dữ liệu đổi liên tục | invalidate suốt → hit rate thấp |
+| **Phải chính xác tuyệt đối** | số dư ví, tồn kho lúc trừ hàng |
+| Query vốn đã nhanh | thêm phức tạp mà không lợi |
+| Dữ liệu riêng từng người | hit rate ~0, tốn RAM |
+| Chưa đo được vấn đề | **đừng tối ưu khi chưa biết chỗ nào chậm** |
+
+🎯 Để ý repo **không cache** giá và tồn kho lúc đặt hàng — `quoteOrder` (buổi 4) luôn hỏi
+`product-service` lấy sự thật mới nhất. Thà chậm còn hơn bán sai giá.
+
+### ✅ Quiz buổi 8
+
+1. `GetSummary` trả `(data, hit, err)`. Vì sao không gộp thành `(data, err)`?
+2. `redis.Nil` được trả về với `err = nil`. Vì sao "không tìm thấy key" không bị coi là lỗi?
+3. Vì sao `limit` phải nằm trong cache key? Nêu một biến thể của lỗi này gây lỗ hổng **bảo mật**.
+4. Vì sao repo dùng index set thay vì `KEYS product-review:list:abc:*`? Liên hệ đặc tính đơn luồng của Redis.
+5. Đã có invalidation chủ động, vì sao vẫn cần TTL? Nêu 3 tình huống invalidation sót.
+6. `SetSummary` lỗi nhưng code vẫn `return summary, nil`. Vì sao đúng? Điều gì phân biệt nó với "nuốt lỗi"?
+7. `ProductReviewCache` khai ở package `service`, implementation ở `repository`. So sánh với `CartRepository` ở buổi 3 — bản nào chuẩn hơn và vì sao?
+8. Giải thích cache stampede và vì sao nó trớ trêu. Vì sao jitter là biện pháp rẻ nhất?
+9. `TxPipeline` khác transaction PostgreSQL (buổi 4) ở điểm nào?
+10. (Khó) Thiết kế cách chống stampede bằng `SETNX` cho `loadReviewSummary`. Request thua khóa nên làm gì — đợi, hay trả dữ liệu cũ?
+
+---
+
 ## Phụ lục — Tra nhanh
 
 ### Các pattern độ tin cậy và nơi chúng sống
@@ -2219,6 +2522,52 @@ service hoàn toàn không phụ thuộc package nào bên ngoài để mô tả
 phụ thuộc vẫn tồn tại, chỉ là trỏ vào một interface thay vì struct. Mất tính thuần khiết,
 **giữ được** lợi ích chính là test fake được. Thoả hiệp chấp nhận được ở service nhỏ.
 
+### Chữa sâu buổi 3 — lỗi hay gặp
+
+> Phần này bổ sung cho đáp án ở trên: mỗi câu thêm một tầng *vì sao sâu hơn* và *cái bẫy mà
+> phần lớn người học rơi vào*. Nếu bạn trả lời đúng ý chính nhưng chưa nói được phần 🔍, tức là
+> bạn hiểu **luật** nhưng chưa hiểu **lý do sinh ra luật**.
+
+**Câu 1 — Dependency Rule.**
+🔍 *Sâu hơn:* luật này không phải quy ước thẩm mỹ, nó bắt nguồn từ **tốc độ thay đổi**. Vòng
+trong đổi chậm (khái niệm "đơn hàng" 10 năm không đổi), vòng ngoài đổi nhanh (Echo, Redis, MoMo).
+Bắt thứ chậm phụ thuộc thứ nhanh nghĩa là mỗi lần đổi thư viện lại phải sửa nghiệp vụ.
+⚠️ *Lỗi hay gặp:* trả lời "để code sạch". Chưa đủ — phải nêu được **hệ quả kinh tế**: đổi hạ tầng
+không lan vào business logic, và test được business logic mà không dựng hạ tầng.
+
+**Câu 2 — vì sao service không nhận `echo.Context`.**
+🔍 *Sâu hơn:* `echo.Context` không chỉ là "một kiểu dữ liệu", nó là **cái cổng vào toàn bộ thế
+giới HTTP** — có `Request()`, `Response()`, `Param()`, `Bind()`. Nhận nó vào service tức là mở
+cửa cho người viết sau tiện tay gọi `c.JSON(...)` ngay trong tầng nghiệp vụ, và thế là tầng đó
+chết cứng với HTTP.
+⚠️ *Lỗi hay gặp:* nghĩ rằng chỉ cần "không dùng tới nó" là an toàn. Không — **có sẵn trong tay
+là sẽ có người dùng**. Chặn từ chữ ký hàm mới là chặn thật.
+
+**Câu 3 — mass assignment.**
+🔍 *Sâu hơn:* gốc rễ là **entity mô tả thứ hệ thống biết, DTO mô tả thứ client được phép nói**.
+Hai tập này gần như không bao giờ trùng nhau. Mỗi field trong entity mà client không được đặt
+(`status`, `signature_verified`, `created_at`, `user_id`) đều là một lỗ hổng nếu bind thẳng.
+⚠️ *Lỗi hay gặp:* tin rằng thêm validation là đủ. Validation kiểm **giá trị hợp lệ**, không kiểm
+**field có được phép xuất hiện hay không**. Chỉ DTO hẹp mới làm được việc đó.
+
+**Câu 4 — kiểm tra `order_lifecycle.go` có vi phạm không.**
+🔍 *Sâu hơn:* kỹ năng thật ở đây là **đọc khối `import` như đọc bản đồ phụ thuộc**. Đây là cách
+review nhanh nhất: không cần đọc logic, chỉ nhìn import là biết file có đứng đúng tầng không.
+⚠️ *Lỗi hay gặp:* chỉ nhìn tên package của repo mà bỏ qua thư viện bên thứ ba. `zap` và `uuid`
+là *tiện ích trung lập* nên chấp nhận được; `echo`, `database/sql`, `go-redis`, `amqp` là *hạ
+tầng* nên không được. Ranh giới nằm ở chỗ: thư viện đó có buộc bạn vào một **giao thức/cơ chế
+lưu trữ** cụ thể không.
+
+**Câu 5 — `ProductCatalog` vs `CartRepository`.**
+🔍 *Sâu hơn:* đây là ví dụ về **"clean vừa đủ"**. Câu hỏi đúng khi review không phải "interface
+đặt đúng chỗ sách dạy chưa?" mà là **"lợi ích cốt lõi còn không?"** — với `CartRepository`, lợi
+ích *test bằng fake* và *đổi storage không sửa service* **vẫn còn**. Mất tính thuần khiết, giữ
+được giá trị.
+⚠️ *Lỗi hay gặp:* hai thái cực — (1) khăng khăng mọi interface phải ở tầng use case, biến
+codebase thành rừng abstraction; (2) coi "interface nào cũng như nhau", bỏ luôn việc phân biệt.
+Người có nghề nhận ra sự khác biệt **và** biết khi nào nó đáng để đánh đổi. Xem thêm buổi 8:
+`ProductReviewCache` là bản chuẩn mực của cùng mẫu này.
+
 ## Đáp án buổi 4
 
 **1.** TOCTOU = Time Of Check To Time Of Use, khe hở giữa lúc kiểm tra và lúc dùng kết quả:
@@ -2257,6 +2606,59 @@ lời gọi hoàn kho thất bại. Kho bị "giam" số lượng của một đ
 Cách phát hiện: job đối soát định kỳ so tổng `stock` + tổng số lượng đang được giữ trong các
 đơn `pending` với số lượng gốc; hoặc metric đếm số lần `restoreOrderItemsStock` fail và cảnh
 báo khi > 0. Bản chất: **đã bỏ transaction phân tán thì phải có cơ chế dọn rác**.
+
+### Chữa sâu buổi 4 — lỗi hay gặp
+
+**Câu 1 — TOCTOU.**
+🔍 *Sâu hơn:* điều làm TOCTOU đáng sợ là nó **không tái hiện được khi debug**. Chạy tay từng
+request thì luôn đúng; chỉ sai khi có tải thật. Nên không thể dựa vào test thủ công để phát hiện
+— phải nhận ra bằng **cách đọc code**: hễ thấy mẫu `đọc → quyết định → ghi` trên dữ liệu dùng
+chung là phải hỏi ngay "giữa hai bước này có ai chen vào được không?".
+⚠️ *Lỗi hay gặp:* tưởng rằng bọc cả ba bước trong một transaction là đủ. **Không** — transaction
+cho *atomicity* (tất cả hoặc không gì), không tự động cho *isolation* đủ mạnh để chặn hai phiên
+cùng đọc giá trị cũ. Phải thêm `FOR UPDATE` hoặc gộp điều kiện vào `WHERE`.
+
+**Câu 2 — vì sao phải dùng `tx` chứ không phải `r.db`.**
+🔍 *Sâu hơn:* `*sql.DB` là một **connection pool**, không phải một kết nối. Gọi `r.db.Exec` giữa
+chừng transaction sẽ **mượn một kết nối khác** từ pool — một phiên hoàn toàn độc lập, không thấy
+dữ liệu chưa commit của transaction đang chạy, và không bị ràng buộc bởi rollback của nó.
+⚠️ *Lỗi hay gặp:* nghĩ rằng "cùng một struct repository thì cùng một transaction". Không có gì
+đảm bảo điều đó — **transaction nằm ở biến `tx`, không nằm ở struct**. Đây là lý do mọi hàm
+`*Tx` trong repo đều nhận `tx *sql.Tx` làm tham số tường minh.
+
+**Câu 3 — CAS vs `FOR UPDATE`.**
+🔍 *Sâu hơn:* tiêu chí quyết định là **"có bao nhiêu logic nằm giữa lúc đọc và lúc ghi"**. Nếu
+điều kiện viết được trọn trong `WHERE` → CAS (nhẹ, không giữ khóa, không rủi ro deadlock). Nếu
+phải đọc ra rồi chạy nhiều luật trong Go, và mỗi luật cần trả **mã lỗi riêng** cho người dùng →
+`FOR UPDATE`.
+⚠️ *Lỗi hay gặp:* mặc định dùng `FOR UPDATE` cho mọi thứ vì "chắc ăn hơn". Khóa bi quan làm
+giảm thông lượng và mở ra khả năng **deadlock** khi hai transaction khóa nhiều dòng theo thứ tự
+khác nhau. Dùng khóa là chọn *đánh đổi*, không phải chọn *an toàn hơn*.
+
+**Câu 4 — hai request đồng thời cùng `Idempotency-Key`.**
+🔍 *Sâu hơn:* điểm cốt lõi là **nơi nào có thể phân xử tranh chấp**. Tầng ứng dụng không thể —
+hai goroutine đọc cùng lúc đều thấy "chưa có". Chỉ **database** mới có điểm đồng bộ hóa duy nhất
+(unique index). Nguyên tắc tổng quát: *khi cần chọn đúng một người thắng giữa nhiều tiến trình,
+hãy để tầng lưu trữ phân xử, đừng tự phân xử ở tầng ứng dụng.*
+⚠️ *Lỗi hay gặp:* bắt được unique violation rồi **trả lỗi 409 cho client**. Sai — client chỉ
+đang retry một cách hợp lệ, nó xứng đáng nhận **đúng đơn hàng đã tạo**. Phải đọc lại bản ghi của
+người thắng và trả về, đúng như repo làm.
+
+**Câu 5 — `defer tx.Rollback()` sau khi đã `Commit()`.**
+🔍 *Sâu hơn:* mấu chốt là `Rollback()` trên transaction đã kết thúc trả `sql.ErrTxDone` — một
+**no-op an toàn**. Điều này biến `defer tx.Rollback()` thành mẫu "đặt một lần, đúng mãi mãi",
+kể cả khi ai đó thêm một nhánh `return` mới sáu tháng sau.
+⚠️ *Lỗi hay gặp:* viết `defer func() { if err != nil { tx.Rollback() } }()` — phức tạp hơn mà
+lại dễ sai (biến `err` bị che bởi biến cùng tên ở scope trong). Cứ rollback vô điều kiện là
+đúng và đơn giản nhất.
+
+**Câu 6 — compensation thất bại.**
+🔍 *Sâu hơn:* bài học lớn nhất của buổi 4 nằm ở đây: **bỏ transaction phân tán thì phải trả giá
+bằng cơ chế dọn rác**. Saga không làm hệ thống nhất quán *ngay*, nó chỉ hứa nhất quán *cuối
+cùng* — và lời hứa đó chỉ có giá trị nếu thật sự có job đối soát chạy.
+⚠️ *Lỗi hay gặp:* viết compensation rồi coi như xong, không đo. Tối thiểu phải có **metric đếm
+số lần compensation thất bại** và cảnh báo khi > 0. Không đo thì "eventual consistency" trên
+thực tế là "never consistent, nhưng không ai biết".
 
 ## Đáp án buổi 5
 
@@ -2302,6 +2704,57 @@ Client của A nhận `status: completed` trong khi DB nói `failed`.
 **Đã sửa trong repo (2026-07-26):** `ApplyWebhookResult` giờ trả `unchanged = true` cho cả hai
 trường hợp không đổi được state, và `HandleGatewayWebhook` reload từ DB ở cả hai. Có test
 `TestHandleMomoWebhookReportsStoredStateWhenCompareAndSetMisses` khoá lại hành vi này.
+
+### Chữa sâu buổi 5 — lỗi hay gặp
+
+**Câu 1 — vì sao webhook không dùng JWT mà dùng HMAC.**
+🔍 *Sâu hơn:* khác biệt nằm ở **ai là chủ thể xác thực**. JWT trả lời "người dùng nào đang gọi?";
+HMAC webhook trả lời "lời gọi này có thật sự đến từ đối tác không, và nội dung có bị sửa trên
+đường không?". Đây là *authentication of the sender + integrity of the payload*, không phải
+*authorization of a user*.
+⚠️ *Lỗi hay gặp:* so chữ ký bằng `==` thay vì `hmac.Equal`. So chuỗi thường thoát sớm ở byte đầu
+khác nhau → lộ thông tin qua **thời gian phản hồi** (timing attack). Luôn dùng so sánh
+constant-time.
+
+**Câu 2 — hậu quả nếu bỏ verify chữ ký.**
+🔍 *Sâu hơn:* điều nguy hiểm nhất không phải lỗ hổng, mà là **lỗ hổng không có triệu chứng**.
+Luồng hợp lệ vẫn chạy đúng 100%, test vẫn xanh, monitoring vẫn im lặng — cho tới ngày có người
+khai thác. Đây là loại bug mà **chỉ code review và test tấn công** mới bắt được, không phải
+observability.
+⚠️ *Lỗi hay gặp:* tin rằng "URL webhook bí mật nên không ai biết". Bảo mật bằng che giấu không
+phải bảo mật: URL rò qua log, qua proxy, qua ảnh chụp màn hình, qua repo public.
+
+**Câu 3 — vì sao trả 200 cho delivery trùng.**
+🔍 *Sâu hơn:* phải phân biệt **"lỗi của bạn"** với **"tình huống bạn đã xử lý xong"**. Với
+webhook, ngữ nghĩa của mã trạng thái là *hợp đồng điều khiển việc gửi lại* của đối tác, không
+phải mô tả nội bộ của bạn. "Tôi đã xử lý rồi" = thành công = 200.
+⚠️ *Lỗi hay gặp:* trả 409 Conflict cho delivery trùng vì thấy "nghe hợp lý". Cổng thanh toán sẽ
+hiểu là thất bại và **gửi lại mãi**, tạo bão retry — đúng thứ inbox pattern sinh ra để tránh.
+
+**Câu 4 — cái gì thật sự chặn khi `gateway_transaction_id` đổi.**
+🔍 *Sâu hơn:* đây là bài học về **phòng thủ nhiều lớp và biết lớp nào chịu trách nhiệm gì**.
+Inbox chặn *delivery giống hệt nhau*; CAS chặn *chuyển trạng thái sai*. Chúng bảo vệ hai thứ
+khác nhau, và câu hỏi này cố tình tạo tình huống lớp đầu **không** áp dụng để xem bạn có biết
+lớp cuối là gì không.
+⚠️ *Lỗi hay gặp:* trả lời "inbox chặn" vì thấy inbox là cơ chế chống trùng. Sai — `message_id`
+băm từ nội dung, nội dung đổi thì hash đổi, `ON CONFLICT` không kích hoạt. **Chốt cuối luôn là
+điều kiện `AND status = 'pending'` trong câu UPDATE.**
+
+**Câu 5 — vì sao giữ lại inbox row.**
+🔍 *Sâu hơn:* đây là tối ưu **chi phí xử lý delivery lặp trong tương lai**: chặn ở bước inbox
+(một lần đọc index) rẻ hơn nhiều so với chạy tiếp xuống CAS. Nó cho thấy inbox row mang ý nghĩa
+*"đã tiếp nhận"*, tách khỏi *"đã đổi được trạng thái"* — hai sự kiện khác nhau.
+⚠️ *Lỗi hay gặp:* nghĩ rằng "không đổi được state thì nên rollback cho sạch". Rollback sẽ **xóa
+mất bằng chứng đã tiếp nhận**, khiến lần gửi lại tiếp theo phải làm lại toàn bộ.
+
+**Câu 6 — hai webhook đua nhau, client nhận state sai.**
+🔍 *Sâu hơn:* đây là bug **thật** đã được sửa trong repo ngày 2026-07-26, và nó minh họa một mẫu
+lỗi rất phổ biến: **`rowsAffected = 0` bị hiểu nhầm là "thành công, không có gì thay đổi"** trong
+khi ý nghĩa thật là *"thế giới đã khác với giả định của tôi"*. Mọi chỗ dùng CAS đều phải trả lời
+câu hỏi "nếu không khớp thì sao?" — và câu trả lời gần như luôn là **đọc lại trạng thái thật**.
+⚠️ *Lỗi hay gặp:* sửa bằng cách thêm khóa hoặc transaction mạnh hơn. Không cần — chỉ cần **reload
+từ DB rồi trả state thật**, đúng như bản sửa trong repo. Bug nằm ở chỗ *báo cáo kết quả*, không
+nằm ở chỗ *ghi dữ liệu* (dữ liệu vốn đã đúng nhờ CAS).
 
 ## Đáp án buổi 6
 
@@ -2573,3 +3026,97 @@ code từ chối request nhưng đã kịp ghi state.
 > **Bài học chung của câu 11:** fake đơn giản quá thì test bỏ sót đúng phần khó nhất. Fake nên
 > mô phỏng **những ràng buộc** của hệ thống thật (unique key, compare-and-set), không chỉ
 > đường đi thành công.
+
+## Đáp án buổi 8
+
+**1.** Cần phân biệt **ba** trạng thái chứ không phải hai: *hit* (có dữ liệu), *miss* (chưa
+cache — bình thường), *lỗi hạ tầng* (Redis sập). Miss thì im lặng query DB; lỗi thì phải **log
+cảnh báo + tăng metric `cache_fallback`**. Gộp thành `(data, err)` khiến hai trạng thái này
+không phân biệt được (cả hai đều `data == nil`).
+🔍 *Sâu hơn:* hệ quả vận hành — nếu gộp, Redis có thể chết cả tuần mà **không ai biết**, hệ
+thống chỉ âm thầm chậm đi.
+⚠️ *Lỗi hay gặp:* coi `data == nil` là miss. Khi Redis sập bạn cũng được `nil`.
+
+**2.** Vì **cache miss là trạng thái vận hành bình thường** — lần đầu ai đó xem một sản phẩm thì
+đương nhiên chưa có cache. `redis.Nil` là **sentinel error** (buổi 1) mà go-redis dùng để báo
+"key không tồn tại", và code dịch nó thành `hit = false, err = nil`.
+🔍 *Sâu hơn:* nếu coi miss là lỗi, log ngập cảnh báo giả → đội vận hành học cách phớt lờ cảnh
+báo → bỏ sót lỗi thật. Cảnh báo chỉ có giá trị khi nó hiếm.
+⚠️ *Lỗi hay gặp:* viết `if err != nil { return nil, err }` ngay đầu mà quên tách `redis.Nil` →
+mọi cache miss thành lỗi 500 trả cho người dùng.
+
+**3.** Vì kết quả **phụ thuộc `limit`** — "10 review đầu" ≠ "20 review đầu". Dùng chung key thì
+người xin 20 có thể nhận bản cache 10. Quy tắc: **key phải là hàm của mọi đầu vào ảnh hưởng đầu
+ra**.
+🔍 *Biến thể gây lỗ hổng bảo mật:* cache dữ liệu **theo người dùng** mà quên đưa `userID` vào key
+→ **người dùng A nhận dữ liệu riêng tư của người dùng B**. Đây là sự cố có thật ở nhiều công ty
+lớn, và là dạng nguy hiểm nhất của lỗi này.
+⚠️ *Lỗi hay gặp:* nhớ `page`/`limit` nhưng quên `role` — admin và khách xem cùng endpoint nhưng
+kết quả khác nhau.
+
+**4.** Vì `KEYS` **quét toàn bộ keyspace**. Redis xử lý lệnh **đơn luồng**, nên một lệnh chậm
+làm *mọi* client khác đứng hình — mà Redis này còn dùng chung cho giỏ hàng, rate limiter và
+dedupe notification. Index set đổi độ phức tạp từ *O(toàn bộ DB)* xuống *O(số key của sản phẩm
+đó)*.
+🔍 *Sâu hơn:* đây là ví dụ điển hình của bug "chỉ xuất hiện ở production" — local có 50 key nên
+`KEYS` chạy tức thì; production có triệu key nên nó gây sự cố toàn hệ thống.
+⚠️ *Lỗi hay gặp:* thay `KEYS` bằng `SCAN` rồi coi như xong. `SCAN` không chặn nhưng vẫn duyệt
+toàn bộ keyspace; index set vẫn tốt hơn khi bạn kiểm soát được lúc ghi.
+
+**5.** TTL là **lưới an toàn** vì invalidation có thể sót. Ba tình huống: (a) ai đó sửa dữ liệu
+thẳng trong DB bằng script, không qua code nên observer không chạy; (b) lệnh `Invalidate` lỗi
+mạng và chỉ được log rồi bỏ qua; (c) lập trình viên thêm **đường ghi mới** mà quên gắn observer.
+🔍 *Sâu hơn:* TTL biến bug "vĩnh viễn" thành bug "kéo dài tối đa N phút" — khác biệt giữa sự cố
+nghiêm trọng và phiền toái nhỏ. Tình huống (c) là phổ biến nhất trong thực tế.
+⚠️ *Lỗi hay gặp:* tin tuyệt đối vào invalidation nên không đặt TTL. Chỉ cần một đường ghi bị sót
+là dữ liệu ôi thiu **mãi mãi**, và cực khó phát hiện vì chỉ sai với vài sản phẩm.
+
+**6.** Vì cache là thành phần **tăng tốc, không bắt buộc** — `summary` đã lấy đúng từ PostgreSQL
+rồi, ghi cache hỏng không làm kết quả sai. Phân biệt với nuốt lỗi: code vẫn `warnCacheFailure`
+**và** tăng metric `cache_fallback` với outcome `SystemError` → sự cố hiện trên dashboard, chỉ
+là người dùng không bị ảnh hưởng.
+🔍 *Sâu hơn:* bắt request fail vì cache hỏng là **tự biến Redis thành điểm chết đơn lẻ** — thêm
+Redis để hệ thống khỏe hơn nhưng lại làm nó dễ chết hơn.
+⚠️ *Lỗi hay gặp:* hai thái cực đều sai — `return err` (biến cache thành bắt buộc), hoặc
+`_ = s.cache.Set(...)` (mất khả năng quan sát). Đúng là **ở giữa**.
+
+**7.** `ProductReviewCache` **chuẩn hơn**: nó khai ở tầng **dùng** (`service`), nên service không
+phải import package nào bên ngoài để mô tả nhu cầu của mình — mũi tên phụ thuộc hướng trọn vào
+trong. `CartRepository` khai ở package `repository`, nên `service` phải `import repository`; mũi
+tên vẫn tồn tại, chỉ trỏ vào interface thay vì struct.
+🔍 *Sâu hơn:* cả hai đều **giữ được lợi ích chính** (test bằng fake, đổi implementation không sửa
+service), nên `CartRepository` là thoả hiệp chấp nhận được. Nhưng khi cần một bản mẫu để học,
+`ProductReviewCache` mới là bản đúng sách.
+⚠️ *Lỗi hay gặp:* kết luận `CartRepository` "sai". Nó không sai — nó **kém thuần khiết hơn**.
+Biết phân biệt hai điều đó là dấu hiệu của người review có nghề.
+
+**8.** **Cache stampede:** khi key hot hết hạn, hàng loạt request đồng thời cùng miss và cùng lao
+vào DB một truy vấn giống hệt nhau, vì chưa ai kịp ghi cache lại. Trớ trêu vì **cache sinh ra để
+bảo vệ DB nhưng đúng khoảnh khắc hết hạn lại dồn tải cực đại vào DB** — và điều đó xảy ra đúng
+lúc lưu lượng cao nhất (key càng hot càng nhiều request cùng miss).
+🔍 *Sâu hơn:* nếu DB chậm lại vì quá tải, cửa sổ miss rộng ra → càng nhiều request dồn vào →
+**vòng xoáy sụp đổ**. **Jitter rẻ nhất** vì chỉ cần sửa một dòng tính TTL, không cần thêm khóa,
+không thêm trạng thái, không thêm điểm hỏng — mà đã phá được kịch bản tệ nhất là *hàng loạt key
+hết hạn cùng một giây* (rất hay xảy ra sau khi deploy hoặc flush cache).
+⚠️ *Lỗi hay gặp:* đặt TTL cố định giống hệt nhau cho hàng loạt key tạo cùng lúc.
+
+**9.** `TxPipeline` gộp nhiều lệnh vào **một chuyến mạng** và đảm bảo chúng chạy **liền mạch
+không bị lệnh khác chen giữa**. Nhưng Redis **không có rollback**: nếu một lệnh lỗi, các lệnh
+khác vẫn có hiệu lực. Transaction PostgreSQL (buổi 4) cho **atomicity thật** — tất cả hoặc
+không gì, nhờ `Rollback()`.
+🔍 *Sâu hơn:* vì vậy không được dùng `TxPipeline` để giữ invariant kiểu "hai key phải luôn khớp
+nhau". Muốn nguyên tử thật trong Redis phải dùng **script Lua** (chạy trọn vẹn, đơn luồng) —
+đúng cách `NewRedisBackedRateLimiter` làm token bucket ở buổi 7A.
+⚠️ *Lỗi hay gặp:* thấy chữ "Tx" rồi suy ra có rollback.
+
+**10.** Thiết kế: khi miss, thử `SETNX cache-lock:<key> <token> EX 5`. Ai đặt được khóa thì đi
+query DB rồi ghi cache và xóa khóa. Ai **không** đặt được thì **không nên đợi vô hạn**.
+🔍 *Trả lời cho câu hỏi "đợi hay trả dữ liệu cũ":* tốt nhất là **trả dữ liệu cũ** (kỹ thuật
+*stale-while-revalidate*) — giữ lại bản cache cũ với TTL dài hơn TTL logic, request thua khóa
+trả ngay bản cũ thay vì xếp hàng. Nếu không có bản cũ (cache lạnh hoàn toàn), mới đợi ngắn
+(vài chục ms) rồi thử đọc lại cache một lần. Với dữ liệu review, cũ vài giây hoàn toàn chấp
+nhận được, còn để người dùng đợi thì không.
+⚠️ *Lỗi hay gặp:* (a) quên `EX` cho khóa → tiến trình chết giữa chừng là khóa kẹt vĩnh viễn,
+mọi request treo; (b) xóa khóa bằng `DEL` mà không kiểm token → xóa nhầm khóa của người khác đã
+giành được sau khi khóa của mình hết hạn (phải xóa bằng script Lua so token, đúng như mẫu
+compare-and-delete).

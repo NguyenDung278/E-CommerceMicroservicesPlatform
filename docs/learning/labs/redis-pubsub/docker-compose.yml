@@ -1,0 +1,14 @@
+# Redis RIÊNG cho lab học tập — cổng 6380 để không đụng stack production
+# (deployments/docker/docker-compose.yml). Tắt lab không ảnh hưởng gì tới repo.
+services:
+  redis-lab:
+    image: redis:7-alpine
+    container_name: ecommerce-redis-lab
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
