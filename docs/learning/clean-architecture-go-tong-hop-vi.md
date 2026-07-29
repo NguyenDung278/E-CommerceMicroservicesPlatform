@@ -26,6 +26,7 @@
 | [Buổi 7B](#buổi-7b--chịu-tải-ở-gateway) | Circuit breaker, retry chọn lọc | api-gateway |
 | [Buổi 7C](#buổi-7c--testing) | Fake, table test, testcontainers | toàn repo |
 | [Buổi 8](#buổi-8--redis-caching) | Cache-aside, invalidation, index set, TTL, stampede | product-service |
+| [Buổi 9](#buổi-9--cursor-pagination-và-sql-index) | Keyset pagination, tie-breaker, `LIMIT+1`, index composite | order-service, product-service |
 
 ---
 
@@ -2457,6 +2458,287 @@ Ba cách chống (repo **chưa** làm — bài tập tốt):
 
 ---
 
+## Buổi 9 — Cursor pagination và SQL index
+
+`CLAUDE.md` liệt kê cursor pagination là một **pattern xương sống**. Buổi này học vì sao — và
+học luôn phần index, vì **cursor không có index đúng thì vô nghĩa**.
+
+### 9.1. Vấn đề: `OFFSET` chết ở quy mô lớn
+
+Cách phân trang ai cũng viết đầu tiên:
+
+```sql
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 20 OFFSET 100000;
+```
+
+Chạy được, nhưng có **hai bệnh chết người**.
+
+#### Bệnh 1 — càng về sau càng chậm
+
+📖 `OFFSET 100000` **không** phải "nhảy thẳng tới bản ghi thứ 100.000". Database buộc phải **đọc
+và đếm đủ 100.000 dòng đầu rồi vứt đi**, chỉ để lấy 20 dòng tiếp theo.
+
+```
+OFFSET 0       → đọc 20 dòng        ⚡
+OFFSET 1000    → đọc 1.020 dòng     🙂
+OFFSET 100000  → đọc 100.020 dòng   🐌
+OFFSET 5000000 → đọc 5.000.020 dòng 💀 timeout
+```
+
+Chi phí **O(offset)**. Nguy hiểm ở chỗ **trang 1 luôn nhanh khi test** — bug chỉ lộ ở production.
+
+#### Bệnh 2 — lặp và bỏ sót bản ghi
+
+Đây mới là lý do người ta bỏ `OFFSET`. Dữ liệu **thay đổi giữa hai lần gọi trang**:
+
+```
+Ban đầu:  [E, D, C, B, A]
+Trang 1:  LIMIT 2 OFFSET 0  → [E, D]
+
+⏱ có đơn MỚI "F" được tạo → [F, E, D, C, B, A]
+
+Trang 2:  LIMIT 2 OFFSET 2  → [D, C]
+                                ▲ D BỊ LẶP, và không ai thấy lỗi
+```
+
+Nếu một dòng **bị xóa** giữa chừng thì ngược lại — có dòng **bị bỏ sót hoàn toàn**.
+
+⚠️ Với danh sách đơn hàng, "bỏ sót" nghĩa là **đơn biến mất khỏi màn hình nhân viên vận hành**.
+
+### 9.2. Cursor: nhớ "đang đứng ở đâu" thay vì "đã bỏ qua bao nhiêu"
+
+📖 **Ví von: đọc sách.**
+> - **OFFSET** = "lật từ trang 1, đếm đủ 100.000 dòng rồi đọc tiếp" — mỗi lần lại đếm từ đầu.
+> - **Cursor** = **kẹp sách**. Ghi lại *"tôi dừng ở dòng có thời gian X, id Y"*, lần sau nhảy
+>   thẳng tới đó. Ai chèn thêm trang vào đầu sách cũng **không ảnh hưởng**.
+
+### 9.3. Mổ code thật — `order-service`
+
+`services/order-service/internal/repository/order_repository_orders.go:294`:
+
+```go
+if strings.TrimSpace(filters.Cursor) != "" {
+	cursorTime, cursorID, err := decodeOrderListCursor(filters.Cursor)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("%w: %v", ErrInvalidOrderCursor, err)
+	}
+	baseQuery += fmt.Sprintf(` AND (created_at < $%d OR (created_at = $%d AND id < $%d))`, argIdx, argIdx, argIdx+1)
+	args = append(args, cursorTime, cursorID)
+	argIdx += 2
+}
+
+selectQuery := fmt.Sprintf(
+	`SELECT ... %s ORDER BY created_at DESC, id DESC LIMIT $%d`, baseQuery, argIdx)
+args = append(args, filters.Limit+1)
+```
+
+#### Trái tim: so sánh bộ đôi (tuple comparison)
+
+```sql
+AND (created_at < $1 OR (created_at = $1 AND id < $2))
+```
+
+Đọc bằng lời: *"lấy đơn có thời gian **cũ hơn** mốc; **hoặc** cùng thời gian nhưng **id nhỏ hơn**."*
+
+🎯 **Vì sao phải có vế thứ hai?** Vì `created_at` **có thể trùng nhau**:
+
+```
+❌ Chỉ `created_at < $1`:
+   Trang 1 lấy [A, B] (cả hai created_at = T), cursor = T
+   Trang 2: WHERE created_at < T  →  BỎ SÓT đơn C (C cũng có created_at = T)
+
+✅ Có tie-breaker id:
+   cursor = (T, id_B)
+   Trang 2: WHERE created_at < T OR (created_at = T AND id < id_B)  →  lấy đúng C
+```
+
+📖 `id` gọi là **tie-breaker** (trọng tài phá thế hòa). Quy tắc bắt buộc: **cột sắp xếp phải
+DUY NHẤT; nếu không, phải nối thêm một cột duy nhất vào cuối.**
+
+Và `ORDER BY created_at DESC, id DESC` phải **khớp chính xác thứ tự lẫn chiều** với mệnh đề
+cursor. Lệch một chỗ là sai kết quả.
+
+#### Mẹo `LIMIT + 1`
+
+```go
+args = append(args, filters.Limit+1)     // xin dư 1 dòng
+...
+hasNext := len(orders) > filters.Limit   // lấy được dư → còn trang sau
+if hasNext {
+	orders = orders[:filters.Limit]      // cắt dòng thừa trước khi trả về
+}
+```
+
+📖 Làm sao biết "còn trang sau" để hiện nút *Xem thêm*? Chạy `SELECT COUNT(*)` thì **rất đắt**
+(PostgreSQL phải quét bảng vì MVCC không lưu sẵn số dòng). Xin **dư đúng 1 dòng** thì chi phí gần
+như bằng 0.
+
+#### Encode/decode cursor
+
+`order_repository_orders.go:572`:
+
+```go
+func encodeOrderListCursor(createdAt time.Time, id string) string {
+	raw := fmt.Sprintf("%s|%s", createdAt.UTC().Format(time.RFC3339Nano), id)
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+```
+
+| Chi tiết | Vì sao |
+|---|---|
+| `.UTC()` | tránh lệch múi giờ giữa các server → cursor nhảy sai chỗ |
+| `RFC3339Nano` | giữ **nano-giây**; cắt bớt độ chính xác biến hai bản ghi khác nhau thành "bằng nhau" |
+| `base64.RawURLEncoding` | cursor nằm trong **URL query**; bản `URL` dùng `-_` thay `+/`, `Raw` = không có `=` đệm |
+
+📖 **Vì sao base64 thay vì trả thẳng `"2026-07-23T10:00:00Z|abc"`?** Để cursor thành **chuỗi mờ
+(opaque)** — client coi nó là "một cái mã, gửi lại nguyên si", **không tự chế**. Nhờ vậy sau này
+đổi cấu trúc cursor mà không phá client. ⚠️ Đây **không** phải bảo mật — base64 ai cũng giải được.
+
+Decode luôn **validate**, cursor rác trả `ErrInvalidOrderCursor` → handler map thành **400**,
+không phải 500 (đúng bài học buổi 1).
+
+### 9.4. Bản khó hơn — sort nhiều trường (`product-service`)
+
+Đơn hàng chỉ sort theo thời gian. Sản phẩm còn sort theo **giá**, **tồn kho**, **độ ưu tiên** —
+`services/product-service/internal/repository/product/product_repository.go:518`:
+
+```go
+case "price_asc":
+	baseQuery += fmt.Sprintf(` AND (
+		price > $%d
+		OR (price = $%d AND created_at < $%d)
+		OR (price = $%d AND created_at = $%d AND id < $%d)
+	)`, ...)
+```
+
+**Ba tầng phá hòa:** giá → thời gian → id (vì hàng nghìn sản phẩm có thể **cùng giá 199.000đ**).
+
+Cursor phải **mang theo giá trị của trường đang sort**:
+
+```go
+type productListCursor struct {
+	Sort              string    `json:"sort"`          // ← nhớ luôn kiểu sort
+	ID                string    `json:"id"`
+	CreatedAt         time.Time `json:"created_at"`
+	Price             float64   `json:"price,omitempty"`
+	Stock             int       `json:"stock,omitempty"`
+	MerchandisingRank int       `json:"merchandising_rank,omitempty"`
+}
+```
+
+🎯 **Vì sao lưu cả `Sort`?** Nếu người dùng đang phân trang theo `price_asc` rồi đổi sang
+`newest`, cursor cũ **vô nghĩa** (nó mang mốc giá, không dùng để so theo ngày). Lưu `sort` cho
+phép **phát hiện và từ chối** thay vì âm thầm trả kết quả sai.
+
+📖 Bản này dùng **JSON rồi mới base64** (thay vì `"a|b"`) vì cấu trúc phức tạp và cần thêm/bớt
+trường linh hoạt.
+
+### 9.5. SQL Index — thứ làm cursor thực sự nhanh
+
+**Cursor mà không có index đúng thì vẫn quét toàn bảng.**
+
+📖 **Index là MỤC LỤC TRA CỨU cuối sách.** Muốn tìm từ "transaction", bạn không đọc cả 500 trang —
+mở mục lục (đã sắp sẵn theo alphabet), thấy "trang 342", nhảy thẳng tới. Trong database, index
+thường là **B-tree** giữ sẵn dữ liệu **đã sắp xếp** theo cột chỉ định. Không có index →
+**sequential scan** (đọc từng dòng cả bảng).
+
+#### Index thật của repo — làm riêng cho cursor
+
+`services/order-service/migrations/000010_add_admin_order_listing_indexes.up.sql`:
+
+```sql
+CREATE INDEX IF NOT EXISTS idx_orders_created_at_id_desc
+    ON orders(created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_orders_status_created_at_id_desc
+    ON orders(status, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_created_at_id_desc
+    ON orders(user_id, created_at DESC, id DESC);
+```
+
+🎯 **Điểm quan trọng nhất buổi — sự khớp nhau:**
+
+```
+Query:   ... ORDER BY created_at DESC, id DESC
+Index:   ON orders(created_at DESC, id DESC)
+                   └──────────────┴────────┘
+                   KHỚP CHÍNH XÁC cả thứ tự lẫn chiều DESC
+```
+
+Nhờ khớp, PostgreSQL **đọc thẳng theo index** — dữ liệu đã sẵn đúng thứ tự, chỉ lấy 21 dòng từ
+vị trí cursor rồi dừng. **Không sort, không quét bảng.** Độ phức tạp `O(log n + limit)` — gần như
+**không đổi dù bảng có 10 triệu dòng**.
+
+#### Quy tắc vàng: equality trước, sort sau
+
+| Query | Index đúng |
+|---|---|
+| `ORDER BY created_at DESC, id DESC` | `(created_at DESC, id DESC)` |
+| `WHERE status = ? ORDER BY created_at DESC, id DESC` | `(status, created_at DESC, id DESC)` |
+| `WHERE user_id = ? ORDER BY created_at DESC, id DESC` | `(user_id, created_at DESC, id DESC)` |
+
+⚠️ **Bẫy "leftmost prefix":** index `(user_id, created_at, id)` dùng được khi lọc theo `user_id`,
+hoặc `user_id + created_at`. Nhưng **KHÔNG** dùng được cho query chỉ lọc `created_at` — vì nó
+không phải cột đầu. Giống mục lục sắp theo *họ rồi tên*: tra theo họ thì nhanh, tra theo mỗi tên
+thì vô dụng.
+
+#### Tự kiểm chứng bằng `EXPLAIN ANALYZE`
+
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM orders
+WHERE status = 'pending'
+ORDER BY created_at DESC, id DESC
+LIMIT 21;
+```
+
+| Thấy gì | Nghĩa là |
+|---|---|
+| `Index Scan using idx_orders_status_created_at_id_desc` | ✅ index đang được dùng |
+| `Seq Scan on orders` | 🚩 **quét toàn bảng** — thiếu index hoặc index không khớp |
+| `Sort` (kèm `Sort Method: external merge Disk`) | 🚩 phải sắp xếp thủ công, **ghi ra đĩa** |
+
+🎯 Kỹ năng backend thật: **thấy `Seq Scan` hoặc `Sort` trên bảng lớn là phải giật mình.**
+
+⚠️ **Index không miễn phí:** mỗi index làm chậm `INSERT`/`UPDATE`/`DELETE` (ghi 1 dòng = cập nhật
+mọi index liên quan), tốn đĩa, và có thể **không bao giờ được dùng**. Nguyên tắc: **thêm index vì
+một query cụ thể đang chậm**, không phải "thêm cho chắc".
+
+### 9.6. Đánh đổi của cursor
+
+Cursor **không phải luôn tốt hơn**:
+
+| | OFFSET | Cursor |
+|---|---|---|
+| Nhảy thẳng tới trang 500 | ✅ được | ❌ **không** (phải đi tuần tự) |
+| Hiện "Trang 1 2 3 … 500" | ✅ được | ❌ chỉ có "Xem thêm" |
+| Tốc độ ở trang sâu | ❌ O(offset) | ✅ gần như không đổi |
+| Dữ liệu đổi giữa chừng | ❌ lặp/bỏ sót | ✅ chính xác |
+| Tổng số trang | ✅ có | ❌ thường không |
+
+👉 **Cursor hợp với:** cuộn vô hạn, API cho máy, danh sách rất lớn, dữ liệu thay đổi liên tục.
+👉 **OFFSET vẫn ổn với:** bảng admin nhỏ cần nhảy trang tùy ý.
+
+📖 Đây là lý do `README.md` ghi *"Admin list offset path còn tồn tại"* như một **pitfall đã biết** —
+và "chuyển admin list sang cursor-first" nằm trong danh sách bài tập. Không phải quên, mà là **nợ
+kỹ thuật có ý thức**.
+
+### ✅ Quiz buổi 9
+
+1. Vì sao `OFFSET 100000 LIMIT 20` chậm? Database thực sự làm gì?
+2. Mô tả kịch bản cụ thể khiến `OFFSET` **lặp** một bản ghi. Vì sao cursor miễn nhiễm?
+3. Giải thích `AND (created_at < $1 OR (created_at = $1 AND id < $2))`. Bỏ vế thứ hai thì hỏng thế nào?
+4. Vì sao query xin `limit+1` dòng? Thay bằng `SELECT COUNT(*)` thì sao?
+5. `encodeOrderListCursor` dùng `.UTC()` và `RFC3339Nano`. Bỏ mỗi cái gây bug gì?
+6. Vì sao mã hoá cursor thành base64 thay vì trả chuỗi thô? Đây có phải biện pháp bảo mật không?
+7. `productListCursor` lưu cả trường `Sort`. Không có thì lỗi gì xảy ra?
+8. Vì sao index là `(status, created_at DESC, id DESC)` mà không phải `(created_at DESC, id DESC, status)`?
+9. `EXPLAIN ANALYZE` hiện `Seq Scan` và `Sort` — hai dấu hiệu này nói lên điều gì?
+10. (Khó) Admin cần nhảy tới "trang 500" bất kỳ. Cursor không làm được. Bạn giải quyết thế nào?
+
+---
+
 ## Phụ lục — Tra nhanh
 
 ### Các pattern độ tin cậy và nơi chúng sống
@@ -3120,3 +3402,87 @@ nhận được, còn để người dùng đợi thì không.
 mọi request treo; (b) xóa khóa bằng `DEL` mà không kiểm token → xóa nhầm khóa của người khác đã
 giành được sau khi khóa của mình hết hạn (phải xóa bằng script Lua so token, đúng như mẫu
 compare-and-delete).
+
+## Đáp án buổi 9
+
+**1.** Vì `OFFSET` **không nhảy** — database phải **đọc và đếm đủ 100.000 dòng đầu rồi vứt bỏ**,
+chỉ để lấy 20 dòng sau đó. Chi phí **O(offset)**.
+🔍 *Sâu hơn:* nguy hiểm ở chỗ **trang 1 luôn nhanh khi test**, nên bug chỉ lộ ở production với dữ
+liệu lớn — loại bug tệ nhất vì không tái hiện được lúc phát triển.
+⚠️ *Lỗi hay gặp:* nghĩ thêm index sẽ cứu được `OFFSET`. Index giúp *tìm đúng thứ tự*, nhưng vẫn
+phải **duyệt qua** đủ số dòng bị bỏ qua.
+
+**2.** Trang 1 lấy `[E, D]` (`LIMIT 2 OFFSET 0`). Có đơn mới `F` chèn vào đầu → danh sách thành
+`[F, E, D, C, B, A]`. Trang 2 (`LIMIT 2 OFFSET 2`) trả `[D, C]` → **`D` bị lặp**. Nếu **xóa** một
+dòng thay vì thêm thì có dòng **bị bỏ sót hoàn toàn**.
+🔍 *Sâu hơn:* cursor miễn nhiễm vì nó neo vào **giá trị dữ liệu** (`created_at`, `id`) chứ không
+vào **vị trí thứ tự**. Chèn/xóa ở nơi khác không làm dịch chuyển cái neo.
+⚠️ *Lỗi hay gặp:* coi đây là lỗi hiển thị nhỏ. Với danh sách đơn hàng, "bỏ sót" nghĩa là nhân
+viên vận hành **không bao giờ nhìn thấy** đơn đó.
+
+**3.** Nghĩa: *"lấy dòng cũ hơn mốc; hoặc cùng thời điểm nhưng id nhỏ hơn."* Bỏ vế `id < $2` →
+khi nhiều đơn có **`created_at` trùng nhau**, những đơn cùng mốc với dòng cuối trang trước sẽ **bị
+bỏ sót vĩnh viễn** (không thỏa `created_at < $1`).
+🔍 *Sâu hơn:* quy tắc tổng quát — **cột dùng phân trang phải DUY NHẤT**; nếu không, phải nối thêm
+một cột duy nhất (thường là khóa chính) làm **tie-breaker**. Và `ORDER BY` phải khớp **chính xác**
+thứ tự + chiều với mệnh đề cursor.
+⚠️ *Lỗi hay gặp:* tin rằng timestamp "đủ chính xác nên không thể trùng". Với insert hàng loạt hoặc
+nhiều máy chủ, trùng là chuyện bình thường.
+
+**4.** Để biết **còn trang sau hay không**: trả về đủ `limit+1` dòng → còn ít nhất 1 dòng nữa →
+`hasNext = true`, rồi cắt dòng thừa (`orders[:limit]`).
+🔍 *Sâu hơn:* `SELECT COUNT(*)` trên bảng lớn thường phải **quét toàn bộ** (PostgreSQL không lưu
+sẵn số dòng do MVCC) — có thể đắt hơn cả query chính. Mẹo `+1` tốn gần như 0 chi phí.
+⚠️ *Lỗi hay gặp:* quên cắt dòng thừa → API trả 21 phần tử trong khi client xin 20.
+
+**5.** Bỏ `.UTC()` → hai server khác múi giờ sinh/đọc cursor lệch nhau nhiều giờ → nhảy sai vị trí.
+Bỏ `RFC3339Nano` (dùng độ chính xác giây) → hai bản ghi cách nhau vài micro-giây bị coi là **bằng
+nhau**, phá vỡ thứ tự và có thể bỏ sót.
+🔍 *Sâu hơn:* cả hai đều là lỗi **âm thầm** — không crash, không log, chỉ vài bản ghi biến mất
+khỏi danh sách. Rất khó truy.
+⚠️ *Lỗi hay gặp:* dùng `time.Format("2006-01-02 15:04:05")` cho quen mắt → mất nano-giây **và**
+mất thông tin múi giờ cùng lúc.
+
+**6.** Để cursor thành **chuỗi mờ (opaque)**: client coi nó là "một cái mã, gửi lại nguyên si",
+**không tự chế**. Nhờ vậy đổi cấu trúc cursor sau này mà không phá client.
+🔍 *Sâu hơn:* **KHÔNG phải biện pháp bảo mật** — base64 giải được trong 2 giây. Nếu cursor chứa dữ
+liệu nhạy cảm phải **ký (HMAC)** hoặc mã hoá thật. Ở đây nó chỉ chứa timestamp + id nên không sao.
+⚠️ *Lỗi hay gặp:* dùng `base64.StdEncoding` → sinh ký tự `+`, `/`, `=` phải escape trong URL, gây
+lỗi khó hiểu khi client không encode đúng. Phải dùng `RawURLEncoding`.
+
+**7.** Vì cursor chứa **mốc của trường đang sort** (ví dụ `price`). Đang phân trang theo
+`price_asc` mà đổi sang `newest` thì cursor cũ **vô nghĩa** — nó mang mốc giá, không so theo ngày
+được. Lưu `Sort` cho phép phát hiện và từ chối.
+🔍 *Sâu hơn:* không có trường này, hệ thống **âm thầm trả kết quả sai** (dùng nhầm mốc) thay vì
+báo lỗi rõ ràng. Nguyên tắc: **cursor phải tự mô tả đủ ngữ cảnh sinh ra nó**.
+⚠️ *Lỗi hay gặp:* chỉ lưu `id` trong cursor. Với sort theo giá, biết `id` thôi không đủ để viết
+mệnh đề `WHERE` — phải biết cả giá của bản ghi đó.
+
+**8.** Quy tắc **"equality trước, sort sau"**: `status` được lọc bằng `=` nên phải đứng **đầu** để
+thu hẹp phạm vi; sau đó `(created_at DESC, id DESC)` khớp đúng `ORDER BY` để đọc thẳng theo thứ
+tự có sẵn.
+🔍 *Sâu hơn:* nếu đặt `(created_at, id, status)`, index sắp theo thời gian trước — muốn lọc
+`status` phải duyệt **mọi** dòng trong khoảng thời gian rồi lọc thủ công. Liên quan **leftmost
+prefix**: index chỉ dùng được từ cột trái sang, nên cột lọc phải nằm bên trái.
+⚠️ *Lỗi hay gặp:* tạo 3 index riêng lẻ `(status)`, `(created_at)`, `(id)` rồi tưởng PostgreSQL sẽ
+ghép lại. Nó có thể làm bitmap scan nhưng **kém hơn nhiều** so với một index composite khớp đúng.
+
+**9.** `Seq Scan` = **quét tuần tự toàn bảng** → không index nào khớp (hoặc bảng quá nhỏ nên
+planner cố tình bỏ qua index). `Sort` = phải **sắp xếp thủ công** → index không khớp `ORDER BY`.
+🔍 *Sâu hơn:* `Sort` kèm `Sort Method: external merge Disk: xxx kB` còn tệ hơn — dữ liệu không vừa
+RAM nên **ghi tạm ra đĩa**. Trên bảng lớn đây là nguyên nhân timeout kinh điển.
+⚠️ *Lỗi hay gặp:* chạy `EXPLAIN` trên database dev có 100 dòng rồi kết luận "index tốt". Bảng nhỏ
+thì `Seq Scan` **nhanh hơn** index nên planner chọn nó — phải đo trên dữ liệu **cỡ thật**.
+
+**10.** Không có lời giải hoàn hảo; chọn theo bối cảnh:
+1. **Giữ OFFSET riêng cho màn admin** — chấp nhận chậm vì admin ít người dùng và thường đã lọc
+   hẹp. Đây chính là điều repo đang làm (và ghi nhận là nợ kỹ thuật).
+2. **Cursor + lọc bắt buộc** — ép chọn khoảng ngày/trạng thái trước, khiến tập kết quả đủ nhỏ để
+   không ai cần trang 500.
+3. **Kết hợp:** cursor cho cuộn tuần tự, cộng ô "nhảy tới ngày X" — về trải nghiệm thay thế được
+   "nhảy tới trang N" mà vẫn dùng keyset.
+4. **Xuất file** cho nhu cầu xem toàn bộ (repo đã có xuất Excel cho báo cáo).
+
+🔍 *Sâu hơn:* câu trả lời hay nhất là nhận ra **"nhảy tới trang 500" gần như luôn là yêu cầu
+giả** — chẳng ai thực sự cần trang 500; họ cần **tìm thấy thứ họ muốn**. Lọc và tìm kiếm giải
+quyết nhu cầu thật tốt hơn phân trang tuỳ ý.
