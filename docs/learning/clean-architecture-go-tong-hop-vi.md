@@ -27,6 +27,7 @@
 | [Buổi 7C](#buổi-7c--testing) | Fake, table test, testcontainers | toàn repo |
 | [Buổi 8](#buổi-8--redis-caching) | Cache-aside, invalidation, index set, TTL, stampede | product-service |
 | [Buổi 9](#buổi-9--cursor-pagination-và-sql-index) | Keyset pagination, tie-breaker, `LIMIT+1`, index composite | order-service, product-service |
+| [Buổi 10](#buổi-10--grpc) | Protobuf contract, field number, codegen, interceptor, metadata | proto/, product-service, cart-service |
 
 ---
 
@@ -2739,6 +2740,407 @@ kỹ thuật có ý thức**.
 
 ---
 
+## Buổi 10 — gRPC
+
+Bạn đã **dùng** gRPC ở gần như mọi buổi — `cart → product`, `order → product`, lỗi
+`codes.NotFound` map thành domain error, trace đi xuyên service — mà chưa bao giờ học nó.
+
+### 10.1. Vấn đề: service gọi service thì dùng gì?
+
+`cart-service` cần giá và tồn kho của sản phẩm, nhưng dữ liệu đó ở `product-service` (database
+riêng). Cách quen thuộc là HTTP + JSON:
+
+```go
+resp, _ := http.Get("http://product-service:8080/api/v1/products/abc123")
+json.NewDecoder(resp.Body).Decode(&product)
+```
+
+Chạy được, nhưng khi gọi **nội bộ, tần suất cao** thì có 4 điểm yếu:
+
+| Điểm yếu | Cụ thể |
+|---|---|
+| Không có hợp đồng bắt buộc | `product-service` đổi `price` từ `float` sang `string` → `cart-service` **compile vẫn xanh**, chỉ chết lúc chạy |
+| JSON tốn kém | Text — phải parse chuỗi, tên field lặp lại trong **mọi** response |
+| Không biết có hàm gì | Muốn biết service kia cung cấp gì → đọc code hoặc hy vọng có tài liệu |
+| Tự viết client mọi lần | Mỗi service lại tự build URL, encode, decode, xử lý lỗi |
+
+📖 Với API **public** (trình duyệt gọi vào), HTTP+JSON là lựa chọn đúng. Nhưng với **giao tiếp
+nội bộ giữa các service của chính bạn**, 4 điểm yếu trên trở nên đắt đỏ.
+
+**gRPC = RPC + Protobuf + HTTP/2:**
+
+| Mảnh | Vai trò |
+|---|---|
+| **RPC** | Gọi hàm ở máy khác **như thể gọi hàm local**: `c.client.GetProductByID(ctx, req)` |
+| **Protobuf** | Ngôn ngữ mô tả **hợp đồng**, và định dạng **nhị phân** để truyền |
+| **HTTP/2** | Một kết nối dùng lại nhiều lần, nén header, đa luồng |
+
+📖 **Ví von:** HTTP+JSON giống **gửi thư viết tay** — ai cũng đọc được nhưng dài dòng và dễ hiểu
+sai. gRPC giống **hai bên ký sẵn một biểu mẫu chuẩn**: ô số 1 là tên, ô số 4 là giá.
+
+### 10.2. Contract — mổ `proto/product.proto`
+
+```protobuf
+syntax = "proto3";
+package product;
+option go_package = "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto";
+
+service ProductService {
+  rpc GetProductByID (GetProductByIDRequest) returns (GetProductByIDResponse);
+  rpc UpdateProduct  (UpdateProductRequest)  returns (UpdateProductResponse);
+  rpc ReserveStock   (ReserveStockRequest)   returns (ReserveStockResponse);
+  rpc ReleaseStock   (ReleaseStockRequest)   returns (ReleaseStockResponse);
+}
+
+message Product {
+  string id             = 1;
+  string name           = 2;
+  float  price          = 4;
+  int32  stock_quantity = 6;
+}
+```
+
+#### 🎯 Con số sau dấu `=` mới là hợp đồng thật
+
+```protobuf
+string name = 2;
+//            ▲ FIELD NUMBER (số hiệu trường)
+```
+
+**Protobuf KHÔNG gửi tên field qua mạng** — nó chỉ gửi **số hiệu + giá trị**:
+
+```
+JSON (67 byte):      {"id":"abc","name":"Áo thun","price":199000,"stock_quantity":10}
+                      ▲ tên field lặp lại trong MỌI response, hàng triệu lần
+
+Protobuf (~25 byte): [1]"abc" [2]"Áo thun" [4]199000 [6]10
+                      ▲ chỉ có SỐ
+```
+
+Hai quy tắc sống còn:
+
+1. **Đổi TÊN field thì an toàn** (`name` → `product_name`) — tên không đi qua mạng.
+2. **Đổi SỐ HIỆU thì phá hợp đồng ngay** — bên kia vẫn đọc ô cũ, nhận giá trị rỗng, **không báo
+   lỗi gì cả**.
+
+⚠️ **Tuyệt đối không TÁI SỬ DỤNG số hiệu đã bỏ.** Xóa `category = 5` rồi thêm `brand = 5` →
+service cũ chưa deploy lại đọc `brand` vào ô `category` → **dữ liệu lẫn lộn âm thầm**. Protobuf
+có `reserved 5;` để chặn.
+
+#### Quy tắc tiến hóa contract
+
+Chính `.proto` của repo ghi: *"prefer additive migration instead of changing the meaning or type
+of these existing fields in place."*
+
+| Thay đổi | An toàn? | Vì sao |
+|---|---|---|
+| **Thêm** field số hiệu mới | ✅ | Bên cũ bỏ qua ô nó không biết |
+| Đổi **tên** field | ✅ | Tên không đi qua mạng |
+| Thêm RPC mới | ✅ | Bên cũ không gọi thì thôi |
+| Đổi **số hiệu** | ❌ | Phá hợp đồng ngay |
+| Đổi **kiểu** | ❌ | Giải mã sai |
+| **Tái dùng** số đã xóa | ❌❌ | Nguy hiểm nhất — sai âm thầm |
+
+📖 Trong microservices bạn **không thể deploy tất cả service cùng lúc** — luôn có khoảng thời gian
+bản cũ và mới chạy song song. Contract phải chịu được điều đó.
+
+#### ⚠️ Bẫy proto3: không phân biệt "rỗng" với "không gửi"
+
+Repo tự cảnh báo trong `.proto`: *"behaves closer to a full snapshot update than a partial patch
+update. Callers should be careful not to overwrite fields unintentionally with zero values."*
+
+Trong proto3 mọi trường scalar đều có **giá trị mặc định** (`""`, `0`), nên bên nhận **không phân
+biệt được**:
+
+```
+"Cố ý đặt price = 0"      ┐
+                           ├── Cả hai đều đến nơi là: price = 0
+"KHÔNG gửi price"         ┘
+```
+
+```go
+// Chỉ muốn đổi tên sản phẩm:
+req := &pb.UpdateProductRequest{ ProductId: "abc", Name: "Tên mới" }
+// → Price = 0, StockQuantity = 0 (mặc định!)
+// → Server ghi đè tất cả → SẢN PHẨM VỀ GIÁ 0 VÀ HẾT HÀNG 😱
+```
+
+**Cách sửa:** dùng `optional` (proto3 ≥ 3.15, sinh con trỏ nên `nil` = không gửi) hoặc wrapper
+type (`google.protobuf.Int32Value`). Repo chưa làm nhưng **ghi nhận thẳng trong comment**.
+
+#### Contract cũng chứa hợp đồng nghiệp vụ
+
+```protobuf
+// Reserve stock for one order: all-or-nothing across items, idempotent per
+// order_id. Replaying the same order_id must not decrement stock twice.
+rpc ReserveStock (ReserveStockRequest) returns (ReserveStockResponse);
+```
+
+🎯 **Idempotency của buổi 4 được viết vào contract**, không giấu trong code. `ReserveStockResponse.
+already_reserved` cho biết lần này thực sự trừ kho hay chỉ là replay. Contract tốt mô tả cả **đảm
+bảo hành vi**, không chỉ hình dạng dữ liệu.
+
+### 10.3. Codegen
+
+```
+proto/product.proto          ← BẠN viết (nguồn sự thật)
+        │  protoc --go_out=. --go-grpc_out=.
+        ▼
+proto/product.pb.go          ← SINH TỰ ĐỘNG: struct Product, các Request/Response
+proto/product_grpc.pb.go     ← SINH TỰ ĐỘNG: interface Server + Client
+```
+
+⚠️ File `.pb.go` **không bao giờ sửa tay** — `.proto` ghi rõ *"should not be edited manually"*.
+
+Codegen cho bạn **interface server phải cài đặt** và **client viết sẵn**.
+
+🎯 **Điểm mạnh lớn nhất so với HTTP+JSON:** nếu `product-service` đổi contract mà `cart-service`
+chưa cập nhật, **code không compile được**. Lỗi bị bắt lúc **build**, không phải 2 giờ sáng ở
+production.
+
+### 10.4. Server — `product_grpc.go`
+
+```go
+type ProductGRPCServer struct {
+	pb.UnimplementedProductServiceServer    // ← EMBEDDING (buổi 2!)
+	productService *service.ProductService
+	log            *zap.Logger
+}
+```
+
+#### 🎯 `UnimplementedProductServiceServer` — embedding có mục đích
+
+Codegen sinh ra struct này với **mọi** method của interface, mỗi cái trả `Unimplemented`:
+
+```go
+func (UnimplementedProductServiceServer) SearchProducts(...) (*SearchProductsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchProducts not implemented")
+}
+```
+
+Nhúng nó → server **tự động thỏa mãn interface** dù mới cài vài method:
+
+```
+Hôm nay:  .proto có 8 RPC, bạn cài 5 → vẫn compile, 3 cái kia trả "Unimplemented"
+Ngày mai: ai đó thêm RPC thứ 9
+          → server VẪN COMPILE (nhờ embedding)
+          → KHÔNG có embedding: build đỏ ngay, mọi service phải sửa cùng lúc
+```
+
+📖 Đây là **forward compatibility**. Nối lại buổi 2: *embedding không xấu — embedding **lộ ra thứ
+không nên lộ** mới xấu*. Với `sync.Mutex` thứ bị lộ (`Lock`/`Unlock`) là thứ phải giấu; ở đây thứ
+được lộ **chính là thứ ta muốn**.
+
+#### Xử lý lỗi: gRPC status code
+
+```go
+func (s *ProductGRPCServer) GetProductByID(ctx context.Context, req *pb.GetProductByIDRequest) (*pb.GetProductByIDResponse, error) {
+	if req.GetProductId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "product_id is required")
+	}
+	product, err := s.productService.GetByID(ctx, req.GetProductId())
+	if err != nil {
+		if err == service.ErrProductNotFound {
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &pb.GetProductByIDResponse{ Product: toProtoProduct(product) }, nil
+}
+```
+
+gRPC có **bộ mã lỗi riêng**, không dùng HTTP status:
+
+| gRPC code | ≈ HTTP | Khi nào |
+|---|---|---|
+| `InvalidArgument` | 400 | tham số sai |
+| `NotFound` | 404 | không tìm thấy |
+| `FailedPrecondition` | 409 | trạng thái không cho phép (repo dùng cho **hết hàng**) |
+| `Unauthenticated` / `PermissionDenied` | 401 / 403 | chưa xác thực / không có quyền |
+| `Internal` | 500 | lỗi server |
+| `Unavailable` / `DeadlineExceeded` | 503 / 504 | service chết / quá hạn |
+
+🎯 Đây là **tầng adapter** (buổi 3): nhận `service.ErrProductNotFound` (domain error) và dịch sang
+`codes.NotFound` (ngôn ngữ gRPC). Tầng service bên dưới **không biết** gRPC tồn tại.
+
+Chuỗi hoàn chỉnh (nối buổi 4):
+
+```
+product-service:  UPDATE ... WHERE stock >= $1  →  RowsAffected = 0
+                        ↓
+                  ErrInsufficientStock              (domain error của product-service)
+                        ↓  gRPC server dịch
+                  codes.FailedPrecondition          (ngôn ngữ gRPC — qua mạng)
+                        ↓  order-service dịch ngược (mapCreateOrderStockError)
+                  ErrInsufficientStock              (domain error của order-service)
+                        ↓  HTTP handler dịch
+                  HTTP 409 Conflict                 (trả về trình duyệt)
+```
+
+### 10.5. Client — `product_client.go`
+
+```go
+func NewProductClient(target string) (*ProductClient, error) {
+	conn, err := grpc.Dial(
+		target,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(appobs.GRPCUnaryClientInterceptor("cart-service")),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("did not connect: %v", err)
+	}
+	return &ProductClient{ client: pb.NewProductServiceClient(conn), conn: conn }, nil
+}
+```
+
+**Kết nối tạo MỘT LẦN, dùng mãi.** `grpc.Dial` gọi lúc khởi động trong `main.go` (composition
+root — buổi 1), `conn` dùng cho mọi request sau đó; `defer productClient.Close()` khi tắt.
+
+📖 gRPC chạy trên **HTTP/2** → **multiplexing**: nhiều request đồng thời trên cùng một kết nối
+TCP. Dial mỗi lần gọi sẽ phải bắt tay TCP/TLS lại, giết sạch lợi thế tốc độ. `*grpc.ClientConn`
+cũng **an toàn khi dùng đồng thời** từ nhiều goroutine.
+
+#### `insecure.NewCredentials()` — có nguy hiểm không?
+
+⚠️ Tắt TLS, nhưng **chấp nhận được ở đây** vì gRPC chỉ chạy trong **mạng nội bộ Docker** (port
+gRPC không publish ra host theo `CLAUDE.md`), và `api-gateway` là entrypoint public duy nhất.
+
+🚩 **Không** còn chấp nhận được khi traffic đi qua mạng thật (Kubernetes nhiều node, nhiều VPC) →
+bắt buộc **mTLS**. Đây là "an toàn nhờ ranh giới triển khai", không phải an toàn tự thân.
+
+### 10.6. Interceptor — middleware của gRPC
+
+📖 **Interceptor = middleware cho gRPC.** Giống `middleware.JWTAuth` bọc mọi HTTP request.
+**Metadata** = "header" của gRPC — bản đồ `key → []string` đi kèm mỗi lời gọi, là chỗ chở
+`trace_id`, `request_id`.
+
+**Client interceptor — TIÊM thông tin vào** (`pkg/observability/grpc.go:55`):
+
+```go
+ctx, span := tracer.Start(ctx, method, trace.WithSpanKind(trace.SpanKindClient))
+defer span.End()
+
+md, ok := metadata.FromOutgoingContext(ctx)
+if !ok { md = metadata.New(nil) } else { md = md.Copy() }        // ← COPY, không sửa bản gốc
+if requestID := RequestIDFromContext(ctx); requestID != "" {
+	md.Set(strings.ToLower(HeaderRequestID), requestID)
+}
+otel.GetTextMapPropagator().Inject(ctx, metadataCarrier(md))      // nhét trace vào metadata
+ctx = metadata.NewOutgoingContext(ctx, md)
+
+err := invoker(ctx, method, req, reply, cc, opts...)
+recordGRPCStatus(span, err)
+```
+
+📖 **`md.Copy()` rất quan trọng:** metadata trong context có thể dùng chung giữa nhiều goroutine
+(buổi 2!). `metadata.MD` bản chất là `map[string][]string` — ghi đồng thời gây
+`fatal error: concurrent map writes`, giết cả process.
+
+**Server interceptor — BÓC thông tin ra:**
+
+```go
+ctx = otel.GetTextMapPropagator().Extract(ctx, metadataCarrier(md))   // bóc trace
+if requestID := firstMetadataValue(md, strings.ToLower(HeaderRequestID)); requestID != "" {
+	ctx = WithRequestID(ctx, requestID)                               // bóc request_id
+}
+ctx, span := tracer.Start(ctx, info.FullMethod, trace.WithSpanKind(trace.SpanKindServer))
+```
+
+#### 🎯 Bức tranh trọn vẹn: một `trace_id` đi xuyên hệ thống
+
+```
+Trình duyệt
+    │  HTTP header: traceparent, X-Request-ID
+    ▼
+api-gateway ──── EchoMiddleware bóc trace ra → context
+    │  HTTP (WrapHTTPTransport tiêm lại vào header)
+    ▼
+cart-service handler ──── ctx mang trace_id
+    ├─ log.Info(...)  ← LoggerWithContext gắn trace_id vào MỌI dòng log
+    ▼ gọi gRPC
+GRPCUnaryClientInterceptor ──── tiêm trace vào gRPC METADATA
+    │  (qua mạng)
+    ▼
+GRPCUnaryServerInterceptor ──── bóc trace ra khỏi metadata
+    ▼
+product-service handler ──── ctx mang CÙNG trace_id
+    └─ log.Info(...)  ← cùng trace_id
+```
+
+🎯 Một request sinh ra hàng chục dòng log ở **4-5 service**, tất cả **cùng `trace_id`**. Lọc theo
+`trace_id` là thấy trọn hành trình. Đây là lý do `ctx` phải được truyền tay xuống **mọi** tầng
+(buổi 1) — đứt một mắt xích là mất dấu vết từ đó trở đi.
+
+#### `metadataCarrier` — adapter nhỏ mà đẹp
+
+```go
+type metadataCarrier metadata.MD
+func (c metadataCarrier) Get(key string) string { ... }
+func (c metadataCarrier) Set(key, value string) { ... }
+func (c metadataCarrier) Keys() []string { ... }
+
+var _ propagation.TextMapCarrier = metadataCarrier{}   // ← kiểm tra lúc COMPILE
+```
+
+OpenTelemetry cần interface `TextMapCarrier`; gRPC metadata có hình dạng khác. `metadataCarrier`
+là **adapter** nối hai bên (interface — buổi 1).
+
+📖 **`var _ Iface = T{}` là mẹo Go rất đáng học:** không tạo biến nào (dấu `_` vứt đi), chỉ để
+**ép compiler kiểm tra** `T` thỏa interface. Vì Go dùng interface **ngầm định** (buổi 1), xóa nhầm
+một method sẽ báo lỗi ở nơi xa xôi với thông điệp khó hiểu — dòng này biến nó thành lỗi **ngay tại
+file định nghĩa**.
+
+### 10.7. Vì sao gRPC vào trong, HTTP ra ngoài?
+
+| | HTTP/JSON (ra ngoài) | gRPC (nội bộ) |
+|---|---|---|
+| Ai gọi | trình duyệt, app, bên thứ ba | chỉ service của **chính bạn** |
+| Trình duyệt gọi trực tiếp | ✅ | ❌ (cần gRPC-Web + proxy) |
+| Debug bằng `curl`/DevTools | ✅ dễ | ❌ khó (nhị phân) |
+| Hợp đồng bắt buộc lúc compile | ❌ | ✅ |
+| Kích thước gói tin | lớn (text) | **nhỏ** (nhị phân) |
+| Tốc độ | ổn | **nhanh hơn** (HTTP/2) |
+
+🎯 **Nguyên tắc:** HTTP/JSON **ở biên** (cần phổ quát, dễ debug), gRPC **bên trong** (cần tốc độ,
+hợp đồng chặt, và bạn kiểm soát cả hai đầu). Đó chính xác là kiến trúc repo.
+
+### 10.8. 🚩 Một điểm yếu repo tự thú nhận
+
+Comment trong `product_grpc.go:55`:
+
+> *"Order Service có thể dùng hàm này như một **mẹo (Hack/Reuse)** để Restore lại Stock kho hàng
+> khi 1 Đơn bị hủy, tránh việc phải viết thêm RPC `RestoreStock` trong Protobuf."*
+
+`UpdateProduct` bị dùng để **điều chỉnh tồn kho**. Ba vấn đề:
+
+1. **Tên nói dối ý định** — đọc `UpdateProduct` không ai đoán được nó đang trả kho cho đơn bị hủy.
+2. **Ngữ nghĩa mơ hồ** — mất sự rõ ràng tăng/giảm mà tầng service đã có
+   (`DecreaseStock`/`RestoreStock`), quay về một hàm "update" chung chung.
+3. **Dính bẫy proto3 zero-value** (10.2) — các trường khác đều mặc định, rủi ro ghi đè tên/giá.
+
+✅ **Cách đúng:** RPC chuyên biệt `AdjustStock(product_id, delta, reason)`. Thực tế repo **đã đi
+hướng này** với `ReserveStock`/`ReleaseStock` — hai RPC chuyên biệt, có idempotency ghi trong
+contract. Contract đang trưởng thành dần.
+
+📖 *"Tránh phải viết thêm RPC"* nghe như tiết kiệm công, nhưng là **vay nợ kỹ thuật** — trả bằng
+sự mơ hồ mà mọi người đọc code sau này phải gánh.
+
+### ✅ Quiz buổi 10
+
+1. Trong `string name = 2;`, con số `2` là gì? Vì sao đổi **tên** field an toàn mà đổi **số** thì phá hợp đồng?
+2. Vì sao **tuyệt đối không** tái sử dụng số hiệu của field đã xóa? Hậu quả cụ thể?
+3. Vì sao `UpdateProductRequest` hành xử như "full snapshot" chứ không phải "partial patch"? Nêu một kịch bản hỏng dữ liệu.
+4. `ProductGRPCServer` nhúng `pb.UnimplementedProductServiceServer` để làm gì? Buổi 2 nói embedding `sync.Mutex` là xấu — vì sao ở đây lại tốt?
+5. Server trả `codes.NotFound` thay vì `404`. Vì sao? Tầng nào dịch nó thành 404 cho trình duyệt?
+6. `grpc.Dial` gọi ở đâu và bao nhiêu lần? Vì sao không gọi mỗi lần cần request?
+7. `insecure.NewCredentials()` tắt TLS. Vì sao chấp nhận được ở repo này, và khi nào thì không?
+8. Vì sao client interceptor phải `md.Copy()` trước khi `md.Set(...)`? Liên hệ buổi 2.
+9. Mô tả đường đi của một `trace_id` từ trình duyệt tới `product-service`. Nếu một service quên truyền `ctx` thì hỏng gì?
+10. `var _ propagation.TextMapCarrier = metadataCarrier{}` làm gì? Vì sao là thói quen tốt?
+11. (Khó) Dùng `UpdateProduct` để restore stock có 3 vấn đề. Nêu cả 3 và đề xuất contract thay thế.
+
+---
+
 ## Phụ lục — Tra nhanh
 
 ### Các pattern độ tin cậy và nơi chúng sống
@@ -2777,6 +3179,114 @@ kỹ thuật có ý thức**.
 
 > Đọc phần này **sau khi** đã tự trả lời. Đáp án ở đây là đáp án mẫu, không phải đáp án
 > duy nhất — nếu bạn lập luận khác mà vẫn đúng, càng tốt.
+
+## Đáp án buổi 1
+
+**1.** Vì **người tiêu thụ định nghĩa hợp đồng theo nhu cầu của mình**. `cart-service` chỉ cần một
+khả năng duy nhất — `GetProduct` — nên nó tự khai một interface bé xíu mô tả đúng cái nó cần. Kết
+quả: **chiều phụ thuộc bị đảo ngược** (Dependency Inversion) — business logic không phụ thuộc gRPC,
+mà gRPC client trở thành thứ đi thoả mãn abstraction do business logic đặt ra.
+🔍 *Sâu hơn:* nếu interface nằm ở package gRPC client, `service` phải `import grpc_client` — mũi
+tên phụ thuộc trỏ **ra ngoài**, vi phạm Dependency Rule (buổi 3). So sánh: `ProductReviewCache`
+(buổi 8) cũng khai ở tầng service — đó là bản chuẩn mực của cùng mẫu này.
+⚠️ *Lỗi hay gặp:* khai interface "cho đủ" với **mọi** method mà gRPC client có. Interface nên **hẹp
+đúng nhu cầu** — càng ít method càng dễ tạo fake khi test.
+
+**2.** `err == ErrX` so sánh **đồng nhất trực tiếp**; `errors.Is(err, ErrX)` **bóc từng lớp `%w`**
+để tìm xem `ErrX` có nằm bên trong không. Dùng `==` sai **ngay khi lỗi bị bọc**.
+🔍 *Sâu hơn:* trong repo, `getProductForCart` trả `fmt.Errorf("%w: %s", ErrProductNotFound, productID)`
+→ lỗi thật là `"product not found: abc123"`. Với `==` thì phép so trả `false` → handler rơi xuống
+nhánh 500 thay vì 404. Đây là bug **âm thầm**: API vẫn trả lỗi, chỉ sai mã.
+⚠️ *Lỗi hay gặp:* dùng `err.Error() == "product not found"` (so chuỗi) — mong manh gấp đôi: hỏng khi
+bọc thêm text, **và** hỏng khi ai đó sửa chính tả thông điệp.
+
+**3.** Vì dependency bị **tạo cứng bên trong** thay vì tiêm từ ngoài: muốn test logic "cộng dồn số
+lượng khi thêm sản phẩm đã có trong giỏ", bạn buộc phải có **Redis thật đang chạy**. Test chậm,
+cần hạ tầng, chạy song song thì giẫm chân nhau, và CI phải dựng Redis.
+🔍 *Sâu hơn:* điều mất mát lớn nhất là **không có đường may (seam)** để thay thế. `NewCartService(repo,
+productClient)` nhận interface nên test chỉ cần một struct giả — nhanh, tất định, không cần hạ tầng.
+Đây chính là lý do "accept interfaces" tồn tại.
+⚠️ *Lỗi hay gặp:* "khắc phục" bằng cách thêm biến toàn cục để test ghi đè. Nó làm test **không chạy
+song song được** và tạo trạng thái ẩn giữa các test.
+
+**4.** Chỉ **handler** được biết 404. Vì HTTP là **chi tiết giao vận ở biên**: service phải dùng
+được cho gRPC, CLI, worker — những nơi khái niệm "404" vô nghĩa; repository chỉ biết dữ liệu có hay
+không.
+🔍 *Sâu hơn:* phân vai đúng là: repository trả `sql.ErrNoRows`/`nil`; service dịch thành domain
+error (`ErrProductNotFound`); handler dịch domain error thành mã HTTP. Mỗi tầng nói ngôn ngữ của
+tầng mình — cùng nguyên tắc áp dụng xuyên service ở buổi 10 (gRPC `codes.NotFound`).
+⚠️ *Lỗi hay gặp:* cho service trả thẳng `echo.NewHTTPError(404, ...)` "cho nhanh" — service lập tức
+dính chặt vào Echo và không tái dùng được.
+
+## Đáp án buổi 2
+
+**1.** Vì `b := a[1:3]` **không copy dữ liệu** — nó tạo một slice header mới trỏ vào **cùng mảng nền
+(backing array)**:
+
+```
+a := []int{1, 2, 3, 4}
+
+mảng nền:   [ 1 ][ 2 ][ 3 ][ 4 ]
+              ▲    ▲         ▲
+a  = {ptr ────┘, len=4, cap=4}
+b  = {ptr ─────────┘, len=2, cap=3}      ← b.ptr trỏ vào PHẦN TỬ SỐ 1 của cùng mảng
+
+b[0] = 99  →  ghi vào ô mà a[1] cũng đang trỏ tới
+              [ 1 ][ 99 ][ 3 ][ 4 ]   →  a = [1, 99, 3, 4]
+```
+
+🔍 *Sâu hơn:* đây là khác biệt lớn nhất giữa slice của Go và mảng của nhiều ngôn ngữ khác. Hệ quả
+thực chiến: hàm nhận `[]T` và sửa phần tử là **sửa dữ liệu của người gọi**. Muốn bản độc lập phải
+`copy()` hoặc `append` vào slice mới.
+⚠️ *Lỗi hay gặp:* trả sub-slice của state nội bộ ra ngoài (`return c.items[:n]`) — người gọi sửa
+một phần tử là hỏng luôn dữ liệu bên trong struct của bạn.
+
+**2.** Vì `payment` là **con trỏ**. Trả thẳng `payment` nghĩa là trả **địa chỉ của bản ghi trong
+fake store** — test sửa giá trị trả về là **sửa luôn dữ liệu "trong database" giả**, khiến các bước
+sau của test chạy trên dữ liệu đã bị bẩn.
+🔍 *Sâu hơn:* fake tốt phải **mô phỏng ranh giới của hệ thống thật**. Repository thật đọc từ
+PostgreSQL luôn trả về **bản dựng mới** từ các dòng scan được — không đời nào caller sửa được dòng
+trong DB bằng cách gán vào struct. `copyValue := *payment; return &copyValue` tái tạo đúng tính chất
+đó.
+⚠️ *Lỗi hay gặp:* fake quá đơn giản nên test **xanh giả** — nó bỏ lọt đúng những bug mà ranh giới
+thật sẽ chặn (xem thêm câu 11 buổi 7C).
+
+**3.** Vì nhúng (embed) sẽ **thăng cấp `Lock()`/`Unlock()` thành method public** của
+`LoginAttemptProtector` — biến cơ chế khoá nội bộ thành một phần API mà code bên ngoài gọi được,
+rất dễ gây khoá nhầm hoặc deadlock. Named field `mu` (chữ thường = unexported) **giấu khoá vào
+trong**.
+🔍 *Sâu hơn:* bài học chuẩn xác không phải "embedding xấu" mà là *embedding **lộ ra thứ không nên
+lộ** mới xấu*. Đối chiếu buổi 10: nhúng `pb.UnimplementedProductServiceServer` là **tốt**, vì thứ
+được lộ (các method của interface) **chính là thứ ta muốn lộ**.
+⚠️ *Lỗi hay gặp:* nghĩ hai cách chỉ khác cú pháp gọi. Khác biệt thật là **phạm vi API công khai** —
+ai được phép khoá struct của bạn.
+
+**4.** `defer fmt.Println(i)` **đánh giá tham số ngay tại thời điểm gặp `defer`** rồi mới hoãn *lời
+gọi* → in giá trị `i` **lúc đó**. `defer func(){ fmt.Println(i) }()` là closure **không có tham
+số** → nó đọc biến `i` **lúc chạy** (khi hàm return) → in giá trị **mới nhất**.
+
+```go
+i := 0
+defer fmt.Println(i)              // in 0  — chốt tham số ngay
+defer func(){ fmt.Println(i) }()  // in 1  — đọc biến lúc chạy
+i++
+```
+
+🔍 *Sâu hơn:* cả hai đều *chạy* lúc hàm return — khác nhau ở chỗ **cái gì được chốt lúc khai báo**.
+Đây là lý do `defer tx.Rollback()` an toàn (chốt luôn `tx`) còn `defer cleanup(resultErr)` thường
+sai ý định (chốt giá trị lỗi lúc đó, chưa phải lỗi cuối).
+⚠️ *Lỗi hay gặp:* dùng dạng closure trong vòng lặp mà quên rằng biến vòng lặp bị chia sẻ — trước
+Go 1.22 mọi closure sẽ thấy **giá trị cuối cùng**.
+
+**5.** `time.Sleep` **không thể bị đánh thức sớm**. Worker sẽ ngủ đủ 1 giây bất kể context đã bị
+huỷ, nên lúc shutdown chương trình phải **chờ tới hết giấc ngủ** mới thoát — graceful shutdown bị
+kéo dài, và nếu chu kỳ là 30 giây thì có thể bị timeout rồi **kill cứng**.
+🔍 *Sâu hơn:* `select` với `case <-ctx.Done()` cho phép **thoát ngay lập tức** khi có tín hiệu huỷ,
+vì nó chờ **nhiều sự kiện cùng lúc** và nhánh nào tới trước thì chạy. Đây là mẫu chuẩn cho mọi
+worker chạy nền: *đừng bao giờ ngủ mù — luôn ngủ kèm một lối thoát*.
+⚠️ *Lỗi hay gặp:* nghĩ rằng chỉ chậm shutdown vài giây thì không sao. Với hàng chục worker và
+orchestrator (Kubernetes) chỉ cho ~30 giây trước khi `SIGKILL`, tiến trình có thể bị giết **giữa
+lúc đang ghi dữ liệu**.
 
 ## Đáp án buổi 3
 
@@ -3486,3 +3996,108 @@ thì `Seq Scan` **nhanh hơn** index nên planner chọn nó — phải đo trê
 🔍 *Sâu hơn:* câu trả lời hay nhất là nhận ra **"nhảy tới trang 500" gần như luôn là yêu cầu
 giả** — chẳng ai thực sự cần trang 500; họ cần **tìm thấy thứ họ muốn**. Lọc và tìm kiếm giải
 quyết nhu cầu thật tốt hơn phân trang tuỳ ý.
+
+## Đáp án buổi 10
+
+**1.** `2` là **field number** — thứ **thực sự đi qua mạng**. Protobuf mã hoá `[số hiệu][giá trị]`,
+**không gửi tên field**. Nên đổi tên chỉ ảnh hưởng code Go sinh ra (compile lại là xong), còn đổi
+số hiệu khiến bên nhận đọc nhầm ô.
+🔍 *Sâu hơn:* đây cũng là lý do Protobuf nhỏ hơn JSON nhiều — JSON lặp tên field trong **mọi**
+message, Protobuf chỉ tốn 1-2 byte cho số hiệu.
+⚠️ *Lỗi hay gặp:* tưởng `.proto` giống JSON schema nên "sắp xếp lại cho gọn". Đổi thứ tự khai báo
+thì không sao, nhưng đổi con số là phá hợp đồng **âm thầm** — không có lỗi compile nào cảnh báo.
+
+**2.** Vì service cũ **chưa deploy lại** vẫn hiểu số hiệu đó theo nghĩa cũ. Xóa `category = 5` rồi
+thêm `brand = 5`: bên gửi mới gửi tên thương hiệu ở ô 5, bên nhận cũ đọc ô 5 tưởng là `category` →
+**dữ liệu lẫn lộn, không báo lỗi**.
+🔍 *Sâu hơn:* Protobuf có `reserved 5;` và `reserved "category";` để compiler **chặn** tái dùng.
+Tập thói quen: xóa field thì lập tức thêm dòng `reserved`.
+⚠️ *Lỗi hay gặp:* nghĩ "deploy đồng thời hết là xong". Trong microservices **không tồn tại**
+khoảnh khắc deploy đồng thời — luôn có cửa sổ chạy song song hai phiên bản.
+
+**3.** Gốc rễ: proto3 dùng trường scalar thuần nên **không phân biệt "gửi giá trị 0/rỗng"** với
+**"không gửi gì"** — cả hai đều đến nơi là giá trị mặc định. Kịch bản hỏng: client chỉ muốn đổi
+tên, gửi `UpdateProductRequest{ProductId, Name}` → `Price = 0`, `StockQuantity = 0` → server ghi
+đè toàn bộ → **sản phẩm về giá 0 và hết hàng**.
+🔍 *Sâu hơn:* cách sửa là `optional` (proto3 ≥ 3.15, sinh con trỏ nên `nil` = không gửi) hoặc
+wrapper types. Repo chưa làm nhưng **ghi nhận thẳng trong comment** — biết điểm yếu của mình là
+dấu hiệu tốt.
+⚠️ *Lỗi hay gặp:* "khắc phục" bằng quy ước `-1` nghĩa là không đổi — magic number, dễ quên, và
+không dùng được cho trường string.
+
+**4.** Nó chứa sẵn **mọi** method của interface (mỗi cái trả `Unimplemented`), nên struct của bạn
+**tự động thỏa mãn interface** dù mới cài vài method. Lợi ích lớn nhất: khi ai đó **thêm RPC mới**
+vào `.proto`, server của bạn **vẫn compile**.
+🔍 *Sâu hơn:* buổi 2 nói embedding `sync.Mutex` xấu vì **lộ `Lock()`/`Unlock()` ra API công khai** —
+thứ không nên lộ. Ở đây thứ được lộ **chính là thứ ta muốn**: các method của interface. Bài học
+chuẩn xác: *embedding không xấu; embedding **lộ ra thứ không nên lộ** mới xấu.*
+⚠️ *Lỗi hay gặp:* bỏ embedding cho "sạch" → mỗi lần thêm RPC vào contract là **mọi server build
+đỏ**, mất hẳn forward compatibility.
+
+**5.** Vì gRPC có **bộ mã lỗi riêng** (`codes.*`), không dùng HTTP status. Tầng **HTTP handler** ở
+service gọi (hoặc gateway) mới dịch sang 404 — sau khi client adapter (`getProductForCart`,
+`mapCreateOrderStockError`) đã dịch `codes.NotFound` → domain error, rồi `errors.Is` map sang HTTP.
+🔍 *Sâu hơn:* đây là phân tầng buổi 3 áp dụng xuyên service: **mỗi tầng nói ngôn ngữ của tầng
+mình**.
+⚠️ *Lỗi hay gặp:* nhét số 404 vào message gRPC (`status.Error(codes.Internal, "404 not found")`) —
+vừa mất khả năng phân loại lỗi bằng code, vừa rò rỉ khái niệm HTTP vào tầng không liên quan.
+
+**6.** Gọi **một lần lúc khởi động**, trong `main.go` (composition root — buổi 1); `conn` dùng lại
+cho mọi request; `defer productClient.Close()` khi tắt.
+🔍 *Sâu hơn:* gRPC chạy trên **HTTP/2** hỗ trợ **multiplexing** — nhiều request đồng thời chia sẻ
+một kết nối TCP. Dial mỗi lần gọi phải bắt tay TCP (và TLS) lại từ đầu, giết sạch lợi thế tốc độ.
+`*grpc.ClientConn` cũng **an toàn khi dùng đồng thời** từ nhiều goroutine.
+⚠️ *Lỗi hay gặp:* gọi `grpc.Dial` bên trong hàm xử lý request → rò rỉ kết nối (không ai `Close`),
+cạn file descriptor, và chậm hơn nhiều.
+
+**7.** Chấp nhận được vì gRPC chỉ chạy **trong mạng nội bộ Docker**, port gRPC **không publish ra
+host**, và `api-gateway` là entrypoint public duy nhất (nó lo HTTPS).
+🔍 *Sâu hơn:* **không** còn chấp nhận được khi traffic đi qua mạng thật — Kubernetes nhiều node,
+nhiều VPC, hạ tầng chia sẻ. Lúc đó phải bật **mTLS** (cả hai phía đều có chứng chỉ): vừa mã hoá,
+vừa xác thực service gọi tới.
+⚠️ *Lỗi hay gặp:* coi "mạng nội bộ" là an toàn tuyệt đối. Đây là an toàn **nhờ ranh giới triển
+khai**, không phải an toàn tự thân — đổi cách deploy là mất luôn giả định đó.
+
+**8.** Vì metadata lấy từ context có thể **dùng chung giữa nhiều goroutine**. Sửa trực tiếp là
+**ghi đồng thời vào map dùng chung** → race condition (buổi 2).
+🔍 *Sâu hơn:* `metadata.MD` bản chất là `map[string][]string`, và map trong Go **không an toàn khi
+truy cập đồng thời** — ghi song song có thể gây `fatal error: concurrent map writes`, giết cả
+process. `Copy()` tạo bản riêng cho mỗi lời gọi.
+⚠️ *Lỗi hay gặp:* `md, _ := metadata.FromOutgoingContext(ctx); md.Set(...)` — chạy đúng 99% thời
+gian ở tải thấp, sập ở production khi tải cao.
+
+**9.** Trình duyệt gửi `traceparent`/`X-Request-ID` → `api-gateway` (`EchoMiddleware`) bóc ra gắn
+vào `ctx` → gọi HTTP xuống service (`WrapHTTPTransport` tiêm lại vào header) → handler nhận, `ctx`
+mang trace → gọi gRPC: **client interceptor tiêm trace vào metadata** → **server interceptor bóc ra
+khỏi metadata** → `product-service` chạy với **cùng trace_id**; mọi log qua `LoggerWithContext` đều
+mang trace_id đó.
+🔍 *Sâu hơn:* nếu một service quên truyền `ctx` (ví dụ dùng `context.Background()` giữa chừng cho
+tiện), **chuỗi đứt từ đó trở đi**: log các bước sau không còn trace_id, trace trên dashboard bị
+cụt — bạn thấy request "biến mất" mà không biết nó đi đâu.
+⚠️ *Lỗi hay gặp:* dùng `context.Background()` trong hàm helper vì "chỗ này không cần cancel" — mất
+luôn trace và cả khả năng huỷ.
+
+**10.** Nó **ép compiler kiểm tra** rằng `metadataCarrier` thật sự thỏa mãn
+`propagation.TextMapCarrier`. Dấu `_` nghĩa là "vứt giá trị đi, tôi chỉ cần phép kiểm tra kiểu".
+🔍 *Sâu hơn:* vì Go dùng **interface ngầm định** (buổi 1) — không có `implements` — nên nếu lỡ
+xóa/đổi chữ ký một method, compiler **không báo tại chỗ định nghĩa** mà báo ở nơi xa xôi dùng tới,
+với thông điệp khó hiểu. Dòng này biến lỗi đó thành lỗi **ngay tại file định nghĩa**. Idiom rất phổ
+biến trong thư viện Go chất lượng.
+⚠️ *Lỗi hay gặp:* bỏ qua vì "không làm gì cả". Nó không tốn runtime (compiler xóa hoàn toàn), mà
+cứu bạn khỏi lỗi khó truy khi refactor.
+
+**11.** Ba vấn đề:
+1. **Tên nói dối ý định** — `UpdateProduct` không hé lộ rằng nó đang trả kho cho đơn bị huỷ.
+2. **Ngữ nghĩa mơ hồ** — mất sự rõ ràng tăng/giảm mà tầng service đã có
+   (`DecreaseStock`/`RestoreStock`); không thể hiện đây là thao tác **delta** hay **snapshot**.
+3. **Dính bẫy proto3 zero-value** — gửi `UpdateProductRequest` chỉ để chỉnh tồn kho thì các trường
+   khác đều mặc định, rủi ro ghi đè tên/giá bằng rỗng/0.
+
+**Contract thay thế:** RPC chuyên biệt `AdjustStock(product_id, delta, reason)` — tên đúng ý định,
+chỉ mang đúng dữ liệu cần, không đụng trường khác.
+
+🔍 *Sâu hơn:* repo **đã đi đúng hướng này** với `ReserveStock`/`ReleaseStock`: hai RPC chuyên biệt,
+và **ghi cả đảm bảo hành vi vào contract** (`all-or-nothing`, `idempotent per order_id`, `no-op khi
+replay`). So sánh hai chỗ này cho thấy contract trưởng thành dần theo thời gian.
+⚠️ *Lỗi hay gặp:* biện minh "tránh phải viết thêm RPC cho nhanh". Đó là **vay nợ kỹ thuật** — lãi
+trả bằng sự mơ hồ mà mọi người đọc code sau này phải gánh.
