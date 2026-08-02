@@ -47,7 +47,7 @@ flowchart LR
 
 | Thành phần                       | Vai trò                                                                                                                                                      |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `api-gateway/`                   | Reverse proxy HTTP dùng Echo, tracing, metrics, Redis-backed rate limiter, request logging, retry chọn lọc và circuit breaker.                               |
+| `api-gateway/`                   | Reverse proxy HTTP dùng Echo, tracing, metrics, Redis-backed rate limiter, request logging, retry chọn lọc và circuit breaker. Serve luôn Swagger UI tại `/swagger` từ spec nhúng ở `internal/docs/openapi.yaml`. |
 | `services/user-service/`         | Đăng ký, đăng nhập, refresh token, profile, role, address, wishlist, OTP email/phone, OAuth, bootstrap dev accounts.                                         |
 | `services/product-service/`      | Product CRUD, upload ảnh, catalog listing, cursor pagination, search assist, review, gRPC product lookup, optional Elasticsearch, optional MinIO.            |
 | `services/cart-service/`         | Giỏ hàng trên Redis, get/add/update/remove/clear/merge cart, validate product qua gRPC.                                                                      |
@@ -129,6 +129,7 @@ curl http://localhost/health
 URL thường dùng:
 
 - `http://localhost:8080`: API Gateway
+- `http://localhost:8080/swagger`: Swagger UI — contract public đầy đủ (spec thô ở `/openapi.yaml`)
 - `http://localhost`: Nginx edge cho `/api/*` và `/health`
 - `http://localhost:9000`: MinIO API
 - `http://localhost:9001`: MinIO Console

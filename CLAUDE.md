@@ -52,6 +52,8 @@ cd client && npm run lint      # eslint
 
 Sau `compose-up`, smoke check: `curl http://localhost:8080/health` (gateway) và `curl http://localhost/health` (Nginx edge). Public API test qua `api-gateway` (`:8080`); Postgres/Redis/RabbitMQ **không** publish port ra host mặc định.
 
+Contract public đầy đủ xem ở `http://localhost:8080/swagger` (Swagger UI) hoặc `/openapi.yaml`. Spec là file **viết tay** ở `api-gateway/internal/docs/openapi.yaml`, nhúng vào binary bằng `go:embed` — **thêm/xoá/đổi route ở `api-gateway/internal/handler/` thì phải sửa spec trong cùng thay đổi**, nếu không `api-gateway/internal/docs/docs_test.go` sẽ đỏ (test so khớp hai chiều với `e.Routes()` thật).
+
 ## Kiến trúc (big picture)
 
 Backend là **monorepo Go đa-module** — `pkg/`, `proto/`, `api-gateway/` và mỗi `services/*-service/` đều có `go.mod` riêng (danh sách đầy đủ ở biến `MODULES` trong Makefile). Không có go.work; đây là lý do phải `cd` vào module khi test/build lẻ.
