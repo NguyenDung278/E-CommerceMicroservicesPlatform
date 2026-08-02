@@ -1,0 +1,4025 @@
+# Contract public của E-Commerce Microservices Platform.
+#
+# File này mô tả đúng những route mà api-gateway đăng ký (entrypoint public duy
+# nhất). Gateway là proxy mỏng: nó mirror nguyên contract /api/v1/... của các
+# service phía sau, nên spec này cũng là contract của từng service.
+#
+# QUAN TRỌNG: docs_test.go so khớp hai chiều giữa spec này và e.Routes() thật.
+# Thêm/xoá/đổi route ở internal/handler mà quên sửa file này thì test sẽ đỏ.
+openapi: 3.0.3
+
+info:
+  title: E-Commerce Microservices Platform — Public API
+  version: 1.0.0
+  description: |
+    Toàn bộ API public đi qua `api-gateway` (`:8080`). Postgres/Redis/RabbitMQ và
+    các service phía sau **không** publish port ra host, nên đây là bề mặt duy
+    nhất client gọi được.
+
+    ## Response envelope
+    Mọi response JSON đều dùng chung một envelope (`pkg/response`):
+    ```json
+    { "success": true, "message": "...", "data": {...}, "error": "...", "meta": {...} }
+    ```
+    `data` chỉ có khi thành công, `error` chỉ có khi lỗi, `meta` chỉ có ở API phân trang.
+
+    ## Xác thực
+    Gửi `Authorization: Bearer <access_token>` lấy từ `POST /api/v1/auth/login`.
+    Route gắn khoá 🔒 yêu cầu JWT; phần mô tả ghi rõ role nào được phép.
+
+    ## Idempotency
+    `POST /api/v1/orders`, `POST /api/v1/payments` và `POST /api/v1/admin/payments/{id}/refunds`
+    nhận header `Idempotency-Key`. Gửi lại cùng key sẽ trả về kết quả của lần
+    xử lý đầu tiên thay vì tạo bản ghi mới.
+
+    ## Rate limit
+    Gateway giới hạn theo IP bằng Redis (60 req/phút, burst 120, chặn 2 phút khi
+    vượt). Vượt ngưỡng trả `429`.
+
+servers:
+  - url: http://localhost:8080
+    description: api-gateway (gọi trực tiếp, dùng khi dev/test)
+  - url: http://localhost
+    description: Nginx edge (đứng trước gateway)
+
+tags:
+  - name: System
+    description: Health check, metrics, tài liệu.
+  - name: Auth
+    description: Đăng ký, đăng nhập, OTP, OAuth, quên mật khẩu. Không cần JWT.
+  - name: Users
+    description: Hồ sơ, địa chỉ, xác minh email/điện thoại, wishlist, tuỳ chọn thông báo.
+  - name: Products
+    description: Catalog sản phẩm, tìm kiếm, đánh giá.
+  - name: Storefront
+    description: Nội dung trang chủ và trang danh mục (public).
+  - name: Cart
+    description: Giỏ hàng lưu trên Redis.
+  - name: Orders
+    description: Preview, đặt hàng, theo dõi đơn, huỷ đơn.
+  - name: Returns
+    description: Yêu cầu trả hàng và bằng chứng đính kèm.
+  - name: Coupons
+    description: Ví coupon public.
+  - name: Payments
+    description: Thanh toán, lịch sử, webhook từ cổng thanh toán.
+  - name: Notifications
+    description: Hộp thư thông báo trong ứng dụng.
+  - name: Admin
+    description: Route quản trị, yêu cầu role admin hoặc staff.
+
+security: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check của gateway
+      operationId: getHealth
+      responses:
+        '200':
+          description: Gateway sống.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: healthy }
+                  service: { type: string, example: api-gateway }
+
+  /metrics:
+    get:
+      tags: [System]
+      summary: Metrics dạng Prometheus text
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Số liệu Prometheus.
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /openapi.yaml:
+    get:
+      tags: [System]
+      summary: Chính file spec này
+      operationId: getOpenAPISpec
+      responses:
+        '200':
+          description: Spec OpenAPI 3.0.
+          content:
+            application/yaml:
+              schema: { type: string }
+
+  /swagger:
+    get:
+      tags: [System]
+      summary: Swagger UI
+      operationId: getSwaggerUI
+      responses:
+        '200':
+          description: Trang Swagger UI đọc `/openapi.yaml`.
+          content:
+            text/html:
+              schema: { type: string }
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Đăng ký bằng email + mật khẩu
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Tạo tài khoản thành công, trả kèm token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/email/send-otp:
+    post:
+      tags: [Auth]
+      summary: Bắt đầu đăng ký bằng email, gửi OTP
+      operationId: sendRegisterEmailOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartEmailSignupRequest' }
+      responses:
+        '200':
+          description: Đã gửi OTP, trả về trạng thái challenge.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/email/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Xác minh OTP email và hoàn tất đăng ký
+      operationId: verifyRegisterEmailOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailOTPRequest' }
+      responses:
+        '201':
+          description: Tạo tài khoản thành công, trả kèm token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/email/resend-otp:
+    post:
+      tags: [Auth]
+      summary: Gửi lại OTP email đăng ký
+      operationId: resendRegisterEmailOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendEmailOTPRequest' }
+      responses:
+        '200':
+          description: Đã gửi lại OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/phone/send-otp:
+    post:
+      tags: [Auth]
+      summary: Bắt đầu đăng ký bằng số điện thoại, gửi OTP
+      operationId: sendRegisterPhoneOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartPhoneSignupRequest' }
+      responses:
+        '200':
+          description: Đã gửi OTP, trả về trạng thái challenge.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/phone/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Xác minh OTP điện thoại và hoàn tất đăng ký
+      operationId: verifyRegisterPhoneOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyPhoneOTPRequest' }
+      responses:
+        '201':
+          description: Tạo tài khoản thành công, trả kèm token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/register/phone/resend-otp:
+    post:
+      tags: [Auth]
+      summary: Gửi lại OTP điện thoại đăng ký
+      operationId: resendRegisterPhoneOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendPhoneOTPRequest' }
+      responses:
+        '200':
+          description: Đã gửi lại OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập
+      description: |
+        Nhận `identifier` (email hoặc số điện thoại) hoặc `email`. Sai mật khẩu
+        nhiều lần liên tiếp sẽ bị khoá tạm thời bởi `LoginAttemptProtector`.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Đăng nhập thành công.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Đổi refresh token lấy access token mới
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '200':
+          description: Cấp cặp token mới.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Xác minh email bằng token trong link
+      operationId: verifyEmailByToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailRequest' }
+      responses:
+        '200':
+          description: Email đã được xác minh.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Yêu cầu gửi link đặt lại mật khẩu
+      description: Luôn trả `200` kể cả khi email không tồn tại, tránh lộ danh sách người dùng.
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200':
+          description: Đã tiếp nhận yêu cầu.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Đặt lại mật khẩu bằng token
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: Đổi mật khẩu thành công.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/auth/oauth/google/start:
+    get:
+      tags: [Auth]
+      summary: Bắt đầu luồng OAuth Google
+      operationId: startGoogleOAuth
+      parameters:
+        - name: redirect_to
+          in: query
+          schema: { type: string }
+          description: URL frontend sẽ được quay lại sau khi xong.
+      responses:
+        '302':
+          description: Redirect sang trang đồng ý của Google.
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/auth/oauth/google/callback:
+    get:
+      tags: [Auth]
+      summary: Callback Google gọi về sau khi người dùng đồng ý
+      description: Đổi `code` lấy hồ sơ Google, tạo ticket một lần rồi redirect về frontend.
+      operationId: googleOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: state
+          in: query
+          schema: { type: string }
+        - name: error
+          in: query
+          schema: { type: string }
+        - name: error_description
+          in: query
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect về frontend kèm ticket hoặc mã lỗi.
+
+  /api/v1/auth/oauth/exchange:
+    post:
+      tags: [Auth]
+      summary: Đổi ticket OAuth lấy token của hệ thống
+      operationId: exchangeOAuthTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OAuthExchangeRequest' }
+      responses:
+        '200':
+          description: Đăng nhập thành công.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Users ───────────────────────────────────────────────────────────────────
+  /api/v1/users/profile:
+    get:
+      tags: [Users]
+      summary: 🔒 Lấy hồ sơ người dùng hiện tại
+      operationId: getProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Hồ sơ người dùng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Users]
+      summary: 🔒 Cập nhật hồ sơ
+      description: |
+        Đổi `phone` bắt buộc kèm `phone_verification_id` của một challenge đã
+        verify, nếu không service sẽ từ chối.
+      operationId: updateProfile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200':
+          description: Hồ sơ sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/users/avatar:
+    post:
+      tags: [Users]
+      summary: 🔒 Tải ảnh đại diện
+      operationId: uploadAvatar
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: File ảnh. Chấp nhận cả field tên `image`.
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: URL ảnh mới kèm hồ sơ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadAvatarEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/users/profile/phone-verification:
+    get:
+      tags: [Users]
+      summary: 🔒 Trạng thái challenge xác minh điện thoại đang mở
+      operationId: getPhoneVerificationStatus
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Trạng thái challenge.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/users/profile/phone-verification/send-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Gửi OTP để đổi số điện thoại
+      operationId: sendProfilePhoneOTP
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendPhoneOTPRequest' }
+      responses:
+        '200':
+          description: Đã gửi OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/profile/phone-verification/verify-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Xác minh OTP điện thoại
+      operationId: verifyProfilePhoneOTP
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyPhoneOTPRequest' }
+      responses:
+        '200':
+          description: Challenge đã verify, dùng `verification_id` để cập nhật hồ sơ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/profile/phone-verification/resend-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Gửi lại OTP điện thoại
+      operationId: resendProfilePhoneOTP
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendPhoneOTPRequest' }
+      responses:
+        '200':
+          description: Đã gửi lại OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PhoneVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/verify-email/status:
+    get:
+      tags: [Users]
+      summary: 🔒 Trạng thái xác minh email
+      operationId: getEmailVerificationStatus
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Trạng thái challenge.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/users/verify-email/send-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Gửi OTP xác minh email
+      operationId: sendVerifyEmailOTP
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đã gửi OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/verify-email/verify-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Xác minh OTP email
+      operationId: verifyEmailOTP
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailOTPRequest' }
+      responses:
+        '200':
+          description: Email đã xác minh.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/verify-email/resend-otp:
+    post:
+      tags: [Users]
+      summary: 🔒 Gửi lại OTP email
+      operationId: resendVerifyEmailOTP
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendEmailOTPRequest' }
+      responses:
+        '200':
+          description: Đã gửi lại OTP.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailVerificationStatusEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/verify-email/resend:
+    post:
+      tags: [Users]
+      summary: 🔒 Gửi lại email xác minh dạng link
+      operationId: resendVerifyEmailLink
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đã gửi lại email.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/v1/users/password:
+    put:
+      tags: [Users]
+      summary: 🔒 Đổi mật khẩu
+      operationId: changePassword
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '200':
+          description: Đổi mật khẩu thành công.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/addresses:
+    get:
+      tags: [Users]
+      summary: 🔒 Danh sách địa chỉ giao hàng
+      operationId: listAddresses
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Danh sách địa chỉ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Users]
+      summary: 🔒 Thêm địa chỉ giao hàng
+      operationId: createAddress
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAddressRequest' }
+      responses:
+        '201':
+          description: Địa chỉ vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/addresses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/AddressId'
+    put:
+      tags: [Users]
+      summary: 🔒 Cập nhật địa chỉ
+      operationId: updateAddress
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAddressRequest' }
+      responses:
+        '200':
+          description: Địa chỉ sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Users]
+      summary: 🔒 Xoá địa chỉ
+      operationId: deleteAddress
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đã xoá.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/users/addresses/{id}/default:
+    put:
+      tags: [Users]
+      summary: 🔒 Đặt địa chỉ mặc định
+      operationId: setDefaultAddress
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AddressId'
+      responses:
+        '200':
+          description: Địa chỉ mặc định mới.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AddressEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/users/notification-preferences:
+    get:
+      tags: [Users]
+      summary: 🔒 Tuỳ chọn nhận thông báo
+      operationId: getNotificationPreferences
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Danh sách topic và trạng thái bật/tắt.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferenceListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Users]
+      summary: 🔒 Cập nhật tuỳ chọn nhận thông báo
+      operationId: updateNotificationPreferences
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateNotificationPreferencesRequest' }
+      responses:
+        '200':
+          description: Tuỳ chọn sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferenceListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/wishlist:
+    get:
+      tags: [Users]
+      summary: 🔒 Danh sách wishlist
+      operationId: listWishlist
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Các sản phẩm đã lưu.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistItemListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Users]
+      summary: 🔒 Thêm sản phẩm vào wishlist
+      description: Lưu kèm giá và tồn kho tại thời điểm thêm, làm mốc cho cảnh báo giảm giá / có hàng lại.
+      operationId: addWishlistItem
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddWishlistItemRequest' }
+      responses:
+        '201':
+          description: Item vừa thêm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistItemEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/wishlist/sync:
+    post:
+      tags: [Users]
+      summary: 🔒 Đồng bộ wishlist khách vãng lai sau khi đăng nhập
+      operationId: syncWishlist
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncWishlistRequest' }
+      responses:
+        '200':
+          description: Wishlist sau khi hợp nhất.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistItemListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/wishlist/alerts:
+    get:
+      tags: [Users]
+      summary: 🔒 Cảnh báo giảm giá / có hàng lại
+      operationId: listWishlistAlerts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Danh sách cảnh báo phát hiện được so với mốc đã lưu.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistAlertListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/users/wishlist/{productId}:
+    delete:
+      tags: [Users]
+      summary: 🔒 Bỏ sản phẩm khỏi wishlist
+      operationId: removeWishlistItem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductIdPath'
+      responses:
+        '200':
+          description: Đã xoá khỏi wishlist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Admin: users ────────────────────────────────────────────────────────────
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin — Danh sách người dùng
+      operationId: adminListUsers
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Lọc theo email hoặc tên.
+      responses:
+        '200':
+          description: Danh sách người dùng kèm phân trang.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/users/{id}/role:
+    put:
+      tags: [Admin]
+      summary: 🔒 admin — Đổi role người dùng
+      operationId: adminUpdateUserRole
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserRoleRequest' }
+      responses:
+        '200':
+          description: Người dùng sau khi đổi role.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Products ────────────────────────────────────────────────────────────────
+  /api/v1/products:
+    get:
+      tags: [Products]
+      summary: Danh sách sản phẩm
+      description: |
+        Hỗ trợ cả hai kiểu phân trang. Truyền `cursor` để dùng cursor pagination
+        (ổn định khi dữ liệu đang thay đổi, `meta.next_cursor` là con trỏ trang
+        sau); không truyền thì rơi về `page`/`limit`.
+      operationId: listProducts
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: brand
+          in: query
+          schema: { type: string }
+        - name: tag
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, active, inactive] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: min_price
+          in: query
+          schema: { type: number, format: double }
+        - name: max_price
+          in: query
+          schema: { type: number, format: double }
+        - name: size
+          in: query
+          schema: { type: string }
+        - name: color
+          in: query
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string }
+          description: Ví dụ `price_asc`, `price_desc`, `newest`.
+      responses:
+        '200':
+          description: Danh sách sản phẩm kèm `meta`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [Products]
+      summary: 🔒 admin/staff — Tạo sản phẩm
+      operationId: createProduct
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductRequest' }
+      responses:
+        '201':
+          description: Sản phẩm vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/products/batch:
+    get:
+      tags: [Products]
+      summary: Lấy nhiều sản phẩm theo danh sách id
+      operationId: listProductsByIDs
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema: { type: string }
+          description: Danh sách id ngăn cách bằng dấu phẩy. Có thể lặp lại tham số nhiều lần.
+          example: prod_1,prod_2,prod_3
+      responses:
+        '200':
+          description: Các sản phẩm tìm được.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/products/search/assist:
+    get:
+      tags: [Products]
+      summary: Gợi ý tìm kiếm, facet và tuỳ chọn sắp xếp
+      description: Degrade gracefully khi Elasticsearch lỗi — vẫn trả kết quả từ PostgreSQL.
+      operationId: searchAssist
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Dữ liệu hỗ trợ tìm kiếm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductSearchAssistEnvelope' }
+
+  /api/v1/products/analytics/search/events:
+    post:
+      tags: [Products]
+      summary: Ghi nhận sự kiện tìm kiếm (click kết quả / áp dụng filter)
+      description: |
+        `event_kind` phải là `result_click` (bắt buộc có `query`) hoặc
+        `filter_apply` (bắt buộc có `filter_key` và `filter_value`).
+      operationId: recordSearchEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchAnalyticsEventRequest' }
+      responses:
+        '202':
+          description: Đã tiếp nhận sự kiện.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          accepted: { type: boolean, example: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/products/analytics/search:
+    get:
+      tags: [Products]
+      summary: 🔒 admin/staff — Thống kê tìm kiếm
+      operationId: getSearchAnalytics
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 7 }
+          description: Cửa sổ thống kê tính theo ngày.
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Top query, query không ra kết quả, filter hay dùng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductSearchAnalyticsEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/products/uploads:
+    post:
+      tags: [Products]
+      summary: 🔒 admin/staff — Tải ảnh sản phẩm lên MinIO
+      description: Tối đa 8 file, mỗi file ≤ 10MB, chỉ nhận content type `image/*`.
+      operationId: uploadProductImages
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  items: { type: string, format: binary }
+                  description: Chấp nhận cả field tên `image`.
+      responses:
+        '201':
+          description: Danh sách URL ảnh đã lưu.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadProductImagesEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503':
+          description: MinIO chưa được cấu hình hoặc không truy cập được.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Products]
+      summary: Chi tiết sản phẩm
+      operationId: getProduct
+      responses:
+        '200':
+          description: Sản phẩm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Products]
+      summary: 🔒 admin/staff — Cập nhật sản phẩm
+      operationId: updateProduct
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProductRequest' }
+      responses:
+        '200':
+          description: Sản phẩm sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Products]
+      summary: 🔒 admin/staff — Xoá sản phẩm
+      operationId: deleteProduct
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đã xoá.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/products/{id}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Products]
+      summary: Danh sách đánh giá của sản phẩm
+      operationId: listProductReviews
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Điểm trung bình, phân bố sao và các đánh giá.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReviewListEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Products]
+      summary: 🔒 Viết đánh giá
+      description: Mỗi người chỉ được một đánh giá cho mỗi sản phẩm; gửi lần hai trả `409`.
+      operationId: createProductReview
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProductReviewRequest' }
+      responses:
+        '201':
+          description: Đánh giá vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReviewEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/products/{id}/reviews/me:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Products]
+      summary: 🔒 Đánh giá của chính mình cho sản phẩm này
+      operationId: getMyProductReview
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đánh giá của người dùng hiện tại.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReviewEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Products]
+      summary: 🔒 Sửa đánh giá của mình
+      operationId: updateMyProductReview
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProductReviewRequest' }
+      responses:
+        '200':
+          description: Đánh giá sau khi sửa.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReviewEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Products]
+      summary: 🔒 Xoá đánh giá của mình
+      operationId: deleteMyProductReview
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Đã xoá.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Storefront ──────────────────────────────────────────────────────────────
+  /api/v1/storefront/home:
+    get:
+      tags: [Storefront]
+      summary: Nội dung trang chủ
+      operationId: getStorefrontHome
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Danh mục và các trang danh mục kèm sản phẩm nổi bật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontHomeEnvelope' }
+
+  /api/v1/storefront/categories:
+    get:
+      tags: [Storefront]
+      summary: Danh sách danh mục public
+      operationId: listStorefrontCategories
+      responses:
+        '200':
+          description: Các danh mục đang mở.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontCategoryListEnvelope' }
+
+  /api/v1/storefront/categories/{identifier}:
+    get:
+      tags: [Storefront]
+      summary: Trang danh mục theo slug hoặc alias
+      operationId: getStorefrontCategoryPage
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema: { type: string }
+          description: Slug danh mục, hoặc một alias đã khai báo.
+      responses:
+        '200':
+          description: Nội dung editorial và sản phẩm nổi bật của danh mục.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StorefrontCategoryPageEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Cart ────────────────────────────────────────────────────────────────────
+  /api/v1/cart:
+    get:
+      tags: [Cart]
+      summary: 🔒 Xem giỏ hàng
+      description: Giỏ hàng lưu trên Redis kèm TTL, không có bảng SQL.
+      operationId: getCart
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Giỏ hàng hiện tại.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Cart]
+      summary: 🔒 Xoá sạch giỏ hàng
+      operationId: clearCart
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Giỏ hàng rỗng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/cart/items:
+    post:
+      tags: [Cart]
+      summary: 🔒 Thêm sản phẩm vào giỏ
+      description: Giá và tên lấy từ product-service qua gRPC, không tin số client gửi lên.
+      operationId: addCartItem
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddToCartRequest' }
+      responses:
+        '200':
+          description: Giỏ hàng sau khi thêm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/cart/merge:
+    post:
+      tags: [Cart]
+      summary: 🔒 Hợp nhất giỏ hàng khách vãng lai sau khi đăng nhập
+      operationId: mergeCart
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MergeCartRequest' }
+      responses:
+        '200':
+          description: Giỏ hàng sau khi hợp nhất.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/cart/items/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductIdPath'
+    put:
+      tags: [Cart]
+      summary: 🔒 Đổi số lượng một item
+      operationId: updateCartItem
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCartItemRequest' }
+      responses:
+        '200':
+          description: Giỏ hàng sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Cart]
+      summary: 🔒 Bỏ một item khỏi giỏ
+      operationId: removeCartItem
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Giỏ hàng sau khi xoá.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Catalog / Coupons (public) ──────────────────────────────────────────────
+  /api/v1/catalog/popularity:
+    get:
+      tags: [Products]
+      summary: Độ phổ biến sản phẩm tính từ đơn hàng
+      operationId: getCatalogPopularity
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Số lượng đã bán theo từng sản phẩm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductPopularityListEnvelope' }
+
+  /api/v1/coupons/public:
+    get:
+      tags: [Coupons]
+      summary: Ví coupon public
+      description: |
+        Truyền `subtotal` để service tính trước mức giảm ước tính và đánh dấu
+        coupon nào đủ điều kiện cho giá trị giỏ hàng đó.
+      operationId: listPublicCoupons
+      parameters:
+        - name: subtotal
+          in: query
+          schema: { type: number, format: double }
+          description: Tạm tính của giỏ hàng, dùng để tính `estimated_discount`.
+      responses:
+        '200':
+          description: Danh sách coupon kèm trạng thái đủ/không đủ điều kiện.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponWalletListEnvelope' }
+
+  # ── Orders ──────────────────────────────────────────────────────────────────
+  /api/v1/orders/preview:
+    post:
+      tags: [Orders]
+      summary: 🔒 Tính thử tổng tiền trước khi đặt
+      description: Không ghi dữ liệu — chỉ tính phí ship, giảm giá coupon và tổng tiền.
+      operationId: previewOrder
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '200':
+          description: Bảng tính tạm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPreviewEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/orders:
+    get:
+      tags: [Orders]
+      summary: 🔒 Danh sách đơn của tôi
+      operationId: listMyOrders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/OrderStatusQuery'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Đơn hàng kèm `meta.next_cursor` khi dùng cursor pagination.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Orders]
+      summary: 🔒 Đặt hàng
+      description: |
+        Toàn bộ việc trừ tồn kho, tiêu coupon, ghi order + outbox nằm trong **một
+        transaction** (`createOrderTx`). Gửi lại cùng `Idempotency-Key` sẽ trả về
+        đơn của lần gọi đầu thay vì tạo đơn thứ hai.
+      operationId: createOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '201':
+          description: Đơn hàng vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '200':
+          description: Trả lại đơn đã tạo trước đó cho cùng `Idempotency-Key`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Hết hàng, coupon hết lượt, hoặc trùng `Idempotency-Key` với payload khác.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/orders/summary:
+    get:
+      tags: [Orders]
+      summary: 🔒 Đơn hàng kèm thông tin thanh toán
+      description: Gộp sẵn payment theo từng đơn để trang tài khoản không phải gọi N+1.
+      operationId: getMyOrderSummary
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Đơn hàng và map payment theo `order_id`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserOrderSummaryEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: 🔒 Chi tiết đơn hàng
+      operationId: getOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/orders/{id}/cancel:
+    put:
+      tags: [Orders]
+      summary: 🔒 Huỷ đơn của mình
+      description: Chỉ huỷ được khi đơn còn ở trạng thái `pending`; tồn kho được hoàn lại trong cùng transaction.
+      operationId: cancelOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn sau khi huỷ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Trạng thái đơn không cho phép huỷ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/orders/{id}/events:
+    get:
+      tags: [Orders]
+      summary: 🔒 Lịch sử chuyển trạng thái của đơn
+      operationId: listOrderEvents
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Các mốc trạng thái theo thời gian.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEventListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/orders/{id}/tracking:
+    get:
+      tags: [Orders]
+      summary: 🔒 Thông tin vận chuyển của đơn
+      operationId: getOrderTracking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Mã vận đơn và trạng thái giao hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShipmentTrackingEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/orders/{id}/return-eligibility:
+    get:
+      tags: [Returns]
+      summary: 🔒 Kiểm tra đơn có đủ điều kiện trả hàng không
+      description: Trả về cửa sổ đổi trả (mặc định 30 ngày) và số lượng còn được trả cho từng item.
+      operationId: getReturnEligibility
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Ảnh chụp điều kiện trả hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnEligibilityEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/orders/{id}/returns:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    get:
+      tags: [Returns]
+      summary: 🔒 Các yêu cầu trả hàng của đơn
+      operationId: listOrderReturns
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Danh sách yêu cầu trả hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Returns]
+      summary: 🔒 Tạo yêu cầu trả hàng
+      operationId: createReturnRequest
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReturnRequest' }
+      responses:
+        '201':
+          description: Yêu cầu vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Ngoài cửa sổ đổi trả hoặc vượt số lượng còn được trả.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/orders/admin/report:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Báo cáo doanh thu (alias cũ)
+      description: Giữ lại cho client cũ. Route chuẩn là `/api/v1/admin/orders/report`.
+      deprecated: true
+      operationId: legacyAdminOrderReport
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Days'
+      responses:
+        '200':
+          description: Báo cáo doanh thu.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReportEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Returns ─────────────────────────────────────────────────────────────────
+  /api/v1/returns:
+    get:
+      tags: [Returns]
+      summary: 🔒 Tất cả yêu cầu trả hàng của tôi
+      operationId: listMyReturns
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: query
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/ReturnStatusQuery'
+      responses:
+        '200':
+          description: Danh sách yêu cầu trả hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/returns/{id}:
+    get:
+      tags: [Returns]
+      summary: 🔒 Chi tiết một yêu cầu trả hàng
+      operationId: getReturnRequest
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+      responses:
+        '200':
+          description: Yêu cầu trả hàng kèm lịch sử và bằng chứng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/returns/{id}/evidence:
+    post:
+      tags: [Returns]
+      summary: 🔒 Đính kèm bằng chứng cho yêu cầu trả hàng
+      description: Tối đa 6 file, mỗi file ≤ 8MB.
+      operationId: uploadReturnEvidence
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                evidence:
+                  type: array
+                  items: { type: string, format: binary }
+                  description: Chấp nhận cả field tên `files`.
+      responses:
+        '200':
+          description: Yêu cầu trả hàng sau khi đính kèm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Admin: orders ───────────────────────────────────────────────────────────
+  /api/v1/admin/orders:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Danh sách toàn bộ đơn hàng
+      operationId: adminListOrders
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: user_id
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/OrderStatusQuery'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Đơn hàng kèm phân trang.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/orders/report:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Báo cáo doanh thu
+      operationId: adminOrderReport
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Days'
+      responses:
+        '200':
+          description: Doanh thu, số đơn, top sản phẩm, phân bố theo trạng thái.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReportEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/orders/{id}:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Chi tiết đơn bất kỳ
+      operationId: adminGetOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/orders/{id}/status:
+    put:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Đổi trạng thái đơn
+      description: |
+        Chuyển trạng thái phải hợp lệ theo state machine
+        `pending → paid → shipped → delivered`, `pending → cancelled`,
+        `paid → refunded`. Bước nhảy không hợp lệ trả `409`.
+      operationId: adminUpdateOrderStatus
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrderStatusRequest' }
+      responses:
+        '200':
+          description: Đơn sau khi đổi trạng thái.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Chuyển trạng thái không hợp lệ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/admin/orders/{id}/cancel:
+    put:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Huỷ đơn thay khách
+      operationId: adminCancelOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCancelOrderRequest' }
+      responses:
+        '200':
+          description: Đơn sau khi huỷ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Trạng thái đơn không cho phép huỷ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/admin/orders/{id}/events:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Lịch sử trạng thái của đơn
+      operationId: adminListOrderEvents
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Các mốc trạng thái kèm actor thực hiện.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderEventListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/orders/{id}/tracking:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Xem vận đơn
+      operationId: adminGetOrderTracking
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Thông tin vận chuyển.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShipmentTrackingEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Cập nhật vận đơn
+      operationId: adminUpdateOrderTracking
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateShipmentTrackingRequest' }
+      responses:
+        '200':
+          description: Vận đơn sau khi cập nhật.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShipmentTrackingEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ── Admin: returns ──────────────────────────────────────────────────────────
+  /api/v1/admin/returns:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Hàng đợi yêu cầu trả hàng
+      operationId: adminListReturns
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: query
+          in: query
+          schema: { type: string }
+        - $ref: '#/components/parameters/ReturnStatusQuery'
+      responses:
+        '200':
+          description: Danh sách yêu cầu trả hàng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/returns/health:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Sức khoẻ worker hoàn tiền
+      description: |
+        Dùng khi nghi refund worker kẹt: xem số job đang chờ, job in-flight quá
+        hạn (lease hết mà chưa xong), lịch retry và các lỗi gần nhất.
+      operationId: adminReturnQueueHealth
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Chỉ số hàng đợi hoàn tiền.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnQueueHealthEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/returns/{id}/status:
+    put:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Duyệt hoặc từ chối yêu cầu trả hàng
+      operationId: adminUpdateReturnStatus
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateReturnStatusRequest' }
+      responses:
+        '200':
+          description: Yêu cầu sau khi đổi trạng thái.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Chuyển trạng thái không hợp lệ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/admin/returns/{id}/refund:
+    post:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Đưa yêu cầu trả hàng vào hàng đợi hoàn tiền
+      description: Đẩy sang trạng thái `refund_pending`; worker sẽ claim theo cơ chế lease và gọi payment-service.
+      operationId: adminRequestReturnRefund
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestReturnRefundRequest' }
+      responses:
+        '202':
+          description: Đã xếp hàng chờ hoàn tiền.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequestEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Trạng thái hiện tại chưa cho phép hoàn tiền.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  # ── Admin: coupons ──────────────────────────────────────────────────────────
+  /api/v1/admin/coupons:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Danh sách coupon
+      operationId: adminListCoupons
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Coupon kèm số lượt đã dùng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Tạo coupon
+      operationId: adminCreateCoupon
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCouponRequest' }
+      responses:
+        '201':
+          description: Coupon vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CouponEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ── Payments ────────────────────────────────────────────────────────────────
+  /api/v1/payments:
+    post:
+      tags: [Payments]
+      summary: 🔒 Tạo thanh toán cho một đơn
+      description: |
+        `payment_method` quyết định gateway xử lý. Với `momo`/`vnpay`, response
+        trả `checkout_url` để redirect người dùng sang cổng thanh toán; trạng
+        thái cuối cùng được chốt qua webhook chứ không phải response này.
+      operationId: processPayment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProcessPaymentRequest' }
+      responses:
+        '201':
+          description: Payment vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '200':
+          description: Trả lại payment đã tạo trước đó cho cùng `Idempotency-Key`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Đơn đã thanh toán, hoặc trùng `Idempotency-Key` với payload khác.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/payments/history:
+    get:
+      tags: [Payments]
+      summary: 🔒 Lịch sử thanh toán của tôi
+      operationId: listMyPayments
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Các giao dịch charge và refund.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/payments/{id}:
+    get:
+      tags: [Payments]
+      summary: 🔒 Chi tiết một payment
+      operationId: getPayment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/payments/order/{orderId}:
+    get:
+      tags: [Payments]
+      summary: 🔒 Payment mới nhất của một đơn
+      operationId: getPaymentByOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderIdPath'
+      responses:
+        '200':
+          description: Payment của đơn.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/payments/order/{orderId}/history:
+    get:
+      tags: [Payments]
+      summary: 🔒 Toàn bộ giao dịch của một đơn
+      operationId: listPaymentsByOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderIdPath'
+      responses:
+        '200':
+          description: Charge và refund theo thứ tự thời gian.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/payments/webhooks/momo:
+    post:
+      tags: [Payments]
+      summary: Webhook MoMo
+      description: |
+        **Không gắn JWT** — cổng thanh toán không có token của khách. Xác thực
+        bằng chữ ký HMAC do payment-service kiểm. Xử lý idempotent qua
+        inbox + compare-and-set, nên MoMo gửi lại cùng một sự kiện sẽ không
+        cộng tiền hai lần.
+      operationId: momoWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MomoWebhookRequest' }
+      responses:
+        '200':
+          description: Đã ghi nhận (kể cả khi là bản lặp).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Chữ ký HMAC không hợp lệ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/payments/webhooks/vnpay:
+    post:
+      tags: [Payments]
+      summary: Webhook VNPay (IPN dạng POST)
+      description: Xác thực bằng `vnp_SecureHash`. Idempotent giống webhook MoMo.
+      operationId: vnpayWebhookPost
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: { type: string }
+              description: Bộ tham số `vnp_*` do VNPay gửi.
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: { type: string }
+      responses:
+        '200':
+          description: Đã ghi nhận.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Chữ ký không hợp lệ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    get:
+      tags: [Payments]
+      summary: Webhook VNPay (IPN dạng GET)
+      description: VNPay gọi IPN bằng GET với tham số trên query string.
+      operationId: vnpayWebhookGet
+      parameters:
+        - name: vnp_TxnRef
+          in: query
+          schema: { type: string }
+        - name: vnp_Amount
+          in: query
+          schema: { type: string }
+        - name: vnp_ResponseCode
+          in: query
+          schema: { type: string }
+        - name: vnp_TransactionNo
+          in: query
+          schema: { type: string }
+        - name: vnp_SecureHash
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Đã ghi nhận.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Chữ ký không hợp lệ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  # ── Admin: payments ─────────────────────────────────────────────────────────
+  /api/v1/admin/payments/history:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Lịch sử thanh toán toàn hệ thống
+      operationId: adminListPayments
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Giao dịch của mọi người dùng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/v1/admin/payments/order/{orderId}/history:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Giao dịch của một đơn bất kỳ
+      operationId: adminListPaymentsByOrder
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderIdPath'
+      responses:
+        '200':
+          description: Charge và refund của đơn.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/admin/payments/{id}/refunds:
+    post:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Hoàn tiền một payment
+      description: |
+        Bỏ trống `amount` để hoàn toàn phần. Tổng số tiền hoàn không vượt quá
+        `net_paid_amount` của giao dịch gốc. Nên gửi kèm `Idempotency-Key`.
+      operationId: adminRefundPayment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefundPaymentRequest' }
+      responses:
+        '201':
+          description: Giao dịch hoàn tiền vừa tạo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '200':
+          description: Trả lại giao dịch hoàn tiền đã tạo trước đó cho cùng `Idempotency-Key`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Vượt quá số tiền còn được hoàn, hoặc payment không ở trạng thái hoàn được.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  # ── Notifications ───────────────────────────────────────────────────────────
+  /api/v1/notifications/inbox:
+    get:
+      tags: [Notifications]
+      summary: 🔒 Hộp thư thông báo trong ứng dụng
+      operationId: listNotificationInbox
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Thông báo của người dùng hiện tại.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationInboxListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/notifications/inbox/read:
+    put:
+      tags: [Notifications]
+      summary: 🔒 Đánh dấu đã đọc toàn bộ
+      description: 'Hiện chỉ hỗ trợ `mark_all: true`; gửi `false` trả `400`.'
+      operationId: markNotificationInboxRead
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarkInboxReadRequest' }
+      responses:
+        '200':
+          description: Số thông báo vừa đánh dấu.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          updated_count: { type: integer, example: 3 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /api/v1/notifications/audit:
+    get:
+      tags: [Admin]
+      summary: 🔒 admin/staff — Nhật ký gửi thông báo
+      description: Dùng khi điều tra thông báo gửi lặp hoặc gửi hụt — có `attempt_count`, `last_error`, `next_retry_at`.
+      operationId: listNotificationAudit
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Các lần retry và thất bại gần nhất.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationInboxListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token lấy từ `POST /api/v1/auth/login`.
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+      description: Số trang khi dùng offset pagination.
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, default: 20 }
+      description: Số bản ghi mỗi trang.
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Con trỏ lấy từ `meta.next_cursor` của lần gọi trước.
+    From:
+      name: from
+      in: query
+      schema: { type: string, format: date-time }
+      description: Lọc từ mốc thời gian (RFC3339 hoặc `YYYY-MM-DD`).
+    To:
+      name: to
+      in: query
+      schema: { type: string, format: date-time }
+      description: Lọc đến mốc thời gian (RFC3339 hoặc `YYYY-MM-DD`).
+    Days:
+      name: days
+      in: query
+      schema: { type: integer, default: 30 }
+      description: Độ dài cửa sổ báo cáo tính theo ngày.
+    OrderStatusQuery:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [pending, paid, shipped, delivered, cancelled, refunded]
+    ReturnStatusQuery:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [requested, approved, rejected, received, refund_pending, refunded, cancelled]
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+      description: |
+        Khoá chống tạo trùng. Gửi lại cùng khoá với cùng payload sẽ trả về kết
+        quả của lần xử lý đầu tiên thay vì tạo bản ghi mới.
+    AddressId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID địa chỉ.
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID người dùng.
+    ProductId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID sản phẩm.
+    ProductIdPath:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID sản phẩm.
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID đơn hàng.
+    OrderIdPath:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID đơn hàng.
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID payment.
+    ReturnId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID yêu cầu trả hàng.
+
+  responses:
+    BadRequest:
+      description: Body hoặc tham số không hợp lệ.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Thiếu token, token sai hoặc hết hạn.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Token hợp lệ nhưng role không đủ quyền.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Không tìm thấy tài nguyên.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: Xung đột với trạng thái hiện tại của tài nguyên.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooManyRequests:
+      description: Vượt rate limit của gateway (60 req/phút mỗi IP).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ServiceUnavailable:
+      description: Dependency phía sau đang không sẵn sàng.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  schemas:
+    # ── Envelope dùng chung (pkg/response) ────────────────────────────────────
+    Meta:
+      type: object
+      description: Metadata phân trang. Chỉ xuất hiện ở API có phân trang.
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, format: int64, example: 137 }
+        next_cursor:
+          type: string
+          description: Con trỏ trang kế tiếp khi dùng cursor pagination.
+        has_next: { type: boolean }
+
+    ApiEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: request succeeded }
+        data: {}
+        error: { type: string }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string, example: validation failed }
+        error:
+          type: string
+          description: Chi tiết lỗi đọc được.
+          example: email is required
+
+    MessageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          description: Phản hồi chỉ có thông báo, không kèm `data`.
+
+    # ── Auth / Users ──────────────────────────────────────────────────────────
+    User:
+      type: object
+      description: Trường nhạy cảm (mật khẩu, token hash) không bao giờ được serialize.
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        avatar_url: { type: string }
+        phone: { type: string }
+        phone_verified: { type: boolean }
+        phone_verified_at: { type: string, format: date-time, nullable: true }
+        phone_last_changed_at: { type: string, format: date-time, nullable: true }
+        first_name: { type: string }
+        last_name: { type: string }
+        role: { type: string, enum: [user, staff, admin] }
+        email_verified: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: 'Access token, gửi kèm ở header `Authorization: Bearer <token>`.'
+        refresh_token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+
+    PhoneVerificationStatus:
+      type: object
+      description: Trạng thái một challenge OTP điện thoại. `phone_masked` dùng để hiển thị.
+      properties:
+        verification_id: { type: string, format: uuid }
+        phone: { type: string }
+        phone_masked: { type: string, example: '09****789' }
+        status:
+          type: string
+          enum: [pending, verified, locked, consumed, expired]
+        expires_at: { type: string, format: date-time }
+        resend_available_at: { type: string, format: date-time }
+        expires_in_seconds: { type: integer, format: int64 }
+        resend_in_seconds: { type: integer, format: int64 }
+        max_attempts: { type: integer }
+        remaining_attempts: { type: integer }
+        verified_at: { type: string, format: date-time, nullable: true }
+
+    EmailVerificationStatus:
+      type: object
+      properties:
+        verification_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        email_masked: { type: string, example: 'ng****@gm.uit.edu.vn' }
+        status:
+          type: string
+          enum: [pending, verified, locked, consumed, expired]
+        expires_at: { type: string, format: date-time }
+        resend_available_at: { type: string, format: date-time }
+        expires_in_seconds: { type: integer, format: int64 }
+        resend_in_seconds: { type: integer, format: int64 }
+        max_attempts: { type: integer }
+        remaining_attempts: { type: integer }
+        verified_at: { type: string, format: date-time, nullable: true }
+
+    Address:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        recipient_name: { type: string }
+        phone: { type: string }
+        location: { type: string }
+        is_default: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    NotificationPreference:
+      type: object
+      properties:
+        user_id: { type: string }
+        topic:
+          type: string
+          enum:
+            - order_updates
+            - payment_updates
+            - return_updates
+            - wishlist_back_in_stock
+            - wishlist_price_drop
+        enabled: { type: boolean }
+        updated_at: { type: string, format: date-time }
+
+    WishlistItem:
+      type: object
+      properties:
+        user_id: { type: string }
+        product_id: { type: string }
+        baseline_price:
+          type: number
+          format: double
+          description: Giá tại thời điểm thêm, dùng làm mốc so sánh cảnh báo giảm giá.
+        baseline_stock:
+          type: integer
+          description: Tồn kho tại thời điểm thêm, dùng làm mốc cảnh báo có hàng lại.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    WishlistAlert:
+      type: object
+      properties:
+        product_id: { type: string }
+        product_name: { type: string }
+        kind: { type: string, enum: [back_in_stock, price_drop] }
+        baseline_price: { type: number, format: double }
+        current_price: { type: number, format: double }
+        baseline_stock: { type: integer }
+        current_stock: { type: integer }
+        detected_at: { type: string, format: date-time }
+
+    # ── Products ──────────────────────────────────────────────────────────────
+    ProductVariant:
+      type: object
+      properties:
+        sku: { type: string }
+        label: { type: string }
+        size: { type: string }
+        color: { type: string }
+        price: { type: number, format: double }
+        stock: { type: integer }
+        image_urls: { type: array, items: { type: string } }
+        fit_note: { type: string }
+        size_guide_id: { type: string }
+        restockable: { type: boolean }
+        lead_time: { type: string }
+        badge: { type: string }
+
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number, format: double }
+        stock: { type: integer }
+        category: { type: string }
+        brand: { type: string }
+        tags: { type: array, items: { type: string } }
+        status: { type: string, enum: [draft, active, inactive] }
+        sku: { type: string }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariant' } }
+        image_url: { type: string }
+        image_urls: { type: array, items: { type: string } }
+        merchandising_rank: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProductReview:
+      type: object
+      properties:
+        id: { type: string }
+        product_id: { type: string }
+        user_id: { type: string }
+        author_label: { type: string, description: Tên hiển thị đã rút gọn của người đánh giá. }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProductReviewSummary:
+      type: object
+      properties:
+        average_rating: { type: number, format: double }
+        review_count: { type: integer, format: int64 }
+        rating_breakdown:
+          type: object
+          properties:
+            one: { type: integer, format: int64 }
+            two: { type: integer, format: int64 }
+            three: { type: integer, format: int64 }
+            four: { type: integer, format: int64 }
+            five: { type: integer, format: int64 }
+
+    ProductReviewList:
+      type: object
+      properties:
+        summary: { $ref: '#/components/schemas/ProductReviewSummary' }
+        items: { type: array, items: { $ref: '#/components/schemas/ProductReview' } }
+
+    ProductSearchAssist:
+      type: object
+      properties:
+        query: { type: string }
+        resolved_query: { type: string, description: Query sau khi áp dụng từ đồng nghĩa. }
+        applied_synonyms: { type: array, items: { type: string } }
+        result_count: { type: integer }
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              kind: { type: string }
+              match_count: { type: integer }
+        facets:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              label: { type: string }
+              values:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value: { type: string }
+                    count: { type: integer }
+        sort_options:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+
+    ProductSearchAnalyticsEntry:
+      type: object
+      properties:
+        query: { type: string }
+        source: { type: string }
+        category: { type: string }
+        request_count: { type: integer }
+        zero_result_count: { type: integer }
+        average_result_count: { type: number, format: double }
+        last_seen_at: { type: string, format: date-time }
+
+    ProductSearchAnalyticsSummary:
+      type: object
+      properties:
+        window_days: { type: integer }
+        top_queries:
+          type: array
+          items: { $ref: '#/components/schemas/ProductSearchAnalyticsEntry' }
+        zero_result_queries:
+          type: array
+          items: { $ref: '#/components/schemas/ProductSearchAnalyticsEntry' }
+        top_clicked_queries:
+          type: array
+          items:
+            type: object
+            properties:
+              query: { type: string }
+              source: { type: string }
+              category: { type: string }
+              click_count: { type: integer }
+              last_seen_at: { type: string, format: date-time }
+        top_filters:
+          type: array
+          items:
+            type: object
+            properties:
+              source: { type: string }
+              category: { type: string }
+              filter_key: { type: string }
+              filter_value: { type: string }
+              apply_count: { type: integer }
+              last_seen_at: { type: string, format: date-time }
+
+    ProductPopularity:
+      type: object
+      properties:
+        product_id: { type: string }
+        quantity: { type: integer }
+
+    # ── Storefront ────────────────────────────────────────────────────────────
+    StorefrontCategory:
+      type: object
+      properties:
+        slug: { type: string }
+        display_name: { type: string }
+        nav_label: { type: string }
+        status: { type: string }
+        hero:
+          type: object
+          description: Cấu hình hero, JSON tự do do biên tập viên định nghĩa.
+          additionalProperties: true
+        filter_config:
+          type: object
+          additionalProperties: true
+        seo:
+          type: object
+          additionalProperties: true
+        aliases: { type: array, items: { type: string } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    StorefrontProduct:
+      type: object
+      properties:
+        id: { type: string }
+        external_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        price: { type: number, format: double }
+        stock: { type: integer }
+        category: { type: string }
+        category_slug: { type: string }
+        brand: { type: string }
+        material: { type: string }
+        tags: { type: array, items: { type: string } }
+        status: { type: string }
+        sku: { type: string }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariant' } }
+        image_url: { type: string }
+        image_urls: { type: array, items: { type: string } }
+        merchandising_rank: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    StorefrontCategoryPage:
+      type: object
+      properties:
+        category: { $ref: '#/components/schemas/StorefrontCategory' }
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              category_slug: { type: string }
+              section_type: { type: string }
+              position: { type: integer }
+              payload:
+                type: object
+                additionalProperties: true
+              published: { type: boolean }
+        featured_products:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              product_external_id: { type: string }
+              category_slug: { type: string }
+              position: { type: integer }
+              product: { $ref: '#/components/schemas/StorefrontProduct' }
+
+    StorefrontHome:
+      type: object
+      properties:
+        categories:
+          type: array
+          items: { $ref: '#/components/schemas/StorefrontCategory' }
+        category_pages:
+          type: array
+          items: { $ref: '#/components/schemas/StorefrontCategoryPage' }
+
+    # ── Cart ──────────────────────────────────────────────────────────────────
+    CartItem:
+      type: object
+      properties:
+        product_id: { type: string }
+        name: { type: string }
+        price: { type: number, format: double }
+        quantity: { type: integer }
+
+    Cart:
+      type: object
+      properties:
+        user_id: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
+        total: { type: number, format: double }
+
+    # ── Orders ────────────────────────────────────────────────────────────────
+    ShippingAddress:
+      type: object
+      properties:
+        recipient_name: { type: string }
+        phone: { type: string }
+        location: { type: string }
+
+    ShippingOption:
+      type: object
+      properties:
+        method: { type: string, enum: [standard, express, pickup] }
+        label: { type: string }
+        description: { type: string }
+        fee: { type: number, format: double }
+        eta_min_days: { type: integer }
+        eta_max_days: { type: integer }
+        eta_label: { type: string }
+        delivery_promise: { type: string }
+
+    OrderItem:
+      type: object
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        product_id: { type: string }
+        name: { type: string, description: Tên chốt tại thời điểm đặt, không đổi theo catalog. }
+        price: { type: number, format: double, description: Giá chốt tại thời điểm đặt. }
+        quantity: { type: integer }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        status:
+          type: string
+          enum: [pending, paid, shipped, delivered, cancelled, refunded]
+        subtotal_price: { type: number, format: double }
+        discount_amount: { type: number, format: double }
+        coupon_code: { type: string }
+        shipping_method: { type: string, enum: [standard, express, pickup] }
+        shipping_fee: { type: number, format: double }
+        shipping_address: { $ref: '#/components/schemas/ShippingAddress' }
+        reservation_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Hạn giữ tồn kho cho đơn chưa thanh toán.
+        reservation_allocated_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Thời điểm tồn kho được chốt hẳn cho đơn.
+        total_price: { type: number, format: double }
+        items: { type: array, items: { $ref: '#/components/schemas/OrderItem' } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    OrderPreview:
+      type: object
+      properties:
+        subtotal_price: { type: number, format: double }
+        discount_amount: { type: number, format: double }
+        coupon_code: { type: string }
+        coupon_description: { type: string }
+        shipping_method: { type: string }
+        shipping_fee: { type: number, format: double }
+        eta_label: { type: string }
+        delivery_promise: { type: string }
+        supported_shipping_methods:
+          type: array
+          items: { $ref: '#/components/schemas/ShippingOption' }
+        total_price: { type: number, format: double }
+
+    OrderEvent:
+      type: object
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        type: { type: string }
+        status:
+          type: string
+          enum: [pending, paid, shipped, delivered, cancelled, refunded]
+        actor_id: { type: string }
+        actor_role: { type: string }
+        message: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ShipmentTracking:
+      type: object
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        carrier: { type: string }
+        tracking_number: { type: string }
+        tracking_url: { type: string }
+        status:
+          type: string
+          enum: [pending, in_transit, out_for_delivery, delivered, exception]
+        estimated_delivery_at: { type: string, format: date-time, nullable: true }
+        last_checked_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Coupon:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        description: { type: string }
+        discount_type: { type: string, enum: [fixed, percentage] }
+        discount_value: { type: number, format: double }
+        min_order_amount: { type: number, format: double }
+        usage_limit: { type: integer, description: '0 nghĩa là không giới hạn.' }
+        used_count: { type: integer }
+        active: { type: boolean }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CouponWalletItem:
+      type: object
+      properties:
+        code: { type: string }
+        description: { type: string }
+        discount_type: { type: string, enum: [fixed, percentage] }
+        discount_value: { type: number, format: double }
+        min_order_amount: { type: number, format: double }
+        expires_at: { type: string, format: date-time, nullable: true }
+        eligible: { type: boolean, description: Có áp được cho `subtotal` đã truyền hay không. }
+        ineligible_reason: { type: string }
+        estimated_discount: { type: number, format: double }
+        remaining_usage_hint: { type: integer }
+
+    SalesTopProduct:
+      type: object
+      properties:
+        product_id: { type: string }
+        name: { type: string }
+        quantity: { type: integer }
+        revenue: { type: number, format: double }
+
+    AdminReport:
+      type: object
+      properties:
+        window_days: { type: integer }
+        total_revenue: { type: number, format: double }
+        order_count: { type: integer }
+        cancelled_count: { type: integer }
+        average_order_value: { type: number, format: double }
+        top_products:
+          type: array
+          items: { $ref: '#/components/schemas/SalesTopProduct' }
+        status_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              orders: { type: integer }
+              revenue: { type: number, format: double }
+
+    UserOrderSummary:
+      type: object
+      properties:
+        orders:
+          type: array
+          items: { $ref: '#/components/schemas/Order' }
+        payments_by_order:
+          type: object
+          description: Map từ `order_id` sang danh sách giao dịch của đơn đó.
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/Payment' }
+
+    # ── Returns ───────────────────────────────────────────────────────────────
+    ReturnItem:
+      type: object
+      properties:
+        id: { type: string }
+        return_id: { type: string }
+        order_item_id: { type: string }
+        product_id: { type: string }
+        quantity: { type: integer }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ReturnEvent:
+      type: object
+      properties:
+        id: { type: string }
+        return_id: { type: string }
+        status: { type: string }
+        actor_id: { type: string }
+        actor_role: { type: string }
+        message: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ReturnEvidence:
+      type: object
+      properties:
+        id: { type: string }
+        return_id: { type: string }
+        file_name: { type: string }
+        content_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        url: { type: string }
+        uploaded_by: { type: string }
+        uploaded_by_role: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ReturnRequest:
+      type: object
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        user_id: { type: string }
+        user_email: { type: string }
+        status:
+          type: string
+          enum: [requested, approved, rejected, received, refund_pending, refunded, cancelled]
+        reason: { type: string }
+        items: { type: array, items: { $ref: '#/components/schemas/ReturnItem' } }
+        events: { type: array, items: { $ref: '#/components/schemas/ReturnEvent' } }
+        evidence: { type: array, items: { $ref: '#/components/schemas/ReturnEvidence' } }
+        refund_amount: { type: number, format: double }
+        refund_charge_payment_id: { type: string }
+        refund_payment_id: { type: string }
+        refund_last_error: { type: string }
+        refund_attempt_count: { type: integer }
+        refund_requested_at: { type: string, format: date-time, nullable: true }
+        refund_completed_at: { type: string, format: date-time, nullable: true }
+        refund_next_retry_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ReturnEligibilitySnapshot:
+      type: object
+      properties:
+        order_id: { type: string }
+        order_status: { type: string }
+        eligible: { type: boolean }
+        reason: { type: string }
+        return_window_days: { type: integer, example: 30 }
+        return_window_started_at: { type: string, format: date-time, nullable: true }
+        return_window_expires_at: { type: string, format: date-time, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              order_item_id: { type: string }
+              product_id: { type: string }
+              product_name: { type: string }
+              ordered_quantity: { type: integer }
+              already_requested_quantity: { type: integer }
+              remaining_quantity: { type: integer }
+              eligible: { type: boolean }
+              reason: { type: string }
+
+    ReturnQueueHealth:
+      type: object
+      properties:
+        pending_count: { type: integer }
+        ready_now_count: { type: integer }
+        ready_with_failures_count: { type: integer }
+        in_flight_count: { type: integer }
+        stale_in_flight_count:
+          type: integer
+          description: Job đã hết lease mà chưa hoàn tất — dấu hiệu worker kẹt.
+        retry_scheduled_count: { type: integer }
+        failed_attempt_count: { type: integer }
+        max_attempt_count: { type: integer }
+        oldest_pending_at: { type: string, format: date-time, nullable: true }
+        longest_in_flight_started_at: { type: string, format: date-time, nullable: true }
+        next_retry_at: { type: string, format: date-time, nullable: true }
+        recent_failures:
+          type: array
+          items:
+            type: object
+            properties:
+              return_id: { type: string }
+              order_id: { type: string }
+              user_id: { type: string }
+              last_error: { type: string }
+              attempt_count: { type: integer }
+              next_retry_at: { type: string, format: date-time, nullable: true }
+              updated_at: { type: string, format: date-time }
+
+    # ── Payments ──────────────────────────────────────────────────────────────
+    Payment:
+      type: object
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        user_id: { type: string }
+        order_total: { type: number, format: double }
+        amount: { type: number, format: double }
+        status: { type: string, enum: [pending, completed, failed, refunded] }
+        transaction_type: { type: string, enum: [charge, refund] }
+        reference_payment_id:
+          type: string
+          description: Với giao dịch refund, đây là id của charge gốc.
+        payment_method:
+          type: string
+          enum: [manual, momo, vnpay, credit_card, digital_wallet, demo]
+        gateway_provider: { type: string }
+        gateway_transaction_id: { type: string }
+        gateway_order_id: { type: string }
+        checkout_url:
+          type: string
+          description: URL redirect người dùng sang cổng thanh toán (momo/vnpay).
+        signature_verified:
+          type: boolean
+          description: Chữ ký webhook của cổng đã được xác thực hay chưa.
+        failure_reason: { type: string }
+        net_paid_amount:
+          type: number
+          format: double
+          description: Số tiền thực nhận sau khi trừ các khoản đã hoàn.
+        outstanding_amount: { type: number, format: double }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    # ── Notifications ─────────────────────────────────────────────────────────
+    NotificationInboxItem:
+      type: object
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        topic: { type: string }
+        routing_key: { type: string }
+        delivery_status: { type: string, enum: [delivered, suppressed] }
+        visible_to_user:
+          type: boolean
+          description: Bản ghi audit vận hành có giá trị `false`.
+        attempt_count: { type: integer }
+        last_error: { type: string }
+        next_retry_at: { type: string, format: date-time, nullable: true }
+        title: { type: string }
+        message: { type: string }
+        action_href: { type: string }
+        action_label: { type: string }
+        order_id: { type: string }
+        payment_id: { type: string }
+        return_id: { type: string }
+        created_at: { type: string, format: date-time }
+        read_at: { type: string, format: date-time, nullable: true }
+
+    # ── Request bodies ────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [email, password, first_name, last_name]
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 10, maxLength: 15 }
+        password: { type: string, format: password, minLength: 8 }
+        first_name: { type: string }
+        last_name: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [password]
+      description: Truyền `identifier` (email hoặc số điện thoại), hoặc `email`.
+      properties:
+        identifier: { type: string, minLength: 3 }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    OAuthExchangeRequest:
+      type: object
+      required: [ticket]
+      properties:
+        ticket: { type: string, description: Ticket một lần do callback OAuth cấp. }
+
+    StartEmailSignupRequest:
+      type: object
+      required: [email, password, confirm_password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+        confirm_password: { type: string, format: password, minLength: 8 }
+
+    StartPhoneSignupRequest:
+      type: object
+      required: [phone, password, confirm_password]
+      properties:
+        phone: { type: string, minLength: 10, maxLength: 20 }
+        password: { type: string, format: password, minLength: 8 }
+        confirm_password: { type: string, format: password, minLength: 8 }
+
+    SendPhoneOTPRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string, minLength: 10, maxLength: 20 }
+
+    VerifyPhoneOTPRequest:
+      type: object
+      required: [verification_id, otp_code]
+      properties:
+        verification_id: { type: string, format: uuid }
+        otp_code: { type: string, pattern: '^[0-9]{6}$', example: '123456' }
+
+    ResendPhoneOTPRequest:
+      type: object
+      required: [verification_id]
+      properties:
+        verification_id: { type: string, format: uuid }
+
+    VerifyEmailOTPRequest:
+      type: object
+      required: [verification_id, otp_code]
+      properties:
+        verification_id: { type: string, format: uuid }
+        otp_code: { type: string, pattern: '^[0-9]{6}$', example: '123456' }
+
+    ResendEmailOTPRequest:
+      type: object
+      required: [verification_id]
+      properties:
+        verification_id: { type: string, format: uuid }
+
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token: { type: string }
+        new_password: { type: string, format: password, minLength: 8 }
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, format: password }
+        new_password: { type: string, format: password, minLength: 8 }
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        first_name: { type: string, minLength: 1, maxLength: 100 }
+        last_name: { type: string, minLength: 1, maxLength: 100 }
+        phone: { type: string, minLength: 10, maxLength: 20 }
+        phone_verification_id:
+          type: string
+          format: uuid
+          description: Bắt buộc khi đổi `phone` — id của challenge đã verify.
+        default_address:
+          type: object
+          properties:
+            recipient_name: { type: string, minLength: 2, maxLength: 100 }
+            phone: { type: string, minLength: 10, maxLength: 20 }
+            location: { type: string, minLength: 5, maxLength: 255 }
+
+    UpdateUserRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [user, staff, admin] }
+
+    CreateAddressRequest:
+      type: object
+      required: [recipient_name, phone, location]
+      properties:
+        recipient_name: { type: string, minLength: 2, maxLength: 100 }
+        phone: { type: string, minLength: 10, maxLength: 20 }
+        location: { type: string, minLength: 5, maxLength: 255 }
+        is_default: { type: boolean }
+
+    UpdateAddressRequest:
+      type: object
+      properties:
+        recipient_name: { type: string, minLength: 2, maxLength: 100 }
+        phone: { type: string, minLength: 10, maxLength: 20 }
+        location: { type: string, minLength: 5, maxLength: 255 }
+        is_default: { type: boolean }
+
+    UpdateNotificationPreferencesRequest:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [topic, enabled]
+            properties:
+              topic: { type: string }
+              enabled: { type: boolean }
+
+    AddWishlistItemRequest:
+      type: object
+      required: [product_id]
+      properties:
+        product_id: { type: string, minLength: 1 }
+
+    SyncWishlistRequest:
+      type: object
+      required: [product_ids]
+      properties:
+        product_ids:
+          type: array
+          minItems: 1
+          items: { type: string }
+
+    ProductVariantRequest:
+      type: object
+      required: [sku, label, price, stock]
+      properties:
+        sku: { type: string, minLength: 1 }
+        label: { type: string, minLength: 1 }
+        size: { type: string }
+        color: { type: string }
+        price: { type: number, format: double, exclusiveMinimum: true, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+        image_urls: { type: array, items: { type: string } }
+        fit_note: { type: string }
+        size_guide_id: { type: string }
+        restockable: { type: boolean }
+        lead_time: { type: string }
+        badge: { type: string }
+
+    CreateProductRequest:
+      type: object
+      required: [name, price, stock]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { type: number, format: double, exclusiveMinimum: true, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string }
+        brand: { type: string }
+        tags: { type: array, items: { type: string } }
+        status: { type: string, enum: [draft, active, inactive] }
+        sku: { type: string }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariantRequest' } }
+        image_url: { type: string, format: uri }
+        image_urls: { type: array, items: { type: string } }
+
+    UpdateProductRequest:
+      type: object
+      description: Chỉ những field được gửi mới bị thay đổi.
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        price: { type: number, format: double, exclusiveMinimum: true, minimum: 0 }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string }
+        brand: { type: string }
+        tags: { type: array, items: { type: string } }
+        status: { type: string, enum: [draft, active, inactive] }
+        sku: { type: string }
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariantRequest' } }
+        image_url: { type: string, format: uri }
+        image_urls: { type: array, items: { type: string } }
+
+    CreateProductReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 2000 }
+
+    UpdateProductReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 2000 }
+
+    SearchAnalyticsEventRequest:
+      type: object
+      required: [event_kind]
+      properties:
+        source: { type: string }
+        event_kind: { type: string, enum: [result_click, filter_apply] }
+        query: { type: string, description: Bắt buộc khi `event_kind` là `result_click`. }
+        category: { type: string }
+        filter_key: { type: string, description: Bắt buộc khi `event_kind` là `filter_apply`. }
+        filter_value: { type: string, description: Bắt buộc khi `event_kind` là `filter_apply`. }
+
+    AddToCartRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id: { type: string }
+        quantity: { type: integer, minimum: 1 }
+
+    UpdateCartItemRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity: { type: integer, minimum: 1 }
+
+    MergeCartRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/AddToCartRequest' }
+
+    CreateOrderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id: { type: string }
+              name: { type: string, description: Chỉ để tham khảo — service lấy tên thật từ product-service. }
+              price: { type: number, format: double, description: Chỉ để tham khảo — service lấy giá thật từ product-service. }
+              quantity: { type: integer, minimum: 1 }
+        coupon_code: { type: string, minLength: 3, maxLength: 64 }
+        shipping_method: { type: string, enum: [standard, express, pickup] }
+        shipping_address:
+          type: object
+          properties:
+            recipient_name: { type: string, minLength: 2, maxLength: 100 }
+            phone: { type: string, minLength: 10, maxLength: 20 }
+            location: { type: string, minLength: 5, maxLength: 255 }
+
+    UpdateOrderStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, paid, shipped, delivered, cancelled, refunded]
+        message: { type: string, maxLength: 255 }
+
+    AdminCancelOrderRequest:
+      type: object
+      properties:
+        message: { type: string, maxLength: 255 }
+
+    UpdateShipmentTrackingRequest:
+      type: object
+      required: [carrier, tracking_number, status]
+      properties:
+        carrier: { type: string, minLength: 2, maxLength: 80 }
+        tracking_number: { type: string, minLength: 3, maxLength: 120 }
+        tracking_url: { type: string, format: uri, maxLength: 512 }
+        status:
+          type: string
+          enum: [pending, in_transit, out_for_delivery, delivered, exception]
+        estimated_delivery_at: { type: string, format: date-time }
+        last_checked_at: { type: string, format: date-time }
+
+    CreateReturnRequest:
+      type: object
+      required: [reason, items]
+      properties:
+        reason: { type: string, minLength: 5, maxLength: 255 }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [order_item_id, quantity]
+            properties:
+              order_item_id: { type: string }
+              quantity: { type: integer, minimum: 1 }
+              reason: { type: string, maxLength: 255 }
+
+    UpdateReturnStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [approved, rejected, received, cancelled] }
+        message: { type: string, maxLength: 255 }
+
+    RequestReturnRefundRequest:
+      type: object
+      properties:
+        message: { type: string, maxLength: 255 }
+
+    CreateCouponRequest:
+      type: object
+      required: [code, discount_type, discount_value]
+      properties:
+        code: { type: string, minLength: 3, maxLength: 64 }
+        description: { type: string, maxLength: 255 }
+        discount_type: { type: string, enum: [fixed, percentage] }
+        discount_value: { type: number, format: double, exclusiveMinimum: true, minimum: 0 }
+        min_order_amount: { type: number, format: double, minimum: 0 }
+        usage_limit: { type: integer, minimum: 0, description: '0 nghĩa là không giới hạn.' }
+        expires_at: { type: string, format: date-time }
+        active: { type: boolean }
+
+    ProcessPaymentRequest:
+      type: object
+      required: [order_id, payment_method]
+      properties:
+        order_id: { type: string }
+        payment_method:
+          type: string
+          enum: [manual, momo, vnpay, credit_card, digital_wallet, demo]
+        amount:
+          type: number
+          format: double
+          description: Bỏ trống để dùng tổng tiền của đơn.
+
+    RefundPaymentRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Bỏ trống để hoàn toàn phần.
+        message: { type: string, maxLength: 255 }
+
+    MomoWebhookRequest:
+      type: object
+      properties:
+        payment_id: { type: string }
+        order_id: { type: string }
+        gateway_order_id: { type: string }
+        gateway_transaction_id: { type: string }
+        amount: { type: number, format: double }
+        result_code: { type: integer, description: '0 là thành công.' }
+        message: { type: string }
+        signature: { type: string, description: Chữ ký HMAC do payment-service kiểm. }
+
+    MarkInboxReadRequest:
+      type: object
+      required: [mark_all]
+      properties:
+        mark_all: { type: boolean, enum: [true] }
+
+    UploadAvatarResponse:
+      type: object
+      properties:
+        avatar_url: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+
+    UploadProductImagesResponse:
+      type: object
+      properties:
+        urls: { type: array, items: { type: string } }
+
+    # ── Envelope theo từng entity ─────────────────────────────────────────────
+    AuthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AuthResponse' }
+
+    UserEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/User' }
+
+    UserListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/User' } }
+
+    UploadAvatarEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/UploadAvatarResponse' }
+
+    PhoneVerificationStatusEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/PhoneVerificationStatus' }
+
+    EmailVerificationStatusEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/EmailVerificationStatus' }
+
+    AddressEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Address' }
+
+    AddressListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Address' } }
+
+    NotificationPreferenceListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/NotificationPreference' } }
+
+    WishlistItemEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/WishlistItem' }
+
+    WishlistItemListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/WishlistItem' } }
+
+    WishlistAlertListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/WishlistAlert' } }
+
+    ProductEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Product' }
+
+    ProductListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Product' } }
+
+    ProductReviewEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ProductReview' }
+
+    ProductReviewListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ProductReviewList' }
+
+    ProductSearchAssistEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ProductSearchAssist' }
+
+    ProductSearchAnalyticsEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ProductSearchAnalyticsSummary' }
+
+    ProductPopularityListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/ProductPopularity' } }
+
+    UploadProductImagesEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/UploadProductImagesResponse' }
+
+    StorefrontHomeEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/StorefrontHome' }
+
+    StorefrontCategoryListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/StorefrontCategory' } }
+
+    StorefrontCategoryPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/StorefrontCategoryPage' }
+
+    CartEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Cart' }
+
+    OrderEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Order' }
+
+    OrderListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Order' } }
+
+    OrderPreviewEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/OrderPreview' }
+
+    OrderEventListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/OrderEvent' } }
+
+    ShipmentTrackingEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ShipmentTracking' }
+
+    UserOrderSummaryEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/UserOrderSummary' }
+
+    AdminReportEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/AdminReport' }
+
+    CouponEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Coupon' }
+
+    CouponListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Coupon' } }
+
+    CouponWalletListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/CouponWalletItem' } }
+
+    ReturnRequestEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ReturnRequest' }
+
+    ReturnRequestListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/ReturnRequest' } }
+
+    ReturnEligibilityEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ReturnEligibilitySnapshot' }
+
+    ReturnQueueHealthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ReturnQueueHealth' }
+
+    PaymentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Payment' }
+
+    PaymentListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+
+    NotificationInboxListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: '#/components/schemas/NotificationInboxItem' } }

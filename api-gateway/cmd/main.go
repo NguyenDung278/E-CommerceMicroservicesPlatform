@@ -12,6 +12,7 @@ import (
 	echomw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 
+	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/api-gateway/internal/docs"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/api-gateway/internal/handler"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/api-gateway/internal/proxy"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/pkg/config"
@@ -92,6 +93,9 @@ func main() {
 			"service": "api-gateway",
 		})
 	})
+
+	// Tài liệu API: GET /swagger (Swagger UI) và GET /openapi.yaml (spec).
+	docs.RegisterRoutes(e)
 
 	// Register service proxy routes.
 	// We expose the same /api/v1/... contract as the backend services so the

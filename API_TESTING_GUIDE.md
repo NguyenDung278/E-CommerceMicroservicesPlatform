@@ -12,6 +12,11 @@ Collection và environment starter:
 - `postman/ecommerce-platform-local.postman_collection.json`
 - `postman/ecommerce-platform-local.postman_environment.json`
 
+Tra route và schema nhanh nhất là mở Swagger UI ở `http://localhost:8080/swagger`
+(spec thô: `http://localhost:8080/openapi.yaml`). Spec nằm ở
+`api-gateway/internal/docs/openapi.yaml` và được test so khớp hai chiều với bảng
+route thật, nên nó luôn khớp với những gì gateway đang phục vụ.
+
 ---
 
 ## 1. Source Of Truth Khi Test API
@@ -19,6 +24,7 @@ Collection và environment starter:
 Khi tài liệu và code lệch nhau, ưu tiên kiểm tra:
 
 - `api-gateway/internal/handler/*.go`
+- `api-gateway/internal/docs/openapi.yaml`
 - `api-gateway/internal/proxy/*.go`
 - `services/*-service/internal/handler/*.go`
 - `services/*-service/internal/service/`
@@ -79,6 +85,7 @@ curl http://localhost/health
 URL backend/runtime:
 
 - `http://localhost:8080`: API Gateway
+- `http://localhost:8080/swagger`: Swagger UI cho toàn bộ contract public
 - `http://localhost`: Nginx edge proxy cho `/api/*` và `/health`
 - `http://localhost:16686`: Jaeger trace viewer
 - `http://localhost:9000`: MinIO API

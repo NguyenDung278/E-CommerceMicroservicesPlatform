@@ -301,6 +301,7 @@ Trước khi kết luận chậm:
 - Request/response phải ổn định và dễ đoán.
 - Dùng envelope chuẩn từ `pkg/response` để giữ nhất quán.
 - Validation ở boundary, business rule ở service.
+- Mọi route public phải có mặt trong `api-gateway/internal/docs/openapi.yaml`. Spec là contract viết tay, không sinh tự động, nên sửa route mà quên sửa spec là làm docs nói dối — `docs_test.go` chặn việc đó.
 
 ### 9.2. gRPC và inter-service calls
 
@@ -492,7 +493,7 @@ Repo này có nhiều file tài liệu ở root và trong `docs/`. Nếu flow, r
 
 Khi thay đổi code liên quan tới runtime thật, contributor và AI agent phải tự hỏi:
 
-1. Route public có đổi không?
+1. Route public có đổi không? Nếu có, **bắt buộc** sửa `api-gateway/internal/docs/openapi.yaml` trong cùng thay đổi — `docs_test.go` so khớp hai chiều spec với `e.Routes()` nên quên là test đỏ ngay.
 2. Docker Compose/runtime local có đổi không?
 3. Flow end-to-end hoặc async semantics có đổi không?
 4. Trạng thái triển khai, test hoặc backlog có đổi không?
@@ -507,6 +508,7 @@ Khi viết hoặc sửa docs, ưu tiên kiểm tra các file sau trước:
 - `deployments/docker/config/*.yaml`
 - `api-gateway/cmd/main.go`
 - `api-gateway/internal/handler/*.go`
+- `api-gateway/internal/docs/openapi.yaml`
 - `api-gateway/internal/proxy/*.go`
 - `services/*-service/cmd/main.go`
 - `services/*-service/internal/handler/`
