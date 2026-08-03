@@ -300,6 +300,8 @@ Các flow này chạm đủ:
 | Oversell theo size/màu dù tổng tồn kho còn         | Dòng đơn thiếu `sku`: kiểm tra `resolveOrderItemVariant` (`order_pricing.go`), `holdStockForItem` (`product_stock_reservation_repository.go`), ledger `stock_reservations.sku` |
 | Tồn kho lệch so với đếm thực tế                    | Sổ cái `stock_adjustments` — `ListStockAdjustments` cho biết ai chỉnh, chỉnh bao nhiêu, vì lý do gì; `AdjustStock` trong `product_stock_adjustment_repository.go` là đường duy nhất tăng tồn kho |
 | Nhập kho bị cộng hai lần                           | Client không gửi `Idempotency-Key` khi gọi `POST /products/:id/stock-adjustments`; unique index `idx_stock_adjustments_idempotency_key` là chốt chặn |
+| Hàng hết mà không ai được cảnh báo                 | `notification.low_stock_recipients` để trống thì `LowStockAlertWorker` không chạy; kiểm tra tiếp `ProductClient.ListLowStock` (`product_client.go`) và `ListLowStockEntries` (`product_queries.go`) |
+| Cảnh báo tồn kho gửi lặp hoặc im lặng quá lâu     | Khoá dedupe trong `low_stock_alert_deduper.go` — mang mức `low`/`out` chứ không mang số tồn; gửi hỏng phải `Release` claim, nếu không cảnh báo tắt tiếng nguyên 24h |
 | Đổi trạng thái / huỷ đơn trả 500                   | `UpdateStatus` trong `order_repository_orders.go` — mọi chỗ dùng `$1` phải ép `::text`, kể cả vế gán, nếu không Postgres báo "inconsistent types deduced for parameter $1" |
 | Stock bị giam sau khi đơn hủy/hết hạn             | `services/order-service/internal/service/order/order_reservation_expiry_worker.go`, `StartReservationExpiryWorker`; ledger `stock_reservations` |
 | Review aggregate sai                              | `product_review_repository.go`, `ApplyReviewSummaryDelta`                                                |

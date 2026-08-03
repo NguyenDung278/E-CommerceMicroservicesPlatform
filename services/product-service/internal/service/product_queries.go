@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -165,6 +167,107 @@ func (s *ProductService) ListLowStock(ctx context.Context, threshold int) ([]*mo
 	}
 
 	return s.repo.ListLowStock(ctx, threshold)
+}
+
+// ListLowStockEntries trả về danh sách cảnh báo tồn kho thấp đã làm phẳng theo
+// từng đơn vị bán được: mức sản phẩm và mức variant.
+//
+// Inputs:
+//   - ctx carries cancellation to the repository.
+//   - threshold là ngưỡng tồn kho, âm được chuẩn hoá về 0.
+//   - limit cắt bớt số dòng trả về; <= 0 nghĩa là lấy hết.
+//
+// Returns:
+//   - các dòng cảnh báo, sắp xếp tồn kho tăng dần (khẩn cấp nhất lên đầu).
+//   - lỗi repository nếu có.
+//
+// Edge cases:
+//   - repository đã lọc sẵn hàng có ÍT NHẤT một mức chạm ngưỡng, nên phải lọc
+//     lại từng mức ở đây: một sản phẩm lọt vào vì size M sắp hết thì không được
+//     đẻ ra thêm dòng cảnh báo mức sản phẩm khi tổng kho vẫn còn dư.
+//   - sản phẩm không khai báo variant chỉ sinh dòng mức sản phẩm.
+//
+// Side effects:
+//   - none.
+//
+// Performance:
+//   - một query repository, phần còn lại là duyệt tuyến tính trong bộ nhớ.
+func (s *ProductService) ListLowStockEntries(
+	ctx context.Context,
+	threshold int,
+	limit int,
+) ([]model.LowStockEntry, error) {
+	if threshold < 0 {
+		threshold = 0
+	}
+
+	products, err := s.repo.ListLowStock(ctx, threshold)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]model.LowStockEntry, 0, len(products))
+	for _, product := range products {
+		if product == nil {
+			continue
+		}
+
+		if product.Stock <= threshold {
+			entries = append(entries, model.LowStockEntry{
+				ProductID:   product.ID,
+				ProductName: product.Name,
+				Stock:       product.Stock,
+				Threshold:   threshold,
+			})
+		}
+
+		for _, variant := range product.Variants {
+			if variant.Stock > threshold {
+				continue
+			}
+			entries = append(entries, model.LowStockEntry{
+				ProductID:    product.ID,
+				ProductName:  product.Name,
+				SKU:          variant.SKU,
+				VariantLabel: variantLabel(variant),
+				Stock:        variant.Stock,
+				Threshold:    threshold,
+			})
+		}
+	}
+
+	// Hết hàng phải nằm trên sắp hết, bất kể thứ tự sản phẩm từ SQL: khi cắt
+	// theo limit thì thứ cần nhập gấp nhất mới là thứ được giữ lại.
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].Stock < entries[j].Stock
+	})
+
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+
+	return entries, nil
+}
+
+// variantLabel chọn nhãn dễ đọc nhất cho một variant để người nhận cảnh báo
+// nhận ra ngay đang nói về size/màu nào mà không phải tra SKU.
+func variantLabel(variant model.ProductVariant) string {
+	if label := strings.TrimSpace(variant.Label); label != "" {
+		return label
+	}
+
+	parts := make([]string, 0, 2)
+	if size := strings.TrimSpace(variant.Size); size != "" {
+		parts = append(parts, size)
+	}
+	if color := strings.TrimSpace(variant.Color); color != "" {
+		parts = append(parts, color)
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, " / ")
+	}
+
+	return strings.TrimSpace(variant.SKU)
 }
 
 // RestoreStock atomically increments product stock, typically after order cancellation.

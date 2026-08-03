@@ -26,7 +26,6 @@ import (
 	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	grpc_handler "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/grpc"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/handler"
-	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/jobs"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/repository"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/search"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
@@ -155,12 +154,6 @@ func main() {
 	}
 	productHandler := handler.NewProductHandler(productService, reviewService)
 	storefrontHandler := handler.NewStorefrontHandler(storefrontService)
-	workerCtx, workerCancel := context.WithCancel(context.Background())
-	defer workerCancel()
-
-	lowStockMonitor := jobs.NewLowStockMonitor(productService, log, 2*time.Minute, 5)
-	go lowStockMonitor.Start(workerCtx)
-
 	e := echo.New()
 	e.HideBanner = true
 	e.Validator = appvalidator.New()
@@ -223,7 +216,6 @@ func main() {
 
 	// Stop gRPC server first
 	grpcServer.GracefulStop()
-	workerCancel()
 
 	// Then stop HTTP server
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

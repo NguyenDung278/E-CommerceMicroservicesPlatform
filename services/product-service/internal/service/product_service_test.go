@@ -185,10 +185,21 @@ func (r *fakeProductServiceRepo) ReleaseStockForOrder(_ context.Context, orderID
 	return items, nil
 }
 
+// Bám sát SQL thật: một hàng lọt vào khi TỔNG tồn kho chạm ngưỡng HOẶC có ít
+// nhất một variant chạm ngưỡng.
 func (r *fakeProductServiceRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
 	results := make([]*model.Product, 0)
 	for _, product := range r.products {
-		if product.Stock <= threshold {
+		matched := product.Stock <= threshold
+		if !matched {
+			for _, variant := range product.Variants {
+				if variant.Stock <= threshold {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
 			copyValue := *product
 			results = append(results, &copyValue)
 		}

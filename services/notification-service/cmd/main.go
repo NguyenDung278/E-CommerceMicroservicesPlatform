@@ -67,13 +67,16 @@ func main() {
 	var inboxStore inbox.Store
 	var historyStore inbox.HistoryStore
 	var wishlistDeduper notificationservice.WishlistAlertDeduper
+	var lowStockDeduper notificationservice.LowStockAlertDeduper
 	if err := redisClient.Ping(rootCtx).Err(); err != nil {
 		log.Warn("redis not available, duplicate inbox protection is disabled", zap.Error(err))
 		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(nil, "")
+		lowStockDeduper = notificationservice.NewRedisLowStockAlertDeduper(nil, "")
 	} else {
 		inboxStore = inbox.NewRedisStore(redisClient, "notification-service:inbox")
 		historyStore = inbox.NewRedisHistoryStore(redisClient, "notification-service:history")
 		wishlistDeduper = notificationservice.NewRedisWishlistAlertDeduper(redisClient, "notification-service:wishlist-alert")
+		lowStockDeduper = notificationservice.NewRedisLowStockAlertDeduper(redisClient, "notification-service:low-stock-alert")
 	}
 
 	conn, err := amqp.Dial(cfg.RabbitMQ.URL())
@@ -130,6 +133,7 @@ func main() {
 
 	sender := email.NewSender(cfg.SMTP, log)
 	userClient := notificationclient.NewUserClient(cfg, log)
+	productClient := notificationclient.NewProductClient(cfg, log)
 	retryPublisher := messaging.NewRetryPublisher(
 		retryCh,
 		messaging.RetryQueue,
@@ -160,6 +164,18 @@ func main() {
 		cfg.Notification.WishlistBatchLimit,
 	)
 	go wishlistAlertWorker.Start(rootCtx)
+
+	lowStockAlertWorker := notificationservice.NewLowStockAlertWorker(
+		log,
+		sender,
+		productClient,
+		lowStockDeduper,
+		cfg.Notification.LowStockRecipientList(),
+		time.Duration(cfg.Notification.LowStockPollIntervalSeconds)*time.Second,
+		cfg.Notification.LowStockThreshold,
+		cfg.Notification.LowStockBatchLimit,
+	)
+	go lowStockAlertWorker.Start(rootCtx)
 
 	workerCount := cfg.Notification.WorkerCount
 	if workerCount <= 0 {

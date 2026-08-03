@@ -213,6 +213,42 @@ Invariant:
 - lý do là tập đóng chứ không phải text tự do, để lọc được "lệch vì hỏng hàng"
   khỏi "lệch vì nhập thiếu".
 
+### 6.2. Cảnh báo tồn kho thấp
+
+Luồng chính:
+
+1. `LowStockAlertWorker` trong `notification-service` tick theo
+   `notification.low_stock_poll_interval_seconds` (mặc định 900s).
+2. Worker gọi `GET /api/v1/products/low-stock?threshold=&limit=` của
+   `product-service` bằng JWT admin tự ký (`ProductClient`, cùng cách
+   `UserClient` gọi wishlist alert).
+3. `ListLowStockEntries` làm phẳng kết quả: mỗi variant chạm ngưỡng là một dòng
+   riêng, sắp xếp tồn kho tăng dần rồi mới cắt theo `limit`.
+4. Worker claim từng dòng qua Redis `SetNX` rồi gửi **một** email digest cho
+   `notification.low_stock_recipients`.
+5. Gửi hỏng thì toàn bộ claim của chu kỳ được `Release` để chu kỳ sau báo lại.
+
+File nên mở:
+
+- `services/notification-service/internal/service/low_stock_alert_worker.go`
+- `services/notification-service/internal/service/low_stock_alert_deduper.go`
+- `services/notification-service/internal/client/product_client.go`
+- `services/product-service/internal/service/product_queries.go` —
+  `ListLowStockEntries`
+
+Invariant:
+
+- ngưỡng phải soi xuống **từng variant**. Chỉ so `products.stock` thì sản phẩm
+  còn tổng 40 cái nhưng size M còn 1 sẽ không bao giờ được cảnh báo — đúng ca
+  mà `stock_reservations.sku` sinh ra để chặn oversell.
+- pull chứ không phải event: `product-service` không có hạ tầng messaging, và
+  "tồn kho thấp" là trạng thái đứng yên nhiều ngày chứ không phải sự kiện rời
+  rạc, nên quét định kỳ đúng hình dạng bài toán hơn là bắn event mỗi lần trừ kho.
+- khoá dedupe mang **mức khẩn cấp** (`low` / `out`), không mang số tồn kho. Mang
+  số tồn thì bán thêm một cái là đổi khoá và spam lại; không mang gì thì món tụt
+  từ "còn 3" xuống "hết sạch" im lặng suốt 24h.
+- danh sách người nhận rỗng thì worker không chạy — không quét, không tốn query.
+
 ---
 
 ## 7. Cart
