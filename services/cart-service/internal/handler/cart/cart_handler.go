@@ -64,6 +64,12 @@ func (h *CartHandler) MergeCart(c echo.Context) error {
 		if errors.Is(err, service.ErrProductUnavailable) {
 			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
 		}
+		if errors.Is(err, service.ErrVariantNotFound) {
+			return response.Error(c, http.StatusNotFound, "variant not found", err.Error())
+		}
+		if errors.Is(err, service.ErrVariantRequired) {
+			return response.Error(c, http.StatusBadRequest, "variant required", err.Error())
+		}
 		if errors.Is(err, service.ErrInsufficientStock) {
 			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
 		}
@@ -95,6 +101,12 @@ func (h *CartHandler) AddItem(c echo.Context) error {
 		if errors.Is(err, service.ErrProductUnavailable) {
 			return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
 		}
+		if errors.Is(err, service.ErrVariantNotFound) {
+			return response.Error(c, http.StatusNotFound, "variant not found", err.Error())
+		}
+		if errors.Is(err, service.ErrVariantRequired) {
+			return response.Error(c, http.StatusBadRequest, "variant required", err.Error())
+		}
 		if errors.Is(err, service.ErrInsufficientStock) {
 			return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
 		}
@@ -103,9 +115,15 @@ func (h *CartHandler) AddItem(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "item added to cart", cart)
 }
 
+// UpdateItem handles PUT /api/v1/cart/items/:productId
+//
+// SKU đi qua query param `?sku=` chứ không nằm trong path: một sản phẩm có
+// nhiều variant là nhiều dòng giỏ hàng khác nhau, nhưng client cũ gọi không kèm
+// sku vẫn trỏ đúng dòng của sản phẩm không có variant.
 func (h *CartHandler) UpdateItem(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	productID := c.Param("productId")
+	sku := c.QueryParam("sku")
 	var req dto.UpdateCartItemRequest
 	if err := c.Bind(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
@@ -114,7 +132,7 @@ func (h *CartHandler) UpdateItem(c echo.Context) error {
 		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
 	}
 
-	cart, err := h.cartService.UpdateItem(c.Request().Context(), claims.UserID, productID, req)
+	cart, err := h.cartService.UpdateItem(c.Request().Context(), claims.UserID, productID, sku, req)
 	if err != nil {
 		if errors.Is(err, service.ErrItemNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "item not in cart")
@@ -124,11 +142,15 @@ func (h *CartHandler) UpdateItem(c echo.Context) error {
 	return response.Success(c, http.StatusOK, "cart updated", cart)
 }
 
+// RemoveItem handles DELETE /api/v1/cart/items/:productId
+//
+// Giống UpdateItem, variant được chọn qua query param `?sku=`.
 func (h *CartHandler) RemoveItem(c echo.Context) error {
 	claims := middleware.GetUserClaims(c)
 	productID := c.Param("productId")
+	sku := c.QueryParam("sku")
 
-	cart, err := h.cartService.RemoveItem(c.Request().Context(), claims.UserID, productID)
+	cart, err := h.cartService.RemoveItem(c.Request().Context(), claims.UserID, productID, sku)
 	if err != nil {
 		if errors.Is(err, service.ErrItemNotFound) {
 			return response.Error(c, http.StatusNotFound, "not found", "item not in cart")

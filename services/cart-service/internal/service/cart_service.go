@@ -10,6 +10,8 @@ var (
 	ErrProductNotFound    = cartsvc.ErrProductNotFound
 	ErrProductUnavailable = cartsvc.ErrProductUnavailable
 	ErrInsufficientStock  = cartsvc.ErrInsufficientStock
+	ErrVariantNotFound    = cartsvc.ErrVariantNotFound
+	ErrVariantRequired    = cartsvc.ErrVariantRequired
 )
 
 type ProductCatalog = cartsvc.ProductCatalog

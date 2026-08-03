@@ -17,12 +17,12 @@ func (s *CartService) MergeCart(ctx context.Context, userID string, req dto.Merg
 	}
 
 	for _, item := range req.Items {
-		product, err := s.getProductForCart(ctx, item.ProductID)
+		product, err := s.getProductForCart(ctx, item.ProductID, item.SKU)
 		if err != nil {
 			return nil, err
 		}
 
-		itemIndex := findCartItemIndex(cart.Items, item.ProductID)
+		itemIndex := findCartItemIndex(cart.Items, item.ProductID, item.SKU)
 		if itemIndex >= 0 {
 			updatedItem, delta, err := mergeCartItem(cart.Items[itemIndex], product, item.Quantity)
 			if err != nil {
@@ -72,12 +72,12 @@ func (s *CartService) AddItem(ctx context.Context, userID string, req dto.AddToC
 		return nil, err
 	}
 
-	product, err := s.getProductForCart(ctx, req.ProductID)
+	product, err := s.getProductForCart(ctx, req.ProductID, req.SKU)
 	if err != nil {
 		return nil, err
 	}
 
-	itemIndex := findCartItemIndex(cart.Items, req.ProductID)
+	itemIndex := findCartItemIndex(cart.Items, req.ProductID, req.SKU)
 	if itemIndex >= 0 {
 		updatedItem, delta, err := mergeCartItem(cart.Items[itemIndex], product, req.Quantity)
 		if err != nil {
@@ -118,13 +118,13 @@ func (s *CartService) AddItem(ctx context.Context, userID string, req dto.AddToC
 //
 // Performance:
 //   - O(n) to find the item, with total updated incrementally instead of rescanning the full cart.
-func (s *CartService) UpdateItem(ctx context.Context, userID, productID string, req dto.UpdateCartItemRequest) (*model.Cart, error) {
+func (s *CartService) UpdateItem(ctx context.Context, userID, productID, sku string, req dto.UpdateCartItemRequest) (*model.Cart, error) {
 	cart, err := s.loadCart(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	itemIndex := findCartItemIndex(cart.Items, productID)
+	itemIndex := findCartItemIndex(cart.Items, productID, sku)
 	if itemIndex < 0 {
 		return nil, ErrItemNotFound
 	}
@@ -158,13 +158,13 @@ func (s *CartService) UpdateItem(ctx context.Context, userID, productID string, 
 //
 // Performance:
 //   - O(n) to find and remove the item, while total updates avoid a second full-cart scan.
-func (s *CartService) RemoveItem(ctx context.Context, userID, productID string) (*model.Cart, error) {
+func (s *CartService) RemoveItem(ctx context.Context, userID, productID, sku string) (*model.Cart, error) {
 	cart, err := s.loadCart(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	itemIndex := findCartItemIndex(cart.Items, productID)
+	itemIndex := findCartItemIndex(cart.Items, productID, sku)
 	if itemIndex < 0 {
 		return nil, ErrItemNotFound
 	}
@@ -211,6 +211,7 @@ func mergeCartItem(current model.CartItem, product *productSnapshot, quantityDel
 	current.Quantity = nextQuantity
 	current.Name = product.name
 	current.Price = product.price
+	current.VariantLabel = product.variantLabel
 
 	return current, itemSubtotal(current) - previousSubtotal, nil
 }
@@ -239,10 +240,12 @@ func newCartItem(product *productSnapshot, req dto.AddToCartRequest) (model.Cart
 	}
 
 	return model.CartItem{
-		ProductID: req.ProductID,
-		Name:      product.name,
-		Price:     product.price,
-		Quantity:  req.Quantity,
+		ProductID:    req.ProductID,
+		SKU:          product.sku,
+		VariantLabel: product.variantLabel,
+		Name:         product.name,
+		Price:        product.price,
+		Quantity:     req.Quantity,
 	}, nil
 }
 
@@ -267,7 +270,7 @@ func newCartItem(product *productSnapshot, req dto.AddToCartRequest) (model.Cart
 //   - O(1).
 func ensureProductStock(product *productSnapshot, quantity int) error {
 	if product.stockQuantity < int32(quantity) {
-		return fmt.Errorf("%w: product %s only has %d item(s)", ErrInsufficientStock, product.name, product.stockQuantity)
+		return fmt.Errorf("%w: product %s only has %d item(s)", ErrInsufficientStock, product.displayName(), product.stockQuantity)
 	}
 	return nil
 }

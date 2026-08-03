@@ -7,13 +7,28 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
+	pb "github.com/NguyenDung278/E-CommerceMicroservicesPlatform/proto"
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/cart-service/internal/model"
 )
 
+// productSnapshot is the authoritative pricing and stock view for one
+// purchasable line, already narrowed down to a specific variant when the
+// product has any.
 type productSnapshot struct {
 	name          string
+	sku           string
+	variantLabel  string
 	price         float64
 	stockQuantity int32
+}
+
+// displayName names the exact thing that ran out, so an out-of-stock message
+// says which size is unavailable instead of blaming the whole product.
+func (p *productSnapshot) displayName() string {
+	if p.variantLabel == "" {
+		return p.name
+	}
+	return p.name + " (" + p.variantLabel + ")"
 }
 
 // loadCart retrieves a cart from the repository and normalizes nil carts into
@@ -73,16 +88,19 @@ func (s *CartService) saveCart(ctx context.Context, cart *model.Cart) error {
 	return s.repo.Save(ctx, cart)
 }
 
-// getProductForCart loads the authoritative product snapshot required for cart
-// mutations.
+// getProductForCart loads the authoritative snapshot required for cart
+// mutations, narrowed to the requested variant.
 //
 // Inputs:
 //   - ctx carries cancellation to product-service.
 //   - productID identifies the product to load.
+//   - sku selects the variant, and is empty for products without variants.
 //
 // Returns:
-//   - the normalized product snapshot.
-//   - a domain error when the product is missing or unavailable.
+//   - the normalized snapshot carrying the price and stock that actually apply
+//     to the requested line.
+//   - a domain error when the product is missing, unavailable, or the sku does
+//     not resolve to a declared variant.
 //   - any other downstream error wrapped with product context.
 //
 // Edge cases:
@@ -93,7 +111,7 @@ func (s *CartService) saveCart(ctx context.Context, cart *model.Cart) error {
 //
 // Performance:
 //   - dominated by one downstream gRPC request.
-func (s *CartService) getProductForCart(ctx context.Context, productID string) (*productSnapshot, error) {
+func (s *CartService) getProductForCart(ctx context.Context, productID, sku string) (*productSnapshot, error) {
 	if s.productClient == nil {
 		return nil, fmt.Errorf("product client is not configured")
 	}
@@ -110,34 +128,66 @@ func (s *CartService) getProductForCart(ctx context.Context, productID string) (
 		}
 	}
 
-	return &productSnapshot{
-		name:          product.Name,
-		price:         float64(product.Price),
-		stockQuantity: product.StockQuantity,
-	}, nil
+	return resolveProductSnapshot(product, productID, sku)
 }
 
-// findCartItemIndex returns the index of a cart item by product id.
+// resolveProductSnapshot picks the price and stock pool a line item draws from.
+//
+// A product that declares variants has no meaningful product-level stock to buy
+// against — its `stock_quantity` is only the aggregate across sizes — so a blank
+// sku is rejected instead of being silently charged to that aggregate.
+func resolveProductSnapshot(product *pb.Product, productID, sku string) (*productSnapshot, error) {
+	variants := product.GetVariants()
+
+	if sku == "" {
+		if len(variants) > 0 {
+			return nil, fmt.Errorf("%w: product %s", ErrVariantRequired, productID)
+		}
+		return &productSnapshot{
+			name:          product.GetName(),
+			price:         float64(product.GetPrice()),
+			stockQuantity: product.GetStockQuantity(),
+		}, nil
+	}
+
+	for _, variant := range variants {
+		if variant.GetSku() != sku {
+			continue
+		}
+		return &productSnapshot{
+			name:          product.GetName(),
+			sku:           variant.GetSku(),
+			variantLabel:  variant.GetLabel(),
+			price:         float64(variant.GetPrice()),
+			stockQuantity: variant.GetStock(),
+		}, nil
+	}
+
+	return nil, fmt.Errorf("%w: product %s sku %s", ErrVariantNotFound, productID, sku)
+}
+
+// findCartItemIndex returns the index of a cart line item.
 //
 // Inputs:
 //   - items is the cart item slice to search.
-//   - productID identifies the desired item.
+//   - productID and sku together identify the desired line item.
 //
 // Returns:
 //   - the zero-based index when found.
-//   - -1 when the product is not present.
+//   - -1 when the line item is not present.
 //
 // Edge cases:
 //   - empty carts return -1.
+//   - two variants of one product are distinct lines, so the sku must match too.
 //
 // Side effects:
 //   - none.
 //
 // Performance:
 //   - O(n) over the cart size.
-func findCartItemIndex(items []model.CartItem, productID string) int {
+func findCartItemIndex(items []model.CartItem, productID, sku string) int {
 	for index, item := range items {
-		if item.ProductID == productID {
+		if item.ProductID == productID && item.SKU == sku {
 			return index
 		}
 	}

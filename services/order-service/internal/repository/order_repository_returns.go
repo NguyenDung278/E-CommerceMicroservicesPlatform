@@ -508,6 +508,14 @@ func (r *postgresOrderRepository) ScheduleReturnRefund(
 	return tx.Commit()
 }
 
+// ClaimPendingReturnRefunds nhận một lô return đang chờ hoàn tiền, giữ lease
+// bằng FOR UPDATE SKIP LOCKED để hai worker không cùng gọi refund một đơn.
+//
+// Lưu ý khi sửa câu SQL bên dưới: tên cột phải viết đúng snake_case. Postgres
+// hạ chữ thường mọi identifier không đặt trong nháy kép, nên một chữ hoa lạc
+// (refund_next_retryAt) biến thành refund_next_retryat và làm hỏng cả câu lệnh.
+// Khi đó worker không claim được job nào, hàng đợi refund_pending kẹt vĩnh viễn
+// mà chỉ để lại WARN trong log — hỏng âm thầm chứ không hỏng ồn ào.
 func (r *postgresOrderRepository) ClaimPendingReturnRefunds(ctx context.Context, limit int, leaseDuration time.Duration) ([]*model.ReturnRequest, error) {
 	if limit <= 0 {
 		limit = 1
@@ -523,7 +531,7 @@ func (r *postgresOrderRepository) ClaimPendingReturnRefunds(ctx context.Context,
 			FROM returns
 			WHERE status = 'refund_pending'
 			  AND refund_payment_id = ''
-			  AND (refund_next_retry_at IS NULL OR refund_next_retryAt <= NOW())
+			  AND (refund_next_retry_at IS NULL OR refund_next_retry_at <= NOW())
 			  AND (
 				refund_processing_started_at IS NULL OR
 				refund_processing_started_at <= NOW() - ($2 * INTERVAL '1 second')

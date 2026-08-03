@@ -148,7 +148,8 @@ export function OrderDetailPage() {
       setActionError(null);
       setActionStatus(null);
       for (const item of order.items) {
-        await addItem(item.product_id, item.quantity);
+        // Mua lại phải giữ đúng variant đã mua, không rơi về sản phẩm chung.
+        await addItem(item.product_id, item.quantity, item.sku);
       }
       setActionStatus("Đã thêm lại sản phẩm vào giỏ hàng");
       navigate("/cart");

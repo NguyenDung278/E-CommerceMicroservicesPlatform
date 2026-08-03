@@ -10,9 +10,13 @@ import (
 )
 
 var (
-	ErrInvalidCursor     = productrepo.ErrInvalidCursor
-	ErrInsufficientStock = productrepo.ErrInsufficientStock
-	ErrProductNotFound   = productrepo.ErrProductNotFound
+	ErrInvalidCursor          = productrepo.ErrInvalidCursor
+	ErrInsufficientStock      = productrepo.ErrInsufficientStock
+	ErrProductNotFound        = productrepo.ErrProductNotFound
+	ErrProductVariantNotFound = productrepo.ErrProductVariantNotFound
+	ErrProductVariantRequired = productrepo.ErrProductVariantRequired
+
+	ErrStockAdjustmentWouldGoNegative = productrepo.ErrStockAdjustmentWouldGoNegative
 )
 
 type ListProductsParams = productrepo.ListProductsParams

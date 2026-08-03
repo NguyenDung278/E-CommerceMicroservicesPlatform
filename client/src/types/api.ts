@@ -255,6 +255,9 @@ export type ProductReviewList = {
 
 export type CartItem = {
   product_id: string;
+  /** Variant của dòng này; rỗng khi sản phẩm không có variant. Cùng với product_id tạo thành khoá của dòng giỏ hàng. */
+  sku?: string;
+  variant_label?: string;
   name: string;
   price: number;
   quantity: number;
@@ -298,6 +301,8 @@ export type CouponWalletItem = {
 
 export type OrderItemRequest = {
   product_id: string;
+  /** Bắt buộc khi sản phẩm có variant — backend lấy giá và tồn kho từ đúng variant này. */
+  sku?: string;
   name?: string;
   price?: number;
   quantity: number;
@@ -327,6 +332,8 @@ export type OrderItem = {
   id: string;
   order_id: string;
   product_id: string;
+  sku?: string;
+  variant_label?: string;
   name: string;
   price: number;
   quantity: number;

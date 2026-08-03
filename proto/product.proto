@@ -127,9 +127,16 @@ message SearchProductsResponse {
 }
 
 // One reserved line item inside a stock reservation.
+//
+// sku selects which variant of the product is being held. An empty sku means
+// the reservation targets the product-level stock pool, which is only valid for
+// products that declare no variants. Products that do declare variants require
+// a non-empty sku, otherwise the reservation is ambiguous and would let two
+// sizes of the same product drain one shared counter.
 message StockReservationItem {
   string product_id = 1;
   int32 quantity = 2;
+  string sku = 3;
 }
 
 // Reserve stock request. order_id doubles as the idempotency key of the whole
@@ -157,6 +164,20 @@ message ReleaseStockResponse {
   int32 released_items = 1;
 }
 
+// One purchasable variant of a product, identified by sku within its product.
+//
+// price and stock here override the product-level values: a caller pricing a
+// line item that carries a sku must read them from the matching variant, not
+// from Product.price / Product.stock_quantity.
+message ProductVariant {
+  string sku = 1;
+  string label = 2;
+  string size = 3;
+  string color = 4;
+  float price = 5;
+  int32 stock = 6;
+}
+
 // Product model.
 //
 // Compatibility note:
@@ -164,6 +185,10 @@ message ReleaseStockResponse {
 // - created_at / updated_at are ISO-8601 strings emitted by the current Go server
 // Future improvements should prefer additive migration instead of changing the
 // meaning or type of these existing fields in place.
+//
+// stock_quantity stays the aggregate across every variant, so catalog listings
+// and "out of stock" badges keep working unchanged. Buying decisions for a
+// product with variants must use the per-variant stock in `variants` instead.
 message Product {
   string id = 1;
   string name = 2;
@@ -174,4 +199,5 @@ message Product {
   string image_url = 7;
   string created_at = 8;
   string updated_at = 9;
+  repeated ProductVariant variants = 10;
 }

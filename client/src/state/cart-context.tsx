@@ -13,9 +13,9 @@ type CartContextValue = {
   cart: Cart | null;
   loading: boolean;
   error: string | null;
-  addItem: (productId: string, quantity?: number) => Promise<void>;
-  updateItem: (productId: string, quantity: number) => Promise<void>;
-  removeItem: (productId: string) => Promise<void>;
+  addItem: (productId: string, quantity?: number, sku?: string) => Promise<void>;
+  updateItem: (productId: string, quantity: number, sku?: string) => Promise<void>;
+  removeItem: (productId: string, sku?: string) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
 };
@@ -81,29 +81,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
     };
   }, [token]);
 
-  async function addItem(productId: string, quantity = 1) {
+  async function addItem(productId: string, quantity = 1, sku?: string) {
     if (!token) {
       setError("Bạn cần đăng nhập để thêm sản phẩm vào giỏ hàng");
       return;
     }
 
-    setCart(await addCartItem(token, { product_id: productId, quantity }));
+    setCart(await addCartItem(token, { product_id: productId, sku, quantity }));
   }
 
-  async function updateItem(productId: string, quantity: number) {
+  async function updateItem(productId: string, quantity: number, sku?: string) {
     if (!token) {
       return;
     }
 
-    setCart(await updateCartItem(token, productId, quantity));
+    setCart(await updateCartItem(token, productId, quantity, sku));
   }
 
-  async function removeItem(productId: string) {
+  async function removeItem(productId: string, sku?: string) {
     if (!token) {
       return;
     }
 
-    setCart(await removeCartItem(token, productId));
+    setCart(await removeCartItem(token, productId, sku));
   }
 
   async function clearCart() {

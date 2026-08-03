@@ -191,21 +191,80 @@ func (s *OrderService) quoteOrderItem(ctx context.Context, item dto.OrderItemReq
 		}
 	}
 
-	if product.StockQuantity < int32(item.Quantity) {
+	variant, err := resolveOrderItemVariant(product, item)
+	if err != nil {
+		return pricedOrderItem{}, err
+	}
+
+	if variant.stock < int32(item.Quantity) {
 		return pricedOrderItem{}, fmt.Errorf(
 			"%w: product %s only has %d item(s)",
 			ErrInsufficientStock,
-			product.Name,
-			product.StockQuantity,
+			variant.displayName,
+			variant.stock,
 		)
 	}
 
 	return pricedOrderItem{
-		ProductID: item.ProductID,
-		Name:      product.Name,
-		Price:     float64(product.Price),
-		Quantity:  item.Quantity,
+		ProductID:    item.ProductID,
+		SKU:          variant.sku,
+		VariantLabel: variant.label,
+		Name:         product.Name,
+		Price:        variant.price,
+		Quantity:     item.Quantity,
 	}, nil
+}
+
+// quotedVariant is the price and stock pool one checkout line actually draws
+// from, after narrowing a product down to the requested sku.
+type quotedVariant struct {
+	sku         string
+	label       string
+	displayName string
+	price       float64
+	stock       int32
+}
+
+// resolveOrderItemVariant picks which pool a line item is priced and stocked
+// against.
+//
+// A product that declares variants has no buyable product-level pool — its
+// StockQuantity is only the aggregate across sizes — so a blank sku is rejected
+// rather than quietly charged to that aggregate, which is how one size could
+// consume another size's inventory.
+func resolveOrderItemVariant(product *pb.Product, item dto.OrderItemRequest) (quotedVariant, error) {
+	variants := product.GetVariants()
+	sku := strings.TrimSpace(item.SKU)
+
+	if sku == "" {
+		if len(variants) > 0 {
+			return quotedVariant{}, fmt.Errorf("%w: product %s", ErrVariantRequired, item.ProductID)
+		}
+		return quotedVariant{
+			displayName: product.GetName(),
+			price:       float64(product.GetPrice()),
+			stock:       product.GetStockQuantity(),
+		}, nil
+	}
+
+	for _, variant := range variants {
+		if variant.GetSku() != sku {
+			continue
+		}
+		displayName := product.GetName()
+		if variant.GetLabel() != "" {
+			displayName = displayName + " (" + variant.GetLabel() + ")"
+		}
+		return quotedVariant{
+			sku:         variant.GetSku(),
+			label:       variant.GetLabel(),
+			displayName: displayName,
+			price:       float64(variant.GetPrice()),
+			stock:       variant.GetStock(),
+		}, nil
+	}
+
+	return quotedVariant{}, fmt.Errorf("%w: product %s sku %s", ErrVariantNotFound, item.ProductID, sku)
 }
 
 // newProductQuoteCache allocates the per-request cache used by quoteOrder.

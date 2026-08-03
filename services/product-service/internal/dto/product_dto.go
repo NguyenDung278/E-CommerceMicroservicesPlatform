@@ -74,3 +74,18 @@ type SearchAssistQuery struct {
 	Status   string `query:"status"`
 	Limit    int    `query:"limit"`
 }
+
+// AdjustStockRequest là body cho một lần nhập kho hoặc điều chỉnh tồn.
+//
+// Delta có dấu chứ không tách thành hai endpoint in/out: người vận hành nghĩ
+// theo "cộng bao nhiêu, trừ bao nhiêu", và một trường có dấu giữ cho sổ cái chỉ
+// có đúng một cách biểu diễn thay vì hai.
+//
+// SKU bắt buộc khi sản phẩm có khai báo variant — cùng quy ước với checkout,
+// nếu không sẽ không biết đang nhập kho cho size nào.
+type AdjustStockRequest struct {
+	SKU    string `json:"sku" validate:"omitempty,max=120"`
+	Delta  int    `json:"delta" validate:"required,ne=0"`
+	Reason string `json:"reason" validate:"required,oneof=received recount damaged returned correction"`
+	Note   string `json:"note" validate:"omitempty,max=255"`
+}

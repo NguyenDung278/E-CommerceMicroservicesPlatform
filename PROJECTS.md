@@ -45,6 +45,9 @@ Nếu có mâu thuẫn giữa file này và source code, hãy ưu tiên source c
 | Hạng mục | Trạng thái | Ghi chú |
 | --- | --- | --- |
 | Inventory reservation transaction-safe ở checkout | `done` | gRPC `ReserveStock`/`ReleaseStock` all-or-nothing, ledger `stock_reservations`, worker expiry nền, k6 + testcontainers chứng minh không oversell |
+| Variant xuyên suốt cart → order → reservation | `done` | `sku` là một phần khoá của dòng giỏ hàng, dòng đơn và ledger giữ chỗ; giá và tồn kho lấy từ variant; storefront có bộ chọn phân loại; test concurrency chứng minh size này không rút được tồn kho của size kia |
+| Đổi trạng thái đơn qua API (`UpdateStatus`) | `done` | Sửa bug có sẵn: `$1` chưa ép `::text` làm Postgres từ chối câu lệnh, khiến user huỷ đơn / admin huỷ / admin đổi trạng thái đều trả 500 và kho bị giam. Có regression test chạy trên Postgres thật |
+| Worker hoàn tiền trả hàng (`ClaimPendingReturnRefunds`) | `done` | Sửa bug có sẵn: sai tên cột `refund_next_retryAt` làm worker không claim được job nào, queue `refund_pending` kẹt vĩnh viễn. Có regression test chạy trên Postgres thật |
 | Payment idempotency cho `POST /api/v1/payments` | `done` | Có replay, conflict detection, test service |
 | Returns/RMA cơ bản | `done` | Tạo return, xem chi tiết, xem theo order, đổi trạng thái |
 | `refund_pending` production-safe | `done` | Queue nội bộ, worker async, retry-safe, idempotent refund call |
@@ -267,6 +270,13 @@ go tool cover -func=coverage_returns_portal_handler.out | grep 'ListUserReturns\
 
 ### Ưu tiên cao
 
+- **COD**: `payment_dto.go` mới nhận `manual momo vnpay credit_card digital_wallet demo`.
+  COD là trạng thái đơn khác hẳn — order confirmed mà payment vẫn pending, ghi
+  nhận tiền lúc delivered — nên cần thêm cả cơ chế chống bom hàng.
+- **Cảnh báo tồn kho thấp**: đã có `ListLowStock` và `stock_adjustments`, còn
+  thiếu worker định kỳ đẩy cảnh báo qua `notification-service`.
+- **Khuyến mãi mức sản phẩm**: hiện chỉ có coupon; `Product` không có `sale_price`
+  nên muốn giảm giá phải sửa giá gốc, mất giá niêm yết và làm sai report doanh thu.
 - Trang detail riêng cho từng return và deep link từ email/notification.
 - Upload ảnh lỗi sản phẩm và bằng chứng nhận hàng cho return.
 - Shipping label / carrier integration cho chiều trả hàng.
@@ -312,6 +322,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Review system | `done` | create/update/delete, summary delta, tx manager, cache |
 | Product gRPC | `done` | cart/order gọi để lấy truth sản phẩm |
 | Stock reservation ledger | `done` | `ReserveStock`/`ReleaseStock` gRPC all-or-nothing, idempotent theo `order_id`, bảng `stock_reservations` (migration 000008), integration test concurrency bằng testcontainers |
+| Nhập kho / điều chỉnh tồn | `done` | Sổ cái `stock_adjustments` (migration 000010) có lý do đóng tập, người thực hiện và tồn kho sau điều chỉnh; `AdjustStock` dùng cùng row lock với reservation nên nhập kho không đua với checkout; idempotent theo `Idempotency-Key`; chặn tồn kho âm. Route `POST/GET /api/v1/products/:id/stock-adjustments` |
 | Optional MinIO / Elasticsearch | `done` | degrade gracefully khi dependency phụ lỗi |
 | Điểm cần theo dõi | `in progress` | benchmark search assist và variant facet; review list public vẫn là offset path |
 
@@ -321,6 +332,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | --- | --- | --- |
 | Redis cart storage | `done` | get/save/delete toàn bộ cart blob với TTL |
 | Product truth validation | `done` | gọi product-service qua gRPC |
+| Variant trong giỏ | `done` | dòng giỏ khoá theo `(product_id, sku)`, giá/tồn kho lấy từ variant; sửa/xoá dòng truyền `?sku=` |
 | Guest merge | `done` | route backend `/api/v1/cart/merge` đã có |
 | Điểm cần theo dõi | `in progress` | concurrent write hiện theo kiểu last-write-wins; chưa có version/CAS |
 
@@ -335,6 +347,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Return / refund queue | `done` | requested -> approved -> refund_pending -> refunded |
 | Outbox / inbox transition | `done` | relay-safe và event-safe khá rõ |
 | Reservation expiry worker | `done` | `StartReservationExpiryWorker` hủy đơn pending quá hạn giữ chỗ và release stock retry-safe qua cột `stock_released_at` (migration 000012) |
+| Variant trên dòng đơn | `done` | `order_items.sku` + `variant_label` (migration 000013), định giá theo variant, `sku` nằm trong hash idempotency, `ReserveStock` truyền `sku` |
 | Điểm cần theo dõi | `in progress` | admin list lớn vẫn còn `COUNT(*) + OFFSET`; edge hiếm: đơn cancelled chuyển refunded ngay trước khi worker kịp release sẽ rời scan `status='cancelled'` (ledger vẫn giữ, cần release tay) |
 
 ### 6.6. Payment service

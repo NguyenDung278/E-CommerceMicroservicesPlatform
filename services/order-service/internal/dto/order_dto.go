@@ -11,8 +11,14 @@ type CreateOrderRequest struct {
 }
 
 // OrderItemRequest represents a single item in a checkout request.
+//
+// SKU selects the variant being bought. It stays optional at the transport
+// layer because products without variants have none, but checkout rejects a
+// blank sku for a product that does declare variants — pricing and the stock
+// hold would otherwise be taken against the product-level aggregate.
 type OrderItemRequest struct {
 	ProductID string  `json:"product_id" validate:"required"`
+	SKU       string  `json:"sku" validate:"omitempty,max=120"`
 	Name      string  `json:"name" validate:"omitempty,min=1"`
 	Price     float64 `json:"price" validate:"omitempty,gt=0"`
 	Quantity  int     `json:"quantity" validate:"gt=0"`

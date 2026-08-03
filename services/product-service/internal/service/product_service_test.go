@@ -24,6 +24,9 @@ type fakeProductServiceRepo struct {
 	listByIDsInput []string
 	searchProducts []*model.Product
 	reservations   map[string][]model.StockReservationItem
+	lastAdjustment *model.StockAdjustment
+	adjustErr      error
+	adjustments    []*model.StockAdjustment
 }
 
 type fakeProductSearchIndex struct {
@@ -128,6 +131,21 @@ func (r *fakeProductServiceRepo) RestoreStock(_ context.Context, id string, quan
 	}
 	product.Stock += quantity
 	return nil
+}
+
+// AdjustStock ghi lại lời gọi để test service kiểm tra được cả phần validate lẫn
+// phần map lỗi từ repository lên lỗi domain.
+func (r *fakeProductServiceRepo) AdjustStock(_ context.Context, adjustment *model.StockAdjustment) (*model.StockAdjustment, error) {
+	r.lastAdjustment = adjustment
+	if r.adjustErr != nil {
+		return nil, r.adjustErr
+	}
+	adjustment.ResultingStock = adjustment.Delta
+	return adjustment, nil
+}
+
+func (r *fakeProductServiceRepo) ListStockAdjustments(_ context.Context, productID string, limit int) ([]*model.StockAdjustment, error) {
+	return r.adjustments, nil
 }
 
 func (r *fakeProductServiceRepo) ReserveStockForOrder(_ context.Context, orderID string, items []model.StockReservationItem) (bool, error) {
@@ -398,5 +416,81 @@ func TestListFallsBackToRepositoryOnSearchError(t *testing.T) {
 	}
 	if pageInfo.NextCursor != "cursor-2" || !pageInfo.HasNext {
 		t.Fatalf("unexpected page info %#v", pageInfo)
+	}
+}
+
+func TestAdjustStockRejectsZeroDelta(t *testing.T) {
+	repo := &fakeProductServiceRepo{products: map[string]*model.Product{}}
+	svc := NewProductService(repo, WithLogger(zap.NewNop()))
+
+	_, err := svc.AdjustStock(context.Background(), "product-1", "", 0, model.StockAdjustmentReasonReceived, "", "admin-1", "admin", "")
+	if !errors.Is(err, ErrStockAdjustmentDeltaRequired) {
+		t.Fatalf("expected ErrStockAdjustmentDeltaRequired, got %v", err)
+	}
+	if repo.lastAdjustment != nil {
+		t.Fatal("validation must fail before touching the repository")
+	}
+}
+
+func TestAdjustStockRejectsUnknownReason(t *testing.T) {
+	repo := &fakeProductServiceRepo{products: map[string]*model.Product{}}
+	svc := NewProductService(repo, WithLogger(zap.NewNop()))
+
+	_, err := svc.AdjustStock(context.Background(), "product-1", "", 5, model.StockAdjustmentReason("vì thích"), "", "admin-1", "admin", "")
+	if !errors.Is(err, ErrStockAdjustmentReasonInvalid) {
+		t.Fatalf("expected ErrStockAdjustmentReasonInvalid, got %v", err)
+	}
+}
+
+func TestAdjustStockPassesActorAndReasonToLedger(t *testing.T) {
+	repo := &fakeProductServiceRepo{products: map[string]*model.Product{}}
+	svc := NewProductService(repo, WithLogger(zap.NewNop()))
+
+	_, err := svc.AdjustStock(context.Background(), " product-1 ", " size-m ", 12,
+		model.StockAdjustmentReasonReceived, "  nhập lô tháng 8  ", "admin-1", "admin", "key-1")
+	if err != nil {
+		t.Fatalf("AdjustStock returned error: %v", err)
+	}
+
+	got := repo.lastAdjustment
+	if got == nil {
+		t.Fatal("expected the adjustment to reach the repository")
+	}
+	if got.ProductID != "product-1" || got.SKU != "size-m" {
+		t.Fatalf("expected trimmed identifiers, got product=%q sku=%q", got.ProductID, got.SKU)
+	}
+	if got.Note != "nhập lô tháng 8" {
+		t.Fatalf("expected trimmed note, got %q", got.Note)
+	}
+	if got.ActorID != "admin-1" || got.ActorRole != "admin" {
+		t.Fatalf("expected actor recorded, got %q/%q", got.ActorID, got.ActorRole)
+	}
+	if got.IdempotencyKey != "key-1" {
+		t.Fatalf("expected idempotency key forwarded, got %q", got.IdempotencyKey)
+	}
+}
+
+func TestAdjustStockMapsRepositoryErrorsToDomainErrors(t *testing.T) {
+	cases := []struct {
+		name    string
+		repoErr error
+		want    error
+	}{
+		{"product missing", repository.ErrProductNotFound, ErrProductNotFound},
+		{"variant missing", repository.ErrProductVariantNotFound, ErrProductVariantNotFound},
+		{"variant required", repository.ErrProductVariantRequired, ErrProductVariantRequired},
+		{"would go negative", repository.ErrStockAdjustmentWouldGoNegative, ErrStockWouldGoNegative},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &fakeProductServiceRepo{products: map[string]*model.Product{}, adjustErr: tc.repoErr}
+			svc := NewProductService(repo, WithLogger(zap.NewNop()))
+
+			_, err := svc.AdjustStock(context.Background(), "product-1", "", 5, model.StockAdjustmentReasonReceived, "", "admin-1", "admin", "")
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("expected %v, got %v", tc.want, err)
+			}
+		})
 	}
 }

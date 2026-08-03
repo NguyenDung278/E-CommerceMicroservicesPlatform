@@ -178,7 +178,40 @@ Hot path:
 - `appendCursorClause`
 - `UpdateStock`
 - `ReserveStockForOrder` / `ReleaseStockForOrder`
+- `AdjustStock`
 - `ApplyReviewSummaryDelta`
+
+### 6.1. Nhập kho và điều chỉnh tồn
+
+Luồng chính:
+
+1. `POST /api/v1/products/:id/stock-adjustments` (admin/staff) vào gateway.
+2. Gateway forward tới `product-service`.
+3. `AdjustStock` ở service validate: `delta` khác 0, `reason` nằm trong tập đóng,
+   `sku` bắt buộc nếu sản phẩm có variant.
+4. Repository lấy row lock `SELECT ... FOR UPDATE` trên sản phẩm — **cùng khoá mà
+   `ReserveStockForOrder` dùng** — rồi áp delta vào đúng bể tồn kho và ghi một
+   dòng `stock_adjustments` trong cùng transaction.
+5. `GET /api/v1/products/:id/stock-adjustments` trả sổ cái để đối chiếu kiểm kê.
+
+File nên mở:
+
+- `services/product-service/internal/handler/product/product_handler.go`
+- `services/product-service/internal/service/product_stock_adjustments.go`
+- `services/product-service/internal/repository/product/product_stock_adjustment_repository.go`
+
+Invariant:
+
+- tồn kho không bao giờ được âm; delta trừ quá tay bị từ chối và **không để lại
+  dòng sổ cái nào**, vì một dòng sổ cái phải luôn tương ứng với một biến động có
+  thật.
+- nhập kho và giữ chỗ checkout phải serialize với nhau. Cộng mù kiểu
+  `stock = stock + $1` sẽ đua với reservation đang đọc số tồn cũ, nên cả hai đi
+  qua cùng một row lock.
+- `Idempotency-Key` biến lần gửi lại thành no-op. Không có nó, một cú double-click
+  lúc nhập kho thổi phồng tồn kho âm thầm và chỉ lộ ra khi kiểm kê.
+- lý do là tập đóng chứ không phải text tự do, để lọc được "lệch vì hỏng hàng"
+  khỏi "lệch vì nhập thiếu".
 
 ---
 
@@ -217,7 +250,8 @@ Luồng chính:
 4. `POST /api/v1/orders` tạo order với `Idempotency-Key`.
 5. `order-service` gọi gRPC `ReserveStock` sang `product-service`: giữ chỗ tồn kho
    all-or-nothing cho mọi item, idempotent theo `order_id` (ledger
-   `stock_reservations` + CAS trong một transaction).
+   `stock_reservations`, khoá theo `(order_id, product_id, sku)`, dưới row lock
+   `SELECT ... FOR UPDATE` trên sản phẩm trong một transaction).
 6. `order_lifecycle.go` tạo order, item, event, outbox và idempotency record;
    nếu persist fail thì gọi `ReleaseStock` bù trừ.
 7. Đơn pending không thanh toán trong 15 phút bị `StartReservationExpiryWorker`
@@ -240,6 +274,12 @@ Invariant:
 - order create replay-safe theo actor, idempotency key và request hash.
 - reserve stock all-or-nothing và idempotent theo `order_id`; release idempotent
   (ledger `stock_reservations` quyết định, không cộng kho hai lần).
+- giữ chỗ phải trỏ đúng variant: sản phẩm có khai báo `variants` thì mọi dòng
+  đơn bắt buộc mang `sku`, và tồn kho bị trừ ở bể của chính variant đó chứ không
+  phải `products.stock`. Thiếu điều này thì size M và size L cùng rút một bộ đếm
+  và vẫn oversell theo size dù reservation đã đúng ở mức sản phẩm.
+- `products.stock` chỉ là tổng hợp để listing/badge dùng; nó đi theo cùng delta
+  với variant chứ không phải nguồn sự thật khi mua.
 - load test chống oversell: `tests/load/run_oversell.sh`.
 
 Hot path:

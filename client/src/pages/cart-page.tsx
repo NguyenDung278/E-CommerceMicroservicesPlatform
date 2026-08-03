@@ -48,22 +48,27 @@ export function CartPage() {
           <div className="cart-layout">
             <div className="cart-list">
               {items.map((item) => (
-                <article key={item.product_id} className="cart-item">
+                // Khoá theo cặp product_id + sku: hai variant của cùng một sản
+                // phẩm là hai dòng riêng, dùng mỗi product_id sẽ trùng key.
+                <article key={`${item.product_id}:${item.sku ?? ""}`} className="cart-item">
                   <div>
                     <Link to={`/products/${item.product_id}`} className="cart-item__name">
                       {item.name}
                     </Link>
+                    {item.variant_label ? (
+                      <span className="cart-item__variant">{item.variant_label}</span>
+                    ) : null}
                     <PriceLabel value={item.price} />
                   </div>
                   <QuantityControl
                     value={item.quantity}
-                    onChange={(quantity) => void updateItem(item.product_id, quantity)}
+                    onChange={(quantity) => void updateItem(item.product_id, quantity, item.sku)}
                   />
                   <strong>{formatCurrency(item.price * item.quantity)}</strong>
                   <button
                     className="button button--ghost"
                     type="button"
-                    onClick={() => void removeItem(item.product_id)}
+                    onClick={() => void removeItem(item.product_id, item.sku)}
                   >
                     Xóa
                   </button>

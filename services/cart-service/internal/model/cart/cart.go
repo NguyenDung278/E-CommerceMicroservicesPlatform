@@ -1,11 +1,18 @@
 package model
 
 // CartItem represents a single item in a user's shopping cart.
+//
+// A line item is identified by the pair (ProductID, SKU), not by ProductID
+// alone: "áo size M" and "áo size L" are two lines of the same product and must
+// keep separate quantities, prices and stock checks. SKU is empty only for
+// products that declare no variants.
 type CartItem struct {
-	ProductID string  `json:"product_id"`
-	Name      string  `json:"name"`
-	Price     float64 `json:"price"`
-	Quantity  int     `json:"quantity"`
+	ProductID    string  `json:"product_id"`
+	SKU          string  `json:"sku,omitempty"`
+	VariantLabel string  `json:"variant_label,omitempty"`
+	Name         string  `json:"name"`
+	Price        float64 `json:"price"`
+	Quantity     int     `json:"quantity"`
 }
 
 // Cart represents a user's shopping cart.

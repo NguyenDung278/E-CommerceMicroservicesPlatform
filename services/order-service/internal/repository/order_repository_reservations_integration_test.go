@@ -193,3 +193,99 @@ func skipIfDockerUnavailable(t *testing.T) {
 		t.Skipf("docker daemon unavailable: %v (%s)", err, string(output))
 	}
 }
+
+// UpdateStatus phải chạy được với tham số bind thật.
+//
+// Câu UPDATE dùng cùng một tham số $1 vừa ở vế gán `status = $1` vừa trong các
+// phép so sánh của CASE. Nếu không ép `::text`, Postgres suy ra hai kiểu khác
+// nhau cho $1 và từ chối câu lệnh — nghĩa là mọi đường đổi trạng thái đơn (user
+// huỷ đơn, admin huỷ, admin đổi trạng thái) đều hỏng ở runtime. Test dùng
+// repository giả không phát hiện được vì lỗi chỉ sinh ra ở tầng Postgres.
+func TestUpdateStatusRunsAgainstPostgres(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newOrderIntegrationDB(t)
+	repo := NewOrderRepository(db)
+
+	for _, status := range []model.OrderStatus{
+		model.OrderStatusCancelled,
+		model.OrderStatusPaid,
+		model.OrderStatusShipped,
+	} {
+		order := newIntegrationPendingOrder(time.Now().UTC().Add(15 * time.Minute))
+		if err := repo.Create(ctx, order, nil); err != nil {
+			t.Fatalf("Create order returned error: %v", err)
+		}
+
+		if err := repo.UpdateStatus(ctx, order.ID, status, "actor-1", "user", "chuyển trạng thái", nil); err != nil {
+			t.Fatalf("UpdateStatus(%s) returned error: %v", status, err)
+		}
+
+		var stored string
+		if err := db.QueryRowContext(ctx, `SELECT status FROM orders WHERE id = $1`, order.ID).Scan(&stored); err != nil {
+			t.Fatalf("failed to read back order status: %v", err)
+		}
+		if stored != string(status) {
+			t.Fatalf("expected status %s, got %s", status, stored)
+		}
+	}
+}
+
+// ClaimPendingReturnRefunds phải claim được job trên Postgres thật.
+//
+// Câu SQL của nó có `FOR UPDATE SKIP LOCKED`, một tham số nhân với INTERVAL, và
+// tên cột dài dễ gõ sai — cả ba thứ đều chỉ nổ ở tầng Postgres. Trước đây một
+// chữ hoa lạc (`refund_next_retryAt`) làm worker hoàn tiền không bao giờ nhận
+// được job nào: hàng đợi `refund_pending` kẹt vĩnh viễn mà chỉ để lại WARN
+// trong log. Repository giả không thể phát hiện loại lỗi này.
+func TestClaimPendingReturnRefundsRunsAgainstPostgres(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newOrderIntegrationDB(t)
+	repo := NewOrderRepository(db)
+
+	order := newIntegrationPendingOrder(time.Now().UTC().Add(15 * time.Minute))
+	if err := repo.Create(ctx, order, nil); err != nil {
+		t.Fatalf("Create order returned error: %v", err)
+	}
+
+	returnID := uuid.New().String()
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO returns (
+			id, order_id, user_id, user_email, status, reason,
+			refund_amount, refund_charge_payment_id, refund_next_retry_at, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, 'buyer@example.com', 'refund_pending', 'đổi ý',
+			80, 'payment-1', NULL, NOW(), NOW())
+	`, returnID, order.ID, order.UserID); err != nil {
+		t.Fatalf("failed to seed refund_pending return: %v", err)
+	}
+
+	claimed, err := repo.ClaimPendingReturnRefunds(ctx, 10, 30*time.Second)
+	if err != nil {
+		t.Fatalf("ClaimPendingReturnRefunds returned error: %v", err)
+	}
+	if len(claimed) != 1 {
+		t.Fatalf("expected exactly 1 claimed refund, got %d", len(claimed))
+	}
+	if claimed[0].ID != returnID {
+		t.Fatalf("expected claimed return %s, got %s", returnID, claimed[0].ID)
+	}
+	if claimed[0].RefundAttemptCount != 1 {
+		t.Fatalf("expected attempt count bumped to 1, got %d", claimed[0].RefundAttemptCount)
+	}
+
+	// Lease đang do lần claim đầu giữ, nên claim lại ngay lập tức phải rỗng —
+	// đây là thứ giữ cho hai worker không cùng gọi refund một lần nữa.
+	again, err := repo.ClaimPendingReturnRefunds(ctx, 10, 30*time.Second)
+	if err != nil {
+		t.Fatalf("second ClaimPendingReturnRefunds returned error: %v", err)
+	}
+	for _, r := range again {
+		if r.ID == returnID {
+			t.Fatal("return still under lease must not be claimed twice")
+		}
+	}
+}

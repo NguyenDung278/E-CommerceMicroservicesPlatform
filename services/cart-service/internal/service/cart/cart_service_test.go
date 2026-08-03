@@ -148,7 +148,7 @@ func TestUpdateItemSkipsSaveWhenQuantityUnchanged(t *testing.T) {
 	}
 	svc := NewCartService(repo, &fakeProductCatalog{})
 
-	cart, err := svc.UpdateItem(context.Background(), "user-1", "product-1", dto.UpdateCartItemRequest{Quantity: 2})
+	cart, err := svc.UpdateItem(context.Background(), "user-1", "product-1", "", dto.UpdateCartItemRequest{Quantity: 2})
 	if err != nil {
 		t.Fatalf("UpdateItem returned error: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestRemoveItemSubtractsSubtotal(t *testing.T) {
 	}
 	svc := NewCartService(repo, &fakeProductCatalog{})
 
-	cart, err := svc.RemoveItem(context.Background(), "user-1", "product-1")
+	cart, err := svc.RemoveItem(context.Background(), "user-1", "product-1", "")
 	if err != nil {
 		t.Fatalf("RemoveItem returned error: %v", err)
 	}
@@ -265,5 +265,110 @@ func TestMergeCartReturnsInsufficientStockWithoutSaving(t *testing.T) {
 	}
 	if repo.saveCount != 0 {
 		t.Fatalf("expected no save on failed merge, got %d", repo.saveCount)
+	}
+}
+
+func variantProduct() *pb.Product {
+	return &pb.Product{
+		Id: "product-1", Name: "Áo thun", Price: 100, StockQuantity: 8,
+		Variants: []*pb.ProductVariant{
+			{Sku: "size-m", Label: "Đen / M", Price: 120, Stock: 3},
+			{Sku: "size-l", Label: "Đen / L", Price: 130, Stock: 5},
+		},
+	}
+}
+
+func TestAddItemKeepsVariantsOfOneProductAsSeparateLines(t *testing.T) {
+	repo := newFakeCartRepo()
+	catalog := &fakeProductCatalog{products: map[string]*pb.Product{"product-1": variantProduct()}}
+	svc := NewCartService(repo, catalog)
+
+	if _, err := svc.AddItem(context.Background(), "user-1", dto.AddToCartRequest{
+		ProductID: "product-1", SKU: "size-m", Quantity: 1,
+	}); err != nil {
+		t.Fatalf("AddItem size-m returned error: %v", err)
+	}
+
+	cart, err := svc.AddItem(context.Background(), "user-1", dto.AddToCartRequest{
+		ProductID: "product-1", SKU: "size-l", Quantity: 2,
+	})
+	if err != nil {
+		t.Fatalf("AddItem size-l returned error: %v", err)
+	}
+
+	if len(cart.Items) != 2 {
+		t.Fatalf("expected two separate lines for two variants, got %d", len(cart.Items))
+	}
+	// 1 × 120 (size M) + 2 × 130 (size L): giá phải lấy từ variant, không phải
+	// giá 100 ở mức sản phẩm.
+	if cart.Total != 380 {
+		t.Fatalf("expected total 380 from variant prices, got %.2f", cart.Total)
+	}
+	if cart.Items[0].VariantLabel != "Đen / M" {
+		t.Fatalf("expected variant label carried onto the line, got %q", cart.Items[0].VariantLabel)
+	}
+}
+
+func TestAddItemStockCheckUsesVariantPoolNotProductAggregate(t *testing.T) {
+	repo := newFakeCartRepo()
+	catalog := &fakeProductCatalog{products: map[string]*pb.Product{"product-1": variantProduct()}}
+	svc := NewCartService(repo, catalog)
+
+	// Sản phẩm còn tổng 8 cái, nhưng size M chỉ còn 3 — mua 4 size M phải hỏng.
+	_, err := svc.AddItem(context.Background(), "user-1", dto.AddToCartRequest{
+		ProductID: "product-1", SKU: "size-m", Quantity: 4,
+	})
+	if !errors.Is(err, ErrInsufficientStock) {
+		t.Fatalf("expected ErrInsufficientStock from the variant pool, got %v", err)
+	}
+}
+
+func TestAddItemRejectsBlankSkuForVariantProduct(t *testing.T) {
+	repo := newFakeCartRepo()
+	catalog := &fakeProductCatalog{products: map[string]*pb.Product{"product-1": variantProduct()}}
+	svc := NewCartService(repo, catalog)
+
+	_, err := svc.AddItem(context.Background(), "user-1", dto.AddToCartRequest{
+		ProductID: "product-1", Quantity: 1,
+	})
+	if !errors.Is(err, ErrVariantRequired) {
+		t.Fatalf("expected ErrVariantRequired, got %v", err)
+	}
+}
+
+func TestAddItemRejectsUnknownSku(t *testing.T) {
+	repo := newFakeCartRepo()
+	catalog := &fakeProductCatalog{products: map[string]*pb.Product{"product-1": variantProduct()}}
+	svc := NewCartService(repo, catalog)
+
+	_, err := svc.AddItem(context.Background(), "user-1", dto.AddToCartRequest{
+		ProductID: "product-1", SKU: "size-xxl", Quantity: 1,
+	})
+	if !errors.Is(err, ErrVariantNotFound) {
+		t.Fatalf("expected ErrVariantNotFound, got %v", err)
+	}
+}
+
+func TestRemoveItemOnlyRemovesTheMatchingVariant(t *testing.T) {
+	repo := newFakeCartRepo()
+	repo.carts["user-1"] = &model.Cart{
+		UserID: "user-1",
+		Items: []model.CartItem{
+			{ProductID: "product-1", SKU: "size-m", Name: "Áo thun", Price: 120, Quantity: 1},
+			{ProductID: "product-1", SKU: "size-l", Name: "Áo thun", Price: 130, Quantity: 2},
+		},
+		Total: 380,
+	}
+	svc := NewCartService(repo, &fakeProductCatalog{})
+
+	cart, err := svc.RemoveItem(context.Background(), "user-1", "product-1", "size-m")
+	if err != nil {
+		t.Fatalf("RemoveItem returned error: %v", err)
+	}
+	if len(cart.Items) != 1 || cart.Items[0].SKU != "size-l" {
+		t.Fatalf("expected only size-m removed, got %+v", cart.Items)
+	}
+	if cart.Total != 260 {
+		t.Fatalf("expected total 260 after removing size-m, got %.2f", cart.Total)
 	}
 }

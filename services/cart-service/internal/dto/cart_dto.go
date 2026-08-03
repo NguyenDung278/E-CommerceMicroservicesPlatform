@@ -1,8 +1,13 @@
 package dto
 
 // AddToCartRequest is the request body for adding an item to cart.
+//
+// SKU selects which variant to buy. It stays optional at the transport layer
+// because products without variants have none, but the service rejects a blank
+// sku for a product that does declare variants.
 type AddToCartRequest struct {
 	ProductID string `json:"product_id" validate:"required"`
+	SKU       string `json:"sku" validate:"omitempty,max=120"`
 	Quantity  int    `json:"quantity" validate:"gt=0"`
 }
 

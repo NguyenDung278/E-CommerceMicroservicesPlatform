@@ -1162,6 +1162,65 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /api/v1/products/{id}/stock-adjustments:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    post:
+      tags: [Products]
+      summary: 🔒 Nhập kho / điều chỉnh tồn kho
+      description: >-
+        Ghi một biến động tồn kho ngoài luồng bán hàng — nhập hàng về, chỉnh cho
+        khớp kiểm kê, loại hàng hỏng, nhập lại hàng khách trả. Mỗi lần đều để lại
+        một dòng sổ cái kèm lý do và người thực hiện.
+
+
+        Nên gửi header `Idempotency-Key`: bấm nút nhập kho hai lần mà không có
+        key sẽ cộng tồn kho hai lần một cách âm thầm.
+      operationId: adjustProductStock
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustStockRequest' }
+      responses:
+        '201':
+          description: Dòng sổ cái vừa ghi, kèm tồn kho sau điều chỉnh.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockAdjustmentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Trừ nhiều hơn tồn kho đang có — tồn kho không được phép âm.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    get:
+      tags: [Products]
+      summary: 🔒 Lịch sử biến động tồn kho của sản phẩm
+      operationId: listProductStockAdjustments
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        '200':
+          description: Sổ cái tồn kho, mới nhất trước.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockAdjustmentListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /api/v1/products/{id}/reviews:
     parameters:
       - $ref: '#/components/parameters/ProductId'
@@ -1368,6 +1427,13 @@ paths:
   /api/v1/cart/items/{productId}:
     parameters:
       - $ref: '#/components/parameters/ProductIdPath'
+      - name: sku
+        in: query
+        required: false
+        schema: { type: string, maxLength: 120 }
+        description: >-
+          Chọn đúng dòng giỏ hàng khi sản phẩm có nhiều variant. Bỏ trống là trỏ
+          tới dòng không có variant của sản phẩm đó.
     put:
       tags: [Cart]
       summary: 🔒 Đổi số lượng một item
@@ -2716,6 +2782,60 @@ components:
         detected_at: { type: string, format: date-time }
 
     # ── Products ──────────────────────────────────────────────────────────────
+    AdjustStockRequest:
+      type: object
+      required: [delta, reason]
+      properties:
+        sku:
+          type: string
+          maxLength: 120
+          description: >-
+            Variant cần điều chỉnh. Bắt buộc khi sản phẩm có khai báo `variants`
+            — cùng quy ước với checkout, nếu không sẽ không biết nhập kho cho
+            size nào.
+        delta:
+          type: integer
+          description: Có dấu — dương là nhập kho, âm là xuất kho. Không được bằng 0.
+        reason:
+          type: string
+          enum: [received, recount, damaged, returned, correction]
+          description: >-
+            Lý do bắt buộc và đóng tập, không phải ghi chú tự do: kiểm kê lệch thì
+            phải lọc được "lệch vì hỏng hàng" khỏi "lệch vì nhập thiếu".
+        note: { type: string, maxLength: 255 }
+
+    StockAdjustment:
+      type: object
+      properties:
+        id: { type: string }
+        product_id: { type: string }
+        sku: { type: string, description: Rỗng nếu điều chỉnh ở mức sản phẩm. }
+        delta: { type: integer }
+        resulting_stock:
+          type: integer
+          description: Tồn kho của đúng bể bị tác động, chốt ngay sau khi áp delta.
+        reason: { type: string, enum: [received, recount, damaged, returned, correction] }
+        note: { type: string }
+        actor_id: { type: string }
+        actor_role: { type: string }
+        created_at: { type: string, format: date-time }
+
+    StockAdjustmentEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/StockAdjustment' }
+
+    StockAdjustmentListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/StockAdjustment' }
+
     ProductVariant:
       type: object
       properties:
@@ -2956,8 +3076,13 @@ components:
     # ── Cart ──────────────────────────────────────────────────────────────────
     CartItem:
       type: object
+      description: >-
+        Một dòng giỏ hàng được định danh bằng cặp (`product_id`, `sku`): hai
+        variant của cùng một sản phẩm là hai dòng riêng, có số lượng và giá riêng.
       properties:
         product_id: { type: string }
+        sku: { type: string, description: Variant của dòng này; rỗng nếu sản phẩm không có variant. }
+        variant_label: { type: string, description: Nhãn hiển thị của variant, ví dụ "Đen / size M". }
         name: { type: string }
         price: { type: number, format: double }
         quantity: { type: integer }
@@ -2995,8 +3120,10 @@ components:
         id: { type: string }
         order_id: { type: string }
         product_id: { type: string }
+        sku: { type: string, description: Variant đã bán; rỗng nếu sản phẩm không có variant. }
+        variant_label: { type: string, description: Nhãn variant chốt tại thời điểm đặt, không đổi theo catalog. }
         name: { type: string, description: Tên chốt tại thời điểm đặt, không đổi theo catalog. }
-        price: { type: number, format: double, description: Giá chốt tại thời điểm đặt. }
+        price: { type: number, format: double, description: Giá chốt tại thời điểm đặt — là giá của variant khi có sku. }
         quantity: { type: integer }
 
     Order:
@@ -3576,6 +3703,13 @@ components:
       required: [product_id, quantity]
       properties:
         product_id: { type: string }
+        sku:
+          type: string
+          maxLength: 120
+          description: >-
+            Variant muốn mua. Bắt buộc khi sản phẩm có khai báo `variants`; bỏ
+            trống sẽ nhận 400 vì không xác định được size/màu nào bị trừ kho.
+            Sản phẩm không có variant thì để trống.
         quantity: { type: integer, minimum: 1 }
 
     UpdateCartItemRequest:
@@ -3605,6 +3739,13 @@ components:
             required: [product_id, quantity]
             properties:
               product_id: { type: string }
+              sku:
+                type: string
+                maxLength: 120
+                description: >-
+                  Variant được đặt. Bắt buộc khi sản phẩm có khai báo
+                  `variants` — giá và tồn kho được lấy từ đúng variant này chứ
+                  không phải từ giá/tồn kho mức sản phẩm.
               name: { type: string, description: Chỉ để tham khảo — service lấy tên thật từ product-service. }
               price: { type: number, format: double, description: Chỉ để tham khảo — service lấy giá thật từ product-service. }
               quantity: { type: integer, minimum: 1 }

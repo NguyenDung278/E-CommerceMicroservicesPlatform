@@ -78,13 +78,20 @@ type ShippingOption struct {
 }
 
 // OrderItem represents a single item within an order.
+//
+// SKU records which variant was sold. It is empty only for products that
+// declare no variants. Like Name and Price, SKU and VariantLabel are snapshots
+// taken at checkout: a later catalog rename must not change what an old order
+// says the customer bought.
 type OrderItem struct {
-	ID        string  `json:"id"`
-	OrderID   string  `json:"order_id"`
-	ProductID string  `json:"product_id"`
-	Name      string  `json:"name"`
-	Price     float64 `json:"price"`
-	Quantity  int     `json:"quantity"`
+	ID           string  `json:"id"`
+	OrderID      string  `json:"order_id"`
+	ProductID    string  `json:"product_id"`
+	SKU          string  `json:"sku,omitempty"`
+	VariantLabel string  `json:"variant_label,omitempty"`
+	Name         string  `json:"name"`
+	Price        float64 `json:"price"`
+	Quantity     int     `json:"quantity"`
 }
 
 type SalesTopProduct struct {
