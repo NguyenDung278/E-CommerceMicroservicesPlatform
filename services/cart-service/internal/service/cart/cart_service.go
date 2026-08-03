@@ -14,6 +14,8 @@ var (
 	ErrProductNotFound    = errors.New("product not found")
 	ErrProductUnavailable = errors.New("product is unavailable")
 	ErrInsufficientStock  = errors.New("insufficient stock")
+	ErrVariantNotFound    = errors.New("product variant not found")
+	ErrVariantRequired    = errors.New("product variant sku is required")
 )
 
 // ProductCatalog describes the product-service lookup capability required by

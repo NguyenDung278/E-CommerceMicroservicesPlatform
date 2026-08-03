@@ -17,6 +17,22 @@ const (
 type ProductVariant = productmodel.ProductVariant
 type Product = productmodel.Product
 type StockReservationItem = productmodel.StockReservationItem
+type StockAdjustment = productmodel.StockAdjustment
+type StockAdjustmentReason = productmodel.StockAdjustmentReason
+
+const (
+	StockAdjustmentReasonReceived   = productmodel.StockAdjustmentReasonReceived
+	StockAdjustmentReasonRecount    = productmodel.StockAdjustmentReasonRecount
+	StockAdjustmentReasonDamaged    = productmodel.StockAdjustmentReasonDamaged
+	StockAdjustmentReasonReturned   = productmodel.StockAdjustmentReasonReturned
+	StockAdjustmentReasonCorrection = productmodel.StockAdjustmentReasonCorrection
+)
+
+// FindVariantIndex locates a sku inside a product's variant list, or -1.
+func FindVariantIndex(variants []ProductVariant, sku string) int {
+	return productmodel.FindVariantIndex(variants, sku)
+}
+
 type ProductReview = productmodel.ProductReview
 type ProductRatingBreakdown = productmodel.ProductRatingBreakdown
 type ProductReviewSummary = productmodel.ProductReviewSummary

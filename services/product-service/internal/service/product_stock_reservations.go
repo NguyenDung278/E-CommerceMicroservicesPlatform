@@ -44,6 +44,12 @@ func (s *ProductService) ReserveStockForOrder(
 		if errors.Is(err, repository.ErrProductNotFound) {
 			return false, ErrProductNotFound
 		}
+		if errors.Is(err, repository.ErrProductVariantNotFound) {
+			return false, ErrProductVariantNotFound
+		}
+		if errors.Is(err, repository.ErrProductVariantRequired) {
+			return false, ErrProductVariantRequired
+		}
 		return false, err
 	}
 

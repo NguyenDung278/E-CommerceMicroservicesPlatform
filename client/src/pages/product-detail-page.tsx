@@ -8,7 +8,7 @@ import { getProduct, getProductReviews } from "../services/product-service";
 import { useAuth } from "../state/auth-context";
 import { useCart } from "../state/cart-context";
 import { useWishlist } from "../state/wishlist-context";
-import type { Product, ProductReviewList } from "../types/api";
+import type { Product, ProductReviewList, ProductVariant } from "../types/api";
 import { getProductImage } from "../utils/format";
 
 export function ProductDetailPage() {
@@ -21,6 +21,7 @@ export function ProductDetailPage() {
   const [reviews, setReviews] = useState<ProductReviewList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSku, setSelectedSku] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -40,6 +41,10 @@ export function ProductDetailPage() {
         if (active) {
           setProduct(productData);
           setReviews(reviewData);
+          // Chọn sẵn variant còn hàng đầu tiên để người mua không phải chọn khi
+          // sản phẩm chỉ còn đúng một size.
+          const variants = productData.variants ?? [];
+          setSelectedSku(variants.find((variant) => variant.stock > 0)?.sku ?? null);
         }
       } catch (err) {
         if (active) {
@@ -68,9 +73,35 @@ export function ProductDetailPage() {
   }
 
   const productId = product.id;
-  const isUnavailable = product.status !== "active" || product.stock <= 0;
+  const variants: ProductVariant[] = product.variants ?? [];
+  const hasVariants = variants.length > 0;
+  const selectedVariant = hasVariants
+    ? (variants.find((variant) => variant.sku === selectedSku) ?? null)
+    : null;
+
+  // Sản phẩm có variant thì giá và tồn kho phải đọc từ variant đang chọn: giá
+  // và tồn kho ở mức sản phẩm chỉ là tổng hợp, không phải thứ khách mua.
+  const displayPrice = selectedVariant ? selectedVariant.price : product.price;
+  const availableStock = selectedVariant ? selectedVariant.stock : product.stock;
+  const isInactive = product.status !== "active";
+  const needsVariantChoice = hasVariants && !selectedVariant;
+  const isUnavailable = isInactive || needsVariantChoice || availableStock <= 0;
+
   const wishlisted = isWishlisted(productId);
   const wishlistBusy = updatingProductIds.includes(productId);
+
+  function addToCartLabel(): string {
+    if (isInactive) {
+      return "Tạm ngừng bán";
+    }
+    if (needsVariantChoice) {
+      return "Chọn phân loại";
+    }
+    if (availableStock <= 0) {
+      return "Tạm hết hàng";
+    }
+    return "Thêm vào giỏ";
+  }
 
   function handleWishlistToggle() {
     if (!user) {
@@ -95,11 +126,39 @@ export function ProductDetailPage() {
         <div className="detail-panel">
           {product.brand ? <span className="eyebrow">{product.brand}</span> : null}
           <h1>{product.name}</h1>
-          <PriceLabel value={product.price} size="large" />
+          <PriceLabel value={displayPrice} size="large" />
           {product.description ? <p>{product.description}</p> : null}
+          {hasVariants ? (
+            <div className="detail-variants">
+              <span className="detail-variants__label">Phân loại</span>
+              <div className="detail-variants__options">
+                {variants.map((variant) => {
+                  const soldOut = variant.stock <= 0;
+                  const active = variant.sku === selectedSku;
+                  return (
+                    <button
+                      key={variant.sku}
+                      type="button"
+                      className={`variant-chip${active ? " is-active" : ""}${soldOut ? " is-soldout" : ""}`}
+                      disabled={soldOut}
+                      aria-pressed={active}
+                      onClick={() => setSelectedSku(variant.sku)}
+                    >
+                      {variant.label || variant.sku}
+                      {soldOut ? <span className="variant-chip__note">Hết hàng</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <div className="detail-facts">
             <span>Danh mục: {product.category || "Chưa phân loại"}</span>
-            <span>Tồn kho: {product.stock}</span>
+            <span>
+              {selectedVariant
+                ? `Tồn kho ${selectedVariant.label || selectedVariant.sku}: ${availableStock}`
+                : `Tồn kho: ${availableStock}`}
+            </span>
             {reviews ? (
               <span>
                 Đánh giá: {reviews.summary.average_rating.toFixed(1)} / 5 (
@@ -112,9 +171,9 @@ export function ProductDetailPage() {
               className="button button--primary detail-button"
               type="button"
               disabled={isUnavailable}
-              onClick={() => void addItem(product.id)}
+              onClick={() => void addItem(productId, 1, selectedVariant?.sku)}
             >
-              {isUnavailable ? "Tạm hết hàng" : "Thêm vào giỏ"}
+              {addToCartLabel()}
             </button>
             <button
               className={`button button--secondary detail-wishlist${wishlisted ? " is-active" : ""}`}

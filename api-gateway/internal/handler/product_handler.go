@@ -36,6 +36,8 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	protected.POST("/uploads", h.forward)
 	protected.PUT("/:id", h.forward)
 	protected.DELETE("/:id", h.forward)
+	protected.POST("/:id/stock-adjustments", h.forward)
+	protected.GET("/:id/stock-adjustments", h.forward)
 
 	reviews := e.Group("/api/v1/products/:id/reviews")
 	reviews.Use(appmw.JWTAuth(jwtSecret))

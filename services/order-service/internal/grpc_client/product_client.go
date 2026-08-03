@@ -74,6 +74,7 @@ func (c *ProductClient) ReserveOrderStock(ctx context.Context, orderID string, i
 	for _, item := range items {
 		reservationItems = append(reservationItems, &pb.StockReservationItem{
 			ProductId: item.ProductID,
+			Sku:       item.SKU,
 			Quantity:  int32(item.Quantity),
 		})
 	}

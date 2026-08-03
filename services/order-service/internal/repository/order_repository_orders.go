@@ -83,12 +83,13 @@ func (r *postgresOrderRepository) createOrderTx(
 	}
 
 	itemQuery := `
-		INSERT INTO order_items (id, order_id, product_id, name, price, quantity)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO order_items (id, order_id, product_id, sku, variant_label, name, price, quantity)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	for _, item := range order.Items {
 		_, err = tx.ExecContext(ctx, itemQuery,
-			item.ID, order.ID, item.ProductID, item.Name, item.Price, item.Quantity,
+			item.ID, order.ID, item.ProductID, item.SKU, item.VariantLabel,
+			item.Name, item.Price, item.Quantity,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create order item: %w", err)
@@ -135,7 +136,7 @@ func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*mode
 		return nil, fmt.Errorf("failed to get order: %w", err)
 	}
 
-	itemQuery := `SELECT id, order_id, product_id, name, price, quantity FROM order_items WHERE order_id = $1`
+	itemQuery := `SELECT id, order_id, product_id, sku, variant_label, name, price, quantity FROM order_items WHERE order_id = $1`
 	rows, err := r.db.QueryContext(ctx, itemQuery, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order items: %w", err)
@@ -144,7 +145,10 @@ func (r *postgresOrderRepository) GetByID(ctx context.Context, id string) (*mode
 
 	for rows.Next() {
 		item := model.OrderItem{}
-		if err := rows.Scan(&item.ID, &item.OrderID, &item.ProductID, &item.Name, &item.Price, &item.Quantity); err != nil {
+		if err := rows.Scan(
+			&item.ID, &item.OrderID, &item.ProductID, &item.SKU, &item.VariantLabel,
+			&item.Name, &item.Price, &item.Quantity,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan order item: %w", err)
 		}
 		order.Items = append(order.Items, item)
@@ -394,16 +398,25 @@ func (r *postgresOrderRepository) UpdateStatus(ctx context.Context, id string, s
 	}
 	defer tx.Rollback()
 
+	// $1 phải được ép `::text` ở MỌI chỗ xuất hiện, kể cả vế gán. Nếu để
+	// `status = $1` không ép, Postgres suy kiểu tham số đó là `character varying`
+	// từ cột đích, trong khi các phép so sánh trong CASE lại suy ra `text`, rồi
+	// từ chối cả câu lệnh với "inconsistent types deduced for parameter $1".
+	// Ép ở vế so sánh thôi là chưa đủ — vế gán vẫn thắng.
+	//
+	// Lỗi chỉ nổ khi chạy thật với tham số bind nên test dùng repository giả
+	// không bắt được; regression test chạy trên Postgres thật nằm ở
+	// order_repository_reservations_integration_test.go.
 	query := `
 		UPDATE orders
-		SET status = $1,
+		SET status = $1::text,
 		    reservation_expires_at = CASE
-		        WHEN $1 IN ('paid', 'cancelled', 'refunded') THEN NULL
+		        WHEN $1::text IN ('paid', 'cancelled', 'refunded') THEN NULL
 		        ELSE reservation_expires_at
 		    END,
 		    reservation_allocated_at = CASE
-		        WHEN $1 = 'paid' THEN COALESCE(reservation_allocated_at, NOW())
-		        WHEN $1 = 'cancelled' THEN NULL
+		        WHEN $1::text = 'paid' THEN COALESCE(reservation_allocated_at, NOW())
+		        WHEN $1::text = 'cancelled' THEN NULL
 		        ELSE reservation_allocated_at
 		    END,
 		    updated_at = NOW()

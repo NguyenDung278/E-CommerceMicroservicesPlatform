@@ -43,9 +43,16 @@ func hashCreateOrderRequest(req dto.CreateOrderRequest) string {
 		addressParts[2] = strings.TrimSpace(address.Location)
 	}
 
+	// sku is part of the hash: retrying "size M" under the same idempotency key
+	// as "size L" is a different order, and must conflict instead of replaying
+	// the first one.
 	items := make([]string, 0, len(req.Items))
 	for _, item := range req.Items {
-		items = append(items, fmt.Sprintf("%s:%d", strings.TrimSpace(item.ProductID), item.Quantity))
+		items = append(items, fmt.Sprintf("%s:%s:%d",
+			strings.TrimSpace(item.ProductID),
+			strings.TrimSpace(item.SKU),
+			item.Quantity,
+		))
 	}
 	sort.Strings(items)
 

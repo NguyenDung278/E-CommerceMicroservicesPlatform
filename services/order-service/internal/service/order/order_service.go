@@ -19,6 +19,8 @@ var (
 	ErrEmptyOrder                       = errors.New("order must contain at least one item")
 	ErrProductNotFound                  = errors.New("product not found")
 	ErrProductUnavailable               = errors.New("product is unavailable")
+	ErrVariantNotFound                  = errors.New("product variant not found")
+	ErrVariantRequired                  = errors.New("product variant sku is required")
 	ErrInsufficientStock                = errors.New("insufficient stock")
 	ErrOrderNotCancellable              = errors.New("only pending orders can be cancelled")
 	ErrAdminCancelNotAllowed            = errors.New("only pending or paid orders can be cancelled manually")
@@ -109,10 +111,12 @@ type ReturnEvidenceStore interface {
 }
 
 type pricedOrderItem struct {
-	ProductID string
-	Name      string
-	Price     float64
-	Quantity  int
+	ProductID    string
+	SKU          string
+	VariantLabel string
+	Name         string
+	Price        float64
+	Quantity     int
 }
 
 type pricedOrderQuote struct {

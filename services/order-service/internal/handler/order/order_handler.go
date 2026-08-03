@@ -701,6 +701,12 @@ func writePricingError(c echo.Context, err error, fallbackMessage string) error 
 	if errors.Is(err, service.ErrProductUnavailable) {
 		return response.Error(c, http.StatusBadRequest, "invalid product", err.Error())
 	}
+	if errors.Is(err, service.ErrVariantNotFound) {
+		return response.Error(c, http.StatusNotFound, "variant not found", err.Error())
+	}
+	if errors.Is(err, service.ErrVariantRequired) {
+		return response.Error(c, http.StatusBadRequest, "variant required", err.Error())
+	}
 	if errors.Is(err, service.ErrInsufficientStock) {
 		return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
 	}

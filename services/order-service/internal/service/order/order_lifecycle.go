@@ -76,6 +76,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail, idemp
 			ErrEmptyOrder,
 			ErrProductNotFound,
 			ErrProductUnavailable,
+			ErrVariantNotFound,
+			ErrVariantRequired,
 			ErrInsufficientStock,
 			ErrInvalidShippingMethod,
 			ErrShippingAddressRequired,
@@ -112,7 +114,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, userEmail, idemp
 	}
 
 	if err := s.reserveCreatedOrderStock(ctx, requestLog, order); err != nil {
-		outcome = appobs.OutcomeFromError(err, ErrProductNotFound, ErrInsufficientStock)
+		outcome = appobs.OutcomeFromError(err, ErrProductNotFound, ErrVariantNotFound, ErrVariantRequired, ErrInsufficientStock)
 		requestLog.Warn("create order failed while reserving stock", zap.String("outcome", outcome), zap.Error(err))
 		return nil, err
 	}
@@ -331,6 +333,15 @@ func (s *OrderService) cancelOrderWithActor(ctx context.Context, order *model.Or
 	if err := s.markOrderCancelled(ctx, order, actorID, actorRole, message, cancelOutbox); err != nil {
 		order.Status = previousStatus
 		appobs.RecordStateTransition("order-service", "order", string(previousStatus), string(model.OrderStatusCancelled), appobs.OutcomeSystemError)
+		// Không nuốt lỗi ở đây: handler chỉ trả "failed to cancel order" cho
+		// client, nên nếu tầng này im lặng thì một lần huỷ đơn hỏng không để lại
+		// dấu vết nào để lần ra — kho vẫn bị giam mà không ai biết vì sao.
+		appobs.LoggerWithContext(s.log, ctx,
+			zap.String("order_id", order.ID),
+			zap.String("actor_id", actorID),
+			zap.String("actor_role", actorRole),
+			zap.String("from_status", string(previousStatus)),
+		).Error("failed to mark order cancelled", zap.Error(err))
 		return err
 	}
 
@@ -425,12 +436,14 @@ func buildOrderItems(orderID string, items []pricedOrderItem) []model.OrderItem 
 	orderItems := make([]model.OrderItem, 0, len(items))
 	for _, item := range items {
 		orderItems = append(orderItems, model.OrderItem{
-			ID:        uuid.New().String(),
-			OrderID:   orderID,
-			ProductID: item.ProductID,
-			Name:      item.Name,
-			Price:     item.Price,
-			Quantity:  item.Quantity,
+			ID:           uuid.New().String(),
+			OrderID:      orderID,
+			ProductID:    item.ProductID,
+			SKU:          item.SKU,
+			VariantLabel: item.VariantLabel,
+			Name:         item.Name,
+			Price:        item.Price,
+			Quantity:     item.Quantity,
 		})
 	}
 
@@ -547,7 +560,7 @@ func (s *OrderService) reserveCreatedOrderStock(ctx context.Context, requestLog 
 	if err != nil {
 		mapped := mapCreateOrderStockError(err)
 		appobs.ObserveOperation("order-service", "reserve_stock",
-			appobs.OutcomeFromError(mapped, ErrProductNotFound, ErrInsufficientStock), time.Since(stockReserveStartedAt))
+			appobs.OutcomeFromError(mapped, ErrProductNotFound, ErrVariantNotFound, ErrInsufficientStock), time.Since(stockReserveStartedAt))
 		return mapped
 	}
 

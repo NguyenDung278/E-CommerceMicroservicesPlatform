@@ -19,8 +19,21 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
   const { addItem } = useCart();
   const { isWishlisted, toggleItem, updatingProductIds } = useWishlist();
   const isUnavailable = product.status !== "active" || product.stock <= 0;
+  // Sản phẩm có variant không thể thêm thẳng từ card: phải biết khách muốn size
+  // hay màu nào thì mới giữ đúng chỗ trong kho. Card chuyển sang trang chi tiết.
+  const needsVariantChoice = (product.variants ?? []).length > 0;
   const wishlisted = isWishlisted(product.id);
   const wishlistBusy = updatingProductIds.includes(product.id);
+
+  function handleAddToCart() {
+    if (needsVariantChoice) {
+      onProductClick?.(product);
+      navigate(`/products/${product.id}`);
+      return;
+    }
+
+    void addItem(product.id);
+  }
 
   function handleWishlistToggle() {
     if (!user) {
@@ -77,9 +90,9 @@ export function ProductCard({ product, onProductClick }: ProductCardProps) {
           className="button button--primary product-card__button"
           type="button"
           disabled={isUnavailable}
-          onClick={() => void addItem(product.id)}
+          onClick={handleAddToCart}
         >
-          {isUnavailable ? "Tạm hết hàng" : "Thêm vào giỏ"}
+          {isUnavailable ? "Tạm hết hàng" : needsVariantChoice ? "Chọn phân loại" : "Thêm vào giỏ"}
         </button>
       </div>
     </article>

@@ -297,11 +297,16 @@ Các flow này chạm đủ:
 | Admin list order chậm hoặc pagination lệch        | `ListAll`, `ListAllByCursor` trong `order_repository.go`                                                 |
 | Payment webhook replay hoặc update sai trạng thái | `services/payment-service/internal/repository/payment/payment_repository.go`, `ApplyWebhookResult`       |
 | Inventory bị âm hoặc oversell                     | `services/product-service/internal/repository/product/product_stock_reservation_repository.go`, `ReserveStockForOrder`; load test `tests/load/run_oversell.sh` |
+| Oversell theo size/màu dù tổng tồn kho còn         | Dòng đơn thiếu `sku`: kiểm tra `resolveOrderItemVariant` (`order_pricing.go`), `holdStockForItem` (`product_stock_reservation_repository.go`), ledger `stock_reservations.sku` |
+| Tồn kho lệch so với đếm thực tế                    | Sổ cái `stock_adjustments` — `ListStockAdjustments` cho biết ai chỉnh, chỉnh bao nhiêu, vì lý do gì; `AdjustStock` trong `product_stock_adjustment_repository.go` là đường duy nhất tăng tồn kho |
+| Nhập kho bị cộng hai lần                           | Client không gửi `Idempotency-Key` khi gọi `POST /products/:id/stock-adjustments`; unique index `idx_stock_adjustments_idempotency_key` là chốt chặn |
+| Đổi trạng thái / huỷ đơn trả 500                   | `UpdateStatus` trong `order_repository_orders.go` — mọi chỗ dùng `$1` phải ép `::text`, kể cả vế gán, nếu không Postgres báo "inconsistent types deduced for parameter $1" |
 | Stock bị giam sau khi đơn hủy/hết hạn             | `services/order-service/internal/service/order/order_reservation_expiry_worker.go`, `StartReservationExpiryWorker`; ledger `stock_reservations` |
 | Review aggregate sai                              | `product_review_repository.go`, `ApplyReviewSummaryDelta`                                                |
 | Profile update dính address/phone verification    | `services/user-service/internal/repository/profile_tx_manager.go`                                        |
 | Notification gửi lặp                              | `services/notification-service/internal/inbox/redis_store.go`, `retry_publisher.go`                      |
 | Refund worker bị kẹt hoặc retry vô hạn            | `ClaimPendingReturnRefunds`, `MarkReturnRefundAttemptFailed`, `CompleteReturnRefund`                     |
+| Queue `refund_pending` không nhúc nhích, log spam WARN | Sai tên cột trong SQL của `ClaimPendingReturnRefunds` — Postgres hạ chữ thường identifier nên một chữ hoa lạc là hỏng cả câu lệnh |
 | Cart bị mất update khi thao tác nhanh             | `services/cart-service/internal/repository/cart/cart_repository.go`                                      |
 
 ---

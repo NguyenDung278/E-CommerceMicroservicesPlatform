@@ -37,6 +37,44 @@ func newReservationTestProduct(id string, stock int) *model.Product {
 	}
 }
 
+// newVariantReservationTestProduct builds a product whose stock lives in two
+// variants. products.stock stays the aggregate so catalog listings keep working,
+// but buying must draw from the per-variant pools.
+func newVariantReservationTestProduct(id string, stockBySKU map[string]int) *model.Product {
+	product := newReservationTestProduct(id, 0)
+	total := 0
+	for _, sku := range []string{"size-m", "size-l"} {
+		stock := stockBySKU[sku]
+		total += stock
+		product.Variants = append(product.Variants, model.ProductVariant{
+			SKU:   sku,
+			Label: "Đen / " + sku,
+			Size:  sku,
+			Color: "đen",
+			Price: 99,
+			Stock: stock,
+		})
+	}
+	product.Stock = total
+	return product
+}
+
+func currentVariantStock(t *testing.T, repo ProductRepository, productID, sku string) int {
+	t.Helper()
+	product, err := repo.GetByID(context.Background(), productID)
+	if err != nil {
+		t.Fatalf("GetByID returned error: %v", err)
+	}
+	if product == nil {
+		t.Fatalf("product %s disappeared", productID)
+	}
+	index := model.FindVariantIndex(product.Variants, sku)
+	if index < 0 {
+		t.Fatalf("product %s has no variant %s", productID, sku)
+	}
+	return product.Variants[index].Stock
+}
+
 func countActiveReservations(t *testing.T, db *sql.DB, productID string) int {
 	t.Helper()
 	var count int
@@ -113,6 +151,176 @@ func TestReserveStockForOrderConcurrentReservationsNeverOversell(t *testing.T) {
 	}
 	if active := countActiveReservations(t, db, product.ID); active != initialStock {
 		t.Fatalf("expected %d active ledger rows, got %d", initialStock, active)
+	}
+}
+
+// Đây là test chứng minh lỗ hổng cũ đã bịt: trước khi ledger mang sku, mọi
+// variant của một sản phẩm cùng rút `products.stock`, nên 40 đơn mua size M có
+// thể tiêu luôn cả tồn kho của size L. Giờ mỗi variant có bể tồn kho riêng.
+func TestReserveStockForOrderConcurrentVariantReservationsNeverOversell(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newProductReviewIntegrationDB(t)
+	repo := NewProductRepository(db)
+
+	const stockPerVariant = 5
+	const attempts = 40
+	product := newVariantReservationTestProduct("resv-variant-concurrent", map[string]int{
+		"size-m": stockPerVariant,
+		"size-l": stockPerVariant,
+	})
+	if err := repo.Create(ctx, product); err != nil {
+		t.Fatalf("Create product returned error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	results := make(chan error, attempts)
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(orderIndex int) {
+			defer wg.Done()
+			_, err := repo.ReserveStockForOrder(ctx, fmt.Sprintf("order-variant-%d", orderIndex), []model.StockReservationItem{
+				{ProductID: product.ID, SKU: "size-m", Quantity: 1},
+			})
+			results <- err
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+
+	succeeded, insufficient := 0, 0
+	for err := range results {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, ErrInsufficientStock):
+			insufficient++
+		default:
+			t.Fatalf("unexpected reservation error: %v", err)
+		}
+	}
+
+	if succeeded != stockPerVariant {
+		t.Fatalf("expected exactly %d successful reservations of size-m, got %d", stockPerVariant, succeeded)
+	}
+	if insufficient != attempts-stockPerVariant {
+		t.Fatalf("expected %d insufficient-stock rejections, got %d", attempts-stockPerVariant, insufficient)
+	}
+	if stock := currentVariantStock(t, repo, product.ID, "size-m"); stock != 0 {
+		t.Fatalf("expected size-m drained to 0, got %d", stock)
+	}
+	if stock := currentVariantStock(t, repo, product.ID, "size-l"); stock != stockPerVariant {
+		t.Fatalf("size-l must be untouched at %d, got %d — one size drained another's stock", stockPerVariant, stock)
+	}
+	if stock := currentStock(t, db, repo, product.ID); stock != stockPerVariant {
+		t.Fatalf("expected aggregate stock to follow the variants down to %d, got %d", stockPerVariant, stock)
+	}
+}
+
+func TestReserveStockForOrderRejectsBlankSkuOnVariantProduct(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newProductReviewIntegrationDB(t)
+	repo := NewProductRepository(db)
+
+	product := newVariantReservationTestProduct("resv-variant-blank", map[string]int{
+		"size-m": 3,
+		"size-l": 3,
+	})
+	if err := repo.Create(ctx, product); err != nil {
+		t.Fatalf("Create product returned error: %v", err)
+	}
+
+	_, err := repo.ReserveStockForOrder(ctx, "order-variant-blank", []model.StockReservationItem{
+		{ProductID: product.ID, Quantity: 1},
+	})
+	if !errors.Is(err, ErrProductVariantRequired) {
+		t.Fatalf("expected ErrProductVariantRequired, got %v", err)
+	}
+	if stock := currentStock(t, db, repo, product.ID); stock != 6 {
+		t.Fatalf("expected aggregate stock untouched at 6, got %d", stock)
+	}
+	if active := countActiveReservations(t, db, product.ID); active != 0 {
+		t.Fatalf("expected no ledger rows after rejection, got %d", active)
+	}
+}
+
+func TestReserveStockForOrderRejectsUnknownSku(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newProductReviewIntegrationDB(t)
+	repo := NewProductRepository(db)
+
+	product := newVariantReservationTestProduct("resv-variant-unknown", map[string]int{
+		"size-m": 2,
+		"size-l": 2,
+	})
+	if err := repo.Create(ctx, product); err != nil {
+		t.Fatalf("Create product returned error: %v", err)
+	}
+
+	_, err := repo.ReserveStockForOrder(ctx, "order-variant-unknown", []model.StockReservationItem{
+		{ProductID: product.ID, SKU: "size-xxl", Quantity: 1},
+	})
+	if !errors.Is(err, ErrProductVariantNotFound) {
+		t.Fatalf("expected ErrProductVariantNotFound, got %v", err)
+	}
+}
+
+// Một order mua nhiều variant của cùng một sản phẩm là hợp lệ và phải giữ chỗ
+// riêng từng variant — khoá chính cũ (order_id, product_id) không cho phép điều
+// này.
+func TestReserveAndReleaseStockPerVariantWithinOneOrder(t *testing.T) {
+	skipIfDockerUnavailable(t)
+
+	ctx := context.Background()
+	db := newProductReviewIntegrationDB(t)
+	repo := NewProductRepository(db)
+
+	product := newVariantReservationTestProduct("resv-variant-multi", map[string]int{
+		"size-m": 4,
+		"size-l": 4,
+	})
+	if err := repo.Create(ctx, product); err != nil {
+		t.Fatalf("Create product returned error: %v", err)
+	}
+
+	items := []model.StockReservationItem{
+		{ProductID: product.ID, SKU: "size-m", Quantity: 1},
+		{ProductID: product.ID, SKU: "size-l", Quantity: 3},
+	}
+	if _, err := repo.ReserveStockForOrder(ctx, "order-variant-multi", items); err != nil {
+		t.Fatalf("ReserveStockForOrder returned error: %v", err)
+	}
+
+	if stock := currentVariantStock(t, repo, product.ID, "size-m"); stock != 3 {
+		t.Fatalf("expected size-m at 3, got %d", stock)
+	}
+	if stock := currentVariantStock(t, repo, product.ID, "size-l"); stock != 1 {
+		t.Fatalf("expected size-l at 1, got %d", stock)
+	}
+	if active := countActiveReservations(t, db, product.ID); active != 2 {
+		t.Fatalf("expected 2 ledger rows, one per variant, got %d", active)
+	}
+
+	released, err := repo.ReleaseStockForOrder(ctx, "order-variant-multi")
+	if err != nil {
+		t.Fatalf("ReleaseStockForOrder returned error: %v", err)
+	}
+	if len(released) != 2 {
+		t.Fatalf("expected 2 released items, got %d", len(released))
+	}
+	if stock := currentVariantStock(t, repo, product.ID, "size-m"); stock != 4 {
+		t.Fatalf("expected size-m restored to 4, got %d", stock)
+	}
+	if stock := currentVariantStock(t, repo, product.ID, "size-l"); stock != 4 {
+		t.Fatalf("expected size-l restored to 4, got %d", stock)
+	}
+	if stock := currentStock(t, db, repo, product.ID); stock != 8 {
+		t.Fatalf("expected aggregate restored to 8, got %d", stock)
 	}
 }
 

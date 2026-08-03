@@ -2171,3 +2171,124 @@ func findShippingOption(options []model.ShippingOption, method string) (model.Sh
 
 	return model.ShippingOption{}, false
 }
+
+func variantCatalog() *fakeProductCatalog {
+	return &fakeProductCatalog{
+		products: map[string]*pb.Product{
+			"product-1": {
+				Id:            "product-1",
+				Name:          "Áo thun",
+				Price:         50,
+				StockQuantity: 8,
+				Variants: []*pb.ProductVariant{
+					{Sku: "size-m", Label: "Đen / M", Price: 120, Stock: 3},
+					{Sku: "size-l", Label: "Đen / L", Price: 130, Stock: 5},
+				},
+			},
+		},
+	}
+}
+
+func TestPreviewOrderPricesLineFromVariantNotProduct(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), variantCatalog(), nil)
+
+	preview, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-l", Quantity: 2}},
+		ShippingMethod: "pickup",
+	})
+	if err != nil {
+		t.Fatalf("PreviewOrder returned error: %v", err)
+	}
+
+	// 2 × 130 của variant, không phải 2 × 50 của giá mức sản phẩm.
+	if preview.SubtotalPrice != 260 {
+		t.Fatalf("expected subtotal 260 from the variant price, got %.2f", preview.SubtotalPrice)
+	}
+}
+
+func TestPreviewOrderStockCheckUsesVariantPool(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), variantCatalog(), nil)
+
+	// Tổng tồn kho 8, nhưng size M chỉ còn 3.
+	_, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-m", Quantity: 4}},
+		ShippingMethod: "pickup",
+	})
+	if !errors.Is(err, ErrInsufficientStock) {
+		t.Fatalf("expected ErrInsufficientStock from the variant pool, got %v", err)
+	}
+}
+
+func TestPreviewOrderRejectsBlankSkuForVariantProduct(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), variantCatalog(), nil)
+
+	_, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", Quantity: 1}},
+		ShippingMethod: "pickup",
+	})
+	if !errors.Is(err, ErrVariantRequired) {
+		t.Fatalf("expected ErrVariantRequired, got %v", err)
+	}
+}
+
+func TestPreviewOrderRejectsUnknownSku(t *testing.T) {
+	svc := NewOrderService(&fakeOrderRepo{}, nil, zap.NewNop(), variantCatalog(), nil)
+
+	_, err := svc.PreviewOrder(context.Background(), dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-xxl", Quantity: 1}},
+		ShippingMethod: "pickup",
+	})
+	if !errors.Is(err, ErrVariantNotFound) {
+		t.Fatalf("expected ErrVariantNotFound, got %v", err)
+	}
+}
+
+func TestCreateOrderPersistsVariantOnOrderItem(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), variantCatalog(), nil)
+
+	order, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "key-variant", dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-m", Quantity: 1}},
+		ShippingMethod: "pickup",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrder returned error: %v", err)
+	}
+
+	if len(order.Items) != 1 {
+		t.Fatalf("expected one order item, got %d", len(order.Items))
+	}
+	if order.Items[0].SKU != "size-m" {
+		t.Fatalf("expected sku persisted on the order item, got %q", order.Items[0].SKU)
+	}
+	if order.Items[0].VariantLabel != "Đen / M" {
+		t.Fatalf("expected variant label snapshot, got %q", order.Items[0].VariantLabel)
+	}
+	if order.Items[0].Price != 120 {
+		t.Fatalf("expected variant price 120 on the order item, got %.2f", order.Items[0].Price)
+	}
+}
+
+// Cùng idempotency key nhưng đổi variant là một đơn khác, phải báo xung đột chứ
+// không được replay đơn size M ra cho người mua size L.
+func TestCreateOrderIdempotencyKeyConflictsWhenSkuChanges(t *testing.T) {
+	repo := &fakeOrderRepo{}
+	svc := NewOrderService(repo, nil, zap.NewNop(), variantCatalog(), nil)
+
+	base := dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-m", Quantity: 1}},
+		ShippingMethod: "pickup",
+	}
+	if _, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "same-key", base); err != nil {
+		t.Fatalf("first CreateOrder returned error: %v", err)
+	}
+
+	switched := dto.CreateOrderRequest{
+		Items:          []dto.OrderItemRequest{{ProductID: "product-1", SKU: "size-l", Quantity: 1}},
+		ShippingMethod: "pickup",
+	}
+	_, err := svc.CreateOrder(context.Background(), "user-1", "user@example.com", "same-key", switched)
+	if !errors.Is(err, ErrIdempotencyKeyConflict) {
+		t.Fatalf("expected ErrIdempotencyKeyConflict when the sku changes, got %v", err)
+	}
+}

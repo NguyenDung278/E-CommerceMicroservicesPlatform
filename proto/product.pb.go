@@ -746,10 +746,17 @@ func (x *SearchProductsResponse) GetLimit() int32 {
 }
 
 // One reserved line item inside a stock reservation.
+//
+// sku selects which variant of the product is being held. An empty sku means
+// the reservation targets the product-level stock pool, which is only valid for
+// products that declare no variants. Products that do declare variants require
+// a non-empty sku, otherwise the reservation is ambiguous and would let two
+// sizes of the same product drain one shared counter.
 type StockReservationItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
 	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Sku           string                 `protobuf:"bytes,3,opt,name=sku,proto3" json:"sku,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -796,6 +803,13 @@ func (x *StockReservationItem) GetQuantity() int32 {
 		return x.Quantity
 	}
 	return 0
+}
+
+func (x *StockReservationItem) GetSku() string {
+	if x != nil {
+		return x.Sku
+	}
+	return ""
 }
 
 // Reserve stock request. order_id doubles as the idempotency key of the whole
@@ -990,6 +1004,95 @@ func (x *ReleaseStockResponse) GetReleasedItems() int32 {
 	return 0
 }
 
+// One purchasable variant of a product, identified by sku within its product.
+//
+// price and stock here override the product-level values: a caller pricing a
+// line item that carries a sku must read them from the matching variant, not
+// from Product.price / Product.stock_quantity.
+type ProductVariant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sku           string                 `protobuf:"bytes,1,opt,name=sku,proto3" json:"sku,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Size          string                 `protobuf:"bytes,3,opt,name=size,proto3" json:"size,omitempty"`
+	Color         string                 `protobuf:"bytes,4,opt,name=color,proto3" json:"color,omitempty"`
+	Price         float32                `protobuf:"fixed32,5,opt,name=price,proto3" json:"price,omitempty"`
+	Stock         int32                  `protobuf:"varint,6,opt,name=stock,proto3" json:"stock,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProductVariant) Reset() {
+	*x = ProductVariant{}
+	mi := &file_proto_product_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProductVariant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProductVariant) ProtoMessage() {}
+
+func (x *ProductVariant) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_product_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProductVariant.ProtoReflect.Descriptor instead.
+func (*ProductVariant) Descriptor() ([]byte, []int) {
+	return file_proto_product_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ProductVariant) GetSku() string {
+	if x != nil {
+		return x.Sku
+	}
+	return ""
+}
+
+func (x *ProductVariant) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *ProductVariant) GetSize() string {
+	if x != nil {
+		return x.Size
+	}
+	return ""
+}
+
+func (x *ProductVariant) GetColor() string {
+	if x != nil {
+		return x.Color
+	}
+	return ""
+}
+
+func (x *ProductVariant) GetPrice() float32 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *ProductVariant) GetStock() int32 {
+	if x != nil {
+		return x.Stock
+	}
+	return 0
+}
+
 // Product model.
 //
 // Compatibility note:
@@ -997,6 +1100,10 @@ func (x *ReleaseStockResponse) GetReleasedItems() int32 {
 // - created_at / updated_at are ISO-8601 strings emitted by the current Go server
 // Future improvements should prefer additive migration instead of changing the
 // meaning or type of these existing fields in place.
+//
+// stock_quantity stays the aggregate across every variant, so catalog listings
+// and "out of stock" badges keep working unchanged. Buying decisions for a
+// product with variants must use the per-variant stock in `variants` instead.
 type Product struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1008,13 +1115,14 @@ type Product struct {
 	ImageUrl      string                 `protobuf:"bytes,7,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Variants      []*ProductVariant      `protobuf:"bytes,10,rep,name=variants,proto3" json:"variants,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Product) Reset() {
 	*x = Product{}
-	mi := &file_proto_product_proto_msgTypes[17]
+	mi := &file_proto_product_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1026,7 +1134,7 @@ func (x *Product) String() string {
 func (*Product) ProtoMessage() {}
 
 func (x *Product) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_product_proto_msgTypes[17]
+	mi := &file_proto_product_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1039,7 +1147,7 @@ func (x *Product) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Product.ProtoReflect.Descriptor instead.
 func (*Product) Descriptor() ([]byte, []int) {
-	return file_proto_product_proto_rawDescGZIP(), []int{17}
+	return file_proto_product_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Product) GetId() string {
@@ -1105,6 +1213,13 @@ func (x *Product) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *Product) GetVariants() []*ProductVariant {
+	if x != nil {
+		return x.Variants
+	}
+	return nil
+}
+
 var File_proto_product_proto protoreflect.FileDescriptor
 
 const file_proto_product_proto_rawDesc = "" +
@@ -1160,11 +1275,12 @@ const file_proto_product_proto_rawDesc = "" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
 	"totalCount\x12\x12\n" +
 	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\x05R\x05limit\"Q\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"c\n" +
 	"\x14StockReservationItem\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\"e\n" +
+	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12\x10\n" +
+	"\x03sku\x18\x03 \x01(\tR\x03sku\"e\n" +
 	"\x13ReserveStockRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x123\n" +
 	"\x05items\x18\x02 \x03(\v2\x1d.product.StockReservationItemR\x05items\"A\n" +
@@ -1173,7 +1289,14 @@ const file_proto_product_proto_rawDesc = "" +
 	"\x13ReleaseStockRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\"=\n" +
 	"\x14ReleaseStockResponse\x12%\n" +
-	"\x0ereleased_items\x18\x01 \x01(\x05R\rreleasedItems\"\x83\x02\n" +
+	"\x0ereleased_items\x18\x01 \x01(\x05R\rreleasedItems\"\x8e\x01\n" +
+	"\x0eProductVariant\x12\x10\n" +
+	"\x03sku\x18\x01 \x01(\tR\x03sku\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\tR\x04size\x12\x14\n" +
+	"\x05color\x18\x04 \x01(\tR\x05color\x12\x14\n" +
+	"\x05price\x18\x05 \x01(\x02R\x05price\x12\x14\n" +
+	"\x05stock\x18\x06 \x01(\x05R\x05stock\"\xb8\x02\n" +
 	"\aProduct\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1185,7 +1308,9 @@ const file_proto_product_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\tR\tupdatedAt2\x8a\x05\n" +
+	"updated_at\x18\t \x01(\tR\tupdatedAt\x123\n" +
+	"\bvariants\x18\n" +
+	" \x03(\v2\x17.product.ProductVariantR\bvariants2\x8a\x05\n" +
 	"\x0eProductService\x12H\n" +
 	"\vGetProducts\x12\x1b.product.GetProductsRequest\x1a\x1c.product.GetProductsResponse\x12Q\n" +
 	"\x0eGetProductByID\x12\x1e.product.GetProductByIDRequest\x1a\x1f.product.GetProductByIDResponse\x12N\n" +
@@ -1208,7 +1333,7 @@ func file_proto_product_proto_rawDescGZIP() []byte {
 	return file_proto_product_proto_rawDescData
 }
 
-var file_proto_product_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_proto_product_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_proto_product_proto_goTypes = []any{
 	(*GetProductsRequest)(nil),     // 0: product.GetProductsRequest
 	(*GetProductsResponse)(nil),    // 1: product.GetProductsResponse
@@ -1227,36 +1352,38 @@ var file_proto_product_proto_goTypes = []any{
 	(*ReserveStockResponse)(nil),   // 14: product.ReserveStockResponse
 	(*ReleaseStockRequest)(nil),    // 15: product.ReleaseStockRequest
 	(*ReleaseStockResponse)(nil),   // 16: product.ReleaseStockResponse
-	(*Product)(nil),                // 17: product.Product
+	(*ProductVariant)(nil),         // 17: product.ProductVariant
+	(*Product)(nil),                // 18: product.Product
 }
 var file_proto_product_proto_depIdxs = []int32{
-	17, // 0: product.GetProductsResponse.products:type_name -> product.Product
-	17, // 1: product.GetProductByIDResponse.product:type_name -> product.Product
-	17, // 2: product.CreateProductResponse.product:type_name -> product.Product
-	17, // 3: product.UpdateProductResponse.product:type_name -> product.Product
-	17, // 4: product.SearchProductsResponse.products:type_name -> product.Product
+	18, // 0: product.GetProductsResponse.products:type_name -> product.Product
+	18, // 1: product.GetProductByIDResponse.product:type_name -> product.Product
+	18, // 2: product.CreateProductResponse.product:type_name -> product.Product
+	18, // 3: product.UpdateProductResponse.product:type_name -> product.Product
+	18, // 4: product.SearchProductsResponse.products:type_name -> product.Product
 	12, // 5: product.ReserveStockRequest.items:type_name -> product.StockReservationItem
-	0,  // 6: product.ProductService.GetProducts:input_type -> product.GetProductsRequest
-	2,  // 7: product.ProductService.GetProductByID:input_type -> product.GetProductByIDRequest
-	4,  // 8: product.ProductService.CreateProduct:input_type -> product.CreateProductRequest
-	6,  // 9: product.ProductService.UpdateProduct:input_type -> product.UpdateProductRequest
-	8,  // 10: product.ProductService.DeleteProduct:input_type -> product.DeleteProductRequest
-	10, // 11: product.ProductService.SearchProducts:input_type -> product.SearchProductsRequest
-	13, // 12: product.ProductService.ReserveStock:input_type -> product.ReserveStockRequest
-	15, // 13: product.ProductService.ReleaseStock:input_type -> product.ReleaseStockRequest
-	1,  // 14: product.ProductService.GetProducts:output_type -> product.GetProductsResponse
-	3,  // 15: product.ProductService.GetProductByID:output_type -> product.GetProductByIDResponse
-	5,  // 16: product.ProductService.CreateProduct:output_type -> product.CreateProductResponse
-	7,  // 17: product.ProductService.UpdateProduct:output_type -> product.UpdateProductResponse
-	9,  // 18: product.ProductService.DeleteProduct:output_type -> product.DeleteProductResponse
-	11, // 19: product.ProductService.SearchProducts:output_type -> product.SearchProductsResponse
-	14, // 20: product.ProductService.ReserveStock:output_type -> product.ReserveStockResponse
-	16, // 21: product.ProductService.ReleaseStock:output_type -> product.ReleaseStockResponse
-	14, // [14:22] is the sub-list for method output_type
-	6,  // [6:14] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	17, // 6: product.Product.variants:type_name -> product.ProductVariant
+	0,  // 7: product.ProductService.GetProducts:input_type -> product.GetProductsRequest
+	2,  // 8: product.ProductService.GetProductByID:input_type -> product.GetProductByIDRequest
+	4,  // 9: product.ProductService.CreateProduct:input_type -> product.CreateProductRequest
+	6,  // 10: product.ProductService.UpdateProduct:input_type -> product.UpdateProductRequest
+	8,  // 11: product.ProductService.DeleteProduct:input_type -> product.DeleteProductRequest
+	10, // 12: product.ProductService.SearchProducts:input_type -> product.SearchProductsRequest
+	13, // 13: product.ProductService.ReserveStock:input_type -> product.ReserveStockRequest
+	15, // 14: product.ProductService.ReleaseStock:input_type -> product.ReleaseStockRequest
+	1,  // 15: product.ProductService.GetProducts:output_type -> product.GetProductsResponse
+	3,  // 16: product.ProductService.GetProductByID:output_type -> product.GetProductByIDResponse
+	5,  // 17: product.ProductService.CreateProduct:output_type -> product.CreateProductResponse
+	7,  // 18: product.ProductService.UpdateProduct:output_type -> product.UpdateProductResponse
+	9,  // 19: product.ProductService.DeleteProduct:output_type -> product.DeleteProductResponse
+	11, // 20: product.ProductService.SearchProducts:output_type -> product.SearchProductsResponse
+	14, // 21: product.ProductService.ReserveStock:output_type -> product.ReserveStockResponse
+	16, // 22: product.ProductService.ReleaseStock:output_type -> product.ReleaseStockResponse
+	15, // [15:23] is the sub-list for method output_type
+	7,  // [7:15] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_proto_product_proto_init() }
@@ -1270,7 +1397,7 @@ func file_proto_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_product_proto_rawDesc), len(file_proto_product_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

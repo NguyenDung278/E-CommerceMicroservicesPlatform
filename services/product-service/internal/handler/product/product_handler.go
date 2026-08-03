@@ -66,6 +66,8 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	admin.POST("/uploads", h.UploadImages)
 	admin.PUT("/:id", h.Update)
 	admin.DELETE("/:id", h.Delete)
+	admin.POST("/:id/stock-adjustments", h.AdjustStock)
+	admin.GET("/:id/stock-adjustments", h.ListStockAdjustments)
 
 	// Authenticated user review routes.
 	reviews := e.Group("/api/v1/products/:id/reviews")
@@ -325,4 +327,77 @@ func parseRequestedProductIDs(values []string) []string {
 	}
 
 	return ids
+}
+
+// AdjustStock handles POST /api/v1/products/:id/stock-adjustments
+//
+// Mục đích: cho admin/staff nhập kho, chỉnh tồn khi kiểm kê lệch, hoặc loại
+// hàng hỏng — mọi lần đều để lại một dòng sổ cái có lý do và người thực hiện.
+//
+// Header `Idempotency-Key` là tùy chọn nhưng nên gửi: bấm nút nhập kho hai lần
+// mà không có key sẽ cộng tồn kho hai lần một cách âm thầm.
+func (h *ProductHandler) AdjustStock(c echo.Context) error {
+	claims := middleware.GetUserClaims(c)
+	productID := c.Param("id")
+
+	var req dto.AdjustStockRequest
+	if err := c.Bind(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "invalid request", err.Error())
+	}
+	if err := c.Validate(&req); err != nil {
+		return response.Error(c, http.StatusBadRequest, "validation failed", validation.Message(err))
+	}
+
+	adjustment, err := h.productService.AdjustStock(
+		c.Request().Context(),
+		productID,
+		req.SKU,
+		req.Delta,
+		model.StockAdjustmentReason(req.Reason),
+		req.Note,
+		claims.UserID,
+		claims.Role,
+		c.Request().Header.Get("Idempotency-Key"),
+	)
+	if err != nil {
+		return writeStockAdjustmentError(c, err)
+	}
+
+	return response.Success(c, http.StatusCreated, "stock adjusted", adjustment)
+}
+
+// ListStockAdjustments handles GET /api/v1/products/:id/stock-adjustments
+//
+// Mục đích: xem lịch sử biến động tồn kho của một sản phẩm để đối chiếu khi số
+// đếm thực tế lệch với hệ thống.
+func (h *ProductHandler) ListStockAdjustments(c echo.Context) error {
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+
+	adjustments, err := h.productService.ListStockAdjustments(c.Request().Context(), c.Param("id"), limit)
+	if err != nil {
+		return writeStockAdjustmentError(c, err)
+	}
+
+	return response.Success(c, http.StatusOK, "stock adjustments retrieved", adjustments)
+}
+
+func writeStockAdjustmentError(c echo.Context, err error) error {
+	switch {
+	case errors.Is(err, service.ErrProductNotFound):
+		return response.Error(c, http.StatusNotFound, "product not found", err.Error())
+	case errors.Is(err, service.ErrProductVariantNotFound):
+		return response.Error(c, http.StatusNotFound, "variant not found", err.Error())
+	case errors.Is(err, service.ErrProductVariantRequired):
+		return response.Error(c, http.StatusBadRequest, "variant required", err.Error())
+	case errors.Is(err, service.ErrStockWouldGoNegative):
+		// 409 chứ không phải 400: request hợp lệ về hình thức, chỉ là xung đột
+		// với tồn kho hiện tại — client nên đọc lại tồn rồi thử lại.
+		return response.Error(c, http.StatusConflict, "insufficient stock", err.Error())
+	case errors.Is(err, service.ErrStockAdjustmentDeltaRequired),
+		errors.Is(err, service.ErrStockAdjustmentReasonInvalid),
+		errors.Is(err, service.ErrStockAdjustmentProductMissing):
+		return response.Error(c, http.StatusBadRequest, "validation failed", err.Error())
+	default:
+		return response.Error(c, http.StatusInternalServerError, "error", err.Error())
+	}
 }

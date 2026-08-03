@@ -80,6 +80,7 @@ export function CheckoutPage() {
   const items =
     cart?.items.map((item) => ({
       product_id: item.product_id,
+      sku: item.sku,
       name: item.name,
       price: item.price,
       quantity: item.quantity,
@@ -190,6 +191,7 @@ export function CheckoutPage() {
       const previewItems =
         cart?.items.map((item) => ({
           product_id: item.product_id,
+          sku: item.sku,
           name: item.name,
           price: item.price,
           quantity: item.quantity,

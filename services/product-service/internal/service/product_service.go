@@ -13,6 +13,8 @@ import (
 
 var (
 	ErrProductNotFound         = errors.New("product not found")
+	ErrProductVariantNotFound  = errors.New("product variant not found")
+	ErrProductVariantRequired  = errors.New("product variant sku is required")
 	ErrInsufficientStock       = errors.New("insufficient stock")
 	ErrInvalidStatus           = errors.New("invalid product status")
 	ErrInvalidCursor           = errors.New("invalid cursor")

@@ -122,6 +122,12 @@ func (r *fakeProductRepo) ReserveStockForOrder(_ context.Context, orderID string
 func (r *fakeProductRepo) ReleaseStockForOrder(_ context.Context, orderID string) ([]model.StockReservationItem, error) {
 	return []model.StockReservationItem{}, nil
 }
+func (r *fakeProductRepo) AdjustStock(_ context.Context, adjustment *model.StockAdjustment) (*model.StockAdjustment, error) {
+	return adjustment, nil
+}
+func (r *fakeProductRepo) ListStockAdjustments(_ context.Context, productID string, limit int) ([]*model.StockAdjustment, error) {
+	return []*model.StockAdjustment{}, nil
+}
 func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
 	return []*model.Product{}, nil
 }

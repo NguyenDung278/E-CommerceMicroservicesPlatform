@@ -226,6 +226,7 @@ func (s *ProductGRPCServer) ReserveStock(ctx context.Context, req *pb.ReserveSto
 	for _, item := range req.GetItems() {
 		items = append(items, model.StockReservationItem{
 			ProductID: item.GetProductId(),
+			SKU:       item.GetSku(),
 			Quantity:  int(item.GetQuantity()),
 		})
 	}
@@ -240,9 +241,15 @@ func (s *ProductGRPCServer) ReserveStock(ctx context.Context, req *pb.ReserveSto
 			errors.Is(err, service.ErrReservationItemInvalid):
 			requestLog.Warn("grpc stock reservation rejected", zap.Error(err))
 			return nil, status.Error(codes.InvalidArgument, err.Error())
+		case errors.Is(err, service.ErrProductVariantRequired):
+			requestLog.Warn("grpc stock reservation rejected: variant sku missing", zap.Error(err))
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		case errors.Is(err, service.ErrProductNotFound):
 			requestLog.Warn("grpc stock reservation failed: product not found", zap.Error(err))
 			return nil, status.Error(codes.NotFound, "product not found")
+		case errors.Is(err, service.ErrProductVariantNotFound):
+			requestLog.Warn("grpc stock reservation failed: variant not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, "product variant not found")
 		case errors.Is(err, service.ErrInsufficientStock):
 			requestLog.Warn("grpc stock reservation failed: insufficient stock", zap.Error(err))
 			return nil, status.Error(codes.FailedPrecondition, "insufficient stock")
@@ -297,5 +304,28 @@ func toProtoProduct(product *model.Product) *pb.Product {
 		ImageUrl:      product.ImageURL,
 		CreatedAt:     product.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:     product.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		Variants:      toProtoVariants(product.Variants),
 	}
+}
+
+// toProtoVariants exposes per-variant price and stock over gRPC so cart-service
+// and order-service can price and stock-check the exact sku a shopper picked
+// instead of falling back to the product-level aggregate.
+func toProtoVariants(variants []model.ProductVariant) []*pb.ProductVariant {
+	if len(variants) == 0 {
+		return nil
+	}
+
+	protoVariants := make([]*pb.ProductVariant, 0, len(variants))
+	for _, variant := range variants {
+		protoVariants = append(protoVariants, &pb.ProductVariant{
+			Sku:   variant.SKU,
+			Label: variant.Label,
+			Size:  variant.Size,
+			Color: variant.Color,
+			Price: float32(variant.Price),
+			Stock: int32(variant.Stock),
+		})
+	}
+	return protoVariants
 }
