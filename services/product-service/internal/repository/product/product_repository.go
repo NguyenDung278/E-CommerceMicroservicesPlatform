@@ -381,12 +381,37 @@ func (r *postgresProductRepository) RestoreStock(ctx context.Context, id string,
 	return nil
 }
 
+// ListLowStock trả về sản phẩm active có tồn kho chạm ngưỡng — tính CẢ tồn kho
+// theo từng variant.
+//
+// Chỉ so `products.stock <= threshold` là bỏ sót đúng ca đáng báo động nhất: sản
+// phẩm còn tổng 40 cái nhưng size M chỉ còn 1. Kể từ khi variant thành nguồn sự
+// thật cho oversell theo size, ngưỡng phải soi xuống từng variant, nên thêm vế
+// EXISTS trên mảng JSONB `variants`.
+//
+// jsonb_typeof được kiểm trước khi ép kiểu: variant do code ta ghi luôn có
+// `stock` dạng number, nhưng một hàng dữ liệu cũ/nhập tay sai kiểu sẽ làm cả
+// query 500 thay vì bỏ qua đúng hàng đó.
 func (r *postgresProductRepository) ListLowStock(ctx context.Context, threshold int) ([]*model.Product, error) {
 	query := `
 		SELECT id, name, description, price, stock, category, brand, tags, status, sku, variants, image_url, image_urls, created_at, updated_at
 		       , merchandising_rank
 		FROM products
-		WHERE status = $1 AND stock <= $2
+		WHERE status = $1
+		  AND (
+		        stock <= $2
+		        OR EXISTS (
+		              SELECT 1
+		              FROM jsonb_array_elements(
+		                     CASE WHEN jsonb_typeof(variants) = 'array'
+		                          THEN variants
+		                          ELSE '[]'::jsonb
+		                     END
+		                   ) AS variant
+		              WHERE jsonb_typeof(variant->'stock') = 'number'
+		                AND (variant->>'stock')::int <= $2
+		        )
+		      )
 		ORDER BY stock ASC, updated_at DESC
 	`
 

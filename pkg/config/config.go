@@ -144,6 +144,28 @@ type NotificationConfig struct {
 	QueueMetricsIntervalSeconds int `mapstructure:"queue_metrics_interval_seconds"`
 	WishlistPollIntervalSeconds int `mapstructure:"wishlist_poll_interval_seconds"`
 	WishlistBatchLimit          int `mapstructure:"wishlist_batch_limit"`
+
+	LowStockPollIntervalSeconds int `mapstructure:"low_stock_poll_interval_seconds"`
+	LowStockThreshold           int `mapstructure:"low_stock_threshold"`
+	LowStockBatchLimit          int `mapstructure:"low_stock_batch_limit"`
+
+	// LowStockRecipients là danh sách email nhận cảnh báo tồn kho, phân tách bởi
+	// dấu phẩy. Để trống thì worker không chạy — cảnh báo vận hành không có địa
+	// chỉ mặc định nào an toàn để đoán, và đây không phải secret bắt buộc nên
+	// không đưa vào validateProductionSecrets.
+	LowStockRecipients string `mapstructure:"low_stock_recipients"`
+}
+
+// LowStockRecipientList tách chuỗi config thành danh sách địa chỉ.
+func (c NotificationConfig) LowStockRecipientList() []string {
+	raw := strings.Split(c.LowStockRecipients, ",")
+	recipients := make([]string, 0, len(raw))
+	for _, value := range raw {
+		if address := strings.TrimSpace(value); address != "" {
+			recipients = append(recipients, address)
+		}
+	}
+	return recipients
 }
 
 type PaymentGatewayConfig struct {
@@ -321,6 +343,12 @@ func Load(serviceName string) (*Config, error) {
 	v.SetDefault("notification.queue_metrics_interval_seconds", 15)
 	v.SetDefault("notification.wishlist_poll_interval_seconds", 300)
 	v.SetDefault("notification.wishlist_batch_limit", 50)
+	// 15 phút: tồn kho thấp là trạng thái kéo dài nhiều giờ tới nhiều ngày, quét
+	// dày hơn không làm ops biết sớm hơn mà chỉ tốn query.
+	v.SetDefault("notification.low_stock_poll_interval_seconds", 900)
+	v.SetDefault("notification.low_stock_threshold", 5)
+	v.SetDefault("notification.low_stock_batch_limit", 50)
+	v.SetDefault("notification.low_stock_recipients", "")
 	v.SetDefault("payment_gateway.webhook_secret", defaultWebhookSecret)
 	v.SetDefault("payment_gateway.momo_return_url", "http://localhost:3000/payments")
 	v.SetDefault("payment_gateway.vnpay_webhook_secret", "")

@@ -19,6 +19,7 @@ type Product = productmodel.Product
 type StockReservationItem = productmodel.StockReservationItem
 type StockAdjustment = productmodel.StockAdjustment
 type StockAdjustmentReason = productmodel.StockAdjustmentReason
+type LowStockEntry = productmodel.LowStockEntry
 
 const (
 	StockAdjustmentReasonReceived   = productmodel.StockAdjustmentReasonReceived

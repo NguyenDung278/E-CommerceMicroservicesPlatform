@@ -273,8 +273,6 @@ go tool cover -func=coverage_returns_portal_handler.out | grep 'ListUserReturns\
 - **COD**: `payment_dto.go` mới nhận `manual momo vnpay credit_card digital_wallet demo`.
   COD là trạng thái đơn khác hẳn — order confirmed mà payment vẫn pending, ghi
   nhận tiền lúc delivered — nên cần thêm cả cơ chế chống bom hàng.
-- **Cảnh báo tồn kho thấp**: đã có `ListLowStock` và `stock_adjustments`, còn
-  thiếu worker định kỳ đẩy cảnh báo qua `notification-service`.
 - **Khuyến mãi mức sản phẩm**: hiện chỉ có coupon; `Product` không có `sale_price`
   nên muốn giảm giá phải sửa giá gốc, mất giá niêm yết và làm sai report doanh thu.
 - Trang detail riêng cho từng return và deep link từ email/notification.
@@ -323,6 +321,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Product gRPC | `done` | cart/order gọi để lấy truth sản phẩm |
 | Stock reservation ledger | `done` | `ReserveStock`/`ReleaseStock` gRPC all-or-nothing, idempotent theo `order_id`, bảng `stock_reservations` (migration 000008), integration test concurrency bằng testcontainers |
 | Nhập kho / điều chỉnh tồn | `done` | Sổ cái `stock_adjustments` (migration 000010) có lý do đóng tập, người thực hiện và tồn kho sau điều chỉnh; `AdjustStock` dùng cùng row lock với reservation nên nhập kho không đua với checkout; idempotent theo `Idempotency-Key`; chặn tồn kho âm. Route `POST/GET /api/v1/products/:id/stock-adjustments` |
+| Cảnh báo tồn kho thấp | `done` | `ListLowStock` soi cả tồn kho **theo variant** (điều kiện JSONB, integration test testcontainers) chứ không chỉ `products.stock`; `ListLowStockEntries` làm phẳng thành từng dòng nhập hàng; route nội bộ admin `GET /api/v1/products/low-stock` là nguồn đọc cho notification-service. Job log-only `internal/jobs/low_stock_monitor.go` đã gỡ vì bị worker thay thế |
 | Optional MinIO / Elasticsearch | `done` | degrade gracefully khi dependency phụ lỗi |
 | Điểm cần theo dõi | `in progress` | benchmark search assist và variant facet; review list public vẫn là offset path |
 
@@ -372,6 +371,7 @@ Phần dưới đây không thay thế chi tiết returns/refund ở trên. Nó 
 | Retry publisher | `done` | exponential backoff qua retry queue |
 | History/inbox API | `done` | history feed, mark-all-read |
 | Wishlist alert worker | `done` | poll user-service, dedupe, dispatch |
+| Low stock alert worker | `done` | `LowStockAlertWorker` poll `GET /api/v1/products/low-stock` của product-service bằng JWT admin tự ký, dedupe Redis theo mức `low`/`out`, gửi **một** email digest mỗi chu kỳ; gửi hỏng thì `Release` claim để chu kỳ sau báo lại. Tắt khi `notification.low_stock_recipients` rỗng |
 | Điểm cần theo dõi | `in progress` | Redis là dependency khá nhạy của reliability path; mark-all-read hiện rewrite payload theo O(n) |
 
 ### 6.8. Frontend và client

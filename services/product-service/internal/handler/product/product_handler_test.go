@@ -30,6 +30,9 @@ import (
 type fakeProductRepo struct {
 	created []*model.Product
 	reviews map[string]*model.ProductReview
+
+	lowStockProducts  []*model.Product
+	lowStockThreshold int
 }
 
 type fakeMediaStore struct{}
@@ -129,7 +132,11 @@ func (r *fakeProductRepo) ListStockAdjustments(_ context.Context, productID stri
 	return []*model.StockAdjustment{}, nil
 }
 func (r *fakeProductRepo) ListLowStock(_ context.Context, threshold int) ([]*model.Product, error) {
-	return []*model.Product{}, nil
+	r.lowStockThreshold = threshold
+	if r.lowStockProducts == nil {
+		return []*model.Product{}, nil
+	}
+	return r.lowStockProducts, nil
 }
 
 func (r *fakeProductRepo) CreateReview(_ context.Context, review *model.ProductReview) error {
@@ -644,4 +651,100 @@ func signedTokenForUser(t *testing.T, secret, userID, email, role string) string
 
 func fakeReviewKey(productID, userID string) string {
 	return productID + "::" + userID
+}
+
+func TestListLowStockRequiresAdminRole(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	productService := service.NewProductService(&fakeProductRepo{})
+	handler := NewProductHandler(productService, nil)
+	secret := "super-secret-test-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/low-stock", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken(t, secret, appmw.RoleUser))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-admin, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// Route tĩnh /low-stock phải thắng route động /:id, nếu không request sẽ rơi
+// vào GetByID và đi tìm sản phẩm có id "low-stock".
+func TestListLowStockReturnsFlattenedVariantEntries(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	repo := &fakeProductRepo{
+		lowStockProducts: []*model.Product{
+			{
+				ID:    "product-1",
+				Name:  "Archive Coat",
+				Stock: 40,
+				Variants: []model.ProductVariant{
+					{SKU: "AC-M", Label: "M", Stock: 1},
+				},
+			},
+		},
+	}
+	productService := service.NewProductService(repo)
+	handler := NewProductHandler(productService, nil)
+	secret := "super-secret-test-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/products/low-stock?threshold=5", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken(t, secret, appmw.RoleAdmin))
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.lowStockThreshold != 5 {
+		t.Fatalf("expected threshold 5 to reach the repository, got %d", repo.lowStockThreshold)
+	}
+
+	var envelope struct {
+		Data []model.LowStockEntry `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(envelope.Data) != 1 {
+		t.Fatalf("expected one variant entry, got %+v", envelope.Data)
+	}
+	if envelope.Data[0].SKU != "AC-M" {
+		t.Fatalf("expected variant AC-M, got %+v", envelope.Data[0])
+	}
+}
+
+// threshold sai/thiếu không được biến thành 0 âm thầm — 0 chỉ báo hàng đã hết
+// sạch và sẽ giấu mất toàn bộ hàng sắp hết.
+func TestListLowStockFallsBackToDefaultThreshold(t *testing.T) {
+	e := echo.New()
+	e.Validator = validation.New()
+	repo := &fakeProductRepo{}
+	productService := service.NewProductService(repo)
+	handler := NewProductHandler(productService, nil)
+	secret := "super-secret-test-key-1234567890"
+	handler.RegisterRoutes(e, secret)
+
+	for _, query := range []string{"", "?threshold=", "?threshold=abc", "?threshold=-3"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/products/low-stock"+query, nil)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+signedToken(t, secret, appmw.RoleAdmin))
+		rec := httptest.NewRecorder()
+
+		e.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("query %q: expected 200, got %d body=%s", query, rec.Code, rec.Body.String())
+		}
+		if repo.lowStockThreshold != defaultLowStockThreshold {
+			t.Fatalf("query %q: expected default threshold %d, got %d",
+				query, defaultLowStockThreshold, repo.lowStockThreshold)
+		}
+	}
 }

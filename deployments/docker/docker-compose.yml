@@ -379,6 +379,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-rabbitmq-password}
       JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-chars}
+      NOTIFICATION_LOW_STOCK_RECIPIENTS: ${NOTIFICATION_LOW_STOCK_RECIPIENTS:-}
     volumes:
       - ./config/notification-service.yaml:/config/config.yaml
     networks:

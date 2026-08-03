@@ -580,11 +580,12 @@ Trình tự trong `services/notification-service/cmd/main.go`:
 1. load config + tracing
 2. kết nối Redis cho inbox/history/deduper
 3. kết nối RabbitMQ, declare queue
-4. tạo `UserClient`, `RetryPublisher`, `EventHandler`
+4. tạo `UserClient`, `ProductClient`, `RetryPublisher`, `EventHandler`
 5. start `QueueMonitor`
 6. start `WishlistAlertWorker`
-7. spawn N consumer worker cho message queue
-8. expose HTTP API cho inbox/audit/health
+7. start `LowStockAlertWorker`
+8. spawn N consumer worker cho message queue
+9. expose HTTP API cho inbox/audit/health
 
 ### 4.3. Public contract
 
@@ -663,6 +664,15 @@ Consumer chính xử lý các routing key:
 | `runCycle` | Poll batch alerts từ `user-service` |
 | `deliver` | Deduplicate rồi gửi email |
 | `wishlistAlertEmail` | Build subject/body cho wishlist alert |
+
+#### Low stock worker
+
+| Function | Vai trò |
+| --- | --- |
+| `LowStockAlertWorker.Start` | Background ticker; không chạy nếu chưa cấu hình người nhận |
+| `runCycle` | Poll `product-service`, claim từng entry, gửi một digest |
+| `releaseClaims` | Nhả claim khi gửi hỏng để chu kỳ sau báo lại |
+| `lowStockDigestEmail` | Tách "đã hết" khỏi "sắp hết" trong cùng một email |
 
 ### 4.7. Điều đáng lưu ý khi đọc code
 
@@ -760,7 +770,23 @@ Package handler được tách theo trách nhiệm: pipeline `HandleMessage`/`pr
    - Build subject/body bằng `wishlistAlertEmail`.
    - Gửi email.
 4. Điều cần nhớ
-   - Notification service có hai async path: queue-driven consumer và polling-driven wishlist worker.
+   - Notification service có ba async path: queue-driven consumer, polling-driven
+     wishlist worker và polling-driven low stock worker.
+
+#### `internal/service/low_stock_alert_worker.go`
+
+1. `Start`
+   - Danh sách người nhận rỗng thì worker dừng hẳn, không poll.
+   - Chạy `runCycle` ngay một lần trước khi vào ticker loop.
+2. `runCycle`
+   - Poll `GET /api/v1/products/low-stock` với timeout 30 giây.
+   - Claim từng entry qua deduper, gom các entry claim được thành **một** digest.
+   - Gửi hỏng thì `releaseClaims` nhả toàn bộ claim của chu kỳ.
+3. Deduper (`low_stock_alert_deduper.go`)
+   - Khoá mang mức khẩn cấp `low`/`out` chứ không mang số tồn kho, TTL 24 giờ.
+4. Điều cần nhớ
+   - Đây là đường pull, không phải event: `product-service` không có hạ tầng
+     messaging, và tồn kho thấp là trạng thái kéo dài chứ không phải sự kiện.
 
 #### `internal/handler/inbox_handler.go`
 
@@ -1334,7 +1360,7 @@ Trong `services/product-service/cmd/main.go`:
 | --- | --- |
 | `Create`, `Update`, `Delete`, `GetByID`, `ListByIDs` | Core catalog CRUD |
 | `List` | Search-aware catalog listing |
-| `CheckStock`, `ListLowStock`, `RestoreStock`, `DecreaseStock` | Inventory API |
+| `CheckStock`, `ListLowStock`, `ListLowStockEntries`, `RestoreStock`, `DecreaseStock` | Inventory API — `ListLowStockEntries` làm phẳng cảnh báo tới từng variant cho notification-service |
 | `SyncSearchIndex` | Rebuild optional search index |
 | `GetSearchAssist`, `RecordSearchEvent`, `recordSearchAnalyticsBestEffort` | Search assist + analytics |
 | `StorefrontService.ListCategories`, `GetHome`, `GetCategoryPage` | Storefront read orchestration |

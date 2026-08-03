@@ -17,6 +17,16 @@ import (
 	"github.com/NguyenDung278/E-CommerceMicroservicesPlatform/services/product-service/internal/service"
 )
 
+const (
+	// defaultLowStockThreshold khớp với ngưỡng mặc định phía notification-service
+	// để gọi thiếu query param vẫn ra cùng tập cảnh báo.
+	defaultLowStockThreshold = 5
+
+	// maxLowStockLimit chặn một cú gọi kéo về toàn bộ catalog khi kho đang cạn
+	// diện rộng.
+	maxLowStockLimit = 200
+)
+
 // ProductHandler handles HTTP requests for product operations.
 type ProductHandler struct {
 	productService *service.ProductService
@@ -47,6 +57,7 @@ func NewProductHandler(productService *service.ProductService, reviewService *se
 //   - POST   /api/v1/products       — Protected (admin only)
 //   - PUT    /api/v1/products/:id   — Protected (admin only)
 //   - DELETE /api/v1/products/:id   — Protected (admin only)
+//   - GET    /api/v1/products/low-stock — Protected (admin only, nội bộ)
 func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	// Public routes.
 	public := e.Group("/api/v1/products")
@@ -62,6 +73,7 @@ func (h *ProductHandler) RegisterRoutes(e *echo.Echo, jwtSecret string) {
 	admin.Use(middleware.JWTAuth(jwtSecret))
 	admin.Use(middleware.RequireRole(middleware.RoleAdmin, middleware.RoleStaff))
 	admin.GET("/analytics/search", h.GetSearchAnalytics)
+	admin.GET("/low-stock", h.ListLowStock)
 	admin.POST("", h.Create)
 	admin.POST("/uploads", h.UploadImages)
 	admin.PUT("/:id", h.Update)
@@ -379,6 +391,34 @@ func (h *ProductHandler) ListStockAdjustments(c echo.Context) error {
 	}
 
 	return response.Success(c, http.StatusOK, "stock adjustments retrieved", adjustments)
+}
+
+// ListLowStock handles GET /api/v1/products/low-stock?threshold=5&limit=50
+//
+// Mục đích: nguồn đọc cho worker cảnh báo tồn kho thấp bên notification-service,
+// đồng thời cho phép admin tự tra cứu thứ cần nhập hàng.
+//
+// Kết quả đã làm phẳng tới từng variant: một dòng là một thứ có thể nhập, không
+// phải một sản phẩm. Route này nội bộ (không proxy qua api-gateway) nên không
+// có mục tương ứng trong openapi.yaml — giống /api/v1/admin/wishlist-alerts của
+// user-service.
+func (h *ProductHandler) ListLowStock(c echo.Context) error {
+	threshold, err := strconv.Atoi(c.QueryParam("threshold"))
+	if err != nil || threshold < 0 {
+		threshold = defaultLowStockThreshold
+	}
+
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if limit <= 0 || limit > maxLowStockLimit {
+		limit = maxLowStockLimit
+	}
+
+	entries, err := h.productService.ListLowStockEntries(c.Request().Context(), threshold, limit)
+	if err != nil {
+		return response.Error(c, http.StatusInternalServerError, "error", err.Error())
+	}
+
+	return response.Success(c, http.StatusOK, "low stock products retrieved", entries)
 }
 
 func writeStockAdjustmentError(c echo.Context, err error) error {

@@ -18,9 +18,16 @@ notification:
   queue_metrics_interval_seconds: 15
   wishlist_poll_interval_seconds: 300
   wishlist_batch_limit: 50
+  low_stock_poll_interval_seconds: 900
+  low_stock_threshold: 5
+  low_stock_batch_limit: 50
+  # Để trống thì worker cảnh báo tồn kho không chạy. Đặt qua
+  # NOTIFICATION_LOW_STOCK_RECIPIENTS trong .env.local khi muốn bật.
+  low_stock_recipients: ""
 
 services:
   user_service: "http://user-service:8081"
+  product_service: "http://product-service:8082"
 
 rabbitmq:
   host: "rabbitmq"
